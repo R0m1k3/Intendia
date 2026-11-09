@@ -105,6 +105,26 @@ sequenceDiagram
 - The browser builds the schedule (`apps/web/src/crons/schedule.ts`, plain French forms → `every Nm`, cron
   expressions or an ISO timestamp) and follows "Run now" by polling every 2 s until `last_run_at` changes.
 
+## Skills
+
+- `src/skills/service.ts` (`SkillService`) calls the `skills` connector; `src/routes/skills.ts` serves
+  `/x/i/:inst/skills...` (list, enable/disable, SKILL.md, toolsets, hub catalogue, search, scan, install, uninstall,
+  update, action status). Every route takes `?profile=` (default `default`) except the action status: Hermes action
+  names do not depend on the profile. Skill names may contain `/`, so they travel in the body or the query.
+- Dashboard first, also for reads (the API server `/v1/skills` answers 500 in 0.23.0 and has neither `enabled` nor
+  `provenance`; `/v1/toolsets` needs a per-profile key). The API server stays as a fallback; a list without
+  `enabled` hides the toggle.
+- Enabling checks the name first: Hermes accepts any name and adds it to its disabled list.
+- Install, uninstall and update are background actions in Hermes (`{ name }` at once, then
+  `/api/actions/{name}/status`). Intendia scans before installing and only starts on `policy: allow`, or `ask` with
+  `acknowledged: true` (Hermes' `--yes` would accept `ask` silently); anything else is a 409 `scan_refused` with the
+  scan. A start whose Hermes action name is already running is a 409 `busy` (name computed as Hermes does,
+  `actionName` in the connector). The status keeps only the lines of the last run (after `=== <name> started`).
+- The browser polls the status every 1.5 s, keeps pending actions in `sessionStorage` (resumed after a reload) and
+  stops on the end, on a 404 (dashboard restarted) or after 5 minutes.
+- `src/agents/service.ts` (`AgentService.profiles`, `/x/i/:inst/agents/profiles`) feeds the agent selector:
+  dashboard profiles, else `default` plus the profiles that have an API server key.
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

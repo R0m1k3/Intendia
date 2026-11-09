@@ -75,6 +75,33 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
   `{ success, cancelled, detail }`.
 - `GET /api/cron/delivery-targets`: `{ targets: [{ id, name, home_target_set }] }`.
 
+## Skills (checked on 0.23.0, phase 5, 2026-11-09)
+
+- `GET /api/skills` lists disabled skills too: `[{ name, description, category, enabled, locked, usage, provenance }]`,
+  `provenance` in `bundled | hub | external | agent`. A `name` may be a relative path (same-tier duplicate).
+- Every `/api/skills/*` and `/api/tools/toolsets` route takes `?profile=`; an unknown profile is a 404
+  `Profile 'x' does not exist.`
+- `PUT /api/skills/toggle {name, enabled}` accepts an unknown name (200) and stores it in the disabled list.
+- `GET /api/skills/content?name=` → `{ name, content, path }` (`path` is a path on the Hermes host); 404 if absent.
+- `GET /api/tools/toolsets` → bare array `{ name, label, description, enabled, available, configured, tools[] }`;
+  `/v1/toolsets` has the same in `{ data }` with an emoji at the start of `label`.
+- No route links a skill to tools; a few SKILL.md declare `requires_toolsets` in their front matter.
+- `GET /api/skills/hub/official` → `{ skills: [... , category, installed] }` (local catalogue, fast).
+  `GET /api/skills/hub/search?q=&source=&limit=` (limit capped at 50) → `{ results, source_counts, timed_out,
+  installed: { identifier: lock entry } }`, about 10 s (network, 30 s internal timeout); empty `q` → empty answer.
+- `GET /api/skills/hub/scan?identifier=` downloads the bundle (about 2 s for an official skill) → `{ verdict:
+  safe|caution|dangerous, policy: allow|ask|block, policy_reason, summary, findings[], severity_counts, trust_level }`;
+  404 for an unknown identifier. `GET /api/skills/hub/preview` gives `skill_md` and `files` (not used).
+- `POST /api/skills/hub/{install {identifier}, uninstall {name}, update}` spawn `hermes [-p profile] skills ... --yes`
+  and answer `{ ok, pid, name }` at once. `name` = `skills-<verb>-<slug>-<sha1(key)[:8]>` (slug: lower case,
+  non-`[a-z0-9]` runs → `-`, trimmed, 48 chars, `skill` if empty) or `skills-update`; it does not include the profile.
+  Hermes keeps one process and one appended log per name (each run starts with `=== <name> started <date> ===`).
+- `GET /api/actions/{name}/status?lines=` (default 200) → `{ name, running, exit_code, pid, lines }`; 404
+  `Unknown action` for a name this dashboard process never started (the table is in memory).
+- `--yes` skips Hermes' confirmation, not its scan: `block` is refused (`Installation blocked`), `ask` installs.
+  Uninstalling a non-hub skill exits 1 (`Error: '<name>' is not a hub-installed skill`); an unknown identifier exits 1
+  (`Error: Could not download ...`).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),
