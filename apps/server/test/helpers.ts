@@ -33,20 +33,22 @@ export function tempDir(): string {
  * Full app against fake-hermes, logged in, with a temporary workspace mount.
  * `request` adds the session cookie and the X-Intendia header.
  */
-export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig> } = {}) {
+export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig>; env?: Record<string, string> } = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
   const { CompatService } = await import('../src/compat/service.js');
   const { loadConfig } = await import('../src/config.js');
   const { openDb } = await import('../src/db/index.js');
   const { InstanceStore } = await import('../src/instances/store.js');
+  const { createServices } = await import('../src/services.js');
+  const { createMcpApp } = await import('../src/mcp/server.js');
 
   const dataDir = tempDir();
   const mount = opts.mount ?? tempDir();
   const inst = fakeInstance({ mount, profileKeys: opts.profileKeys ?? {}, ...opts.instance });
   const config = loadConfig({
     INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, INTENDIA_TRUST_PROXY: 'true',
-    INTENDIA_INSTANCES: JSON.stringify([inst]),
+    INTENDIA_INSTANCES: JSON.stringify([inst]), ...opts.env,
   });
   const db = openDb(dataDir);
   const store = new InstanceStore(db, config);
@@ -55,7 +57,9 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const fetchImpl = fakeFetch(fake);
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, version: 'test' });
+  const services = createServices({ config, db, store });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test' });
+  const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
 
   let cookie = '';
   const raw = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
@@ -72,8 +76,20 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
     const res = await raw(method, path, body, headers);
     return { status: res.status, json: (await res.json().catch(() => null)) as any };
   };
+  /** Any body (bytes, text), with or without the session cookie and the X-Intendia header. */
+  const rawRequest = (method: string, path: string, o: { body?: Buffer | string; headers?: Record<string, string>; cookie?: boolean; csrf?: boolean } = {}) =>
+    app.request(path, {
+      method,
+      headers: {
+        'X-Forwarded-For': '10.0.0.9',
+        ...(o.csrf === false ? {} : { 'X-Intendia': '1' }),
+        ...(o.cookie === false || !cookie ? {} : { Cookie: cookie }),
+        ...o.headers,
+      },
+      body: typeof o.body === "string" || o.body === undefined ? o.body : new Uint8Array(o.body),
+    });
   await raw('POST', '/x/setup/password', { code: auth.setupCode, password: 'test-password-123' });
-  return { app, db, mount, fake, inst, store, compat, request, raw };
+  return { app, mcp, db, mount, fake, inst, store, compat, config, services, links: services.links, request, raw, rawRequest };
 }
 
 /** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */

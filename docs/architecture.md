@@ -42,13 +42,38 @@ demand from the State screen. State changes go to the webhook.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session
-  folder, and the first 4 KiB of `AGENTS.md`.
+  folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`.
 - Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
   calls Hermes through `/p/<profile>/` with that profile's key.
 - Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
   The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
   becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
 - One run at a time per session: sending while the last run is not terminal answers 409.
+
+## Files, share links and MCP
+
+- **Every path chosen by the browser or the agent goes through `src/files/paths.ts`** before any disk access:
+  `normalizeRel` (no `..`, NUL, backslash, absolute path), `resolveInside` (realpath must stay under the workspace, or
+  under the mount for `share_file`; `create` mode refuses an existing name, dangling links included, then writes with
+  `wx`), `resolveEntry` (delete and move act on a symbolic link itself, never on its target), `toVolumePath` (agent or
+  Intendia absolute path → path relative to the mount). Known limit: a race between the realpath check and the open
+  (no `openat`/`O_NOFOLLOW` in Node).
+- The disk is the only source: `src/files/service.ts` reads it on each request (tree, search, raw, upload in a stream,
+  move, delete, text save with an mtime check, batch `exists` for chat chips). No file list in the database, no watcher.
+- Everything served from the volume (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
+  (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
+  (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,
+  not for PDFs (Chrome refuses PDFs in sandboxed frames).
+- Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, path relative to the instance mount,
+  private by default, public until a date (365 days max), revoked rows kept so `/f/<token>` can say so. A move from the
+  explorer rewrites link paths by exact prefix in the same SQLite transaction as the rename (the rename is last).
+  `GET /f/<token>` order: unknown/revoked → 404; logged in → file; private → `/connexion?suite=/f/<token>` (the login
+  page sends a logged-in user straight back with a full page load, since the `SameSite=Strict` cookie is not sent on a
+  navigation from another site); public expired → 410; public → file; missing file → 404 (old path shown to the owner).
+- MCP (`src/mcp/server.ts`, port `INTENDIA_MCP_PORT`): hand-written JSON-RPC over Streamable HTTP, stateless, JSON
+  answers only; `initialize`, `ping`, `tools/list`, `tools/call` with the single tool `share_file`. Checks: method (405),
+  instance (404), bearer token (`settings` key `mcp_token:<instance>`, 401). The agent only ever gets a private link.
+- `src/services.ts` builds `WorkspaceService`, `LinkService` and `FileService` once; the web app and the MCP app share them.
 
 ```mermaid
 sequenceDiagram

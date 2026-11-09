@@ -11,10 +11,14 @@ import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
 import { InstanceStore } from './instances/store.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
+import { forgetMcpToken, mcpToken, mcpUrl, rotateMcpToken } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
+import { fileRoutes } from './routes/files.js';
+import { linkRoutes, publicLinkRoute } from './routes/links.js';
+import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
-import { WorkspaceFsError } from './workspaces/fs.js';
-import { NotFoundError, ValidationError, WorkspaceService } from './workspaces/service.js';
+import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
+import { NotFoundError, ValidationError } from './workspaces/service.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -22,6 +26,7 @@ export interface AppDeps {
   auth: Auth;
   store: InstanceStore;
   compat: CompatService;
+  services: Services;
   fetchImpl?: FetchLike;
   version: string;
 }
@@ -37,7 +42,8 @@ export function createApp(deps: AppDeps) {
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'same-origin');
-    c.header('X-Frame-Options', 'DENY');
+    // file routes allow framing by Intendia itself (preview); every other response stays DENY
+    if (!c.res.headers.has('X-Frame-Options')) c.header('X-Frame-Options', 'DENY');
   });
 
   app.onError((err, c) => {
@@ -46,7 +52,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {
-      return c.json({ error: err.message }, err.code === 'exists' ? 409 : err.code === 'too_large' ? 413 : 422);
+      return c.json({ error: err.message, code: err.code }, FS_ERROR_STATUS[err.code]);
     }
     if (err instanceof ModuleUnavailableError) {
       return c.json({ error: err.message, module: err.module, op: err.op, reasons: err.reasons }, 409);
@@ -122,6 +128,7 @@ export function createApp(deps: AppDeps) {
 
   priv.delete('/instances/:id', (c) => {
     store.remove(c.req.param('id'));
+    forgetMcpToken(deps.db, c.req.param('id'));
     compat.forget(c.req.param('id'));
     return c.json({ ok: true });
   });
@@ -134,12 +141,28 @@ export function createApp(deps: AppDeps) {
     return c.json(await compat.check(id));
   });
 
-  const workspaces = new WorkspaceService(deps.db, store);
+  /** share_file connection details for one instance (URL, bearer token). */
+  const mcpInfo = (id: string) => ({ url: mcpUrl(config, id), token: mcpToken(deps.db, id), publicUrlSet: Boolean(config.publicUrl) });
+  priv.get('/instances/:id/mcp', (c) => {
+    if (!store.get(c.req.param('id'))) return c.json({ error: 'instance inconnue' }, 404);
+    return c.json(mcpInfo(c.req.param('id')));
+  });
+  priv.post('/instances/:id/mcp/rotate', (c) => {
+    const id = c.req.param('id');
+    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    rotateMcpToken(deps.db, id);
+    return c.json(mcpInfo(id));
+  });
+
+  const { workspaces, files, links } = deps.services;
   priv.route('/', workspaceRoutes({ ...deps, workspaces }));
   priv.route('/', chatRoutes({ ...deps, workspaces }));
+  priv.route('/', fileRoutes(files));
+  priv.route('/', linkRoutes(links));
 
   x.route('/', priv);
   app.route('/x', x);
+  app.route('/', publicLinkRoute(links, auth));
 
   // ---- SPA
   const webDir = config.webDir;
@@ -148,7 +171,7 @@ export function createApp(deps: AppDeps) {
     app.use('/assets/*', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
     app.use('/favicon.svg', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
     app.get('*', (c) => {
-      if (c.req.path.startsWith('/x/')) return c.json({ error: 'not found' }, 404);
+      if (c.req.path.startsWith('/x/') || c.req.path.startsWith('/f/')) return c.json({ error: 'not found' }, 404);
       return c.html(indexHtml);
     });
   }

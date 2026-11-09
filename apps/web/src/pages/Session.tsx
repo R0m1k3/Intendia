@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArrowLeft, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, Files, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ApprovalChoice, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, type Entry, type RunState } from '../chat/events';
-import { Composer } from '../chat/Composer';
+import { Composer, type ComposerHandle } from '../chat/Composer';
 import { ApprovalCard, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
-import { Button, ErrorText } from '../components/ui';
+import { SessionFiles } from '../components/SessionFiles';
+import { DropZone } from '../files/DropZone';
+import { FilePaths, type FilePathsValue } from '../files/FilePaths';
+import { findPathCandidates } from '../files/paths';
+import { Preview } from '../files/Preview';
+import { uploadFiles } from '../files/upload';
+import { Button, cx, ErrorText } from '../components/ui';
 
 interface ActiveRun {
   id: string;
@@ -46,6 +52,12 @@ export function SessionPage() {
   const [busy, setBusy] = useState(false);
   const firstRun = useRef(false);
   const chat = useChatAvailability(inst);
+  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const mounts = instances.data?.instances.find((i) => i.id === inst);
+  const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [runCount, setRunCount] = useState(0);
+  const composer = useRef<ComposerHandle>(null);
 
   // Reopened during a run (reload, other tab, network cut): plug back into its stream.
   useEffect(() => {
@@ -62,6 +74,7 @@ export function SessionPage() {
       qc.invalidateQueries({ queryKey: ['sessions'] }),
     ]);
     setActive(null);
+    setRunCount((n) => n + 1);
     if (firstRun.current && inst) {
       firstRun.current = false;
       // the session now exists at Hermes: give it the same title (Telegram, CLI)
@@ -142,8 +155,47 @@ export function SessionPage() {
 
   const title = sess.data?.session.title || 'Nouvelle session';
 
+  // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
+  const candidates = useMemo(() => {
+    if (!mounts) return [];
+    const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : '')).join('\n');
+    return findPathCandidates(text, { agentMount: mounts.agentMount, mount: mounts.mount }).sort();
+  }, [entries, mounts]);
+  const exists = useQuery({
+    queryKey: ['exists', slug, candidates.join('\n'), runCount],
+    queryFn: () => api.filesExist(slug, candidates.slice(0, 200)),
+    enabled: candidates.length > 0,
+    staleTime: 60_000,
+  });
+  const filePaths = useMemo<FilePathsValue>(() => {
+    const found = new Map<string, string>();
+    for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
+    return { found, open: (path) => { setPreviewPath(path); setPanel(true); } };
+  }, [exists.data]);
+  const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);
+
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const attach = async (files: File[]) => {
+    setUploadError(null);
+    try {
+      const done = await uploadFiles(slug, 'inbox', files);
+      composer.current?.append(done.map((d) => d.agentPath));
+      void qc.invalidateQueries({ queryKey: ['tree', slug] });
+    } catch (err) {
+      setUploadError(err);
+    }
+  };
+
+  const side = previewPath ? (
+    <Preview slug={slug} path={previewPath} onClose={() => setPreviewPath(null)} />
+  ) : (
+    <SessionFiles slug={slug} sessionId={sessionId} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
+  );
+
   return (
-    <div className="flex min-h-full flex-col">
+    <FilePaths.Provider value={filePaths}>
+    <div className="flex min-h-full">
+    <DropZone onFiles={(f) => void attach(f)} label="Déposer dans inbox/ et citer dans le message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-dvh">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-3 md:px-8">
           <Link to="/w/$slug" params={{ slug }} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink" aria-label="Retour au workspace">
@@ -156,6 +208,10 @@ export function SessionPage() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" className={cx('size-8 px-0', panel && 'lg:bg-raised lg:text-ink')} aria-label="Fichiers de la session" title="Fichiers de la session"
+              aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
+              <Files className="size-4" strokeWidth={1.5} />
+            </Button>
             <Button variant="ghost" className="size-8 px-0" aria-label="Renommer" title="Renommer"
               onClick={() => { const t = prompt('Nouveau titre', sess.data?.session.title ?? ''); if (t?.trim()) rename.mutate(t.trim()); }}>
               <Pencil className="size-4" strokeWidth={1.5} />
@@ -201,17 +257,29 @@ export function SessionPage() {
 
       <div className="sticky bottom-0 bg-linear-to-t from-paper from-70% to-transparent pt-4">
         <div className="mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
-          <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
+          <div className="mb-2 empty:hidden"><ErrorText error={error ?? uploadError} /></div>
           <Composer
+            ref={composer}
+            onAttach={(f) => void attach(f)}
             onSend={send}
             onStop={stop}
             running={running}
             disabled={!chat.available || !inst}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : undefined}
           />
-          <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne</p>
+          <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne · glisser un fichier pour le joindre</p>
         </div>
       </div>
+    </DropZone>
+    {panel && (
+      <aside className={cx(
+        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:border-l lg:border-line',
+        previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]',
+      )}>
+        {side}
+      </aside>
+    )}
     </div>
+    </FilePaths.Provider>
   );
 }

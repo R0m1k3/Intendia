@@ -13,7 +13,10 @@ services:
       - workspace:/workspace
     networks: [hermes, proxy]
     # No published ports: your reverse proxy reaches intendia:3000 on the "proxy" network.
-    # Port 3001 (MCP for the agents) must stay reachable from the Hermes network only.
+    # Port 3001 (MCP, tool share_file) must stay reachable from the Hermes network only: Hermes calls
+    # http://intendia:3001/mcp/<instance-id> with the token shown in Settings (see docs/install.md).
+    # Never add "3001:3001" under ports.
+    expose: ["3000", "3001"]
     logging:
       options: { max-size: "10m", max-file: "3" }
     # labels:

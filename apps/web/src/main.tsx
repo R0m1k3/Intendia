@@ -12,6 +12,8 @@ import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
 import { ExternalSessionPage } from './pages/ExternalSession';
+import { FilesPage, type FilesSearch } from './pages/Files';
+import { LinksPage } from './pages/Links';
 import { SessionPage } from './pages/Session';
 import { WorkspacePage } from './pages/Workspace';
 import { WorkspacesPage } from './pages/Workspaces';
@@ -52,11 +54,19 @@ const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat',
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
 const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: '/w', component: WorkspacesPage });
 const workspaceRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug', component: WorkspacePage });
+const filesRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/w/$slug/fichiers', component: FilesPage,
+  validateSearch: (s: Record<string, unknown>): FilesSearch => ({
+    path: typeof s.path === 'string' && s.path ? s.path : undefined,
+    f: typeof s.f === 'string' && s.f ? s.f : undefined,
+  }),
+});
+const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', component: LinksPage });
 const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, sessionRoute, externalRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute])]),
   defaultPreload: 'intent',
 });
 

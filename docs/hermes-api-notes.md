@@ -55,3 +55,16 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),
 commands `gateway run` and `dashboard --host ... --no-open`.
+
+## MCP client (checked on 0.23.0, phase 3)
+
+- Hermes speaks Streamable HTTP to `mcp_servers.<name>.url` and sends `mcp_servers.<name>.headers` on every request.
+  Before connecting it probes the URL with `HEAD` (then `GET` on 405/501) and only gives up on a 2xx with a non-MCP
+  content type, after one more `POST initialize` try. Intendia answers 405: the probe passes.
+- The default mode tries `initialize` first, offering `2025-11-25` (handshake versions known: `2024-11-05`, `2025-03-26`,
+  `2025-06-18`, `2025-11-25`), and only falls back to `server/discover` (the stateless `2026-07-28` era) on -32022 or on
+  -32601 for `initialize`.
+- Dashboard: `POST /api/mcp/servers` accepts `{name, url, auth: "header", bearer_token}` (without `auth: "header"` a
+  bearer token is refused) and stores the token in Hermes's `.env` as `MCP_<NAME>_API_KEY`, referenced from the headers;
+  `POST /api/mcp/servers/{name}/test` connects, lists the tools and disconnects; `DELETE /api/mcp/servers/{name}`.
+

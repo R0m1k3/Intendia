@@ -7,6 +7,8 @@ import { CompatService } from './compat/service.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db/index.js';
 import { InstanceStore } from './instances/store.js';
+import { createMcpApp } from './mcp/server.js';
+import { createServices } from './services.js';
 
 const VERSION = process.env.INTENDIA_VERSION ?? '0.1.0-dev';
 
@@ -36,7 +38,9 @@ function main() {
 
   const auth = new Auth(db, config);
   const compat = new CompatService(db, store, new WebhookNotifier(config.webhookUrl, config.publicUrl));
-  const app = createApp({ config, db, auth, store, compat, version: VERSION });
+  const services = createServices({ config, db, store });
+  const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
+  const mcpApp = createMcpApp({ db, store, links: services.links, config, version: VERSION });
 
   if (auth.setupCode) {
     console.log('');
@@ -48,11 +52,16 @@ function main() {
   const server = serve({ fetch: app.fetch, port: config.port, hostname: '0.0.0.0' }, (info) => {
     console.log(`[intendia] ${VERSION} listening on :${info.port}${config.publicUrl ? ` (${config.publicUrl})` : ''}`);
   });
+  // MCP for the agents: reachable on the Docker network only, never published
+  const mcpServer = serve({ fetch: mcpApp.fetch, port: config.mcpPort, hostname: '0.0.0.0' }, (info) => {
+    console.log(`[intendia] MCP (share_file) on :${info.port}`);
+  });
   compat.start(config.versionCheckMinutes);
 
   const shutdown = () => {
     compat.stop();
-    server.close(() => {
+    const closed = (s: { close: (cb: () => void) => unknown }) => new Promise<void>((r) => { s.close(() => r()); });
+    void Promise.all([closed(server), closed(mcpServer)]).then(() => {
       db.$client.close();
       process.exit(0);
     });

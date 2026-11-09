@@ -1,9 +1,11 @@
-import { ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronRight, FileText } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalChoice } from '../api';
 import { Button, cx, Mark } from '../components/ui';
+import { useFilePaths } from '../files/FilePaths';
+import { rehypePaths } from '../files/rehypePaths';
 import type { Approval, Entry } from './events';
 
 export function clock(ts: number | null): string {
@@ -21,10 +23,33 @@ function Row({ ts, children, className }: { ts: number | null; children: React.R
   );
 }
 
-function Md({ text }: { text: string }) {
+/**
+ * Markdown of the assistant. Inside a session, paths of existing workspace files become chips that
+ * open the preview (rehypePaths); every other link opens in a new tab.
+ */
+export function Md({ text }: { text: string }) {
+  const paths = useFilePaths();
+  const rehype = useMemo(() => (paths?.found.size ? [rehypePaths(paths.found)] : []), [paths?.found]);
   return (
     <div className="md">
-      <Markdown remarkPlugins={[remarkGfm]} components={{ a: ({ node: _n, ...p }) => <a {...p} target="_blank" rel="noreferrer" /> }}>
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehype}
+        components={{
+          a: ({ node: _n, ...p }) => {
+            const path = (p as { 'data-path'?: string })['data-path'];
+            if (path && paths) {
+              return (
+                <a href="#" className="file-chip" title={p.title} onClick={(e) => { e.preventDefault(); paths.open(path); }}>
+                  <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />
+                  <span>{path.slice(path.lastIndexOf('/') + 1)}</span>
+                </a>
+              );
+            }
+            return <a {...p} target="_blank" rel="noreferrer" />;
+          },
+        }}
+      >
         {text}
       </Markdown>
     </div>

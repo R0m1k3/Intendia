@@ -73,6 +73,11 @@ export class WorkspaceService {
     return inst;
   }
 
+  /** Instance serving a workspace (mount, agentMount). */
+  instanceOf(ws: Workspace): InstanceConfig {
+    return this.instance(ws.instanceId);
+  }
+
   dir(ws: Workspace): string {
     return join(this.instance(ws.instanceId).mount, ws.slug);
   }
@@ -202,6 +207,7 @@ export class WorkspaceService {
       `[Intendia] Workspace : ${ws.name} (${ws.slug})`,
       `Dossier de travail : ${path}/`,
       `Range chaque fichier que tu produis dans ${path}/sessions/${ctx.session.id}/.`,
+      "Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.",
       `Consignes du projet (${path}/AGENTS.md) :`,
       agents || '(aucune)',
     ].join('\n');

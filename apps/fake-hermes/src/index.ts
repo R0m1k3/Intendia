@@ -9,7 +9,10 @@
  * - "approval": stops on approval.request until POST /v1/runs/{id}/approval
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
+ * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
+ *   translated by `pathMap` (agent path → local folder), then cites its path
  */
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,6 +39,8 @@ export interface FakeOptions {
   retainFrom?: number;
   /** Delay between simulated events, in ms (default 5; "lent" scenario: 500). */
   stepMs?: number;
+  /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
+  pathMap?: { from: string; to: string };
 }
 
 export interface LoggedRequest {
@@ -72,6 +77,7 @@ interface SimRun {
   id: string;
   sessionId: string;
   input: string;
+  instructions: string;
   createdAt: number;
   status: string;
   output: string;
@@ -99,13 +105,13 @@ class Simulator {
   private counter = 0;
   private msgId = 1000;
 
-  constructor(private readonly stepMs: number) {}
+  constructor(private readonly stepMs: number, private readonly pathMap?: { from: string; to: string }) {}
 
-  create(sessionId: string, input: string): SimRun {
+  create(sessionId: string, input: string, instructions = ''): SimRun {
     this.counter += 1;
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
-      sessionId, input, createdAt: Date.now() / 1000, status: 'queued', output: '',
+      sessionId, input, instructions, createdAt: Date.now() / 1000, status: 'queued', output: '',
       events: [], listeners: new Set(), approval: null,
     };
     this.runs.set(run.id, run);
@@ -156,6 +162,7 @@ class Simulator {
         return this.finish(run, 'Commande refusée, je m’arrête là.');
       }
     }
+    if (/fichier/i.test(run.input)) return this.playFile(run, step);
     await sleep(step);
     this.push(run, { event: 'message.delta', delta: 'Je regarde ' });
     await sleep(step);
@@ -171,6 +178,24 @@ class Simulator {
     this.addMessage(run.sessionId, 'tool', 'AGENTS.md\nfiles\ninbox\nsessions', { tool_name: 'terminal' });
     await sleep(step);
     this.finish(run, 'Je regarde le dossier. Il contient `AGENTS.md`, `files`, `inbox` et `sessions`.');
+  }
+
+  private async playFile(run: SimRun, step: number) {
+    const dir = /dans (\S+\/sessions\/[^/\s]+)\/\./.exec(run.instructions)?.[1] ?? '/workspace/sessions/inconnue';
+    const path = `${dir}/rapport.md`;
+    const map = this.pathMap;
+    if (map && path.startsWith(`${map.from}/`)) {
+      const local = `${map.to}${path.slice(map.from.length)}`;
+      mkdirSync(local.slice(0, local.lastIndexOf('/')), { recursive: true });
+      writeFileSync(local, '# Rapport\n\nFichier écrit par fake-hermes.\n\n| Magasin | Ventes |\n|---|---|\n| Frouard | 1 240 |\n| Houdemont | 980 |\n');
+    }
+    await sleep(step);
+    this.push(run, { event: 'tool.started', tool: 'write_file', preview: path, call_id: 'call_1' });
+    await sleep(step);
+    this.push(run, { event: 'tool.completed', tool: 'write_file', duration: 0.05, error: false, preview: path, call_id: 'call_1' });
+    this.addMessage(run.sessionId, 'tool', `Wrote ${path}`, { tool_name: 'write_file' });
+    await sleep(step);
+    this.finish(run, `Voilà le rapport : \`${path}\`. Il reprend les ventes des deux magasins.`);
   }
 
   private finish(run: SimRun, output: string) {
@@ -298,7 +323,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
   const b = (body ?? {}) as Record<string, unknown>;
   if (method === 'POST' && path === '/v1/runs') {
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
-    const run = sim.create(sessionId, String(b.input ?? ''));
+    const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''));
     return json({ run_id: run.id, status: 'started', replayed: false });
   }
   let m = /^\/v1\/runs\/([^/]+)(\/[a-z]+)?$/.exec(path);
@@ -370,7 +395,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
 }
 
 export function createFakeHermes(opts: FakeOptions) {
-  const sim = new Simulator(opts.stepMs ?? 5);
+  const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
   const requests: LoggedRequest[] = [];
   return { api: makeApp('api', opts, sim, requests), dash: makeApp('dash', opts, sim, requests), requests, sim };
 }

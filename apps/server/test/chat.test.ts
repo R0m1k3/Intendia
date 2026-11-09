@@ -28,6 +28,7 @@ describe('sending a message', () => {
     expect(body.instructions).toContain('Dossier de travail : /opt/data/workspace/dev/');
     expect(body.instructions).toContain(`Range chaque fichier que tu produis dans /opt/data/workspace/dev/sessions/${s.id}/.`);
     expect(body.instructions).toContain('Réponds en français.');
+    expect(body.instructions).toContain("Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.\nConsignes du projet (");
     expect(body.instructions).toContain('(suite tronquée : lis /opt/data/workspace/dev/AGENTS.md en entier avant de commencer)');
     expect(body.instructions).not.toContain('�');
     const after = (await t.request('GET', base)).json.session;
