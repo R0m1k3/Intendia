@@ -1,0 +1,112 @@
+{
+  "status": 200,
+  "body": {
+    "version": "0.23.0",
+    "release_date": "2026.9.24",
+    "config_version": 52,
+    "latest_config_version": 52,
+    "can_update_hermes": true,
+    "gateway_running": true,
+    "gateway_state": "running",
+    "gateway_platforms": {
+      "api_server": {
+        "state": "connected",
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-11-09T13:48:20.461147+00:00",
+        "needs_attention": false,
+        "retrying_since": null,
+        "listener_base": "http://127.0.0.1:8642",
+        "metrics": {
+          "host": "127.0.0.1",
+          "port": 8642,
+          "active_runs": 0,
+          "stored_runs": 1,
+          "last_request_at": "2026-11-09T13:40:18.712645+00:00",
+          "last_heartbeat": "2026-11-09T13:48:20.460624+00:00",
+          "metrics_today": {
+            "day": "2026-11-09",
+            "requests": 1,
+            "messages": 1,
+            "tokens": 0,
+            "latency_p95_ms": 389.33
+          }
+        }
+      }
+    },
+    "gateway_exit_reason": null,
+    "gateway_updated_at": "2026-11-09T13:48:23.540611+00:00",
+    "gateway_heartbeat_stale_s": null,
+    "gateway_shared_with": [],
+    "active_agents": 0,
+    "gateway_busy": false,
+    "gateway_drainable": true,
+    "restart_drain_timeout": 0,
+    "active_sessions": 0,
+    "auth_required": false,
+    "auth_providers": [
+      "session-token"
+    ],
+    "auth_flows": [],
+    "nous_session_valid": "unknown",
+    "install_id": "86be891a78894f61913dc8bedf05f104",
+    "shared_profile_warning": false,
+    "components": {
+      "gateway": {
+        "status": "ok",
+        "state": "running"
+      },
+      "dashboard": {
+        "status": "ok",
+        "recent_unhandled_errors": 0,
+        "last_error_at": null,
+        "selftest": "ok"
+      },
+      "storage": {
+        "status": "ok"
+      },
+      "platforms": {
+        "status": "ok",
+        "configured": 1,
+        "connected": 1
+      }
+    },
+    "overall": "ok",
+    "memory": {
+      "pressure": "ok",
+      "gateway_rss_mb": 297,
+      "system_total_mb": 32094,
+      "system_available_mb": 15077,
+      "swap_used_mb": 0,
+      "sampled_at": "2026-11-09T13:48:21.802453+00:00",
+      "last_boot_unclean": false,
+      "last_boot_suspected_oom": false,
+      "boot_id": "2026-11-09T13:39:19.488852+00:00"
+    },
+    "disk": {
+      "pressure": "ok",
+      "total_mb": 395699,
+      "free_mb": 117421,
+      "used_percent": 70.3
+    },
+    "profiles": [
+      "default"
+    ],
+    "parked_profiles": [],
+    "gateway_mode": "single",
+    "multiplex_standalone_reason": null,
+    "hermes_home": "<redacted>/.hermes",
+    "config_path": "<redacted>/.hermes/config.yaml",
+    "env_path": "<redacted>/.hermes/.env",
+    "gateway_pid": 715418,
+    "gateway_health_url": null,
+    "gateways": [
+      {
+        "profile": "default",
+        "ports": {
+          "api_server": 8642
+        }
+      }
+    ]
+  }
+}

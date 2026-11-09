@@ -1,0 +1,34 @@
+# Intendia next to an existing Hermes Agent stack. Copy to docker-compose.yml and adapt the
+# three external names (workspace volume, Hermes network, reverse-proxy network).
+services:
+  intendia:
+    image: ghcr.io/r0m1k3/intendia:1        # major alias: patch releases only
+    container_name: intendia
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-10000}:${PGID:-10000}"   # must be able to write the Hermes workspace volume
+    env_file: .env
+    volumes:
+      - intendia-data:/data
+      - workspace:/workspace
+    networks: [hermes, proxy]
+    # No published ports: your reverse proxy reaches intendia:3000 on the "proxy" network.
+    # Port 3001 (MCP for the agents) must stay reachable from the Hermes network only.
+    logging:
+      options: { max-size: "10m", max-file: "3" }
+    # labels:
+    #   - com.centurylinklabs.watchtower.enable=true   # only if Watchtower runs with --label-enable
+
+volumes:
+  intendia-data:
+  workspace:
+    name: hermes_workspace          # the volume your Hermes containers use as workspace
+    external: true
+
+networks:
+  hermes:
+    name: hermes_default            # the network of your Hermes stack
+    external: true
+  proxy:
+    name: proxy                     # the network of your reverse proxy (NPM, Caddy, Traefik...)
+    external: true

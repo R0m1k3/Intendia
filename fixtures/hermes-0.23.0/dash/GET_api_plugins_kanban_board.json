@@ -1,0 +1,45 @@
+{
+  "status": 200,
+  "body": {
+    "columns": [
+      {
+        "name": "triage",
+        "tasks": []
+      },
+      {
+        "name": "todo",
+        "tasks": []
+      },
+      {
+        "name": "scheduled",
+        "tasks": []
+      },
+      {
+        "name": "ready",
+        "tasks": []
+      },
+      {
+        "name": "running",
+        "tasks": []
+      },
+      {
+        "name": "blocked",
+        "tasks": []
+      },
+      {
+        "name": "review",
+        "tasks": []
+      },
+      {
+        "name": "done",
+        "tasks": []
+      }
+    ],
+    "tenants": [],
+    "assignees": [
+      "default"
+    ],
+    "latest_event_id": 0,
+    "now": 1794232113
+  }
+}

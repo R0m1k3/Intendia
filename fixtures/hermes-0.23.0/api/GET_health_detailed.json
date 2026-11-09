@@ -1,0 +1,100 @@
+{
+  "status": 200,
+  "body": {
+    "status": "ok",
+    "readiness": {
+      "status": "ok",
+      "checks": {
+        "state_db": {
+          "status": "ok"
+        },
+        "session_store": {
+          "status": "ok"
+        },
+        "config": {
+          "status": "ok"
+        },
+        "model": {
+          "status": "ok"
+        },
+        "disk": {
+          "status": "ok",
+          "used_percent": 70.3,
+          "free_bytes": 123125215232
+        },
+        "gateway": {
+          "status": "ok",
+          "state": "running",
+          "connected_platforms": 1,
+          "platforms": 1
+        },
+        "background_queues": {
+          "status": "ok",
+          "active_api_runs": 0,
+          "process_completions": 0,
+          "active_delegations": 0
+        }
+      }
+    },
+    "platform": "hermes-agent",
+    "version": "0.23.0",
+    "gateway_state": "running",
+    "platforms": {
+      "api_server": {
+        "state": "connected",
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-11-09T13:48:20.461147+00:00",
+        "writer_pid": 715418,
+        "writer_start_time": 19616622,
+        "needs_attention": false,
+        "retrying_since": null,
+        "listener_base": "http://127.0.0.1:8642",
+        "metrics": {
+          "host": "127.0.0.1",
+          "port": 8642,
+          "active_runs": 0,
+          "stored_runs": 1,
+          "last_request_at": "2026-11-09T13:40:18.712645+00:00",
+          "last_heartbeat": "2026-11-09T13:48:32.660370+00:00",
+          "metrics_today": {
+            "day": "2026-11-09",
+            "requests": 1,
+            "messages": 1,
+            "tokens": 0,
+            "latency_p95_ms": 389.33
+          }
+        }
+      }
+    },
+    "api_server": {
+      "host": "127.0.0.1",
+      "port": 8642,
+      "active_runs": 0,
+      "stored_runs": 1,
+      "last_request_at": "2026-11-09T13:40:18.712645+00:00",
+      "last_heartbeat": "2026-11-09T13:48:32.660370+00:00",
+      "metrics_today": {
+        "day": "2026-11-09",
+        "requests": 1,
+        "messages": 1,
+        "tokens": 0,
+        "latency_p95_ms": 389.33
+      }
+    },
+    "metrics_today": {
+      "day": "2026-11-09",
+      "requests": 1,
+      "messages": 1,
+      "tokens": 0,
+      "latency_p95_ms": 389.33
+    },
+    "last_heartbeat": "2026-11-09T13:48:32.660370+00:00",
+    "active_agents": 0,
+    "gateway_busy": false,
+    "gateway_drainable": true,
+    "exit_reason": null,
+    "updated_at": "2026-11-09T13:48:23.540611+00:00",
+    "pid": 715418
+  }
+}

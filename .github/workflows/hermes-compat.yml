@@ -1,0 +1,66 @@
+# Weekly early warning: starts the official Hermes image (latest), without any AI provider key,
+# records its read-only answers with `probe`, and opens an issue if a module would degrade or a
+# response shape changed compared with the newest recorded fixtures.
+name: Hermes compatibility
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      API_KEY: ci-api-key-0123456789abcdef
+      DASH_TOKEN: ci-dashboard-token-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - name: Start Hermes latest (gateway + dashboard)
+        run: |
+          docker volume create hermes-data
+          docker run -d --name hermes-gw -v hermes-data:/opt/data -p 8642:8642 \
+            -e API_SERVER_ENABLED=true -e API_SERVER_HOST=0.0.0.0 -e API_SERVER_KEY=$API_KEY \
+            nousresearch/hermes-agent:latest gateway run
+          docker run -d --name hermes-dash -v hermes-data:/opt/data -p 9119:9119 \
+            -e HERMES_DASHBOARD_SESSION_TOKEN=$DASH_TOKEN \
+            nousresearch/hermes-agent:latest dashboard --host 0.0.0.0 --no-open
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8642/health >/dev/null && curl -s -o /dev/null http://127.0.0.1:9119/ && break
+            sleep 5
+          done
+      - name: Record and compare
+        id: probe
+        run: |
+          set -o pipefail
+          previous=$(ls -d fixtures/hermes-* | sort -V | tail -1)
+          code=0
+          PROBE_API=http://127.0.0.1:8642 PROBE_API_KEY=$API_KEY \
+          PROBE_DASH=http://127.0.0.1:9119 PROBE_DASH_TOKEN=$DASH_TOKEN \
+            pnpm probe record --out /tmp/latest --strict 2>&1 | tee /tmp/record.txt || code=$?
+          pnpm --silent probe diff "$previous" /tmp/latest 2>&1 | tee /tmp/diff.txt
+          version=$(node -e "console.log(require('/tmp/latest/surface.json').version)")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          lines=$(grep -cvE '^(Hermes .*)?$' /tmp/diff.txt || true)
+          if [ "$code" != 0 ] || [ "$lines" -gt 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: hermes-latest-recording, path: /tmp/latest }
+      - name: Open an issue
+        if: steps.probe.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Hermes ${{ steps.probe.outputs.version }}: API changes detected"
+          if gh issue list --state open --search "$title in:title" --json number --jq 'length' | grep -q '^0$'; then
+            { echo '`probe` against `nousresearch/hermes-agent:latest`. Recording attached to the workflow run.'; echo; \
+              echo '### Modules'; echo '```'; tail -12 /tmp/record.txt; echo '```'; \
+              echo '### Diff with the newest fixtures'; echo '```'; cat /tmp/diff.txt; echo '```'; } > /tmp/body.md
+            gh issue create --title "$title" --body-file /tmp/body.md
+          fi
+      - if: always()
+        run: docker logs hermes-gw 2>&1 | tail -40; docker logs hermes-dash 2>&1 | tail -20
