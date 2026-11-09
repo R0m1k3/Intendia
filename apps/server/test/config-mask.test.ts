@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Masker, isSecretKey, SecretError } from '../src/hermes-config/mask.js';
+import { Masker, isSecretKey, parse, SecretError } from '../src/hermes-config/mask.js';
 
 const m = new Masker('test-secret-0123456789abcdef');
 const ID = /«secret:[0-9a-f]{8}»/;
@@ -163,5 +163,12 @@ describe('Masker.yaml and restore', () => {
       expect((e as SecretError).extra.line).toBeTypeOf('number');
     }
     expect(() => m.restore('- a\n- b\n', YAML_TEXT)).toThrow(/table/);
+  });
+});
+
+describe('parse', () => {
+  it('reads floats like PyYAML', () => {
+    expect(parse('a: .\nb: e5\nc: 1.5\nd: .5\ne: 1.0e+3\nf: 1e5\ng: yes\nh: .inf').toJS())
+      .toEqual({ a: '.', b: 'e5', c: 1.5, d: 0.5, e: 1000, f: '1e5', g: true, h: Infinity });
   });
 });

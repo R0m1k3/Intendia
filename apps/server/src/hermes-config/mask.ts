@@ -195,9 +195,18 @@ export class Masker {
   }
 }
 
-/** YAML 1.1, like Hermes' `yaml.safe_load` (`yes`/`on` are booleans). */
+// PyYAML's float resolver needs a digit (the `yaml` library reads `.` as NaN and `e5` as a number)
+const PY_FLOAT = /^(?:[-+]?[0-9][0-9_]*\.[0-9_]*|\.[0-9][0-9_]*)$/;
+const PY_FLOAT_EXP = /^(?:[-+]?[0-9][0-9_]*\.[0-9_]*|\.[0-9][0-9_]*)[eE][-+][0-9]+$/;
+type Tag = { tag: string; format?: string; test?: RegExp };
+export const pyTags = <T extends Tag>(tags: T[]): T[] => tags.map((t) => {
+  if (t.tag !== 'tag:yaml.org,2002:float' || !t.test || t.format === 'NAN' || t.test.test('.nan')) return t;
+  return { ...t, test: t.format === 'EXP' ? PY_FLOAT_EXP : PY_FLOAT };
+});
+
+/** YAML 1.1, like Hermes' `yaml.safe_load` (`yes`/`on` are booleans, `.` is a string). */
 export function parse(text: string): Document.Parsed {
-  return parseDocument(text, { version: '1.1', uniqueKeys: false });
+  return parseDocument(text, { version: '1.1', uniqueKeys: false, customTags: pyTags as never });
 }
 
 /** Calls `fn` for every value scalar (not mapping keys) with its path of keys and list indices. */

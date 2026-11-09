@@ -83,6 +83,12 @@ export interface McpCreate { name: string; url?: string; token?: string; command
 
 type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatService['get']>; instanceId: string; profile: string };
 
+/** Hermes or Intendia said no before writing (a timeout or a 5xx may have written, so the copy stays). */
+function refused(err: unknown): boolean {
+  return err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
+    || (err instanceof ConfigConflictError && err.code === 'hermes_conflict');
+}
+
 export function versionOf(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 16);
 }
@@ -183,8 +189,15 @@ export class ConfigService {
       if (CHECKED.has(source) && expected !== null && versionOf(current) !== expected) {
         throw new ConfigConflictError('config_changed', "La configuration a changé dans Hermes depuis l'affichage");
       }
-      this.copy(ctx, source, current);
-      await fn(current);
+      const copied = this.copy(ctx, source, current);
+      try {
+        await fn(current);
+      } catch (err) {
+        // refused before anything was written: the copy would describe a write that never happened
+        if (copied !== null && refused(err)) this.db.delete(configVersions).where(eq(configVersions.id, copied)).run();
+        throw err;
+      }
+      this.trim(ctx);
       const after = await this.readRaw(ctx).catch(() => null);
       return { version: after === null ? null : versionOf(after) };
     });
@@ -198,18 +211,23 @@ export class ConfigService {
       .orderBy(desc(configVersions.id)).all();
   }
 
-  private copy(ctx: Ctx, source: WriteSource, text: string): void {
+  /** Copy of the file before a write (id of the new row, null when the latest copy is the same text). */
+  private copy(ctx: Ctx, source: WriteSource, text: string): number | null {
     const hash = versionOf(text);
     const latest = this.rows(ctx)[0];
     if (latest) {
       try {
-        if ((JSON.parse(latest.configJson) as { hash?: string }).hash === hash) return;
+        if ((JSON.parse(latest.configJson) as { hash?: string }).hash === hash) return null;
       } catch { /* unreadable row: copy again */ }
     }
-    this.db.insert(configVersions).values({
+    const row = this.db.insert(configVersions).values({
       instanceId: ctx.instanceId, profile: ctx.profile, createdAt: Date.now(),
       configJson: JSON.stringify({ format: 'yaml', source, hash, enc: encrypt(this.secret, text, HISTORY_PURPOSE) }),
-    }).run();
+    }).returning({ id: configVersions.id }).get();
+    return row?.id ?? null;
+  }
+
+  private trim(ctx: Ctx): void {
     const keep = this.rows(ctx).slice(0, HISTORY_KEEP).map((r) => r.id);
     this.db.delete(configVersions).where(and(
       eq(configVersions.instanceId, ctx.instanceId), eq(configVersions.profile, ctx.profile), notInArray(configVersions.id, keep),

@@ -135,6 +135,16 @@ describe('config: YAML editor', () => {
     expect(unknown.json).toMatchObject({ code: 'secret_placeholder', path: 'a.api_key' });
     expect(dashCalls(t, 'PUT', '/api/config/raw')).toHaveLength(0);
   });
+
+  it('keeps no copy of a write that was refused', async () => {
+    const t = await testApp();
+    expect((await t.request('PUT', BASE, { changes: { 'runtime.nofile_soft_limit': 123 }, version: await version(t) })).status).toBe(200);
+    const v = await version(t);
+    expect((await t.request('PUT', `${BASE}/raw`, { yaml: 'a: [1\n', version: v })).status).toBe(400);
+    expect((await t.request('POST', `${BASE}/models`, { scope: 'main', provider: 'openrouter', model: 'cher-2', version: v })).status).toBe(409);
+    const list = (await t.request('GET', `${BASE}/versions`)).json.versions;
+    expect(list.map((x: { source: string }) => x.source)).toEqual(['form']);
+  });
 });
 
 describe('config: history', () => {

@@ -112,7 +112,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
           ))}
         </Panel>
       </div>
-      {changes.length > 0 && (
+      {(changes.length > 0 || Object.keys(bad).length > 0) && (
         <div className="sticky bottom-3 z-10 rounded-xl border border-line bg-sheet p-4 shadow-lg">
           {review ? (
             <div className="space-y-3">
@@ -133,10 +133,13 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm">{changes.length} changement{changes.length > 1 ? 's' : ''} en attente</span>
+              <span className="text-sm">
+                {changes.length} changement{changes.length > 1 ? 's' : ''} en attente
+                {Object.keys(bad).length > 0 && <span className="text-bad"> · {Object.keys(bad).length} valeur{Object.keys(bad).length > 1 ? 's' : ''} à corriger</span>}
+              </span>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => { setPending({}); setTexts({}); setBad({}); }}>Annuler</Button>
-                <Button variant="primary" disabled={!writable || Object.keys(bad).length > 0} onClick={() => setReview(true)}>Voir et enregistrer</Button>
+                <Button variant="primary" disabled={!writable || changes.length === 0 || Object.keys(bad).length > 0} onClick={() => setReview(true)}>Voir et enregistrer</Button>
               </div>
             </div>
           )}

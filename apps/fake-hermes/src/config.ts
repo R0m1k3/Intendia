@@ -2,6 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument, stringify } from 'yaml';
 
+// YAML 1.1 as PyYAML reads it: a float needs a digit (the library alone reads `.` as NaN)
+const PY_FLOAT = /^(?:[-+]?[0-9][0-9_]*\.[0-9_]*|\.[0-9][0-9_]*)$/;
+const PY_FLOAT_EXP = /^(?:[-+]?[0-9][0-9_]*\.[0-9_]*|\.[0-9][0-9_]*)[eE][-+][0-9]+$/;
+const PY = {
+  version: '1.1' as const,
+  customTags: ((tags: { tag: string; format?: string; test?: RegExp }[]) => tags.map((t) =>
+    t.tag !== 'tag:yaml.org,2002:float' || !t.test || t.test.test('.nan') ? t : { ...t, test: t.format === 'EXP' ? PY_FLOAT_EXP : PY_FLOAT })) as never,
+};
+
 /**
  * Configuration routes of the dashboard (phase 6), with state: config file text, env, MCP servers,
  * auxiliary models, gateway restart. One configuration for all profiles, like SkillStore.
@@ -83,12 +92,12 @@ export class ConfigStore {
   }
 
   file(): Obj {
-    const v = parseDocument(this.raw, { version: '1.1' }).toJS() as unknown;
+    const v = parseDocument(this.raw, PY).toJS() as unknown;
     return isObj(v) ? v : {};
   }
 
   private write(obj: Obj): void {
-    this.raw = stringify(obj);
+    this.raw = stringify(obj, { version: '1.1' });
   }
 
   private resolve(v: unknown): unknown {
@@ -142,7 +151,7 @@ export class ConfigStore {
     }
     if (path === '/api/config/raw' && method === 'PUT') {
       const text = typeof b.yaml_text === 'string' ? b.yaml_text : '';
-      const doc = parseDocument(text, { version: '1.1' });
+      const doc = parseDocument(text, PY);
       if (doc.errors.length) return json({ detail: `Invalid YAML: ${doc.errors[0]!.message}` }, 400);
       if (!isObj(doc.toJS())) return json({ detail: 'YAML must be a mapping' }, 400);
       this.raw = text;
