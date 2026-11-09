@@ -74,6 +74,20 @@ describe('crons', () => {
     expect(hermesJob(t, id).workdir).toBeNull();
   });
 
+  it('moving to another workspace keeps the key only if it is free there', async () => {
+    const t = await testApp();
+    for (const slug of ['ventes', 'achats', 'stock']) await t.request('POST', '/x/workspaces', { slug, name: slug, instanceId: 'fake' });
+    const { id } = (await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron;
+    // a folder left in achats by a deleted cron must not be reused
+    mkdirSync(join(t.mount, 'achats', 'crons', 'rapport-du-lundi'), { recursive: true });
+    const moved = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'achats' }))).json.cron;
+    expect(moved.workspace).toMatchObject({ slug: 'achats', folder: 'rapport-du-lundi-2' });
+    expect(hermesJob(t, id).prompt).toContain(`${t.mount}/achats/crons/rapport-du-lundi-2/`);
+    // free in stock: the key moves with the cron (its own former key is not counted as taken)
+    const again = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'stock' }))).json.cron;
+    expect(again.workspace).toMatchObject({ slug: 'stock', folder: 'rapport-du-lundi-2' });
+  });
+
   it('shows a deleted workspace as missing', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'ventes', name: 'Ventes', instanceId: 'fake' });

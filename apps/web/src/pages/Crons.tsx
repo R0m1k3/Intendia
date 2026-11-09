@@ -36,9 +36,13 @@ function CronRow({ cron, can, open, follow, onOpen, onEdit, onFollow, onFollowEn
   const remove = useMutation({ mutationFn: () => api.deleteCron(cron.instanceId, cron.id, cron.profile), onSuccess: refresh });
   const trigger = useMutation({
     mutationFn: async () => {
-      // snapshot before the click: the run is over when Hermes writes a new last_run_at
-      const runs = can('runs') ? (await api.cronRuns(cron.instanceId, cron.id, cron.profile)).runs : [];
-      const snap = snapshot(cron, runs);
+      // snapshot before the click, from a fresh read: the list may predate a scheduled run, whose newer
+      // last_run_at would then end the follow-up at once. The run is over when Hermes writes a new last_run_at
+      const [fresh, runs] = await Promise.all([
+        api.cron(cron.instanceId, cron.id, cron.profile).then((r) => r.cron),
+        can('runs') ? api.cronRuns(cron.instanceId, cron.id, cron.profile).then((r) => r.runs) : Promise.resolve([]),
+      ]);
+      const snap = snapshot(fresh, runs);
       await api.cronAction(cron.instanceId, cron.id, cron.profile, 'trigger');
       return snap;
     },

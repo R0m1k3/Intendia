@@ -232,8 +232,9 @@ export class CronService {
   }
 
   /** Keys already used by the instance's crons, and folders already on disk under the workspace's crons/. */
-  private async takenKeys(instanceId: string, ws: Workspace): Promise<string[]> {
-    const keys = (await this.rawList(instanceId)).map((j) => unframe(j.prompt ?? '').folder).filter((k): k is string => Boolean(k));
+  private async takenKeys(instanceId: string, ws: Workspace, exceptJobId?: string): Promise<string[]> {
+    const keys = (await this.rawList(instanceId)).filter((j) => j.id !== exceptJobId)
+      .map((j) => unframe(j.prompt ?? '').folder).filter((k): k is string => Boolean(k));
     const dir = join(this.workspaces.dir(ws), 'crons');
     if (existsSync(dir)) keys.push(...readdirSync(dir));
     return keys;
@@ -281,7 +282,11 @@ export class CronService {
       if (wsProfile !== jobProfile) {
         throw new ValidationError(`Ce workspace utilise le profil ${wsProfile}, ce cron le profil ${jobProfile}`);
       }
-      const folder = current.folder ?? folderKey(input.name, await this.takenKeys(instanceId, ws));
+      // same workspace: the folder never changes. Another workspace: keep the key only if it is free there
+      // (a folder left by a deleted cron must not be reused), else allocate one against the destination
+      const folder = current.folder && current.slug === ws.slug
+        ? current.folder
+        : folderKey(current.folder ?? input.name, await this.takenKeys(instanceId, ws, id));
       fields.prompt = frame(input.prompt, this.blockLines(ws, folder));
       fields.workdir = this.workspaces.agentPath(ws);
     } else if (current.slug) {
