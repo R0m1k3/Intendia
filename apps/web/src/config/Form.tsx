@@ -20,13 +20,15 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   const [review, setReview] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [dropped, setDropped] = useState<string[]>([]);
+  /** Version the pending edits started from: a background refetch must not move it (that would skip the 409). */
+  const [baseVersion, setBaseVersion] = useState<string | null>(null);
 
   const data = form.data;
   const changes = useMemo(() => (data ? changeList(data.values, pending) : []), [data, pending]);
   const save = useMutation({
-    mutationFn: () => api.saveConfig(inst, profile, Object.fromEntries(changes.map((c) => [c.path, c.after])), data!.version!),
+    mutationFn: () => api.saveConfig(inst, profile, Object.fromEntries(changes.map((c) => [c.path, c.after])), (baseVersion ?? data!.version)!),
     onSuccess: async () => {
-      setPending({}); setTexts({}); setReview(false); setConflict(false);
+      setPending({}); setTexts({}); setReview(false); setConflict(false); setBaseVersion(null);
       await invalidate();
       onSaved(true);
     },
@@ -46,14 +48,16 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   }).sort();
   const writable = can('put') && data.version !== null;
 
+  const started = () => { if (baseVersion === null) setBaseVersion(data.version); };
   const edit = (path: string, kind: EditorKind, text: string, original: unknown) => {
+    started();
     setTexts((t) => ({ ...t, [path]: text }));
     const parsed = fromText(kind, text, original);
     if (!parsed.ok) { setBad((b) => ({ ...b, [path]: parsed.error })); return; }
     setBad(({ [path]: _, ...rest }) => rest);
     setPending((p) => ({ ...p, [path]: parsed.value }));
   };
-  const setValue = (path: string, value: unknown) => setPending((p) => ({ ...p, [path]: value }));
+  const setValue = (path: string, value: unknown) => { started(); setPending((p) => ({ ...p, [path]: value })); };
 
   const reload = async () => {
     const fresh = await form.refetch();
@@ -61,6 +65,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
       const r = reapply(pending, fresh.data.schema);
       setPending(r.kept);
       setDropped(r.dropped);
+      setBaseVersion(fresh.data.version);
     }
     setConflict(false);
     save.reset();
@@ -138,7 +143,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
                 {Object.keys(bad).length > 0 && <span className="text-bad"> · {Object.keys(bad).length} valeur{Object.keys(bad).length > 1 ? 's' : ''} à corriger</span>}
               </span>
               <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => { setPending({}); setTexts({}); setBad({}); }}>Annuler</Button>
+                <Button variant="ghost" onClick={() => { setPending({}); setTexts({}); setBad({}); setBaseVersion(null); }}>Annuler</Button>
                 <Button variant="primary" disabled={!writable || changes.length === 0 || Object.keys(bad).length > 0} onClick={() => setReview(true)}>Voir et enregistrer</Button>
               </div>
             </div>

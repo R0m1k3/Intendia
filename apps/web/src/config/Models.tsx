@@ -19,8 +19,10 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey }: TabProps
       await invalidate();
       onSaved(false);
     },
-    onError: (err, input) => {
+    onError: async (err, input) => {
       if (errorCode(err) === 'confirm_required') setConfirmFor({ input, message: String(errorData(err).message ?? 'Confirmer ?') });
+      // the file changed elsewhere: reread it so the next attempt carries the new version
+      if (errorCode(err) === 'config_changed') { setConfirmFor(null); await models.refetch(); }
     },
   });
 

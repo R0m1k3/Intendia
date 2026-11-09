@@ -20,6 +20,8 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
   const [showDiff, setShowDiff] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** Bumped on cancel: the editor keeps its own text, so it must be recreated to drop the edits. */
+  const [resets, setResets] = useState(0);
 
   const shown = start ?? raw.data ?? null;
   const against = base ?? shown;
@@ -60,7 +62,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
         title="Fichier de configuration"
         action={(
           <div className="flex gap-2">
-            {dirty && <Button variant="ghost" onClick={() => { setDraft(null); setStart(null); setBase(null); setShowDiff(false); save.reset(); }}>Annuler</Button>}
+            {dirty && <Button variant="ghost" onClick={() => { setDraft(null); setStart(null); setBase(null); setShowDiff(false); setResets((n) => n + 1); save.reset(); }}>Annuler</Button>}
             <Button disabled={!dirty} onClick={() => setShowDiff((v) => !v)}>{showDiff ? 'Masquer la différence' : 'Voir la différence'}</Button>
             <Button variant="primary" disabled={!dirty || !writable || save.isPending} onClick={() => { setShowDiff(true); save.mutate(); }}>
               <Save className={ICON} strokeWidth={1.5} />{save.isPending ? 'Enregistrement…' : 'Enregistrer'}
@@ -71,7 +73,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
       >
         <div className="h-[60vh] min-h-80 overflow-hidden">
           <Suspense fallback={<p className="p-5 text-sm text-ink-soft">Chargement de l’éditeur…</p>}>
-            <CodeView key={`${shown.version}`} name="config.yaml" value={shown.yaml} editable={writable}
+            <CodeView key={`${shown.version}:${resets}`} name="config.yaml" value={shown.yaml} editable={writable}
               onChange={(v) => { if (!start) setStart(shown); setDraft(v); setSaved(false); }} />
           </Suspense>
         </div>
