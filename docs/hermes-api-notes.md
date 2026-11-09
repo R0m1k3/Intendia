@@ -51,6 +51,30 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
 - Kanban: `/api/plugins/kanban/*` (board, boards, tasks, links, dispatch, orchestration, profiles...).
 - Files: `/api/files` (list, read, download, upload, mkdir, delete) — a possible path for instances on another host.
 
+## Crons (checked on 0.23.0, phase 4, 2026-11-09)
+
+- Source: the dashboard (`/api/cron/*`, in its OpenAPI). The API server answers `/api/jobs` too (`{ jobs }`,
+  `PATCH` with flat fields, `{ job }` replies, `POST /api/jobs/{id}/run`) but announces `jobs_admin: false` and has
+  no runs, no cancel, no delivery targets. Intendia uses the dashboard first, the API server as a fallback.
+- Every cron route takes `?profile=`; the list defaults to `all`, the others to the active profile. Unknown profile:
+  404 `Profile 'x' does not exist.`; job not in that profile: 404 `Job not found`.
+- Create (`CronJobCreate`): `schedule` required; `name`, `prompt`, `deliver` (default `local`), `skills[]`, `model`,
+  `workdir`, `paused`. Update: `PUT` with `{ "updates": { ... } }`. `updates.paused: false` does **not** resume a job
+  (use `/resume`); `updates.workdir: null` clears it.
+- `schedule` strings: `every 30m`, `every 2h`, `in 30m` (once), `0 9 * * *`, `2026-11-12T08:30:00` (once, Hermes
+  time zone), plus English phrases (`weekdays at 9am`) Intendia does not send. Invalid: 400
+  `{"detail":"Invalid schedule 'x'. Use: ..."}`. Replies carry `schedule: { kind: interval|cron|once, minutes | expr | run_at, display }`
+  and `schedule_display`.
+- A job also carries `hermes_home`, `script`, `monitor_*`, `origin`: never sent to the browser.
+- `last_run_at` / `last_status` (`ok`, `error`, `delivery_failed`, `cancelled`, `blocked_config`...) are written only
+  when a run ends (`cron/jobs.py`, `_record_run_outcome`): a change of `last_run_at` means the run is over.
+- `GET .../runs?limit=` answers `{ runs }`; each run is a Hermes session (`id`, `started_at`/`ended_at` in seconds,
+  `message_count`, `tool_call_count`, `estimated_cost_usd`). A run blocked before starting keeps `ended_at: null`.
+  The run's text output goes to a Hermes file with no HTTP route.
+- `trigger` answers the job at once (a blocked run is already recorded in that reply); `cancel` answers
+  `{ success, cancelled, detail }`.
+- `GET /api/cron/delivery-targets`: `{ targets: [{ id, name, home_target_set }] }`.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

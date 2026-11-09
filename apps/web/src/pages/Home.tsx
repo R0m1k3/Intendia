@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowRight, RotateCw } from 'lucide-react';
+import { ArrowRight, CalendarClock, RotateCw } from 'lucide-react';
+import { describe, whenFr } from '../crons/schedule';
 import { api, type CompatReport, type PublicInstance } from '../api';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, host, MODULE_META, Panel, StateMark, timeAgo } from '../components/ui';
@@ -128,6 +129,36 @@ function RecentWorkspaces() {
   );
 }
 
+/** Next three active crons across instances; hidden when there are none. */
+function UpcomingCrons() {
+  const up = useQuery({ queryKey: ['upcoming-crons'], queryFn: api.upcomingCrons, refetchInterval: 60_000 });
+  const list = up.data?.upcoming ?? [];
+  if (list.length === 0) return null;
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-[15px] font-medium">Prochains crons</h2>
+        <Link to="/crons" className="inline-flex items-center gap-1 text-xs text-ink-soft transition-colors hover:text-ink">
+          Tous
+          <ArrowRight className="size-3.5" strokeWidth={1.5} />
+        </Link>
+      </div>
+      <ul className="divide-y divide-line rounded-xl border border-line bg-sheet">
+        {list.map((c) => (
+          <li key={`${c.instanceId}/${c.id}`}>
+            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-raised/50">
+              <CalendarClock className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.name}</span>
+              <span className="text-[13px] text-ink-soft">{whenFr(c.nextRunAt)}</span>
+              <span className="w-full pl-8 font-mono text-[11px] text-ink-faint sm:w-auto sm:pl-0">{describe(c.schedule)} · {c.instanceLabel}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function summary(reports: CompatReport[], count: number): string {
   if (count === 0) return 'Aucune instance Hermes';
   const mods = reports.flatMap((r) => r.modules);
@@ -159,6 +190,7 @@ export function HomePage() {
           </Panel>
         )}
         {list.length > 0 && <RecentWorkspaces />}
+        {list.length > 0 && <UpcomingCrons />}
         {list.map((i) => (
           <InstanceSheet key={i.id} instance={i} report={reports.find((r) => r.instanceId === i.id)} />
         ))}

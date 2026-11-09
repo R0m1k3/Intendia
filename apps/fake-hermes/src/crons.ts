@@ -98,6 +98,8 @@ export class CronStore {
       } else if (k === 'enabled') {
         job.enabled = v === true;
         job.state = job.enabled ? 'scheduled' : 'paused';
+        job.paused_at = job.enabled ? null : iso(Date.now());
+        if (job.enabled && !job.next_run_at) job.next_run_at = nextRun(job.schedule as Record<string, unknown>);
       } else if (k !== 'paused' && k !== 'id' && k !== 'profile') {
         job[k] = v; // Hermes ignores `paused` in updates (checked on 0.23.0)
       }

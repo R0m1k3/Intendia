@@ -133,7 +133,73 @@ export interface McpInfo {
 
 const enc = encodeURIComponent;
 /** Base path of an Intendia session's routes. */
+export interface CronSchedule {
+  kind: string;
+  minutes: number | null;
+  expr: string | null;
+  runAt: string | null;
+  display: string | null;
+}
+
+export interface Cron {
+  id: string;
+  instanceId: string;
+  profile: string;
+  name: string;
+  prompt: string;
+  workspace: { slug: string; name: string | null; folder: string; missing: boolean } | null;
+  schedule: CronSchedule;
+  enabled: boolean;
+  state: string | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  lastDeliveryError: string | null;
+  failureStreak: number;
+  deliver: string | null;
+  skills: string[];
+  model: string | null;
+}
+
+export interface CronRun {
+  id: string;
+  startedAt: number | null;
+  endedAt: number | null;
+  endReason: string | null;
+  messageCount: number;
+  toolCallCount: number;
+  costUsd: number | null;
+  model: string | null;
+}
+
+export interface CronInput {
+  name: string;
+  prompt: string;
+  schedule?: string;
+  deliver: string;
+  skills: string[];
+  model: string | null;
+  workspace: string | null;
+  paused?: boolean;
+}
+
+export interface DeliveryTarget { id: string; name: string }
+
+export interface UpcomingCron {
+  instanceId: string;
+  instanceLabel: string;
+  id: string;
+  profile: string;
+  name: string;
+  nextRunAt: string;
+  schedule: CronSchedule;
+}
+
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
+const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
+const cronPath = (inst: string, id: string, profile: string, sub?: string) =>
+  `${cronsPath(inst)}/${enc(id)}${sub ? `/${sub}` : ''}?profile=${enc(profile)}`;
 const filesPath = (slug: string) => `/workspaces/${enc(slug)}/files`;
 
 export class ApiError extends Error {
@@ -207,6 +273,19 @@ export const api = {
   revokeLink: (token: string) => call<{ ok: true }>('DELETE', `/links/${enc(token)}`),
   mcp: (inst: string) => call<McpInfo>('GET', `/instances/${enc(inst)}/mcp`),
   rotateMcp: (inst: string) => call<McpInfo>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
+
+  crons: (inst: string) => call<{ crons: Cron[] }>('GET', cronsPath(inst)),
+  cron: (inst: string, id: string, profile: string) => call<{ cron: Cron }>('GET', cronPath(inst, id, profile)),
+  createCron: (inst: string, input: CronInput) => call<{ cron: Cron }>('POST', cronsPath(inst), input),
+  updateCron: (inst: string, id: string, profile: string, input: CronInput) => call<{ cron: Cron }>('PUT', cronPath(inst, id, profile), input),
+  deleteCron: (inst: string, id: string, profile: string) => call<null>('DELETE', cronPath(inst, id, profile)),
+  cronAction: (inst: string, id: string, profile: string, op: 'pause' | 'resume' | 'trigger') =>
+    call<{ cron: Cron }>('POST', cronPath(inst, id, profile, op), {}),
+  cancelCron: (inst: string, id: string, profile: string) =>
+    call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
+  cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
+  cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
+  upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
 };
 
 /** URL of a file's content (preview, download); served with CSP sandbox. */

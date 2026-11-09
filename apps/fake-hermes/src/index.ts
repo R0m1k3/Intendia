@@ -42,6 +42,8 @@ export interface FakeOptions {
   retainFrom?: number;
   /** Delay between simulated events, in ms (default 5; "lent" scenario: 500). */
   stepMs?: number;
+  /** Step of simulated cron runs, in ms (default: stepMs). */
+  cronStepMs?: number;
   /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
   pathMap?: { from: string; to: string };
 }
@@ -402,7 +404,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
 
 export function createFakeHermes(opts: FakeOptions) {
   const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
-  const crons = new CronStore(opts.stepMs ?? 5, sim);
+  const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const requests: LoggedRequest[] = [];
   return { api: makeApp('api', opts, sim, crons, requests), dash: makeApp('dash', opts, sim, crons, requests), requests, sim, crons };
 }

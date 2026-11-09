@@ -62,3 +62,22 @@ describe('folderKey', () => {
     expect(folderKey(long, [long])).toBe(`${'x'.repeat(38)}-2`);
   });
 });
+
+describe('recorded Hermes 0.23.0 responses', () => {
+  it('parse with the connector schemas and lose internal fields once public', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { JobListSchema, normaliseJobs, TargetListSchema } = await import('../src/connectors/crons/index.js');
+    const { toPublic } = await import('../src/crons/service.js');
+    const { FIXTURES } = await import('./helpers.js');
+    const read = (f: string) => JSON.parse(readFileSync(join(FIXTURES, f), 'utf8')).body;
+    for (const f of ['dash/GET_api_cron_jobs.json', 'api/GET_api_jobs.json']) {
+      const jobs = normaliseJobs(JobListSchema.parse(read(f)));
+      expect(jobs.length).toBeGreaterThan(0);
+      const pub = toPublic('ref', jobs[0]!, () => undefined);
+      expect(pub).toMatchObject({ name: 'Rapport du lundi', schedule: { kind: 'cron', expr: '30 8 * * 1' }, enabled: true });
+      expect(JSON.stringify(pub)).not.toContain('hermes_home');
+    }
+    expect(TargetListSchema.parse(read('dash/GET_api_cron_delivery_targets.json')).targets[0]).toMatchObject({ id: 'local' });
+  });
+});

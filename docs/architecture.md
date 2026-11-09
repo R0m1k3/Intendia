@@ -90,6 +90,21 @@ sequenceDiagram
   I->>H: POST /v1/runs/run_x/approval
 ```
 
+## Crons
+
+- `src/crons/service.ts` (`CronService`) calls the `crons` connector; `src/routes/crons.ts` serves
+  `/x/i/:inst/crons...` and `/x/crons/upcoming`. Dashboard routes first, API server as a fallback (no history, no
+  cancel: the module is then read-only and the page says what is missing).
+- Hermes stays the only source: no table. A cron attached to a workspace has a block at the very start of its prompt
+  (`[Intendia] Workspace : <name> (<slug>) ; dossier : crons/<key>` ... `[/Intendia]`) asking the agent to read
+  `AGENTS.md`, store its files in `<agentPath>/crons/<key>/` and use `share_file`; `workdir` is set to the
+  workspace. `unframe` strips the block on read; detaching clears `workdir`. `<key>` is the slug of the cron name when
+  first attached, never changed afterwards, unique among the instance's crons and the folders on disk.
+- An attached cron is created on the workspace's profile; attaching a workspace of another profile is refused.
+- Every action carries the job's `profile` (`?profile=`); Hermes answers 404 when the job is not in it.
+- The browser builds the schedule (`apps/web/src/crons/schedule.ts`, plain French forms → `every Nm`, cron
+  expressions or an ISO timestamp) and follows "Run now" by polling every 2 s until `last_run_at` changes.
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

@@ -11,6 +11,7 @@ import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
+import { CronsPage } from './pages/Crons';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { LinksPage } from './pages/Links';
@@ -63,10 +64,20 @@ const filesRoute = createRoute({
 });
 const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', component: LinksPage });
 const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
+/** /crons: the first instance (creation order) */
+const cronsIndexRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/crons',
+  beforeLoad: async () => {
+    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+    const first = instances[0];
+    throw first ? redirect({ to: '/i/$inst/crons', params: { inst: first.id } }) : redirect({ to: '/' });
+  },
+});
+const cronsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage });
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute])]),
   defaultPreload: 'intent',
 });
 
