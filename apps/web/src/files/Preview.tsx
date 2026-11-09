@@ -144,7 +144,8 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
             <div className="px-6 py-5"><Md text={text.data} /></div>
           ) : (
             <Suspense fallback={<pre className="p-4 font-mono text-xs whitespace-pre-wrap">{text.data}</pre>}>
-              <CodeView name={name} value={editing && base ? draft ?? base.text : text.data} editable={editing} onChange={setDraft} />
+              {/* while editing, the editor starts from base.text (stable: CodeView rebuilds on a new value); edits go to draft */}
+              <CodeView name={name} value={editing && base ? base.text : text.data} editable={editing} onChange={setDraft} />
             </Suspense>
           )
         ) : (
