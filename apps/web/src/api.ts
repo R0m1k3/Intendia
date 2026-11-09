@@ -239,6 +239,35 @@ export interface ActionStatus {
   truncated: boolean;
 }
 
+// ---------------------------------------------------------------- Hermes configuration (phase 6)
+
+export interface ConfigField { type?: string; description?: string; category?: string; options?: unknown[]; clearable?: boolean; searchable?: boolean }
+export interface ConfigForm { values: Record<string, unknown>; schema: Record<string, ConfigField>; categories: string[]; version: string | null }
+export interface ConfigVersion { id: number; createdAt: number; source: string; readable: boolean }
+export interface ModelProvider { slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null }
+export interface ConfigModels {
+  main: { provider: string; model: string; contextLength: number | null };
+  providers: ModelProvider[];
+  auxiliary: { task: string; label: string | null; provider: string; model: string }[];
+  version: string | null;
+}
+export interface EnvVar {
+  key: string; isSet: boolean; description: string | null; category: string | null; isPassword: boolean;
+  advanced: boolean; channelManaged: boolean; provider: string | null; custom: boolean;
+}
+export interface McpServer {
+  name: string; transport: string | null; url: string | null; command: string | null; args: string[];
+  env: { key: string; isSet: boolean }[]; auth: string | null; enabled: boolean; tools: string[]; source: string | null; plugin: string | null;
+}
+export interface McpInput { name: string; url?: string; token?: string; command?: string; args?: string[]; env?: Record<string, string> }
+export interface Platform {
+  id: string; name: string; enabled: boolean; configured: boolean; state: string | null; errorMessage: string | null;
+  env: { key: string; isSet: boolean; required: boolean }[];
+}
+export interface RestartStatus { running: boolean; exitCode: number | null; lines: string[]; truncated: boolean }
+export interface WriteResult { version: string | null }
+export interface ModelInput { scope: 'main' | 'auxiliary'; provider: string; model: string; task?: string; confirm?: boolean; version: string }
+
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
 const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
 const cronPath = (inst: string, id: string, profile: string, sub?: string) =>
@@ -352,6 +381,32 @@ export const api = {
     call<{ action: string }>('POST', instPath(inst, 'skills/hub/uninstall', profile), { name }),
   updateSkills: (inst: string, profile: string) => call<{ action: string }>('POST', instPath(inst, 'skills/hub/update', profile), {}),
   skillAction: (inst: string, action: string) => call<ActionStatus>('GET', instPath(inst, `skills/hub/actions/${enc(action)}`)),
+  config: (inst: string, profile: string) => call<ConfigForm>('GET', instPath(inst, 'config', profile)),
+  saveConfig: (inst: string, profile: string, changes: Record<string, unknown>, version: string) =>
+    call<WriteResult>('PUT', instPath(inst, 'config', profile), { changes, version }),
+  configRaw: (inst: string, profile: string) => call<{ yaml: string; version: string }>('GET', instPath(inst, 'config/raw', profile)),
+  saveConfigRaw: (inst: string, profile: string, yaml: string, version: string) =>
+    call<WriteResult>('PUT', instPath(inst, 'config/raw', profile), { yaml, version }),
+  configVersions: (inst: string, profile: string) => call<{ versions: ConfigVersion[] }>('GET', instPath(inst, 'config/versions', profile)),
+  configVersion: (inst: string, profile: string, id: number) => call<{ yaml: string }>('GET', instPath(inst, `config/versions/${id}`, profile)),
+  restoreConfig: (inst: string, profile: string, id: number, version: string) =>
+    call<WriteResult>('POST', instPath(inst, `config/versions/${id}/restore`, profile), { version }),
+  configModels: (inst: string, profile: string) => call<ConfigModels>('GET', instPath(inst, 'config/models', profile)),
+  setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
+  configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),
+  setEnv: (inst: string, profile: string, key: string, value: string) => call<WriteResult>('PUT', instPath(inst, 'config/env', profile), { key, value }),
+  deleteEnv: (inst: string, profile: string, key: string) => call<WriteResult>('DELETE', instPath(inst, `config/env/${enc(key)}`, profile)),
+  mcpServers: (inst: string, profile: string) => call<{ servers: McpServer[] }>('GET', instPath(inst, 'config/mcp', profile)),
+  addMcp: (inst: string, profile: string, m: McpInput) => call<WriteResult>('POST', instPath(inst, 'config/mcp', profile), m),
+  testMcp: (inst: string, profile: string, name: string) =>
+    call<{ ok: boolean; tools: string[]; error?: string }>('POST', instPath(inst, `config/mcp/${enc(name)}/test`, profile), {}),
+  enableMcp: (inst: string, profile: string, name: string, enabled: boolean) =>
+    call<WriteResult>('PUT', instPath(inst, `config/mcp/${enc(name)}/enabled`, profile), { enabled }),
+  removeMcp: (inst: string, profile: string, name: string) =>
+    call<WriteResult & { tokenLeft?: string }>('DELETE', instPath(inst, `config/mcp/${enc(name)}`, profile)),
+  platforms: (inst: string, profile: string) => call<{ platforms: Platform[] }>('GET', instPath(inst, 'config/platforms', profile)),
+  restartGateway: (inst: string, profile: string) => call<{ ok: true }>('POST', instPath(inst, 'config/gateway/restart', profile), {}),
+  restartStatus: (inst: string, profile: string) => call<RestartStatus>('GET', instPath(inst, 'config/gateway/restart', profile)),
 };
 
 /** URL of a file's content (preview, download); served with CSP sandbox. */
