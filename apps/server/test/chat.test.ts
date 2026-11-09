@@ -50,6 +50,16 @@ describe('sending a message', () => {
     expect((await t.request('POST', `${base}/runs`, { input: 'après redémarrage' })).status).toBe(200);
   });
 
+  it('two concurrent sends to the same session start one run only', async () => {
+    const { t, base } = await session();
+    const [a, b] = await Promise.all([
+      t.request('POST', `${base}/runs`, { input: 'premier' }),
+      t.request('POST', `${base}/runs`, { input: 'second' }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(runsPosted(t)).toHaveLength(1);
+  });
+
   it('goes through /p/<profile>/ with the profile key', async () => {
     const { t, base } = await session({ profileKeys: { dev: DEV_KEY } }, { profile: 'dev' });
     const run = (await t.request('POST', `${base}/runs`, { input: 'approval' })).json.runId;
