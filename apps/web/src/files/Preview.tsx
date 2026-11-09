@@ -54,19 +54,23 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
   });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
+  // text and mtime as they were when editing began: a refresh of the listing or of the text must neither
+  // move the conflict check to the new mtime (silent overwrite) nor replace the editor contents
+  const [base, setBase] = useState<{ text: string; mtime: number } | null>(null);
   const [source, setSource] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { setEditing(false); setDraft(null); setSource(false); setError(null); }, [path]);
+  useEffect(() => { setEditing(false); setDraft(null); setBase(null); setSource(false); setError(null); }, [path]);
 
   const save = async () => {
-    if (!entry || draft === null) return setEditing(false);
+    if (!base || draft === null) { setEditing(false); setBase(null); return; }
     setSaving(true);
     setError(null);
     try {
-      await api.saveText(slug, path, draft, entry.mtime);
+      await api.saveText(slug, path, draft, base.mtime);
       setEditing(false);
       setDraft(null);
+      setBase(null);
       await qc.invalidateQueries({ queryKey: ['tree', slug, parent] });
     } catch (err) {
       setError(err instanceof ApiError && err.status === 409 ? new Error('Modifié sur le disque depuis l’ouverture : recharger le fichier') : err);
@@ -90,7 +94,12 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
             <Save className="size-4" strokeWidth={1.5} />Enregistrer
           </Button>
         ) : (
-          <Button variant="ghost" className="h-8 px-2.5" onClick={() => { setSource(true); setEditing(true); }} title="Modifier">
+          <Button variant="ghost" className="h-8 px-2.5" onClick={() => {
+            if (text.data === undefined) return;
+            setBase({ text: text.data, mtime: entry.mtime });
+            setSource(true);
+            setEditing(true);
+          }} disabled={text.data === undefined} title="Modifier">
             <Pencil className="size-4" strokeWidth={1.5} /><span className="hidden text-[13px] sm:inline">Modifier</span>
           </Button>
         ))}
@@ -135,7 +144,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
             <div className="px-6 py-5"><Md text={text.data} /></div>
           ) : (
             <Suspense fallback={<pre className="p-4 font-mono text-xs whitespace-pre-wrap">{text.data}</pre>}>
-              <CodeView name={name} value={text.data} editable={editing} onChange={setDraft} />
+              <CodeView name={name} value={editing && base ? draft ?? base.text : text.data} editable={editing} onChange={setDraft} />
             </Suspense>
           )
         ) : (

@@ -3,7 +3,7 @@
  * Every path goes through files/paths.ts.
  */
 import {
-  chmodSync, createWriteStream, lstatSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync,
+  chmodSync, createWriteStream, lstatSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync,
   type Stats,
 } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -156,18 +156,23 @@ export class FileService {
     if (!statSync(dirAbs).isDirectory()) throw new WorkspaceFsError('not_file', `Pas un dossier : ${dir}`);
     const dot = name.lastIndexOf('.');
     const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+    // the name is reserved by an exclusive create (wx): a concurrent upload of the same name moves on to
+    // the next candidate, and the cleanup below only ever removes the file this request created
     let target = '';
     let rel = '';
-    for (let n = 1; n <= 99 && !target; n++) {
+    let fd = -1;
+    for (let n = 1; n <= 99 && fd < 0; n++) {
       const candidate = n === 1 ? name : `${stem} (${n})${ext}`;
       try {
         rel = join2(dir, checkName(candidate));
         target = resolveInside(c.dir, rel, 'create');
+        fd = openSync(target, 'wx', FILE_MODE);
       } catch (err) {
-        if (!(err instanceof WorkspaceFsError && err.code === 'exists')) throw err;
+        const taken = (err instanceof WorkspaceFsError && err.code === 'exists') || (err as NodeJS.ErrnoException).code === 'EEXIST';
+        if (!taken) throw err;
       }
     }
-    if (!target) throw new WorkspaceFsError('exists', `Trop de fichiers nommés ${name}`);
+    if (fd < 0) throw new WorkspaceFsError('exists', `Trop de fichiers nommés ${name}`);
 
     const max = this.uploadMaxBytes;
     let size = 0;
@@ -178,18 +183,17 @@ export class FileService {
         else cb(null, chunk);
       },
     });
-    const out = createWriteStream(target, { flags: 'wx', mode: FILE_MODE });
+    const out = createWriteStream(target, { fd });
     try {
       const src = body ? Readable.fromWeb(body as import('node:stream/web').ReadableStream) : Readable.from([]);
       await pipeline(src, limit, out);
       chmodSync(target, FILE_MODE);
     } catch (err) {
       try {
-        unlinkSync(target);
+        unlinkSync(target); // created by this request (wx above)
       } catch {
-        // never created, or already gone
+        // already gone
       }
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new WorkspaceFsError('exists', `Existe déjà : ${rel}`);
       throw err;
     }
     return { path: rel, agentPath: this.agentPath(c, rel) };
