@@ -30,8 +30,16 @@ const OUTCOME: Record<string, string> = {
   error: 'Flux interrompu',
 };
 
+/**
+ * The route reuses the page when another session is opened from the sidebar: a key remounts it so the
+ * run state (active run, outcome, draft) never leaks from one session to the next.
+ */
 export function SessionPage() {
   const { slug, sessionId } = useParams({ strict: false }) as { slug: string; sessionId: string };
+  return <SessionView key={`${slug}/${sessionId}`} slug={slug} sessionId={sessionId} />;
+}
+
+function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const ws = useQuery({ queryKey: ['workspace', slug], queryFn: () => api.workspace(slug) });
