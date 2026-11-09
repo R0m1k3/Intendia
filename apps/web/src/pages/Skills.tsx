@@ -27,18 +27,21 @@ export interface SkillsSearch { profile?: string }
 
 interface Outcome { state: ActionState; text: string }
 
-/** Pending hub actions of (instance, profile), polled until Hermes reports the end; survives a reload. */
+/**
+ * Pending hub actions of (instance, profile), polled until Hermes reports the end; survives a reload.
+ * The page remounts its view per (instance, profile), so this state never mixes two contexts.
+ */
 function useSkillActions(inst: string, profile: string) {
   const qc = useQueryClient();
   const [pending, setPending] = useState<PendingAction[]>(() => loadActions(inst, profile));
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
-  useEffect(() => { setPending(loadActions(inst, profile)); setOutcomes({}); }, [inst, profile]);
   useEffect(() => saveActions(inst, profile, pending), [inst, profile, pending]);
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
 
   useEffect(() => {
     if (!pending.length) return;
+    let cancelled = false;
     const tick = async () => {
       const finished: Record<string, Outcome> = {};
       for (const p of pendingRef.current) {
@@ -57,14 +60,15 @@ function useSkillActions(inst: string, profile: string) {
         };
       }
       const targets = Object.keys(finished);
-      if (!targets.length) return;
+      // a status that arrives after the cleanup belongs to a context that is gone
+      if (cancelled || !targets.length) return;
       setPending((list) => list.filter((p) => !targets.includes(p.target)));
       setOutcomes((o) => ({ ...o, ...finished }));
       await qc.invalidateQueries({ queryKey: ['skills', inst, profile] });
       await qc.invalidateQueries({ queryKey: ['hub', inst, profile] });
     };
     const timer = setInterval(() => void tick(), ACTION_POLL_MS);
-    return () => clearInterval(timer);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [pending.length, inst, profile, qc]);
 
   const track = useCallback((action: string, label: string, target: string) => {
@@ -383,6 +387,10 @@ export function SkillsPage() {
   const { inst } = useParams({ strict: false }) as { inst: string };
   const search = useSearch({ strict: false }) as SkillsSearch;
   const profile = search.profile ?? 'default';
+  return <SkillsView key={`${inst}:${profile}`} inst={inst} profile={profile} />;
+}
+
+function SkillsView({ inst, profile }: { inst: string; profile: string }) {
   const navigate = useNavigate();
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const profiles = useQuery({ queryKey: ['profiles', inst], queryFn: () => api.profiles(inst).then((r) => r.profiles) });
