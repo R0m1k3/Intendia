@@ -11,6 +11,10 @@ import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
+import { ExternalSessionPage } from './pages/ExternalSession';
+import { SessionPage } from './pages/Session';
+import { WorkspacePage } from './pages/Workspace';
+import { WorkspacesPage } from './pages/Workspaces';
 import '@fontsource-variable/instrument-sans';
 import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
@@ -46,9 +50,13 @@ const appRoute = createRoute({
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
+const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: '/w', component: WorkspacesPage });
+const workspaceRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug', component: WorkspacePage });
+const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
+const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, sessionRoute, externalRoute])]),
   defaultPreload: 'intent',
 });
 

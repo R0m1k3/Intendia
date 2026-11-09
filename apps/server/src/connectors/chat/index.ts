@@ -1,13 +1,18 @@
 import { z } from 'zod';
 import type { ModuleDef } from '../types.js';
 
+/** Run statuses after which no event will come (0.23.0). */
+export const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'interrupted'];
+
 export const RunCreatedSchema = z.looseObject({ run_id: z.string(), status: z.string().optional() });
 
 export const RunStatusSchema = z.looseObject({
   run_id: z.string(),
   status: z.string(),
   session_id: z.string().nullish(),
+  created_at: z.number().optional(),
   output: z.string().nullish(),
+  error: z.string().nullish(),
   pending_controls: z.array(z.unknown()).optional(),
 });
 

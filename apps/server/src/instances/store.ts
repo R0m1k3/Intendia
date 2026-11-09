@@ -11,6 +11,7 @@ export interface PublicInstance {
   dashboard: string | null;
   dashboardLink: string | null;
   mount: string;
+  agentMount: string;
   profiles: string[];
   source: 'env' | 'db';
 }
@@ -56,6 +57,7 @@ export class InstanceStore {
       dashboard: i.dashboard ?? null,
       dashboardLink: i.dashboardLink ?? null,
       mount: i.mount,
+      agentMount: i.agentMount ?? i.mount,
       profiles: Object.keys(i.profileKeys),
       source,
     };

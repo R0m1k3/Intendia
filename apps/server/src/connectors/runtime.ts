@@ -2,6 +2,10 @@ import type { CompatReport, ModuleId } from './types.js';
 import { MODULES } from './index.js';
 import { HermesError, type HermesHttp, type RequestOptions } from '../hermes/http.js';
 
+// Routes and services outside src/{hermes,connectors,compat,cli} import these from here (boundaries.test.ts).
+export { HermesError } from '../hermes/http.js';
+export type { HermesHttp } from '../hermes/http.js';
+
 export class ModuleUnavailableError extends Error {
   constructor(readonly module: ModuleId, readonly op: string, readonly reasons: string[]) {
     super(`${module}.${op} indisponible sur cette instance`);

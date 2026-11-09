@@ -28,3 +28,82 @@ export function fakeHttp(opts: Omit<FakeOptions, 'fixturesDir'> = {}, inst = fak
 export function tempDir(): string {
   return mkdtempSync(join(tmpdir(), 'intendia-test-'));
 }
+
+/**
+ * Full app against fake-hermes, logged in, with a temporary workspace mount.
+ * `request` adds the session cookie and the X-Intendia header.
+ */
+export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig> } = {}) {
+  const { createApp } = await import('../src/app.js');
+  const { Auth } = await import('../src/auth/auth.js');
+  const { CompatService } = await import('../src/compat/service.js');
+  const { loadConfig } = await import('../src/config.js');
+  const { openDb } = await import('../src/db/index.js');
+  const { InstanceStore } = await import('../src/instances/store.js');
+
+  const dataDir = tempDir();
+  const mount = opts.mount ?? tempDir();
+  const inst = fakeInstance({ mount, profileKeys: opts.profileKeys ?? {}, ...opts.instance });
+  const config = loadConfig({
+    INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, INTENDIA_TRUST_PROXY: 'true',
+    INTENDIA_INSTANCES: JSON.stringify([inst]),
+  });
+  const db = openDb(dataDir);
+  const store = new InstanceStore(db, config);
+  const auth = new Auth(db, config);
+  const fake = createFakeHermes({ fixturesDir: FIXTURES, ...opts });
+  const fetchImpl = fakeFetch(fake);
+  const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
+  await compat.check(inst.id);
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, version: 'test' });
+
+  let cookie = '';
+  const raw = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
+    const res = await app.request(path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Intendia': '1', 'X-Forwarded-For': '10.0.0.9', ...(cookie ? { Cookie: cookie } : {}), ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const set = res.headers.get('set-cookie');
+    if (set) cookie = set.split(';')[0]!;
+    return res;
+  };
+  const request = async (method: string, path: string, body?: unknown, headers?: Record<string, string>) => {
+    const res = await raw(method, path, body, headers);
+    return { status: res.status, json: (await res.json().catch(() => null)) as any };
+  };
+  await raw('POST', '/x/setup/password', { code: auth.setupCode, password: 'test-password-123' });
+  return { app, db, mount, fake, inst, store, compat, request, raw };
+}
+
+/** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */
+export async function readSse(res: Response, ms = 2000): Promise<{ id: string | null; data: any }[]> {
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const chunk = await Promise.race([
+      reader.read(),
+      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), Math.max(1, deadline - Date.now()))),
+    ]);
+    if (chunk.done) break;
+    buf += dec.decode(chunk.value, { stream: true });
+  }
+  await reader.cancel().catch(() => {});
+  return buf.split('\n\n').filter((f) => f.includes('data:')).map((f) => {
+    const id = /^id: (.*)$/m.exec(f)?.[1] ?? null;
+    const data = JSON.parse(/^data: (.*)$/m.exec(f)![1]!);
+    return { id, data };
+  });
+}
+
+/** Polls the Intendia run status until it is terminal. */
+export async function waitRun(t: Awaited<ReturnType<typeof testApp>>, base: string, runId: string): Promise<string> {
+  for (let i = 0; i < 200; i++) {
+    const s = (await t.request('GET', `${base}/runs/${runId}`)).json.status as string;
+    if (['completed', 'failed', 'cancelled', 'interrupted', 'unknown'].includes(s)) return s;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('run did not finish');
+}

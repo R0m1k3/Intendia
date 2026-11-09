@@ -15,7 +15,22 @@ export const SessionListSchema = z.looseObject({
   has_more: z.boolean().optional(),
 });
 
-export const MessageListSchema = z.unknown();
+/** GET /api/sessions/{id}: 0.23.0 wraps the session in `{session}`; a flat object is accepted too. */
+export const SessionGetSchema = z.union([
+  z.looseObject({ session: SessionSchema }).transform((v) => v.session),
+  SessionSchema,
+]);
+
+export const MessageSchema = z.looseObject({
+  id: z.number(),
+  role: z.string(),
+  content: z.unknown().optional(),
+  tool_calls: z.unknown().optional(),
+  tool_name: z.string().nullish(),
+  timestamp: z.number().nullish(),
+});
+
+export const MessageListSchema = z.looseObject({ data: z.array(MessageSchema) });
 
 export const sessionsModule: ModuleDef = {
   id: 'sessions',
@@ -27,7 +42,7 @@ export const sessionsModule: ModuleDef = {
       routes: [{ via: 'api', method: 'GET', path: '/api/sessions', capability: 'sessions', feature: 'session_resources' }],
     },
     get: {
-      kind: 'read', probe: false, schema: SessionSchema,
+      kind: 'read', probe: false, schema: SessionGetSchema,
       routes: [{ via: 'api', method: 'GET', path: '/api/sessions/{session_id}', capability: 'session' }],
     },
     messages: {

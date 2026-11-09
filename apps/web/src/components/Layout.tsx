@@ -1,11 +1,12 @@
-import { Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { House, ListChecks, LogOut, Settings2 } from 'lucide-react';
+import { FolderOpen, House, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: House },
+  { to: '/w', label: 'Workspaces', icon: FolderOpen },
   { to: '/etat', label: 'État', icon: ListChecks },
   { to: '/reglages', label: 'Réglages', icon: Settings2 },
 ] as const;
@@ -17,6 +18,10 @@ export function Layout() {
   const navigate = useNavigate();
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 60_000 });
+  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+  const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
+  const openSlug = params.slug;
+  const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
 
   const logout = async () => {
     await api.logout();
@@ -35,7 +40,7 @@ export function Layout() {
             <Link
               key={n.to}
               to={n.to}
-              activeOptions={{ exact: n.to === '/' }}
+              activeOptions={{ exact: n.to === '/' || n.to === '/w' }}
               className={ROW}
               activeProps={{ className: '!bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' }}
             >
@@ -44,6 +49,48 @@ export function Layout() {
             </Link>
           ))}
         </nav>
+
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+        {(workspaces.data?.workspaces.length ?? 0) > 0 && (
+          <>
+            <div className="mt-6 px-5 pb-2 text-xs text-ink-faint">Workspaces</div>
+            <ul className="flex flex-col gap-0.5 px-3">
+              {workspaces.data!.workspaces.map((w) => (
+                <li key={w.slug}>
+                  <Link
+                    to="/w/$slug"
+                    params={{ slug: w.slug }}
+                    activeOptions={{ exact: true }}
+                    className={ROW}
+                    activeProps={{ className: '!bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' }}
+                  >
+                    <span className="flex size-4 shrink-0 items-center justify-center font-mono text-[11px] text-ink-faint">#</span>
+                    <span className="truncate">{w.name}</span>
+                  </Link>
+                  {openSlug === w.slug && (
+                    <ul className="ml-[22px] mt-0.5 flex flex-col gap-0.5 border-l border-line pl-2">
+                      {sessions.data?.sessions.slice(0, 8).map((s) => (
+                        <li key={s.id}>
+                          <Link
+                            to="/w/$slug/s/$sessionId"
+                            params={{ slug: w.slug, sessionId: s.id }}
+                            className="flex h-7 items-center rounded-md px-2 text-[13px] text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+                            activeProps={{ className: '!bg-raised !text-ink' }}
+                          >
+                            <span className="truncate">{s.title || 'Nouvelle session'}</span>
+                          </Link>
+                        </li>
+                      ))}
+                      <li>
+                        <NewSessionLink slug={w.slug} />
+                      </li>
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         <div className="mt-6 px-5 pb-2 text-xs text-ink-faint">Instances</div>
         <ul className="flex flex-col gap-0.5 px-3">
@@ -62,7 +109,9 @@ export function Layout() {
           })}
         </ul>
 
-        <div className="mt-auto border-t border-line px-3 py-3">
+        </div>
+
+        <div className="border-t border-line px-3 py-3">
           <button onClick={logout} className={ROW + ' w-full'}>
             <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
             Se déconnecter
@@ -70,7 +119,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0">
+      <main className="min-w-0 flex-1 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="enter mx-auto max-w-[1440px]">
           <Outlet />
         </div>
@@ -82,7 +131,7 @@ export function Layout() {
             key={n.to}
             to={n.to}
             activeOptions={{ exact: n.to === '/' }}
-            className="flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] text-ink-faint"
+            className="flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-ink-faint"
             activeProps={{ className: '!text-accent' }}
           >
             <n.icon className="size-5" strokeWidth={1.5} />
@@ -91,6 +140,22 @@ export function Layout() {
         ))}
       </nav>
     </div>
+  );
+}
+
+function NewSessionLink({ slug }: { slug: string }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const create = async () => {
+    const { session } = await api.createSession(slug);
+    await qc.invalidateQueries({ queryKey: ['sessions'] });
+    await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+  };
+  return (
+    <button onClick={() => void create()} className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-faint transition-colors hover:bg-raised hover:text-ink">
+      <Plus className="size-3.5" strokeWidth={1.5} />
+      Nouvelle session
+    </button>
   );
 }
 
