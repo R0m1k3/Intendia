@@ -4,6 +4,7 @@ import type { AppConfig } from './config.js';
 import { CronService } from './crons/service.js';
 import type { Db } from './db/index.js';
 import { FileService } from './files/service.js';
+import { ConfigService } from './hermes-config/service.js';
 import type { InstanceStore } from './instances/store.js';
 import { LinkService } from './links/service.js';
 import { SkillService } from './skills/service.js';
@@ -16,6 +17,7 @@ export interface Services {
   crons: CronService;
   skills: SkillService;
   agents: AgentService;
+  config: ConfigService;
 }
 
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
@@ -26,5 +28,6 @@ export function createServices(deps: { config: AppConfig; db: Db; store: Instanc
   const crons = new CronService(deps.compat, workspaces, deps.store);
   const skills = new SkillService(deps.compat, deps.store);
   const agents = new AgentService(deps.compat, deps.store);
-  return { workspaces, links, files, crons, skills, agents };
+  const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
+  return { workspaces, links, files, crons, skills, agents, config };
 }

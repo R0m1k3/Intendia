@@ -20,6 +20,7 @@ import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CronStore } from './crons.js';
+import { ConfigStore } from './config.js';
 import { SkillStore } from './skills.js';
 
 export const FAKE_API_KEY = 'fake-api-key-000000000000';
@@ -48,6 +49,8 @@ export interface FakeOptions {
   cronStepMs?: number;
   /** Duration of a simulated skills action (install, uninstall, update), in ms (default: stepMs). */
   skillStepMs?: number;
+  /** Step of a simulated gateway restart (3 steps), in ms (default: stepMs). */
+  configStepMs?: number;
   /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
   pathMap?: { from: string; to: string };
 }
@@ -261,7 +264,7 @@ class Simulator {
 
 // ---------------------------------------------------------------- apps
 
-function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, skills: SkillStore, log: LoggedRequest[]): Hono {
+function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, skills: SkillStore, config: ConfigStore, log: LoggedRequest[]): Hono {
   const app = new Hono();
   const deleted = new Set<string>();
 
@@ -293,6 +296,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, 
 
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
     if (cron) return cron;
+    // before skills: SkillStore answers every /api/actions/{name}/status (404 for unknown actions)
+    const conf = config.handle(via, method, path, c.req.query(), body);
+    if (conf) return conf;
     const skill = await skills.handle(via, method, path, c.req.query(), body);
     if (skill) return skill;
 
@@ -412,10 +418,11 @@ export function createFakeHermes(opts: FakeOptions) {
   const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
+  const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
   const requests: LoggedRequest[] = [];
   return {
-    api: makeApp('api', opts, sim, crons, skills, requests), dash: makeApp('dash', opts, sim, crons, skills, requests),
-    requests, sim, crons, skills,
+    api: makeApp('api', opts, sim, crons, skills, config, requests), dash: makeApp('dash', opts, sim, crons, skills, config, requests),
+    requests, sim, crons, skills, config,
   };
 }
 

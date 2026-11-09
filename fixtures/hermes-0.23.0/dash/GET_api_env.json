@@ -6614,7 +6614,7 @@
     },
     "TERMINAL_MODAL_IMAGE": {
       "is_set": true,
-      "redacted_value": "«redacted:niko...js20»",
+      "redacted_value": "«redacted:***»",
       "description": "",
       "url": null,
       "category": "custom",

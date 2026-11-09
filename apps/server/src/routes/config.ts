@@ -1,0 +1,114 @@
+import { Hono, type Context } from 'hono';
+import { z } from 'zod';
+import { ConfigInputError, type ConfigService } from '../hermes-config/service.js';
+import { profileOf } from './skills.js';
+
+const VERSION = z.string().regex(/^[0-9a-f]{16}$/, 'version invalide');
+const PATH = z.string().regex(/^[A-Za-z0-9_.-]{1,200}$/);
+const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+const FormBody = z.object({ changes: z.record(PATH, z.unknown()), version: VERSION });
+const RawBody = z.object({ yaml: z.string().max(2_000_000), version: VERSION });
+const RestoreBody = z.object({ version: VERSION });
+const ModelBody = z.object({
+  scope: z.enum(['main', 'auxiliary']),
+  provider: z.string().min(1).max(200),
+  model: z.string().min(1).max(200),
+  task: z.string().min(1).max(64).optional(),
+  confirm: z.boolean().optional(),
+  version: VERSION,
+});
+const EnvBody = z.object({ key: z.string(), value: z.string() });
+const McpBody = z.object({
+  name: z.string(),
+  url: z.string().max(2000).optional(),
+  token: z.string().max(4096).optional(),
+  command: z.string().max(2000).optional(),
+  args: z.array(z.string().max(2000)).max(100).optional(),
+  env: z.record(z.string(), z.string().max(16_384)).optional(),
+});
+const EnabledBody = z.object({ enabled: z.boolean() });
+
+function checkKey(key: string): string {
+  if (!KEY_RE.test(key)) throw new ConfigInputError('invalid_key', 'Nom de variable invalide', { key });
+  return key;
+}
+
+function checkName(name: string): string {
+  if (!NAME_RE.test(name)) throw new ConfigInputError('invalid_name', 'Nom de serveur MCP invalide (lettres, chiffres, - et _)');
+  return name;
+}
+
+export function configRoutes(config: ConfigService): Hono {
+  const r = new Hono();
+  const inst = (c: Context) => c.req.param('inst') ?? '';
+  const id = (c: Context) => {
+    const n = Number(c.req.param('id'));
+    if (!Number.isInteger(n) || n <= 0) throw new ConfigInputError('invalid_id', 'Copie invalide');
+    return n;
+  };
+
+  r.get('/i/:inst/config', async (c) => c.json(await config.form(inst(c), profileOf(c))));
+  r.put('/i/:inst/config', async (c) => {
+    const body = FormBody.parse(await c.req.json());
+    return c.json(await config.saveForm(inst(c), profileOf(c), body.changes, body.version));
+  });
+  r.get('/i/:inst/config/raw', async (c) => c.json(await config.raw(inst(c), profileOf(c))));
+  r.put('/i/:inst/config/raw', async (c) => {
+    const body = RawBody.parse(await c.req.json());
+    return c.json(await config.saveRaw(inst(c), profileOf(c), body.yaml, body.version));
+  });
+
+  r.get('/i/:inst/config/versions', (c) => c.json({ versions: config.versions(inst(c), profileOf(c)) }));
+  r.get('/i/:inst/config/versions/:id', (c) => c.json(config.version(inst(c), profileOf(c), id(c))));
+  r.post('/i/:inst/config/versions/:id/restore', async (c) => {
+    const body = RestoreBody.parse(await c.req.json());
+    return c.json(await config.restore(inst(c), profileOf(c), id(c), body.version));
+  });
+
+  r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
+  r.post('/i/:inst/config/models', async (c) => {
+    const body = ModelBody.parse(await c.req.json());
+    if ((body.scope === 'auxiliary') !== (body.task !== undefined)) {
+      throw new ConfigInputError('invalid_task', 'Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui');
+    }
+    return c.json(await config.setModel(inst(c), profileOf(c), body));
+  });
+
+  r.get('/i/:inst/config/env', async (c) => c.json({ env: await config.env(inst(c), profileOf(c)) }));
+  r.put('/i/:inst/config/env', async (c) => {
+    const body = EnvBody.parse(await c.req.json());
+    checkKey(body.key);
+    if (!body.value || body.value.includes('«') || body.value.length > 16_384) {
+      throw new ConfigInputError('invalid_value', 'Valeur vide, masquée ou trop longue');
+    }
+    return c.json(await config.setEnv(inst(c), profileOf(c), body.key, body.value));
+  });
+  r.delete('/i/:inst/config/env/:key', async (c) => c.json(await config.deleteEnv(inst(c), profileOf(c), checkKey(c.req.param('key')))));
+
+  r.get('/i/:inst/config/mcp', async (c) => c.json({ servers: await config.mcp(inst(c), profileOf(c)) }));
+  r.post('/i/:inst/config/mcp', async (c) => {
+    const body = McpBody.parse(await c.req.json());
+    checkName(body.name);
+    const byUrl = body.url !== undefined && body.url !== '';
+    const byCommand = body.command !== undefined && body.command !== '';
+    const valid = byUrl !== byCommand
+      && (!byUrl || (/^https?:\/\/\S+$/i.test(body.url!) && body.args === undefined && body.env === undefined))
+      && (!byCommand || body.token === undefined)
+      && Object.keys(body.env ?? {}).every((k) => KEY_RE.test(k));
+    if (!valid) throw new ConfigInputError('invalid_mcp', 'Donner une URL (avec jeton facultatif) ou une commande (avec arguments et variables)');
+    return c.json(await config.addMcp(inst(c), profileOf(c), body), 201);
+  });
+  r.post('/i/:inst/config/mcp/:name/test', async (c) => c.json(await config.testMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));
+  r.put('/i/:inst/config/mcp/:name/enabled', async (c) => {
+    const body = EnabledBody.parse(await c.req.json());
+    return c.json(await config.enableMcp(inst(c), profileOf(c), checkName(c.req.param('name')), body.enabled));
+  });
+  r.delete('/i/:inst/config/mcp/:name', async (c) => c.json(await config.removeMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));
+
+  r.get('/i/:inst/config/platforms', async (c) => c.json({ platforms: await config.platforms(inst(c), profileOf(c)) }));
+  r.post('/i/:inst/config/gateway/restart', async (c) => c.json(await config.restartGateway(inst(c), profileOf(c)), 202));
+  r.get('/i/:inst/config/gateway/restart', async (c) => c.json(await config.restartStatus(inst(c), profileOf(c))));
+  return r;
+}

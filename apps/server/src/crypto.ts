@@ -19,24 +19,24 @@ function deriveKey(secret: string, purpose: string): Buffer {
 }
 
 /** AES-256-GCM, output: base64url(iv | tag | ciphertext). */
-export function encrypt(secret: string, plaintext: string): string {
-  const key = deriveKey(secret, 'instances-v1');
+export function encrypt(secret: string, plaintext: string, purpose = 'instances-v1'): string {
+  const key = deriveKey(secret, purpose);
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
   const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64url');
 }
 
-export function decrypt(secret: string, payload: string): string {
+export function decrypt(secret: string, payload: string, purpose = 'instances-v1'): string {
   const raw = Buffer.from(payload, 'base64url');
-  const key = deriveKey(secret, 'instances-v1');
+  const key = deriveKey(secret, purpose);
   const decipher = createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
   decipher.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
 }
 
-export function sign(secret: string, value: string): string {
-  return createHmac('sha256', deriveKey(secret, 'sign-v1')).update(value).digest('base64url');
+export function sign(secret: string, value: string, opts: { purpose?: string; encoding?: 'base64url' | 'hex' } = {}): string {
+  return createHmac('sha256', deriveKey(secret, opts.purpose ?? 'sign-v1')).update(value).digest(opts.encoding ?? 'base64url');
 }
 
 export function safeEqual(a: string, b: string): boolean {
