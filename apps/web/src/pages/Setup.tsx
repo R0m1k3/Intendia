@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../api';
 import { InstanceForm } from '../components/InstanceForm';
-import { Button, ErrorText, Field, Input } from '../components/ui';
+import { Button, ErrorText, Field, Input, Wordmark } from '../components/ui';
 import { Shell } from './Login';
 
 function PasswordStep() {
@@ -27,11 +27,11 @@ function PasswordStep() {
 
   return (
     <Shell>
-      <h1 className="text-lg font-semibold">Premier lancement</h1>
-      <p className="mt-1 text-sm text-ink-soft">
+      <h1 className="text-[28px] font-medium leading-tight">Premier lancement</h1>
+      <p className="mt-2 text-sm text-ink-soft">
         Le code d’installation est affiché dans les logs du conteneur (<code className="font-mono text-xs">docker logs intendia</code>).
       </p>
-      <form onSubmit={submit} className="mt-6 space-y-4">
+      <form onSubmit={submit} className="mt-8 space-y-4">
         <Field label="Code d’installation">
           <Input value={code} onChange={(e) => setCode(e.target.value)} required autoFocus className="font-mono" />
         </Field>
@@ -42,7 +42,7 @@ function PasswordStep() {
           <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
         </Field>
         <ErrorText error={error} />
-        <Button variant="primary" className="w-full">Définir le mot de passe</Button>
+        <Button variant="primary" className="h-10 w-full">Définir le mot de passe</Button>
       </form>
     </Shell>
   );
@@ -55,17 +55,14 @@ export function SetupPage() {
   if (!setup.data) return null;
   if (setup.data.needsPassword) return <PasswordStep />;
   return (
-    <div className="mx-auto max-w-3xl p-5 md:p-10">
-      <div className="mb-8 flex items-center gap-2.5">
-        <img src="/favicon.svg" alt="" className="size-7" />
-        <span className="text-lg font-semibold tracking-tight">Intendia</span>
-      </div>
-      <h1 className="text-lg font-semibold">Ajouter une instance Hermes</h1>
-      <p className="mt-1 max-w-xl text-sm text-ink-soft">
+    <div className="enter mx-auto max-w-3xl p-5 md:p-10">
+      <div className="mb-10"><Wordmark size="lg" /></div>
+      <h1 className="text-[28px] font-medium leading-tight">Ajouter une instance Hermes</h1>
+      <p className="mt-2 max-w-xl text-sm text-ink-soft">
         Intendia teste chaque module contre l’instance avant d’enregistrer. Les clés sont chiffrées dans la base et ne
         sont jamais renvoyées au navigateur.
       </p>
-      <div className="mt-6">
+      <div className="mt-8 rounded-xl border border-line bg-sheet p-5 md:p-6">
         <InstanceForm onSaved={async () => { await qc.invalidateQueries(); await navigate({ to: '/' }); }} />
       </div>
       <Button variant="ghost" className="mt-4" onClick={() => navigate({ to: '/' })}>Plus tard</Button>

@@ -11,6 +11,8 @@ import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
+import '@fontsource-variable/instrument-sans';
+import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 
 const savedTheme = localStorage.getItem('intendia-theme');

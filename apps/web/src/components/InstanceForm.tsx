@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type CompatReport, type InstanceInput } from '../api';
-import { Button, ErrorText, Field, Input, StateBadge } from './ui';
+import { Button, ErrorText, Field, Input, StateMark } from './ui';
 
 const EMPTY: InstanceInput = { id: '', label: '', api: 'http://hermes:8642', apiKey: '', dashboard: '', dashboardToken: '', dashboardLink: '', mount: '/workspace' };
 
@@ -39,7 +39,7 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
   };
 
   return (
-    <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void run(report ? 'save' : 'test'); }}>
+    <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); void run(report ? 'save' : 'test'); }}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Identifiant" hint="a-z, 0-9 et tiret, par exemple hermes-dev">
           <Input value={v.id} onChange={set('id')} required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="hermes" />
@@ -70,21 +70,21 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
       <ErrorText error={error} />
 
       {report && (
-        <div className="rounded-md border border-line">
-          <div className="flex items-center justify-between border-b border-line px-3 py-2 text-sm">
-            <span>Hermes {report.hermesVersion ?? 'version inconnue'}</span>
+        <div className="overflow-hidden rounded-lg border border-line">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3 text-sm">
+            <span className="font-medium">Hermes {report.hermesVersion ?? 'version inconnue'}</span>
             <span className="text-ink-faint">
               API {report.api.reachable ? 'joignable' : 'injoignable'} · dashboard {!report.dash.configured ? 'non configuré' : report.dash.reachable ? 'joignable' : 'injoignable'}
             </span>
           </div>
           <ul className="divide-y divide-line">
             {report.modules.map((m) => (
-              <li key={m.id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+              <li key={m.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
                 <div className="min-w-0">
                   <div>{m.label}</div>
                   {m.reasons[0] && <div className="truncate text-xs text-ink-faint">{m.reasons[0]}</div>}
                 </div>
-                <StateBadge state={m.state} />
+                <StateMark state={m.state} quiet />
               </li>
             ))}
           </ul>

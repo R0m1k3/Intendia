@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { api } from '../api';
 import { InstanceForm } from '../components/InstanceForm';
 import { PageHeader } from '../components/Layout';
-import { Button, ErrorText, Panel } from '../components/ui';
+import { Button, cx, ErrorText, Panel } from '../components/ui';
 
 type Theme = 'system' | 'light' | 'dark';
 function applyTheme(t: Theme) {
@@ -25,8 +25,8 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Réglages" subtitle="Instances Hermes et préférences d’affichage." />
-      <div className="space-y-4 px-5 pb-10 md:px-8">
+      <PageHeader title="Réglages" subtitle="Instances Hermes reliées à Intendia et affichage" />
+      <div className="space-y-6 px-5 pb-12 md:px-8">
         <Panel
           title="Instances"
           action={!declarative && !adding && <Button onClick={() => setAdding(true)}>Ajouter</Button>}
@@ -41,8 +41,8 @@ export function SettingsPage() {
             {instances.data?.instances.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div className="min-w-0 text-sm">
-                  <div className="font-medium">{i.label} <span className="ml-1 font-mono text-xs font-normal text-ink-faint">{i.id}</span></div>
-                  <div className="truncate font-mono text-xs text-ink-soft">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'} · {i.mount}</div>
+                  <div className="font-medium">{i.label} <span className="ml-2 font-mono text-xs font-normal text-ink-faint">{i.id}</span></div>
+                  <div className="mt-1 truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'} · {i.mount}</div>
                 </div>
                 {!declarative && (
                   <Button
@@ -63,11 +63,20 @@ export function SettingsPage() {
           )}
         </Panel>
         <Panel title="Thème">
-          <div className="flex gap-2">
+          <div role="radiogroup" aria-label="Thème" className="inline-flex rounded-lg border border-line bg-paper p-0.5">
             {(['system', 'light', 'dark'] as const).map((t) => (
-              <Button key={t} variant={theme === t ? 'primary' : 'secondary'} onClick={() => { setTheme(t); applyTheme(t); }}>
+              <button
+                key={t}
+                role="radio"
+                aria-checked={theme === t}
+                onClick={() => { setTheme(t); applyTheme(t); }}
+                className={cx(
+                  'h-8 rounded-md px-4 text-sm transition-colors',
+                  theme === t ? 'bg-sheet text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' : 'text-ink-soft hover:text-ink',
+                )}
+              >
                 {t === 'system' ? 'Système' : t === 'light' ? 'Clair' : 'Sombre'}
-              </Button>
+              </button>
             ))}
           </div>
         </Panel>

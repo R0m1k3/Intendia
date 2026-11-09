@@ -1,18 +1,24 @@
 @import "tailwindcss";
 
-/* Intendia: a steward's register. Warm paper, ink, one green for "in order". */
+/*
+ * Intendia: a steward's register. Quiet paper and ink for the chrome; one ink-green accent
+ * for actions and selection. States read as register boxes (full, half, empty), never as pills.
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --color-paper: #f4f1ea;
-  --color-sheet: #fbfaf6;
-  --color-line: #e2ddd2;
-  --color-ink: #1d1f1e;
-  --color-ink-soft: #5b5f5a;
-  --color-ink-faint: #8c8f88;
+  --color-paper: #f3f2ee;
+  --color-sheet: #fbfbf9;
+  --color-raised: #eceae4;
+  --color-line: #e2e0d9;
+  --color-ink: #1c1d1c;
+  --color-ink-soft: #595b57;
+  --color-ink-faint: #8a8b86;
   --color-accent: #1f4d3a;
-  --color-accent-soft: #e3ece6;
+  --color-accent-strong: #163a2b;
+  --color-accent-soft: #e2ebe5;
+  --color-on-accent: #fbfbf9;
 
   --color-ok: #2f6b4a;
   --color-ok-soft: #e2eee6;
@@ -20,50 +26,66 @@
   --color-warn-soft: #f6ead2;
   --color-bad: #9b2c22;
   --color-bad-soft: #f5e1dd;
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --color-paper: #16181a;
-    --color-sheet: #1d2022;
-    --color-line: #2d3134;
-    --color-ink: #e9e6df;
-    --color-ink-soft: #a9a8a1;
-    --color-ink-faint: #74746e;
-    --color-accent: #7fb89a;
-    --color-accent-soft: #22302a;
-    --color-ok: #7fb89a;
+@layer base {
+  :root.dark {
+    --color-paper: #151615;
+    --color-sheet: #1b1c1b;
+    --color-raised: #232523;
+    --color-line: #2c2e2c;
+    --color-ink: #e8e7e2;
+    --color-ink-soft: #a6a6a0;
+    --color-ink-faint: #737470;
+    --color-accent: #8cc0a3;
+    --color-accent-strong: #a4cfb6;
+    --color-accent-soft: #213028;
+    --color-on-accent: #121312;
+    --color-ok: #8cc0a3;
     --color-ok-soft: #1f2d26;
-    --color-warn: #d7a95a;
+    --color-warn: #d9ab5c;
     --color-warn-soft: #33291a;
-    --color-bad: #e08a7f;
+    --color-bad: #e38c80;
     --color-bad-soft: #3a2220;
   }
-}
-:root.dark {
-  --color-paper: #16181a;
-  --color-sheet: #1d2022;
-  --color-line: #2d3134;
-  --color-ink: #e9e6df;
-  --color-ink-soft: #a9a8a1;
-  --color-ink-faint: #74746e;
-  --color-accent: #7fb89a;
-  --color-accent-soft: #22302a;
-  --color-ok: #7fb89a;
-  --color-ok-soft: #1f2d26;
-  --color-warn: #d7a95a;
-  --color-warn-soft: #33291a;
-  --color-bad: #e08a7f;
-  --color-bad-soft: #3a2220;
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      --color-paper: #151615;
+      --color-sheet: #1b1c1b;
+      --color-raised: #232523;
+      --color-line: #2c2e2c;
+      --color-ink: #e8e7e2;
+      --color-ink-soft: #a6a6a0;
+      --color-ink-faint: #737470;
+      --color-accent: #8cc0a3;
+      --color-accent-strong: #a4cfb6;
+      --color-accent-soft: #213028;
+      --color-on-accent: #121312;
+      --color-ok: #8cc0a3;
+      --color-ok-soft: #1f2d26;
+      --color-warn: #d9ab5c;
+      --color-warn-soft: #33291a;
+      --color-bad: #e38c80;
+      --color-bad-soft: #3a2220;
+    }
+  }
+
+  html, body, #root { height: 100%; }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 }
 
-html, body, #root { height: 100%; }
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+/* One entrance: the page content fades and rises a few pixels. */
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+.enter { animation: enter 240ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
