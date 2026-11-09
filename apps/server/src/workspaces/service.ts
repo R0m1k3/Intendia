@@ -198,16 +198,27 @@ export class WorkspaceService {
     return this.getSession(instanceId, sessionId).session;
   }
 
+  /** Framing lines shared by chat runs and crons; `folder` is relative to the workspace. */
+  framingLines(ws: Workspace, folder: string): { workdir: string; store: string; share: string } {
+    const path = this.agentPath(ws);
+    return {
+      workdir: `Dossier de travail : ${path}/`,
+      store: `Range chaque fichier que tu produis dans ${path}/${folder}/.`,
+      share: "Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.",
+    };
+  }
+
   /** The framing block sent in `instructions` with every run. */
   instructionsFor(ctx: SessionContext): string {
     const ws = ctx.workspace;
     const path = this.agentPath(ws);
     const agents = framingAgentsMd(readAgentsMd(this.dir(ws)), path);
+    const lines = this.framingLines(ws, `sessions/${ctx.session.id}`);
     return [
       `[Intendia] Workspace : ${ws.name} (${ws.slug})`,
-      `Dossier de travail : ${path}/`,
-      `Range chaque fichier que tu produis dans ${path}/sessions/${ctx.session.id}/.`,
-      "Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.",
+      lines.workdir,
+      lines.store,
+      lines.share,
       `Consignes du projet (${path}/AGENTS.md) :`,
       agents || '(aucune)',
     ].join('\n');

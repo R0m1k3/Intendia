@@ -57,7 +57,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const fetchImpl = fakeFetch(fake);
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
-  const services = createServices({ config, db, store });
+  const services = createServices({ config, db, store, compat });
   const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test' });
   const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
 

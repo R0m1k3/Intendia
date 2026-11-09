@@ -9,6 +9,8 @@
  * - "approval": stops on approval.request until POST /v1/runs/{id}/approval
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
+ * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
+ *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   translated by `pathMap` (agent path → local folder), then cites its path
  */
@@ -16,6 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CronStore } from './crons.js';
 
 export const FAKE_API_KEY = 'fake-api-key-000000000000';
 export const FAKE_DASH_TOKEN = 'fake-dashboard-token';
@@ -120,7 +123,7 @@ class Simulator {
     return run;
   }
 
-  private addMessage(sessionId: string, role: string, content: string, extra: Partial<SimMessage> = {}) {
+  addMessage(sessionId: string, role: string, content: string, extra: Partial<SimMessage> = {}) {
     const list = this.messages.get(sessionId) ?? [];
     this.msgId += 1;
     list.push({ id: this.msgId, session_id: sessionId, role, content, tool_calls: null, tool_name: null, timestamp: Date.now() / 1000, ...extra });
@@ -252,7 +255,7 @@ class Simulator {
 
 // ---------------------------------------------------------------- apps
 
-function makeApp(via: Via, opts: FakeOptions, sim: Simulator, log: LoggedRequest[]): Hono {
+function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, log: LoggedRequest[]): Hono {
   const app = new Hono();
   const deleted = new Set<string>();
 
@@ -281,6 +284,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, log: LoggedRequest
     const brk = opts.breaks?.[key];
     if (brk?.status) return c.json(brk.body ?? { error: 'broken by fake-hermes' }, brk.status as 404);
     if (brk && 'body' in brk) return c.json(brk.body as object);
+
+    const cron = crons.handle(via, method, path, c.req.query(), body, profile);
+    if (cron) return cron;
 
     if (via === 'api') {
       const simulated = handleRuns(c.req.raw, method, path, body, sim, opts, deleted);
@@ -396,8 +402,9 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
 
 export function createFakeHermes(opts: FakeOptions) {
   const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
+  const crons = new CronStore(opts.stepMs ?? 5, sim);
   const requests: LoggedRequest[] = [];
-  return { api: makeApp('api', opts, sim, requests), dash: makeApp('dash', opts, sim, requests), requests, sim };
+  return { api: makeApp('api', opts, sim, crons, requests), dash: makeApp('dash', opts, sim, crons, requests), requests, sim, crons };
 }
 
 /**

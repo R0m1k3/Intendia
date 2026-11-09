@@ -18,6 +18,8 @@ import { linkRoutes, publicLinkRoute } from './routes/links.js';
 import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
+import { cronRoutes } from './routes/crons.js';
+import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
 
 export interface AppDeps {
@@ -49,6 +51,7 @@ export function createApp(deps: AppDeps) {
   app.onError((err, c) => {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
     if (err instanceof z.ZodError) return c.json({ error: 'invalid request', issues: err.issues }, 400);
+    if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {
@@ -159,6 +162,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', chatRoutes({ ...deps, workspaces }));
   priv.route('/', fileRoutes(files));
   priv.route('/', linkRoutes(links));
+  priv.route('/', cronRoutes(deps.services.crons));
 
   x.route('/', priv);
   app.route('/x', x);

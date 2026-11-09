@@ -1,6 +1,6 @@
 import type { CompatReport, ModuleId } from './types.js';
 import { MODULES } from './index.js';
-import { HermesError, type HermesHttp, type RequestOptions } from '../hermes/http.js';
+import { HermesError, type HermesHttp, type RequestOptions, type Via } from '../hermes/http.js';
 
 // Routes and services outside src/{hermes,connectors,compat,cli} import these from here (boundaries.test.ts).
 export { HermesError } from '../hermes/http.js';
@@ -15,7 +15,8 @@ export class ModuleUnavailableError extends Error {
 
 export interface CallOptions extends Omit<RequestOptions, 'body'> {
   params?: Record<string, string>;
-  body?: unknown;
+  /** A value, or a function of the route chosen by the compatibility report (bodies that differ per API). */
+  body?: unknown | ((via: Via) => unknown);
 }
 
 function fill(path: string, params: Record<string, string> = {}): string {
@@ -43,7 +44,8 @@ export async function callOp<T = unknown>(
   const resolved = report?.modules.find((m) => m.id === module)?.ops[op];
   if (!resolved?.ok || !resolved.route) throw new ModuleUnavailableError(module, op, resolved?.notes ?? ['pas encore vérifié']);
   const { via, method, path } = resolved.route;
-  const data = await http.json(via, method, fill(path, opts.params), opts);
+  const body = typeof opts.body === 'function' ? (opts.body as (v: Via) => unknown)(via) : opts.body;
+  const data = await http.json(via, method, fill(path, opts.params), { ...opts, body });
   if (def.schema && def.kind === 'read') {
     const parsed = def.schema.safeParse(data);
     if (!parsed.success) {

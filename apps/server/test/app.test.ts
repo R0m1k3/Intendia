@@ -19,7 +19,7 @@ function setup(env: Record<string, string> = {}) {
   const notifier: Notifier = { moduleStates: async (_r, c) => void changes.push(...c) };
   const { fetchImpl } = fakeHttp();
   const compat = new CompatService(db, store, notifier, fetchImpl);
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, services: createServices({ config, db, store }), version: 'test' });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services: createServices({ config, db, store, compat }), version: 'test' });
   let cookie = '';
   const req = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
     const res = await app.request(path, {
