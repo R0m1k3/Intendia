@@ -60,7 +60,8 @@ export class HermesHttp {
     return { base: this.instance.dashboard, token: this.instance.dashboardToken, prefix: '' };
   }
 
-  async request(via: Via, method: Method, path: string, opts: RequestOptions = {}): Promise<Response> {
+  /** Sends the request; the timeout stays armed until `release()` (or an error). */
+  private async open(via: Via, method: Method, path: string, opts: RequestOptions) {
     const t = this.target(via, opts.profile);
     // keep any base path of the configured URL (reverse-proxied Hermes)
     const full = new URL(t.base.replace(/\/$/, '') + t.prefix + path);
@@ -78,23 +79,41 @@ export class HermesHttp {
     const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(new Error('timeout')), timeoutMs) : undefined;
     opts.signal?.addEventListener('abort', () => controller.abort(opts.signal?.reason), { once: true });
     const detail = { via, method, path };
-    try {
-      return await this.fetchImpl(full.toString(), { method, headers, body, signal: controller.signal });
-    } catch (err) {
+    const release = () => { if (timer) clearTimeout(timer); };
+    /** HermesError for a failure while fetching or reading the body. */
+    const fail = (err: unknown) => {
+      release();
       if (controller.signal.aborted && !opts.signal?.aborted) {
-        throw new HermesError('timeout', `${via} ${method} ${path}: no answer after ${timeoutMs} ms`, detail);
+        return new HermesError('timeout', `${via} ${method} ${path}: no answer after ${timeoutMs} ms`, detail);
       }
-      throw new HermesError('network', `${via} ${method} ${path}: ${(err as Error).message}`, detail);
-    } finally {
-      // fetch resolves once headers arrive: the timeout never cuts a stream body
-      if (timer) clearTimeout(timer);
+      return new HermesError('network', `${via} ${method} ${path}: ${(err as Error).message}`, detail);
+    };
+    try {
+      const res = await this.fetchImpl(full.toString(), { method, headers, body, signal: controller.signal });
+      return { res, release, fail };
+    } catch (err) {
+      throw fail(err);
     }
+  }
+
+  /** Raw response (SSE streams): fetch resolves once headers arrive, the timeout never cuts the body. */
+  async request(via: Via, method: Method, path: string, opts: RequestOptions = {}): Promise<Response> {
+    const { res, release } = await this.open(via, method, path, opts);
+    release();
+    return res;
   }
 
   /** JSON request; non-2xx becomes a HermesError carrying the status. */
   async json(via: Via, method: Method, path: string, opts: RequestOptions = {}): Promise<unknown> {
-    const res = await this.request(via, method, path, opts);
-    const text = await res.text();
+    // the timeout covers the body too: a Hermes that sends headers and then stalls must not hang a probe
+    const { res, release, fail } = await this.open(via, method, path, opts);
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (err) {
+      throw fail(err);
+    }
+    release();
     if (!res.ok) {
       throw new HermesError('http', `${via} ${method} ${path}: HTTP ${res.status}`, {
         via, method, path, status: res.status, body: text.slice(0, 500),
