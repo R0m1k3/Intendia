@@ -13,6 +13,8 @@ const pathMap = map?.length === 2 ? { from: map[0]!.replace(/\/$/, ''), to: map[
 const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? JSON.parse(process.env.FAKE_BREAKS) : undefined, pathMap,
   // cron runs last 4 steps ("long": 100): 500 ms makes the live follow-up visible by hand
   cronStepMs: Number(process.env.FAKE_CRON_STEP_MS ?? 500),
+  // skills actions (install, uninstall, update): long enough to see the follow-up
+  skillStepMs: Number(process.env.FAKE_SKILL_STEP_MS ?? 500),
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);

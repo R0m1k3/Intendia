@@ -2,10 +2,10 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { CronService } from '../crons/service.js';
 import { SLUG_RE } from '../workspaces/fs.js';
+import { PROFILE_RE } from './params.js';
 import { ValidationError } from '../workspaces/service.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const PROFILE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const Fields = {
   name: z.string().trim().min(1).max(120),

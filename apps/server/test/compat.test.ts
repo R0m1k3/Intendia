@@ -83,7 +83,7 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
     const { http } = fakeHttp({}, fakeInstance({ dashboard: undefined, dashboardToken: undefined }));
     const { report } = await checkInstance(http);
     // crons: list/create/update work through the API server; cancel and runs exist only on the dashboard
-    expect(states(report)).toMatchObject({ chat: 'full', sessions: 'full', crons: 'readonly', config: 'unavailable', kanban: 'unavailable', agents: 'unavailable' });
+    expect(states(report)).toMatchObject({ chat: 'full', sessions: 'full', crons: 'readonly', config: 'unavailable', kanban: 'unavailable', agents: 'unavailable', skills: 'unavailable' });
     expect(state(report, 'crons').ops.list!.ok).toBe(true);
     expect(state(report, 'config').reasons[0]).toContain('non configuré');
   });

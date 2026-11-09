@@ -19,6 +19,20 @@ export interface CallOptions extends Omit<RequestOptions, 'body'> {
   body?: unknown | ((via: Via) => unknown);
 }
 
+/** Hermes' own error message from a non-2xx body (`detail` or `error`), else the raw body. */
+export function hermesDetail(err: HermesError): string {
+  const body = err.detail.body ?? '';
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
+    const d = parsed.detail ?? parsed.error;
+    if (typeof d === 'string') return d;
+    if (d && typeof d === 'object' && 'message' in d) return String((d as { message: unknown }).message);
+    return body;
+  } catch {
+    return body;
+  }
+}
+
 function fill(path: string, params: Record<string, string> = {}): string {
   return path.replace(/\{([^}]+)\}/g, (_, name: string) => {
     const v = params[name];
