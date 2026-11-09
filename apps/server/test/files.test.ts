@@ -103,6 +103,17 @@ describe('files', () => {
     expect(existsSync(join(t.ws, 'inbox', 'big.bin'))).toBe(false);
   });
 
+  it('two concurrent uploads of the same name both land, under two names', async () => {
+    const t = await setup();
+    const up = (body: string) => t.rawRequest('PUT', `${t.F}/upload?dir=inbox&name=same.txt`, { body });
+    const res = await Promise.all([up('un'), up('deux'), up('trois')]);
+    expect(res.map((r) => r.status)).toEqual([201, 201, 201]);
+    const paths = (await Promise.all(res.map((r) => r.json()))).map((j: { path: string }) => j.path).sort();
+    expect(paths).toEqual(['inbox/same (2).txt', 'inbox/same (3).txt', 'inbox/same.txt']);
+    const bodies = paths.map((p) => readFileSync(join(t.ws, p), 'utf8')).sort();
+    expect(bodies).toEqual(['deux', 'trois', 'un']);
+  });
+
   it('move never overwrites; delete protects the standard folders', async () => {
     const t = await setup();
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'files/sub/doc.pdf' })).status).toBe(200);

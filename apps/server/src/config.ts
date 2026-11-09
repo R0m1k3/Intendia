@@ -73,7 +73,9 @@ export function parseInstances(raw: string): InstanceConfig[] {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const parsed = EnvSchema.safeParse(env);
+  // Compose passes `KEY=` lines of an env file as empty strings: treat them as unset
+  const cleaned = Object.fromEntries(Object.entries(env).filter(([k, v]) => !(k.startsWith('INTENDIA_') && v?.trim() === '')));
+  const parsed = EnvSchema.safeParse(cleaned);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Invalid configuration:\n${lines.join('\n')}`);
