@@ -128,24 +128,36 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return c.json({ messages: await messages(ctx.instance.id, ctx.session.id, ctx.profile) });
   });
 
+  // one run creation at a time per session: two tabs could otherwise both pass the "no run in progress"
+  // check and start two runs, the second overwriting the first in lastRunId
+  const starting = new Set<string>();
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
     const { input } = SendBody.parse(await c.req.json());
-    if (ctx.session.lastRunId) {
-      const last = await status(ctx, ctx.session.lastRunId);
-      if (last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) {
-        return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
+    const key = `${ctx.instance.id}:${ctx.session.id}`;
+    if (starting.has(key)) return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
+    starting.add(key);
+    try {
+      // re-read after the body: the session may have changed while it was received
+      const lastRunId = workspaces.getSession(ctx.instance.id, ctx.session.id).session.lastRunId;
+      if (lastRunId) {
+        const last = await status(ctx, lastRunId);
+        if (last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) {
+          return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
+        }
       }
+      const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
+        profile: ctx.profile,
+        body: {
+          input, session_id: ctx.session.id, instructions: workspaces.instructionsFor(ctx),
+          ...(ctx.workspace.model ? { model: ctx.workspace.model } : {}),
+        },
+      });
+      const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
+      return c.json({ runId: created.run_id, session });
+    } finally {
+      starting.delete(key);
     }
-    const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
-      profile: ctx.profile,
-      body: {
-        input, session_id: ctx.session.id, instructions: workspaces.instructionsFor(ctx),
-        ...(ctx.workspace.model ? { model: ctx.workspace.model } : {}),
-      },
-    });
-    const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
-    return c.json({ runId: created.run_id, session });
   });
 
   r.get('/sessions/:inst/:id/runs/:runId', async (c) => {
