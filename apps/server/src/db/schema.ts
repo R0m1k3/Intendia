@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Mirrors migrations/*.sql (the SQL files are the source of truth for the schema).
 
@@ -24,7 +24,9 @@ export const workspaces = sqliteTable('workspaces', {
   name: text('name').notNull(),
   instanceId: text('instance_id').notNull(),
   profile: text('profile'),
+  /** Last model / effort chosen in one of its sessions: starting point of its new sessions. */
   model: text('model'),
+  effort: text('effort'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -39,8 +41,38 @@ export const sessionWorkspace = sqliteTable(
     createdAt: integer('created_at').notNull(),
     lastRunId: text('last_run_id'),
     lastActiveAt: integer('last_active_at'),
+    /** Model and reasoning effort sent with each run (NULL = Hermes default). */
+    model: text('model'),
+    effort: text('effort'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
+);
+
+/** One row per run started from Intendia: options asked for, then what Hermes reports at the end. */
+export const runStats = sqliteTable(
+  'run_stats',
+  {
+    instanceId: text('instance_id').notNull(),
+    runId: text('run_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    hermesSessionId: text('hermes_session_id'),
+    /** "running" until settled, then the Hermes terminal status, or "unknown" (forgotten by Hermes). */
+    status: text('status').notNull(),
+    requestedModel: text('requested_model'),
+    requestedEffort: text('requested_effort'),
+    servedModel: text('served_model'),
+    startedAt: integer('started_at').notNull(),
+    endedAt: integer('ended_at'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWriteTokens: integer('cache_write_tokens'),
+    costBeforeUsd: real('cost_before_usd'),
+    costBeforeSessionId: text('cost_before_session_id'),
+    costUsd: real('cost_usd'),
+    costFinal: integer('cost_final', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.instanceId, t.runId] }), index('run_stats_session').on(t.instanceId, t.sessionId, t.startedAt)],
 );
 
 export const shareLinks = sqliteTable('share_links', {

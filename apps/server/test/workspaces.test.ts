@@ -16,7 +16,7 @@ describe('workspaces', () => {
     expect(mode(dir)).toBe(0o775);
     expect(mode(join(dir, 'sessions'))).toBe(0o775);
     expect(mode(join(dir, 'AGENTS.md'))).toBe(0o664);
-    expect((await t.request('GET', '/x/workspaces')).json.workspaces).toMatchObject([{ slug: 'magasins', model: 'opus', profile: null }]);
+    expect((await t.request('GET', '/x/workspaces')).json.workspaces).toMatchObject([{ slug: 'magasins', model: null, effort: null, profile: null }]);
     expect((await t.request('GET', '/x/workspaces/magasins/agents-md')).json.text).toContain('Consignes du projet');
   });
 
@@ -67,11 +67,11 @@ describe('workspaces', () => {
     expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'é'.repeat(40_000) })).status).toBe(413);
   });
 
-  it('updates name and model', async () => {
+  it('updates the name; the model is no longer a workspace setting', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'w', name: 'W', instanceId: 'fake' });
     const res = await t.request('PATCH', '/x/workspaces/w', { name: 'Dev', model: 'sonnet' });
-    expect(res.json.workspace).toMatchObject({ name: 'Dev', model: 'sonnet' });
+    expect(res.json.workspace).toMatchObject({ name: 'Dev', model: null });
   });
 });
 

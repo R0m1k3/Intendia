@@ -8,6 +8,9 @@ export const SessionSchema = z.looseObject({
   model: z.string().nullish(),
   started_at: z.number().nullish(),
   message_count: z.number().nullish(),
+  /** Cumulated cost of the session (null before anything is counted). */
+  estimated_cost_usd: z.number().nullish().catch(null),
+  actual_cost_usd: z.number().nullish().catch(null),
 });
 
 export const SessionListSchema = z.looseObject({
@@ -30,7 +33,8 @@ export const MessageSchema = z.looseObject({
   timestamp: z.number().nullish(),
 });
 
-export const MessageListSchema = z.looseObject({ data: z.array(MessageSchema) });
+/** `session_id`: the live session (after a context compression, its continuation). */
+export const MessageListSchema = z.looseObject({ data: z.array(MessageSchema), session_id: z.string().nullish().catch(null) });
 
 export const sessionsModule: ModuleDef = {
   id: 'sessions',

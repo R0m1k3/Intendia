@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNotNull, ne } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
-import { sessionWorkspace, workspaces } from '../db/schema.js';
+import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
+import type { FinishFields } from '../chat/run-stats.js';
 import type { InstanceStore } from '../instances/store.js';
 import {
   createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd, readAgentsMd, removeWorkspaceDir, writeAgentsMd,
@@ -11,6 +12,7 @@ import {
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
+export type RunStatRow = typeof runStats.$inferSelect;
 
 export interface PublicSession {
   id: string;
@@ -21,6 +23,9 @@ export interface PublicSession {
   lastRunId: string | null;
   lastActiveAt: number | null;
   createdAt: number;
+  /** Model and reasoning effort sent with each run; null = Hermes default ("Auto"). */
+  model: string | null;
+  effort: string | null;
 }
 
 export interface SessionContext {
@@ -61,7 +66,7 @@ const TITLE_MAX = 60;
 function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
-    lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt,
+    lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, effort: r.effort,
   };
 }
 
@@ -110,7 +115,7 @@ export class WorkspaceService {
     return ws;
   }
 
-  createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null; model?: string | null }): Workspace {
+  createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null }): Workspace {
     const inst = this.instance(input.instanceId);
     const profile = input.profile && input.profile !== 'default' ? input.profile : null;
     if (profile && !inst.profileKeys[profile]) throw new ValidationError(`Profil sans clé sur cette instance : ${profile}`);
@@ -119,7 +124,7 @@ export class WorkspaceService {
     }
     const dir = createWorkspaceDir(inst.mount, input.slug);
     const row: Workspace = {
-      slug: input.slug, name: input.name, instanceId: inst.id, profile, model: input.model || null, createdAt: Date.now(),
+      slug: input.slug, name: input.name, instanceId: inst.id, profile, model: null, effort: null, createdAt: Date.now(),
     };
     try {
       this.db.insert(workspaces).values(row).run();
@@ -130,11 +135,10 @@ export class WorkspaceService {
     return row;
   }
 
-  updateWorkspace(slug: string, patch: { name?: string; model?: string | null }): Workspace {
+  updateWorkspace(slug: string, patch: { name?: string }): Workspace {
     this.getWorkspace(slug);
     const set: Partial<Workspace> = {};
     if (patch.name !== undefined) set.name = patch.name;
-    if (patch.model !== undefined) set.model = patch.model || null;
     if (Object.keys(set).length) this.db.update(workspaces).set(set).where(eq(workspaces.slug, slug)).run();
     return this.getWorkspace(slug);
   }
@@ -179,18 +183,30 @@ export class WorkspaceService {
     const now = Date.now();
     this.db.insert(sessionWorkspace).values({
       sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: null, archived: false, createdAt: now, lastActiveAt: now,
+      // a new session starts from the last choice made in this workspace
+      model: ws.model, effort: ws.effort,
     }).run();
     return this.getSession(ws.instanceId, id).session;
   }
 
-  updateSession(instanceId: string, sessionId: string, patch: { title?: string | null; archived?: boolean }): PublicSession {
-    this.getSession(instanceId, sessionId);
+  updateSession(
+    instanceId: string, sessionId: string,
+    patch: { title?: string | null; archived?: boolean; model?: string | null; effort?: string | null },
+  ): PublicSession {
+    const { workspace } = this.getSession(instanceId, sessionId);
     const set: Partial<SessionRow> = {};
     if (patch.title !== undefined) set.title = patch.title ? titleFrom(patch.title) : null;
     if (patch.archived !== undefined) set.archived = patch.archived;
+    // the run options are also remembered as the workspace's last choice (start of its next sessions)
+    const choice: Partial<Workspace> = {};
+    if (patch.model !== undefined) set.model = choice.model = patch.model || null;
+    if (patch.effort !== undefined) set.effort = choice.effort = patch.effort || null;
     if (Object.keys(set).length) {
-      this.db.update(sessionWorkspace).set(set)
-        .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
+      this.db.transaction((tx) => {
+        tx.update(sessionWorkspace).set(set)
+          .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
+        if (Object.keys(choice).length) tx.update(workspaces).set(choice).where(eq(workspaces.slug, workspace.slug)).run();
+      });
     }
     return this.getSession(instanceId, sessionId).session;
   }
@@ -231,6 +247,37 @@ export class WorkspaceService {
       .set({ lastRunId: runId, lastActiveAt: Date.now(), ...(session.title ? {} : { title: titleFrom(input) }) })
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
     return this.getSession(instanceId, sessionId).session;
+  }
+
+  // ---- run consumption (run_stats)
+
+  insertRunStat(row: Omit<RunStatRow, 'costFinal' | 'endedAt' | 'hermesSessionId' | 'servedModel' | 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd'>): void {
+    this.db.insert(runStats).values({ ...row, costFinal: false }).onConflictDoNothing().run();
+  }
+
+  /** Rows of a session, oldest first; `running` ones included only when asked. */
+  runStats(instanceId: string, sessionId: string, opts: { running?: boolean } = {}): RunStatRow[] {
+    return this.db.select().from(runStats)
+      .where(and(
+        eq(runStats.instanceId, instanceId), eq(runStats.sessionId, sessionId),
+        ...(opts.running ? [] : [ne(runStats.status, 'running')]),
+      ))
+      .orderBy(asc(runStats.startedAt)).all();
+  }
+
+  /** End of a run, written once: a concurrent settle that lost the race changes nothing. */
+  finishRunStat(instanceId: string, runId: string, f: Partial<FinishFields> & { status: string; endedAt: number; hermesSessionId: string | null }): boolean {
+    const { startedAt, ...rest } = f;
+    const res = this.db.update(runStats)
+      .set({ ...rest, ...(startedAt ? { startedAt } : {}) })
+      .where(and(eq(runStats.instanceId, instanceId), eq(runStats.runId, runId), eq(runStats.status, 'running'))).run();
+    return res.changes > 0;
+  }
+
+  /** Cost of a finished run, while it is not final yet; `final` freezes it. */
+  setRunCost(instanceId: string, runId: string, costUsd: number | null, final: boolean): void {
+    this.db.update(runStats).set({ costUsd, costFinal: final })
+      .where(and(eq(runStats.instanceId, instanceId), eq(runStats.runId, runId), eq(runStats.costFinal, false))).run();
   }
 
   /** Framing lines shared by chat runs and crons; `folder` is relative to the workspace. */

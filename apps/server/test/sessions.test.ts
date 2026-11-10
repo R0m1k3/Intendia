@@ -19,6 +19,28 @@ describe('sessions', () => {
     expect((await t.request('GET', '/x/workspaces/dev/sessions')).json.sessions).toHaveLength(1);
   });
 
+  it('stores model and effort per session and remembers them as the workspace last choice', async () => {
+    const { t, base } = await withWorkspace();
+    const res = await t.request('PATCH', base, { model: 'anthropic/claude-opus-4.6', effort: 'high' });
+    expect(res.status).toBe(200);
+    expect(res.json.session).toMatchObject({ model: 'anthropic/claude-opus-4.6', effort: 'high' });
+    expect((await t.request('GET', '/x/workspaces/dev')).json.workspace).toMatchObject({ model: 'anthropic/claude-opus-4.6', effort: 'high' });
+    // a new session of the workspace starts from that choice; the first one is unchanged by later edits
+    const next = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    expect(next).toMatchObject({ model: 'anthropic/claude-opus-4.6', effort: 'high' });
+    await t.request('PATCH', `/x/sessions/fake/${next.id}`, { model: null });
+    expect((await t.request('GET', base)).json.session.model).toBe('anthropic/claude-opus-4.6');
+    expect((await t.request('GET', '/x/workspaces/dev')).json.workspace).toMatchObject({ model: null, effort: 'high' });
+  });
+
+  it('refuses an unknown effort and a model name with spaces or line breaks', async () => {
+    const { t, base } = await withWorkspace();
+    expect((await t.request('PATCH', base, { effort: 'turbo' })).status).toBe(400);
+    expect((await t.request('PATCH', base, { model: 'a\nb' })).status).toBe(400);
+    expect((await t.request('PATCH', base, { model: 'x'.repeat(201) })).status).toBe(400);
+    expect((await t.request('GET', base)).json.session).toMatchObject({ model: null, effort: null });
+  });
+
   it('fills the title from the first message and pushes renames to Hermes', async () => {
     const { t, base, s } = await withWorkspace();
     const sent = await t.request('POST', `${base}/runs`, { input: '  Prépare   le rapport des ventes de la semaine pour les deux magasins, avec les marges  ' });
