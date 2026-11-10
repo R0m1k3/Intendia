@@ -61,16 +61,33 @@ describe('kanban board', () => {
 });
 
 describe('kanban tasks', () => {
-  it('creates in todo by default (triage then PATCH), triage or ready on request', async () => {
+  it('creates in scheduled by default (ready without agent, parked, then assigned), ready or triage on request, never todo', async () => {
     const t = await testApp();
-    const a = await task(t, { title: 'Par défaut' });
-    expect(a.status).toBe('todo');
-    expect(last(t, 'POST', '/api/plugins/kanban/tasks')!.body).toMatchObject({ title: 'Par défaut', triage: true });
-    expect(last(t, 'PATCH', `/api/plugins/kanban/tasks/${a.id}`)!.body).toEqual({ status: 'todo' });
-    expect((await task(t, { title: 'Tri', start: 'triage' })).status).toBe('triage');
-    const r = await task(t, { title: 'Prête', start: 'ready' });
+    const a = await task(t, { title: 'Par défaut', assignee: 'default' });
+    expect(a.status).toBe('scheduled');
+    expect(a.assignee).toBe('default');
+    const post = last(t, 'POST', '/api/plugins/kanban/tasks')!.body as Record<string, unknown>;
+    expect(post).toMatchObject({ title: 'Par défaut', triage: false });
+    expect(post.assignee).toBeUndefined();
+    const patches = t.fake.requests.filter((r) => r.method === 'PATCH').map((r) => r.body);
+    expect(patches).toEqual([{ status: 'scheduled' }, { assignee: 'default' }]);
+    const r = await task(t, { title: 'Prête', start: 'ready', assignee: 'default' });
     expect(r.status).toBe('ready');
-    expect(last(t, 'POST', '/api/plugins/kanban/tasks')!.body).toMatchObject({ triage: false });
+    expect(last(t, 'POST', '/api/plugins/kanban/tasks')!.body).toMatchObject({ triage: false, assignee: 'default' });
+    expect((await task(t, { title: 'Tri', start: 'triage' })).status).toBe('triage');
+    expect(last(t, 'POST', '/api/plugins/kanban/tasks')!.body).toMatchObject({ triage: true });
+    expect((await t.request('POST', `${K}/tasks?board=default`, { title: 'Repos', start: 'todo' })).status).toBe(400);
+  });
+
+  it('follows Hermes on dependencies: a linked child waits in todo, then is promoted when its parent is done', async () => {
+    const t = await testApp();
+    const p = await task(t, { title: 'Parent', start: 'ready' });
+    const c = await task(t, { title: 'Enfant', start: 'ready' });
+    expect((await t.request('POST', `${K}/links?board=default`, { parent: p.id, child: c.id })).status).toBe(200);
+    const st = async (id: string) => (await t.request('GET', `${K}/tasks/${id}?board=default`)).json.task.status;
+    expect(await st(c.id)).toBe('todo');
+    await t.request('PATCH', `${K}/tasks/${p.id}?board=default`, { status: 'done' });
+    expect(await st(c.id)).toBe('ready');
   });
 
   it('refuses a title over 200 characters', async () => {
@@ -142,7 +159,7 @@ describe('kanban tasks', () => {
     expect(last(t, 'POST', `/api/plugins/kanban/tasks/${a.id}/comments`)!.body).toEqual({ body: 'Vu', author: 'intendia' });
     expect((await t.request('POST', `${K}/links?board=default`, { parent: a.id, child: b.id })).status).toBe(200);
     let d = (await t.request('GET', `${K}/tasks/${b.id}?board=default`)).json;
-    expect(d.parents).toEqual([{ id: a.id, title: 'Parent', status: 'todo' }]);
+    expect(d.parents).toEqual([{ id: a.id, title: 'Parent', status: 'scheduled' }]);
     expect(d.comments).toEqual([]);
     expect((await t.request('DELETE', `${K}/links?board=default&parent=${a.id}&child=${b.id}`)).status).toBe(200);
     d = (await t.request('GET', `${K}/tasks/${b.id}?board=default`)).json;

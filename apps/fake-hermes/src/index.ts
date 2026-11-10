@@ -469,15 +469,20 @@ export function createFakeHermes(opts: FakeOptions) {
 
 type Fake = ReturnType<typeof createFakeHermes>;
 
+/** Like Hermes 0.23.0, a wrong token gets no answer to its handshake (neither open nor close). */
+export function kanbanWsTokenOk(url: string): boolean {
+  return new URL(url, 'ws://fake-dash').searchParams.get('token') === FAKE_DASH_TOKEN;
+}
+
 /**
- * One connection to `/api/plugins/kanban/events?board=&since=&token=`, whatever the transport:
- * `{events, cursor}` messages for the board; wrong token, unknown board or `kanbanWs: false` → close 1008.
- * Returns the function that ends the subscription.
+ * One connection to `/api/plugins/kanban/events?board=&since=&token=` (token already checked with
+ * `kanbanWsTokenOk`), whatever the transport: `{events, cursor}` messages for the board; unknown board or
+ * `kanbanWs: false` → close 1008. Returns the function that ends the subscription.
  */
 export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: string) => void; close: (code: number) => void }): () => void {
   const u = new URL(url, 'ws://fake-dash');
   const board = u.searchParams.get('board') ?? 'default';
-  if (!fake.kanbanWs || u.pathname !== '/api/plugins/kanban/events' || u.searchParams.get('token') !== FAKE_DASH_TOKEN
+  if (!fake.kanbanWs || u.pathname !== '/api/plugins/kanban/events' || !kanbanWsTokenOk(url)
     || !fake.kanban.boards.get(board) || fake.kanban.boards.get(board)!.archived) {
     io.close(1008);
     return () => {};
@@ -507,6 +512,7 @@ export function fakeWebSocketFactory(fake: Fake) {
       fire('close', { code });
     };
     queueMicrotask(() => {
+      if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
       fire('open');
       stop = connectKanbanEvents(fake, url, { send: (data) => { if (open) fire('message', { data }); }, close: end });
     });

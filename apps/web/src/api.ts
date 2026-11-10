@@ -355,7 +355,7 @@ export interface KanbanOrchestration {
   autoPromoteChildren: boolean;
   activeProfile: string | null;
 }
-export type KanbanStart = 'todo' | 'triage' | 'ready';
+export type KanbanStart = 'scheduled' | 'ready' | 'triage';
 export interface KanbanTaskInput { title: string; body?: string; assignee?: string | null; priority?: number | null; start?: KanbanStart; workspace?: string | null }
 export interface KanbanTaskPatch { status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string }
 export const kanbanPath = (inst: string, sub: string, board?: string, extra: Record<string, string> = {}) =>

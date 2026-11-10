@@ -42,6 +42,8 @@ export interface AppDeps {
   fetchImpl?: FetchLike;
   /** Kanban live events (tests inject fake-hermes' factory; default: Node's WebSocket). */
   wsFactory?: WsFactory;
+  /** Delay before an unanswered kanban WebSocket handshake is given up (tests shorten it). */
+  wsOpenTimeoutMs?: number;
   version: string;
 }
 
@@ -186,7 +188,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', configRoutes(deps.services.config));
   priv.route('/', agentRoutes(deps.services.agents));
   priv.route('/', activityRoutes(deps.services.activity));
-  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory }));
+  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);
   app.route('/x', x);

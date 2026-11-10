@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kanbanEventsUrl } from '../src/hermes/events.js';
+import { kanbanEventsUrl, openKanbanEvents, type WsLike } from '../src/hermes/events.js';
 import { fakeInstance, testApp } from './helpers.js';
 
 type T = Awaited<ReturnType<typeof testApp>>;
@@ -57,7 +57,7 @@ describe('kanban live events', () => {
     await reader.cancel();
   });
 
-  it('closes the stream when the WebSocket is refused (kanbanWs off, wrong token, unknown board)', async () => {
+  it('closes the stream when the WebSocket is refused or never answers (kanbanWs off, wrong token, unknown board)', async () => {
     const off = await testApp({ kanbanWs: false });
     const a = await read(await off.raw('GET', `${K}/events?board=default`), () => false);
     expect(a.ended).toBe(true);
@@ -72,6 +72,16 @@ describe('kanban live events', () => {
     const t = await testApp();
     const c = await read(await t.raw('GET', `${K}/events?board=inconnu`), () => false);
     expect(c.ended).toBe(true);
+  });
+
+  it('gives up a handshake Hermes never answers (wrong token on 0.23.0) and closes the socket', async () => {
+    let closedWith: number | undefined;
+    const silent = (): WsLike => ({ addEventListener: () => {}, close: (code) => { closedWith = code; } });
+    const reasons: string[] = [];
+    openKanbanEvents(fakeInstance(), 'default', { onEvents: () => {}, onClose: (r) => reasons.push(r) }, silent, 50);
+    await sleep(120);
+    expect(reasons).toEqual(['Flux du kanban sans réponse']);
+    expect(closedWith).toBe(1000);
   });
 
   it('builds the WebSocket URL from the dashboard URL, base path kept', () => {

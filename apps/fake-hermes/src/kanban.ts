@@ -138,11 +138,33 @@ export class KanbanStore {
       t.completed_at = now();
       t.result = 'Terminé par fake-hermes.';
       this.emit(b, 'completed', t.id, null, w.run_id);
+      this.recompute(b);
     }, this.stepMs);
+  }
+
+  /**
+   * Like Hermes' `recompute_ready` (run after its writes and on each dispatcher tick): a `todo` task whose
+   * parents are all done is promoted to `ready`. `todo` means "waiting for its parents", not "idle".
+   */
+  private recompute(b: Board) {
+    for (const t of b.tasks) {
+      if (t.status !== 'todo') continue;
+      const parents = b.links.filter((l) => l.child === t.id).map((l) => b.tasks.find((x) => x.id === l.parent));
+      if (parents.every((x) => !x || x.status === 'done')) {
+        t.status = 'ready';
+        this.emit(b, 'promoted', t.id);
+      }
+    }
   }
 
   /** null when the route is not a kanban route. */
   handle(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
+    const res = this.route(via, method, path, query, body);
+    if (res && method !== 'GET') for (const b of this.boards.values()) this.recompute(b);
+    return res;
+  }
+
+  private route(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
     if (via !== 'dash' || !path.startsWith('/api/plugins/kanban/')) return null;
     const p = path.slice('/api/plugins/kanban'.length);
     const b0 = (body ?? {}) as Record<string, unknown>;
@@ -207,6 +229,8 @@ export class KanbanStore {
       };
       b.tasks.push(t);
       for (const parent of Array.isArray(b0.parents) ? b0.parents.map(String) : []) b.links.push({ parent, child: t.id });
+      // a ready task with an unfinished parent waits in todo
+      if (t.status === 'ready' && b.links.some((l) => l.child === t.id && b.tasks.find((x) => x.id === l.parent)?.status !== 'done')) t.status = 'todo';
       this.emit(b, 'created', t.id, { status: t.status, assignee: t.assignee });
       return json({ task: this.view(b, t) });
     }
@@ -230,8 +254,12 @@ export class KanbanStore {
         if (!b.tasks.some((t) => t.id === parent) || !b.tasks.some((t) => t.id === child)) return json({ detail: 'unknown task' }, 404);
         if (parent === child) return json({ detail: 'a task cannot depend on itself' }, 400);
         if (!b.links.some((l) => l.parent === parent && l.child === child)) b.links.push({ parent, child });
+        // like Hermes' link_tasks: a ready child of an unfinished parent goes back to todo
+        const c = b.tasks.find((t) => t.id === child)!;
+        const gated = c.status === 'ready' && b.tasks.find((t) => t.id === parent)!.status !== 'done';
+        if (gated) c.status = 'todo';
         this.emit(b, 'linked', child, { parent });
-        return json({ ok: true, gated: false });
+        return json({ ok: true, gated });
       }
       if (method === 'DELETE') {
         b.links = b.links.filter((l) => !(l.parent === query.parent_id && l.child === query.child_id));

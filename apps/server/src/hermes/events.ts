@@ -30,10 +30,18 @@ export function kanbanEventsUrl(instance: InstanceConfig, board: string): string
 
 const defaultFactory: WsFactory = (url) => new WebSocket(url) as unknown as WsLike;
 
+/** Hermes 0.23.0 never answers the handshake of a wrong token: past this delay the connection is given up. */
+export const OPEN_TIMEOUT_MS = 10_000;
+
 /** Opens the events of one board. Messages and errors never carry the URL (it holds the token). */
-export function openKanbanEvents(instance: InstanceConfig, board: string, handlers: KanbanEventHandlers, factory: WsFactory = defaultFactory): { close: () => void } {
+export function openKanbanEvents(
+  instance: InstanceConfig, board: string, handlers: KanbanEventHandlers,
+  factory: WsFactory = defaultFactory, openTimeoutMs = OPEN_TIMEOUT_MS,
+): { close: () => void } {
   let closed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const end = (reason: string) => {
+    clearTimeout(timer);
     if (closed) return;
     closed = true;
     handlers.onClose(reason);
@@ -45,7 +53,14 @@ export function openKanbanEvents(instance: InstanceConfig, board: string, handle
     queueMicrotask(() => end('Connexion au flux du kanban impossible'));
     return { close: () => { closed = true; } };
   }
-  ws.addEventListener('open', () => handlers.onOpen?.());
+  timer = setTimeout(() => {
+    end('Flux du kanban sans réponse');
+    try { ws.close(1000); } catch { /* not open */ }
+  }, openTimeoutMs);
+  ws.addEventListener('open', () => {
+    clearTimeout(timer);
+    handlers.onOpen?.();
+  });
   ws.addEventListener('message', (ev) => {
     if (closed) return;
     try {
@@ -60,6 +75,7 @@ export function openKanbanEvents(instance: InstanceConfig, board: string, handle
   ws.addEventListener('close', (ev) => end(ev.code === 1008 ? 'Flux du kanban refusé par Hermes' : 'Flux du kanban fermé'));
   return {
     close: () => {
+      clearTimeout(timer);
       closed = true;
       try { ws.close(1000); } catch { /* already closed */ }
     },

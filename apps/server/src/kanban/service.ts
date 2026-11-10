@@ -23,7 +23,13 @@ export class KanbanError extends Error {
 }
 
 export const LIMITS = { title: 200, body: 20_000, comment: 10_000, blockReason: 500, boardName: 100 } as const;
-export const START_STATES = ['todo', 'triage', 'ready'] as const;
+/**
+ * `scheduled` is the only state Hermes leaves alone (out only by an explicit unblock: a move to ready);
+ * `ready` is launched by the dispatcher once it has an agent; `triage` is split by the gateway when an auxiliary
+ * model is set (`auto_decompose`). Not `todo`: Hermes promotes a todo task to ready as soon as its parents are
+ * done (`recompute_ready`). A task without an agent is never launched.
+ */
+export const START_STATES = ['scheduled', 'ready', 'triage'] as const;
 export type StartState = (typeof START_STATES)[number];
 const DISPATCH_MAX = 8;
 const LOG_TAIL = 200;
@@ -305,9 +311,10 @@ export class KanbanService {
     if (!title) throw new ValidationError('Titre manquant');
     textLimit(title, LIMITS.title, 'Titre');
     textLimit(input.body, LIMITS.body, 'Texte');
-    const start = input.start ?? 'todo';
-    const body: Record<string, unknown> = { title, triage: start !== 'ready' };
-    if (input.assignee) body.assignee = input.assignee;
+    const start = input.start ?? 'scheduled';
+    const body: Record<string, unknown> = { title, triage: start === 'triage' };
+    // scheduled: created ready without agent (the dispatcher skips it), parked, then given its agent
+    if (input.assignee && start !== 'scheduled') body.assignee = input.assignee;
     if (input.priority !== undefined && input.priority !== null) body.priority = input.priority;
     let text = input.body ?? '';
     if (input.workspace) {
@@ -322,12 +329,11 @@ export class KanbanService {
     if (text) body.body = text;
     const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'createTask', { body }, 'Tableau introuvable');
     let task = TaskSchema.parse(res.task);
-    if (start === 'todo') {
-      // created in triage so the dispatcher leaves it, then parked in todo (the gateway splits triage tasks)
-      const moved = await this.onBoard<{ task?: unknown }>(instanceId, board, 'updateTask', {
-        params: { task_id: task.id }, body: { status: 'todo' },
-      }, 'Tâche introuvable');
-      task = TaskSchema.parse(moved.task ?? { ...task, status: 'todo' });
+    if (start === 'scheduled') {
+      const patch = async (b: Record<string, unknown>) => TaskSchema.parse((await this.onBoard<{ task?: unknown }>(
+        instanceId, board, 'updateTask', { params: { task_id: task.id }, body: b }, 'Tâche introuvable')).task);
+      task = await patch({ status: 'scheduled' });
+      if (input.assignee) task = await patch({ assignee: input.assignee });
     }
     return this.toPublic(instanceId, task);
   }

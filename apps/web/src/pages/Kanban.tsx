@@ -127,11 +127,25 @@ function NewBoard({ inst, onClose, onCreated }: { inst: string; onClose: () => v
 
 const slugify = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 
+// No "todo" start: Hermes promotes a todo task without unfinished parents to ready at once. "Planifiée" is the
+// state it leaves alone.
 const START: { value: KanbanStart; label: string }[] = [
-  { value: 'todo', label: 'À faire (rien ne se lance)' },
-  { value: 'triage', label: 'Triage' },
+  { value: 'scheduled', label: 'Planifiée (rien ne se lance)' },
   { value: 'ready', label: 'Prête à lancer' },
+  { value: 'triage', label: 'Triage' },
 ];
+
+function startHint(start: KanbanStart, agent: boolean, autoDecompose: boolean): string {
+  if (start === 'scheduled') return 'Elle attend que vous la passiez en « Prête à lancer »';
+  if (start === 'triage') {
+    return autoDecompose
+      ? 'Hermes la découpera et lancera les morceaux s’il a un modèle auxiliaire (orchestration « découper automatiquement »)'
+      : 'Elle attend d’être précisée ou découpée depuis son panneau';
+  }
+  return agent
+    ? 'Le répartiteur la lancera à son prochain passage (toutes les 60 s) ou avec « Répartir »'
+    : 'Sans agent, rien ne se lance : elle attend que vous en choisissiez un';
+}
 
 function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: {
   inst: string; board: string; assignees: string[]; autoDecompose: boolean; onClose: () => void; onCreated: (id: string) => void;
@@ -139,7 +153,7 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
   const qc = useQueryClient();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
-  const [f, setF] = useState({ title: '', body: '', assignee: '', priority: 0, start: 'todo' as KanbanStart, workspace: '' });
+  const [f, setF] = useState({ title: '', body: '', assignee: '', priority: 0, start: 'scheduled' as KanbanStart, workspace: '' });
   const create = useMutation({
     mutationFn: () => api.createKanbanTask(inst, board, {
       title: f.title.trim(), body: f.body || undefined, assignee: f.assignee || null, priority: f.priority || null, start: f.start, workspace: f.workspace || null,
@@ -162,9 +176,7 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
         </Field>
         <Field label="Priorité"><Input type="number" min={-1000} max={1000} value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.valueAsNumber || 0 })} /></Field>
       </div>
-      <Field label="État de départ" hint={f.start === 'triage' && autoDecompose
-        ? 'Hermes découpera la tâche et lancera les morceaux (orchestration « découper automatiquement »)'
-        : f.start === 'ready' ? 'Le répartiteur la lancera dès qu’elle a un agent' : 'Elle attend que vous la passiez en « Prête à lancer »'}>
+      <Field label="État de départ" hint={startHint(f.start, Boolean(f.assignee), autoDecompose)}>
         <select className={SELECT} value={f.start} onChange={(e) => setF({ ...f, start: e.target.value as KanbanStart })}>
           {START.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
@@ -272,7 +284,7 @@ export function KanbanPage() {
   const orch = useQuery({ queryKey: ['kanban-orchestration', inst], queryFn: () => api.kanbanOrchestration(inst), enabled: a.available && a.has('kanban', 'orchestration') });
   const [dialog, setDialog] = useState<'board' | 'task' | 'dispatch' | 'orchestration' | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  const [mobileCol, setMobileCol] = useState<string>('todo');
+  const [mobileCol, setMobileCol] = useState<string>('ready');
   const [moveError, setMoveError] = useState<unknown>(null);
   const wide = useWide();
 

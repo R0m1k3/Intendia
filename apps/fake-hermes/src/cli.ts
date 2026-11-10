@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import { WebSocketServer } from 'ws';
-import { connectKanbanEvents, createFakeHermes, FAKE_API_KEY, FAKE_DASH_TOKEN } from './index.ts';
+import { connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, FAKE_DASH_TOKEN } from './index.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
 const latest = readdirSync(root).filter((d) => d.startsWith('hermes-')).sort().at(-1);
@@ -31,6 +31,7 @@ const dash = serve({ fetch: fake.dash.fetch, port: dashPort, hostname: '127.0.0.
 // kanban live events on the dashboard port, like Hermes
 const wss = new WebSocketServer({ noServer: true });
 dash.on('upgrade', (req, socket, head) => {
+  if (!kanbanWsTokenOk(req.url ?? '/')) return; // like Hermes: the handshake gets no answer
   wss.handleUpgrade(req, socket, head, (ws) => {
     const stop = connectKanbanEvents(fake, req.url ?? '/', { send: (t) => ws.send(t), close: (code) => ws.close(code) });
     ws.on('close', stop);

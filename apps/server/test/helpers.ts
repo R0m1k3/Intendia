@@ -58,7 +58,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
   const services = createServices({ config, db, store, compat });
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake) });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
   const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
 
   let cookie = '';

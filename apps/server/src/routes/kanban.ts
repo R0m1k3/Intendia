@@ -54,7 +54,7 @@ const Orchestration = z.object({
 
 const PING_MS = 25_000;
 
-export function kanbanRoutes(deps: { kanban: KanbanService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory }): Hono {
+export function kanbanRoutes(deps: { kanban: KanbanService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory; wsOpenTimeoutMs?: number }): Hono {
   const { kanban } = deps;
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
@@ -156,7 +156,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; config: ConfigServic
             send(`event: closed\ndata: ${JSON.stringify({ reason })}\n\n`);
             finish();
           },
-        }, deps.wsFactory);
+        }, deps.wsFactory, deps.wsOpenTimeoutMs);
         cleanup = finish;
         c.req.raw.signal.addEventListener('abort', finish);
       },
