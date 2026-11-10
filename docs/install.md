@@ -143,7 +143,8 @@ and give the returned link in your answer. Never paste the file's content instea
 
 - **Hermes** can stay on `latest`. After each update Intendia re-tests every module; the State screen shows the result,
   and `INTENDIA_WEBHOOK_URL` can notify you when a module changes state.
-- **Intendia** publishes `X.Y.Z`, `X.Y` and (from 1.0) `X` tags. During development (`0.0.x`) follow `:0.0`; from 1.0,
-  follow the major tag (`:1`) to receive fixes only.
+- **Intendia** publishes `X.Y.Z`, `X.Y`, `X` and `latest` tags for every release. During development (`0.0.x`)
+  follow `:0.0`: the `:0` and `:latest` tags also move to any later `0.y` release, which may change behaviour. From 1.0,
+  follow the major tag (`:1`) to receive fixes and compatible additions only.
 - **Database**: before each migration Intendia copies it with `VACUUM INTO` into `/data/backups/` (last five kept).
   Migrations only add tables or columns, so going back one version works without a restore.
