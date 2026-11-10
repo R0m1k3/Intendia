@@ -4,7 +4,7 @@ import type { CompatService } from '../compat/service.js';
 import {
   JobGetSchema, JobListSchema, normaliseJobs, RunListSchema, TargetListSchema, updateBody, type HermesJob,
 } from '../connectors/crons/index.js';
-import { callOp, HermesError } from '../connectors/runtime.js';
+import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 
@@ -147,19 +147,6 @@ export function toPublic(instanceId: string, job: HermesJob, findWorkspace: (slu
 }
 
 // ---------------------------------------------------------------- service
-
-function hermesDetail(err: HermesError): string {
-  const body = err.detail.body ?? '';
-  try {
-    const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
-    const d = parsed.detail ?? parsed.error;
-    if (typeof d === 'string') return d;
-    if (d && typeof d === 'object' && 'message' in d) return String((d as { message: unknown }).message);
-    return body;
-  } catch {
-    return body;
-  }
-}
 
 /** Hermes 400 → CronInputError, 404 → NotFoundError; anything else is rethrown. */
 async function translate<T>(fn: () => Promise<T>, what = 'Cron introuvable'): Promise<T> {

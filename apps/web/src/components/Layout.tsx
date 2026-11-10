@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
+import { CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/w', label: 'Workspaces', icon: FolderOpen },
   { to: '/liens', label: 'Liens', icon: Link2 },
   { to: '/crons', label: 'Crons', icon: CalendarClock },
+  { to: '/skills', label: 'Skills', icon: Puzzle },
   { to: '/etat', label: 'État', icon: ListChecks },
   { to: '/reglages', label: 'Réglages', icon: Settings2 },
 ] as const;
@@ -25,7 +26,8 @@ export function Layout() {
   const openSlug = params.slug;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   /** /crons redirects to /i/<instance>/crons: keep its entry active there */
-  const alsoActive = (to: string) => to === '/crons' && /^\/i\/[^/]+\/crons$/.test(pathname);
+  // per-instance console pages (/i/<inst>/crons, /i/<inst>/skills) light up their entry (/crons, /skills)
+  const alsoActive = (to: string) => to !== '/' && new RegExp(`^/i/[^/]+${to}$`).test(pathname);
   const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
 
   const logout = async () => {

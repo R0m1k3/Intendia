@@ -196,10 +196,58 @@ export interface UpcomingCron {
   schedule: CronSchedule;
 }
 
+export interface Skill {
+  name: string;
+  description: string | null;
+  category: string | null;
+  enabled: boolean | null;
+  provenance: string | null;
+  usage: number;
+  locked: boolean;
+}
+export interface Toolset {
+  name: string;
+  label: string;
+  description: string | null;
+  enabled: boolean | null;
+  configured: boolean | null;
+  tools: string[];
+}
+export interface HubResult {
+  name: string;
+  identifier: string;
+  description: string | null;
+  source: string | null;
+  trust: string | null;
+  repo: string | null;
+  tags: string[];
+  installed: boolean;
+}
+export interface Scan {
+  verdict: string;
+  policy: string;
+  reason: string | null;
+  summary: string | null;
+  trust: string | null;
+  findings: Record<string, unknown>[];
+  counts: Record<string, number>;
+}
+export interface ActionStatus {
+  running: boolean;
+  exitCode: number | null;
+  lines: string[];
+  truncated: boolean;
+}
+
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
 const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
 const cronPath = (inst: string, id: string, profile: string, sub?: string) =>
   `${cronsPath(inst)}/${enc(id)}${sub ? `/${sub}` : ''}?profile=${enc(profile)}`;
+/** Per-instance console route with ?profile= (skills, agents). */
+const instPath = (inst: string, sub: string, profile?: string, extra?: Record<string, string>) => {
+  const q = new URLSearchParams({ ...(profile ? { profile } : {}), ...extra }).toString();
+  return `/i/${enc(inst)}/${sub}${q ? `?${q}` : ''}`;
+};
 const filesPath = (slug: string) => `/workspaces/${enc(slug)}/files`;
 
 export class ApiError extends Error {
@@ -286,6 +334,24 @@ export const api = {
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
   upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
+  profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
+  skills: (inst: string, profile: string) => call<{ skills: Skill[] }>('GET', instPath(inst, 'skills', profile)),
+  skillContent: (inst: string, profile: string, name: string) =>
+    call<{ name: string; content: string; truncated: boolean }>('GET', instPath(inst, 'skills/content', profile, { name })),
+  setSkillEnabled: (inst: string, profile: string, name: string, enabled: boolean) =>
+    call<{ skill: Skill }>('PUT', instPath(inst, 'skills/enabled', profile), { name, enabled }),
+  toolsets: (inst: string, profile: string) => call<{ toolsets: Toolset[] }>('GET', instPath(inst, 'skills/toolsets', profile)),
+  hubOfficial: (inst: string, profile: string) => call<{ results: HubResult[]; timedOut: string[] }>('GET', instPath(inst, 'skills/hub/official', profile)),
+  hubSearch: (inst: string, profile: string, q: string) =>
+    call<{ results: HubResult[]; timedOut: string[] }>('GET', instPath(inst, 'skills/hub/search', profile, { q })),
+  hubScan: (inst: string, profile: string, identifier: string) =>
+    call<{ scan: Scan }>('GET', instPath(inst, 'skills/hub/scan', profile, { identifier })),
+  installSkill: (inst: string, profile: string, identifier: string, acknowledged: boolean) =>
+    call<{ action: string }>('POST', instPath(inst, 'skills/hub/install', profile), { identifier, acknowledged }),
+  uninstallSkill: (inst: string, profile: string, name: string) =>
+    call<{ action: string }>('POST', instPath(inst, 'skills/hub/uninstall', profile), { name }),
+  updateSkills: (inst: string, profile: string) => call<{ action: string }>('POST', instPath(inst, 'skills/hub/update', profile), {}),
+  skillAction: (inst: string, action: string) => call<ActionStatus>('GET', instPath(inst, `skills/hub/actions/${enc(action)}`)),
 };
 
 /** URL of a file's content (preview, download); served with CSP sandbox. */

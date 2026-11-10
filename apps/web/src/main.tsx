@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
 import { CronsPage } from './pages/Crons';
+import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { LinksPage } from './pages/Links';
@@ -74,10 +75,25 @@ const cronsIndexRoute = createRoute({
   },
 });
 const cronsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage });
+/** /skills: the first instance (creation order) */
+const skillsIndexRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/skills',
+  beforeLoad: async () => {
+    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+    const first = instances[0];
+    throw first ? redirect({ to: '/i/$inst/skills', params: { inst: first.id } }) : redirect({ to: '/' });
+  },
+});
+const skillsRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/skills', component: SkillsPage,
+  validateSearch: (s: Record<string, unknown>): SkillsSearch => ({
+    profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+  }),
+});
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute])]),
   defaultPreload: 'intent',
 });
 

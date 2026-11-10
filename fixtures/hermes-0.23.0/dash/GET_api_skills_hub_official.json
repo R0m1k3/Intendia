@@ -1,0 +1,59 @@
+{
+  "status": 200,
+  "body": {
+    "skills": [
+      {
+        "name": "agent-merge-conflict-arbiter",
+        "description": "Neutral arbiter for merge conflicts between two agents.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/agent-merge-conflict-arbiter",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Multi-Agent",
+          "Git",
+          "Merge-Conflict",
+          "Kanban",
+          "Arbitration"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "antigravity-cli",
+        "description": "Operate the Antigravity CLI (agy): plugins, auth, sandbox.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/antigravity-cli",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "Antigravity",
+          "CLI",
+          "Auth",
+          "Plugins",
+          "Sandbox"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "blackbox",
+        "description": "Delegate coding tasks to the Blackbox AI multi-model CLI.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/blackbox",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "Blackbox",
+          "Multi-Agent",
+          "Judge",
+          "Multi-Model"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      }
+    ]
+  }
+}

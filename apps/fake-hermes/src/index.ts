@@ -10,6 +10,7 @@
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
+ * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   translated by `pathMap` (agent path → local folder), then cites its path
@@ -19,6 +20,7 @@ import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CronStore } from './crons.js';
+import { SkillStore } from './skills.js';
 
 export const FAKE_API_KEY = 'fake-api-key-000000000000';
 export const FAKE_DASH_TOKEN = 'fake-dashboard-token';
@@ -44,6 +46,8 @@ export interface FakeOptions {
   stepMs?: number;
   /** Step of simulated cron runs, in ms (default: stepMs). */
   cronStepMs?: number;
+  /** Duration of a simulated skills action (install, uninstall, update), in ms (default: stepMs). */
+  skillStepMs?: number;
   /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
   pathMap?: { from: string; to: string };
 }
@@ -257,7 +261,7 @@ class Simulator {
 
 // ---------------------------------------------------------------- apps
 
-function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, log: LoggedRequest[]): Hono {
+function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, skills: SkillStore, log: LoggedRequest[]): Hono {
   const app = new Hono();
   const deleted = new Set<string>();
 
@@ -289,6 +293,8 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, 
 
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
     if (cron) return cron;
+    const skill = await skills.handle(via, method, path, c.req.query(), body);
+    if (skill) return skill;
 
     if (via === 'api') {
       const simulated = handleRuns(c.req.raw, method, path, body, sim, opts, deleted);
@@ -405,8 +411,12 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
 export function createFakeHermes(opts: FakeOptions) {
   const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
+  const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const requests: LoggedRequest[] = [];
-  return { api: makeApp('api', opts, sim, crons, requests), dash: makeApp('dash', opts, sim, crons, requests), requests, sim, crons };
+  return {
+    api: makeApp('api', opts, sim, crons, skills, requests), dash: makeApp('dash', opts, sim, crons, skills, requests),
+    requests, sim, crons, skills,
+  };
 }
 
 /**

@@ -19,6 +19,9 @@ import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
 import { cronRoutes } from './routes/crons.js';
+import { skillRoutes } from './routes/skills.js';
+import { agentRoutes } from './routes/agents.js';
+import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
 
@@ -52,6 +55,8 @@ export function createApp(deps: AppDeps) {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
     if (err instanceof z.ZodError) return c.json({ error: 'invalid request', issues: err.issues }, 400);
     if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
+    if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
+    if (err instanceof ActionBusyError) return c.json({ error: err.message, code: err.code, action: err.action }, 409);
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {
@@ -163,6 +168,8 @@ export function createApp(deps: AppDeps) {
   priv.route('/', fileRoutes(files));
   priv.route('/', linkRoutes(links));
   priv.route('/', cronRoutes(deps.services.crons));
+  priv.route('/', skillRoutes(deps.services.skills));
+  priv.route('/', agentRoutes(deps.services.agents));
 
   x.route('/', priv);
   app.route('/x', x);
