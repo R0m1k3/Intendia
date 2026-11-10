@@ -6,7 +6,7 @@ import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { PageHeader } from '../components/Layout';
 import { ModelInput } from '../components/NewWorkspace';
-import { Button, ErrorText, Field, Panel, timeAgo } from '../components/ui';
+import { Button, ErrorText, Field, Input, Panel, timeAgo } from '../components/ui';
 
 export function WorkspacePage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -19,10 +19,11 @@ export function WorkspacePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const [text, setText] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(null);
   const w = ws.data?.workspace;
   const inst = instances.data?.instances.find((i) => i.id === w?.instanceId);
 
-  useEffect(() => { setText(null); setModel(null); }, [slug]);
+  useEffect(() => { setText(null); setModel(null); setName(null); }, [slug]);
 
   const create = useMutation({
     mutationFn: () => api.createSession(slug),
@@ -40,9 +41,15 @@ export function WorkspacePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace', slug] }).then(() => { setModel(null); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }),
   });
 
+  const saveName = useMutation({
+    mutationFn: (n: string) => api.updateWorkspace(slug, { name: n.trim() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace', slug] }).then(() => { setName(null); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }),
+  });
+
   if (ws.isError) return <div className="p-8"><ErrorText error={ws.error} /></div>;
   const agentsValue = text ?? agents.data?.text ?? '';
   const modelValue = model ?? w?.model ?? '';
+  const nameValue = name ?? w?.name ?? '';
 
   return (
     <>
@@ -84,6 +91,15 @@ export function WorkspacePage() {
         </div>
 
         <div className="space-y-6">
+          <Panel title="Nom">
+            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (nameValue.trim()) saveName.mutate(nameValue); }}>
+              <Field label="Nom affiché" hint={w ? `Le dossier reste ${w.slug}/` : undefined}>
+                <Input id="ws-name" value={nameValue} maxLength={80} onChange={(e) => setName(e.target.value)} disabled={!w} />
+              </Field>
+              <ErrorText error={saveName.error} />
+              {name !== null && name.trim() !== '' && name.trim() !== w?.name && <Button variant="secondary" disabled={saveName.isPending}>Renommer</Button>}
+            </form>
+          </Panel>
           <Panel title="Modèle">
             <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); saveModel.mutate(modelValue); }}>
               <Field label="Modèle des prochains messages" hint="Vide : celui de l’agent">

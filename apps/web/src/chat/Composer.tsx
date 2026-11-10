@@ -1,5 +1,5 @@
 import { ArrowUp, Paperclip, Square } from 'lucide-react';
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type Ref } from 'react';
 import { cx } from '../components/ui';
 
 export interface ComposerHandle {
@@ -9,7 +9,8 @@ export interface ComposerHandle {
 
 /**
  * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it.
- * The paperclip uploads files to inbox/ (onAttach) and adds their paths to the message.
+ * The paperclip uploads files to inbox/ (onAttach) and adds their paths to the message; so does pasting
+ * a file or a screenshot (Ctrl+V), which gets a dated name since the clipboard calls every image image.png.
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, onAttach, ref: handle,
@@ -39,6 +40,14 @@ export function Composer({
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, [text]);
+
+  const paste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onAttach || disabled) return;
+    const files = Array.from(e.clipboardData.files);
+    if (!files.length) return;
+    e.preventDefault();
+    onAttach(files.map((f, i) => new File([f], pastedName(f, i, files.length), { type: f.type })));
+  };
 
   const send = async () => {
     const t = text.trim();
@@ -72,6 +81,7 @@ export function Composer({
         value={text}
         disabled={disabled}
         onChange={(e) => setText(e.target.value)}
+        onPaste={paste}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -106,4 +116,14 @@ export function Composer({
       )}
     </div>
   );
+}
+
+/** collage-2026-11-10-143205.png (-2, -3… when several files come in one paste); keeps real file names. */
+function pastedName(f: File, i: number, count: number): string {
+  if (f.name && !/^image\.(png|jpe?g|gif|webp)$/i.test(f.name)) return f.name;
+  const ext = (f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'png';
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  return `collage-${stamp}${count > 1 ? `-${i + 1}` : ''}.${ext}`;
 }
