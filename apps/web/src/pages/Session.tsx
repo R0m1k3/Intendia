@@ -7,7 +7,7 @@ import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type R
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
 import { placeRunStats } from '../chat/format';
 import { RunOptions } from '../chat/RunOptions';
-import { AGENT_INDENT, ApprovalCard, Thread } from '../chat/Thread';
+import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
 import { SessionFiles } from '../components/SessionFiles';
@@ -300,6 +300,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
         <Thread entries={entries} footers={footers} />
+        {running && !live?.approval && <ThinkingIndicator entries={entries} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
         )}
