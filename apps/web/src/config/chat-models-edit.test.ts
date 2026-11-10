@@ -1,25 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { candidates, move, offered } from './chat-models-edit';
+import { addChoices, validModelName } from './chat-models-edit';
 
-describe('chat models edition', () => {
-  it('move: first up and last down change nothing', () => {
-    expect(move(['a', 'b', 'c'], 0, -1)).toEqual(['a', 'b', 'c']);
-    expect(move(['a', 'b', 'c'], 2, 1)).toEqual(['a', 'b', 'c']);
-    expect(move(['a', 'b', 'c'], 2, -1)).toEqual(['a', 'c', 'b']);
-    expect(move(['a', 'b', 'c'], 0, 1)).toEqual(['b', 'a', 'c']);
+const CAT = ['openai/gpt-5.5', 'openai/gpt-5.5-mini', 'qwen/qwen3-coder'];
+
+describe('addChoices', () => {
+  it('filters the catalogue by the typed text, without the declared models (any case)', () => {
+    expect(addChoices(CAT, ['OpenAI/GPT-5.5'], 'gpt').filter((c) => !c.typed).map((c) => c.model)).toEqual(['openai/gpt-5.5-mini']);
+    expect(addChoices(CAT, [], '').map((c) => c.model)).toEqual(CAT);
+    expect(addChoices(CAT, [], '', 2)).toHaveLength(2);
   });
-  it('candidates: substring without case, models already listed excluded, limit', () => {
-    const cat = ['openai/gpt-5.5', 'anthropic/claude-sonnet-4.5', 'anthropic/claude-opus-4.6'];
-    expect(candidates(cat, [], 'CLAUDE')).toEqual(['anthropic/claude-sonnet-4.5', 'anthropic/claude-opus-4.6']);
-    expect(candidates(cat, ['anthropic/claude-opus-4.6'], 'claude')).toEqual(['anthropic/claude-sonnet-4.5']);
-    expect(candidates(cat, [], '')).toEqual(cat);
-    expect(candidates(cat, [], '', 1)).toEqual(['openai/gpt-5.5']);
+  it('offers the typed name itself when valid and new', () => {
+    expect(addChoices(CAT, [], 'my/own-model').at(-1)).toEqual({ model: 'my/own-model', typed: true });
+    expect(addChoices(CAT, [], 'qwen/qwen3-coder').filter((c) => c.typed)).toEqual([]);
+    expect(addChoices(CAT, ['my/own'], 'MY/OWN').filter((c) => c.typed)).toEqual([]);
+    expect(addChoices(CAT, [], 'bad name').filter((c) => c.typed)).toEqual([]);
   });
-  it('offered: only providers with a key, no duplicates', () => {
-    expect(offered([
-      { authenticated: true, models: ['a', 'b'] },
-      { authenticated: false, models: ['c'] },
-      { authenticated: true, models: ['b', 'd'] },
-    ])).toEqual(['a', 'b', 'd']);
+  it('validModelName follows the server rule', () => {
+    expect(validModelName(' a/b ')).toBe(true);
+    expect(validModelName('')).toBe(false);
+    expect(validModelName('a b')).toBe(false);
+    expect(validModelName('x'.repeat(201))).toBe(false);
   });
 });

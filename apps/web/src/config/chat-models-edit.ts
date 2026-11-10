@@ -1,27 +1,21 @@
-import type { ConfigModels } from '../api';
+/** Rule of a model name, same as the server's (PatchSession.model): 1-200 characters, no space. */
+export function validModelName(name: string): boolean {
+  const n = name.trim();
+  return n.length > 0 && n.length <= 200 && !/\s/.test(n);
+}
 
 /**
- * Models Hermes offers to this agent. Rule shared with the server (apps/server/src/chat/models-list.ts
- * `offeredModels`): in the `models` of a provider whose `authenticated` is true; the main model is not added.
+ * Choices of the "Ajouter un modèle" field of one provider: its catalogue models matching `typed` (substring, any
+ * case) and not declared yet (any case, like Hermes), 20 at most; then the typed name itself when it is valid and
+ * neither declared nor in the list (a model Hermes does not list can still be declared).
  */
-export function offered(providers: Pick<ConfigModels['providers'][number], 'authenticated' | 'models'>[]): string[] {
-  const out = new Set<string>();
-  for (const p of providers) if (p.authenticated === true) for (const m of p.models) out.add(m);
-  return [...out];
-}
-
-/** Moves item `i` by `delta` places; out of range = unchanged copy. */
-export function move<T>(list: T[], i: number, delta: number): T[] {
-  const j = i + delta;
-  if (i < 0 || i >= list.length || j < 0 || j >= list.length) return [...list];
-  const out = [...list];
-  [out[i], out[j]] = [out[j]!, out[i]!];
+export function addChoices(catalogue: string[], declared: string[], typed: string, max = 20): { model: string; typed: boolean }[] {
+  const q = typed.trim();
+  const taken = new Set(declared.map((m) => m.toLowerCase()));
+  const found = catalogue.filter((m) => !taken.has(m.toLowerCase()) && (!q || m.toLowerCase().includes(q.toLowerCase()))).slice(0, max);
+  const out = found.map((model) => ({ model, typed: false }));
+  if (q && validModelName(q) && !taken.has(q.toLowerCase()) && !found.some((m) => m.toLowerCase() === q.toLowerCase())) {
+    out.push({ model: q, typed: true });
+  }
   return out;
-}
-
-/** Catalogue models matching `query` (substring, any case), not already in the list, 20 at most. */
-export function candidates(catalog: string[], list: string[], query: string, max = 20): string[] {
-  const q = query.trim().toLowerCase();
-  const taken = new Set(list);
-  return catalog.filter((m) => !taken.has(m) && (!q || m.toLowerCase().includes(q))).slice(0, max);
 }

@@ -1,30 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatModelList } from '../api';
-import { modelItems } from './model-items';
+import { currentValue, decodeChoice, encodeChoice, modelItems } from './model-items';
 
 const noop = () => {};
-const labels = (l: ChatModelList | undefined, m: string | null = null) => modelItems(l, m, noop).map((i) => i.label);
+const none = { model: null, provider: null };
+const text = (l: ChatModelList | undefined, cur: { model: string | null; provider: string | null } = none) =>
+  modelItems(l, cur, noop).map((i) => ('heading' in i ? `# ${i.heading}` : i.label));
+const LIST: ChatModelList = {
+  auto: { model: 'anthropic/claude-opus-4.6', provider: 'openrouter' },
+  groups: [
+    { provider: 'openrouter', name: 'OpenRouter', models: ['a', 'b'], declared: true },
+    { provider: 'anthropic', name: 'Anthropic', models: ['c'], declared: false },
+  ],
+  managed: true,
+};
 
 describe('modelItems', () => {
   it('no list yet: Auto only', () => {
-    expect(labels(undefined)).toEqual(['Auto']);
+    expect(text(undefined)).toEqual(['Auto']);
   });
-  it('empty managed list: Auto and the manage action', () => {
-    expect(labels({ auto: 'anthropic/claude-opus-4.6', models: [], managed: true })).toEqual(['Auto · claude-opus-4.6', 'Gérer les modèles…']);
+  it('Auto, one titled group per provider, then the manage action', () => {
+    expect(text(LIST)).toEqual(['Auto · claude-opus-4.6', '# OpenRouter', 'a', 'b', '# Anthropic', 'c', 'Gérer les modèles…']);
+    const choice = modelItems(LIST, none, noop)[2]!;
+    expect('value' in choice && decodeChoice(choice.value)).toEqual({ model: 'a', provider: 'openrouter' });
   });
-  it('unavailable models are hidden, order kept', () => {
-    const l = { auto: null, models: [{ id: 'b', available: true }, { id: 'x', available: false }, { id: 'a', available: true }], managed: true };
-    expect(labels(l)).toEqual(['Auto', 'b', 'a', 'Gérer les modèles…']);
+  it('a session model without provider that is in a group is not repeated; otherwise under "Autre"', () => {
+    expect(text(LIST, { model: 'c', provider: null })).not.toContain('# Autre');
+    expect(text(LIST, { model: 'z', provider: null })).toEqual([...text(LIST).slice(0, -1), '# Autre', 'z', 'Gérer les modèles…']);
   });
-  it('the session model is added once', () => {
-    const l = { auto: null, models: [{ id: 'a', available: true }], managed: true };
-    expect(labels(l, 'a')).toEqual(['Auto', 'a', 'Gérer les modèles…']);
-    expect(labels(l, 'z')).toEqual(['Auto', 'a', 'z', 'Gérer les modèles…']);
-    expect(labels({ ...l, models: [{ id: 'z', available: false }] }, 'z')).toEqual(['Auto', 'z', 'Gérer les modèles…']);
+  it('a model with a provider no longer offered is "indisponible" under "Autre"', () => {
+    const items = modelItems(LIST, { model: 'gone', provider: 'openrouter' }, noop);
+    const gone = items.find((i) => 'value' in i && i.label === 'gone')!;
+    expect('hint' in gone && gone.hint).toBe('openrouter · indisponible');
+    expect(text(LIST, { model: 'c', provider: 'openrouter' })).toContain('# Autre');
   });
-  it('the manage action only when the list is managed', () => {
-    expect(labels({ auto: null, models: [{ id: 'a', available: true }], managed: false })).toEqual(['Auto', 'a']);
-    const action = modelItems({ auto: null, models: [], managed: true }, null, noop).at(-1)!;
+  it('the manage action only when managed', () => {
+    expect(text({ ...LIST, managed: false }).at(-1)).toBe('c');
+    const action = modelItems(LIST, none, noop).at(-1)!;
     expect('action' in action && action.action).toBe(noop);
+  });
+  it('encodes and decodes choices; current value', () => {
+    expect(decodeChoice(encodeChoice('llama3:8b', 'custom:local'))).toEqual({ model: 'llama3:8b', provider: 'custom:local' });
+    expect(decodeChoice('m')).toEqual({ model: 'm', provider: null });
+    expect(decodeChoice(null)).toEqual(none);
+    expect(currentValue(LIST, { model: 'c', provider: null })).toBe(encodeChoice('c', 'anthropic'));
+    expect(currentValue(LIST, { model: 'z', provider: null })).toBe('z');
+    expect(currentValue(LIST, none)).toBeNull();
   });
 });
