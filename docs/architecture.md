@@ -37,8 +37,16 @@ demand from the State screen. State changes go to the webhook.
 ## Workspaces, sessions and runs
 
 - A workspace (`workspaces` table) = a folder `<mount>/<slug>/` on the volume shared with one instance, served by one
-  Hermes profile and one model. `src/workspaces/fs.ts` creates it (`mkdir` without `recursive`, removed if anything
+  Hermes profile. `src/workspaces/fs.ts` creates it (`mkdir` without `recursive`, removed if anything
   fails); `src/workspaces/service.ts` owns the rows.
+- Model and reasoning effort are chosen per session, in the chat (`session_workspace.model` / `effort`, NULL =
+  Hermes default) and sent as `model` / `model_options.reasoning_effort`. The workspace keeps the last choice
+  (`workspaces.model` / `effort`) as the start of its next sessions; it is not a setting of its own.
+- One `run_stats` row per run started from Intendia: written `running` at send time (options asked for, cost of
+  the live session before), settled by `settle()` in `routes/chat.ts` when the messages or the run status are
+  read (status, served model, tokens, Hermes times), cost = difference of the live session's cumulated cost,
+  re-read for 30 s then frozen. Pure parts in `src/chat/run-stats.ts`; the page shows one line per run under the
+  reply (`chat/RunFooter.tsx`, placement `placeRunStats`).
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session
@@ -81,7 +89,7 @@ sequenceDiagram
   participant I as Intendia
   participant H as Hermes
   B->>I: POST /x/sessions/i/s/runs {input}
-  I->>H: POST /v1/runs {input, session_id, instructions, model}
+  I->>H: POST /v1/runs {input, session_id, instructions, model?, model_options?}
   H-->>I: {run_id}
   B->>I: EventSource …/runs/run_x/events
   I->>H: GET /v1/runs/run_x/events (Last-Event-ID)
