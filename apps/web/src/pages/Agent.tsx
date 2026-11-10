@@ -119,7 +119,9 @@ export function AgentPage() {
                   {x.activeWorkers.map((w) => (
                     <li key={`${w.board}:${w.runId}`} className="flex items-center gap-3 px-5 py-3 text-sm">
                       <Mark state="readonly" className="animate-pulse" />
-                      <span className="min-w-0 flex-1 truncate">{w.taskTitle ?? w.taskId}</span>
+                      <Link to="/i/$inst/kanban" params={{ inst }} search={{ board: w.board, task: w.taskId }} className="min-w-0 flex-1 truncate hover:text-accent">
+                        {w.taskTitle ?? w.taskId}
+                      </Link>
                       <span className="font-mono text-[11px] text-ink-faint">{w.board}</span>
                       {w.startedAt && <span className="text-xs text-ink-faint">{timeAgo(w.startedAt * 1000)}</span>}
                     </li>

@@ -61,7 +61,9 @@ function WorkerRow({ worker, instanceLabel, onStopped }: { worker: KanbanWorker;
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm">
       <Mark state="readonly" className="animate-pulse" />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{title}</p>
+        <Link to="/i/$inst/kanban" params={{ inst: worker.instance }} search={{ board: worker.board, task: worker.taskId }} className="block truncate font-medium hover:text-accent">
+          {title}
+        </Link>
         <p className="text-xs text-ink-soft">
           {worker.assignee ?? 'agent inconnu'} · tableau <span className="font-mono">{worker.board}</span>{instanceLabel ? ` · ${instanceLabel}` : ''}
           {worker.startedAt ? ` · ${timeAgo(worker.startedAt * 1000)}` : ''}

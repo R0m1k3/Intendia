@@ -314,6 +314,52 @@ export interface Activity {
   errors: { instance: string; message: string }[];
 }
 export interface KanbanBoard { slug: string; name: string; total: number }
+export interface KanbanTask {
+  id: string;
+  title: string;
+  status: string;
+  body: string;
+  assignee: string | null;
+  priority: number | null;
+  commentCount: number;
+  parents: number;
+  children: number;
+  progress: { done: number; total: number } | null;
+  runId: number | null;
+  error: string | null;
+  summary: string | null;
+  workspace: { slug: string; name: string; folder: string } | null;
+  /** seconds */
+  createdAt: number | null;
+  startedAt: number | null;
+  completedAt: number | null;
+}
+export interface KanbanColumn { key: string; label: string; dragTarget: boolean; tasks: KanbanTask[] }
+export interface KanbanBoardView { board: string; columns: KanbanColumn[]; latestEventId: number | null }
+export interface KanbanWorkflow { columns: { key: string; label: string; dragTarget: boolean }[]; manual: Record<string, string[]> }
+export interface KanbanTaskRef { id: string; title: string | null; status: string | null }
+export interface KanbanTaskDetail {
+  task: KanbanTask;
+  blockReason: string | null;
+  comments: { id: number; author: string | null; body: string; createdAt: number | null }[];
+  events: { id: number; kind: string; createdAt: number | null }[];
+  attachments: { id: number; filename: string; size: number | null; contentType: string | null }[];
+  parents: KanbanTaskRef[];
+  children: KanbanTaskRef[];
+  runs: { id: number; profile: string | null; status: string | null; outcome: string | null; startedAt: number | null; endedAt: number | null; error: string | null; summary: string | null }[];
+}
+export interface KanbanOrchestration {
+  orchestratorProfile: string | null;
+  defaultAssignee: string | null;
+  autoDecompose: boolean;
+  autoPromoteChildren: boolean;
+  activeProfile: string | null;
+}
+export type KanbanStart = 'todo' | 'triage' | 'ready';
+export interface KanbanTaskInput { title: string; body?: string; assignee?: string | null; priority?: number | null; start?: KanbanStart; workspace?: string | null }
+export interface KanbanTaskPatch { status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string }
+export const kanbanPath = (inst: string, sub: string, board?: string, extra: Record<string, string> = {}) =>
+  `/i/${encodeURIComponent(inst)}/kanban/${sub}${board || Object.keys(extra).length ? `?${new URLSearchParams({ ...(board ? { board } : {}), ...extra })}` : ''}`;
 
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
 const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
@@ -418,9 +464,27 @@ export const api = {
   setAgentDescription: (inst: string, name: string, description: string) =>
     call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
   activity: () => call<Activity>('GET', '/activity'),
-  kanbanBoards: (inst: string) => call<{ boards: KanbanBoard[] }>('GET', instPath(inst, 'kanban/boards')),
+  kanbanBoards: (inst: string) => call<{ boards: KanbanBoard[] }>('GET', kanbanPath(inst, 'boards')),
+  createKanbanBoard: (inst: string, slug: string, name?: string) => call<{ board: KanbanBoard }>('POST', kanbanPath(inst, 'boards'), { slug, name }),
+  kanbanBoard: (inst: string, board: string) => call<KanbanBoardView>('GET', kanbanPath(inst, 'board', board)),
+  kanbanWorkflow: (inst: string) => call<KanbanWorkflow>('GET', kanbanPath(inst, 'workflow')),
+  kanbanAssignees: (inst: string) => call<{ assignees: string[] }>('GET', kanbanPath(inst, 'assignees')),
+  kanbanOrchestration: (inst: string) => call<KanbanOrchestration>('GET', kanbanPath(inst, 'orchestration')),
+  setKanbanOrchestration: (inst: string, o: { orchestrator_profile?: string; default_assignee?: string; auto_decompose?: boolean; auto_promote_children?: boolean }) =>
+    call<{ version: string | null; profile: string }>('PUT', kanbanPath(inst, 'orchestration'), o),
+  createKanbanTask: (inst: string, board: string, t: KanbanTaskInput) => call<{ task: KanbanTask }>('POST', kanbanPath(inst, 'tasks', board), t),
+  kanbanTask: (inst: string, board: string, id: string) => call<KanbanTaskDetail>('GET', kanbanPath(inst, `tasks/${enc(id)}`, board)),
+  updateKanbanTask: (inst: string, board: string, id: string, patch: KanbanTaskPatch) =>
+    call<{ task: KanbanTask }>('PATCH', kanbanPath(inst, `tasks/${enc(id)}`, board), patch),
+  kanbanLog: (inst: string, board: string, id: string) => call<{ content: string; exists: boolean; truncated: boolean }>('GET', kanbanPath(inst, `tasks/${enc(id)}/log`, board)),
+  commentKanbanTask: (inst: string, board: string, id: string, body: string) => call<{ ok: true }>('POST', kanbanPath(inst, `tasks/${enc(id)}/comments`, board), { body }),
+  kanbanAux: (inst: string, board: string, id: string, op: 'specify' | 'decompose') => call<Record<string, unknown>>('POST', kanbanPath(inst, `tasks/${enc(id)}/${op}`, board), {}),
+  linkKanbanTasks: (inst: string, board: string, parent: string, child: string) => call<{ ok: true }>('POST', kanbanPath(inst, 'links', board), { parent, child }),
+  unlinkKanbanTasks: (inst: string, board: string, parent: string, child: string) => call<{ ok: true }>('DELETE', kanbanPath(inst, 'links', board, { parent, child })),
+  dispatchKanban: (inst: string, board: string, dryRun: boolean) =>
+    call<{ spawned: { taskId: string; assignee: string | null }[]; skippedUnassigned: string[]; dryRun: boolean }>('POST', kanbanPath(inst, 'dispatch', board, dryRun ? { dry_run: '1' } : {}), {}),
   stopWorker: (inst: string, board: string, runId: number) =>
-    call<{ taskId: string; status: string }>('POST', instPath(inst, `kanban/workers/${runId}/stop`, undefined, { board }), {}),
+    call<{ taskId: string; status: string }>('POST', kanbanPath(inst, `workers/${runId}/stop`, board), {}),
   skills: (inst: string, profile: string) => call<{ skills: Skill[] }>('GET', instPath(inst, 'skills', profile)),
   skillContent: (inst: string, profile: string, name: string) =>
     call<{ name: string; content: string; truncated: boolean }>('GET', instPath(inst, 'skills/content', profile, { name })),
