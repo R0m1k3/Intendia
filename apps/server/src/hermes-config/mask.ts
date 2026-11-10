@@ -126,7 +126,8 @@ export class Masker {
     let out = text.replace(URL_ANY_RE, (u) => this.url(u));
     out = out.replace(/\b(Bearer|Basic|Token)(\s+)([A-Za-z0-9._~+/=-]{6,})/g, (m, a: string, sp: string, v: string) =>
       (v.startsWith(PLACEHOLDER_START) ? m : `${a}${sp}${this.token(v)}`));
-    out = out.replace(/([A-Za-z_][A-Za-z0-9_.-]*)(\s*[=:]\s*)(["']?)([^\s"',;&)]+)/g, (m, key: string, sep: string, q: string, v: string) => {
+    // (?<!«): the «secret:<id>» placeholders written above are not a `secret: value` pair
+    out = out.replace(/(?<![«A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*)(\s*[=:]\s*)(["']?)([^\s"',;&)]+)/g, (m, key: string, sep: string, q: string, v: string) => {
       if (!isSecretKey(key.split('.').pop()!) || /^\d+(\.\d+)?$/.test(v) || v.includes('«') || /^(Bearer|Basic|Token)$/.test(v)) return m;
       return `${key}${sep}${q}${this.token(v)}`;
     });
