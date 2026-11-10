@@ -279,7 +279,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             disabled={!chat.available || !inst}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : undefined}
           />
-          <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne · glisser un fichier pour le joindre</p>
+          <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne · glisser ou coller un fichier pour le joindre</p>
         </div>
       </div>
     </DropZone>
