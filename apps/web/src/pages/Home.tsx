@@ -65,8 +65,8 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
 
 /** Next active crons across instances; hidden when there are none. */
 function UpcomingCrons() {
-  const up = useQuery({ queryKey: ['upcoming-crons'], queryFn: api.upcomingCrons, refetchInterval: 60_000 });
-  const list = up.data?.upcoming ?? [];
+  const up = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
+  const list = (up.data?.crons ?? []).filter((c): c is typeof c & { nextRunAt: string } => c.nextRunAt !== null).slice(0, 3);
   if (list.length === 0) return null;
   return (
     <section className="overflow-hidden card" aria-labelledby="crons-title">

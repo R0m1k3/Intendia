@@ -27,7 +27,7 @@ function CronRow({ cron, can, open, follow, onOpen, onEdit, onFollow, onFollowEn
   const qc = useQueryClient();
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ['crons', cron.instanceId] });
-    await qc.invalidateQueries({ queryKey: ['upcoming-crons'] });
+    await qc.invalidateQueries({ queryKey: ['crons-overview'] });
   };
   const toggle = useMutation({
     mutationFn: () => api.cronAction(cron.instanceId, cron.id, cron.profile, cron.enabled ? 'pause' : 'resume'),

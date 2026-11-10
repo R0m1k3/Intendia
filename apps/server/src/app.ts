@@ -27,7 +27,7 @@ import type { WsFactory } from './connectors/kanban/index.js';
 import { AgentConflictError } from './agents/service.js';
 import { KanbanError } from './kanban/service.js';
 import { configRoutes } from './routes/config.js';
-import { ConfigConflictError, ConfigInputError, ConfirmRequiredError } from './hermes-config/service.js';
+import { ConfigConflictError, ConfigInputError, ConfirmRequiredError, PartialWriteError } from './hermes-config/service.js';
 import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
@@ -72,7 +72,10 @@ export function createApp(deps: AppDeps) {
     if (err instanceof AgentConflictError) return c.json({ error: err.message, code: err.code }, 409);
     if (err instanceof ConfigInputError) return c.json({ ...err.extra, error: err.message, code: err.code }, 400);
     if (err instanceof ConfigConflictError) return c.json({ error: err.message, code: err.code }, 409);
-    if (err instanceof ConfirmRequiredError) return c.json({ error: err.message, code: err.code, message: err.prompt }, 409);
+    if (err instanceof ConfirmRequiredError) {
+      return c.json({ error: err.message, code: err.code, message: err.prompt, ...(err.task ? { task: err.task } : {}) }, 409);
+    }
+    if (err instanceof PartialWriteError) return c.json({ error: err.message, code: err.code }, 502);
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {

@@ -138,7 +138,7 @@ class Simulator {
   /** Tests: session id → live session id reported by /messages (simulates a context compression). */
   liveAlias = new Map<string, string>();
   /** Tests: sessions born elsewhere (Telegram, cron…) added by POST /_fake/sessions. */
-  extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number }>();
+  extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[] }>();
   /** Session titles set by PATCH /api/sessions/{id}. */
   titles = new Map<string, string>();
   /** POST /v1/runs received since start. */
@@ -378,6 +378,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       sim.extraSessions.set(id, {
         id, source: typeof b.source === 'string' ? b.source : null, title: typeof b.title === 'string' ? b.title : null,
         started_at: typeof b.started_at === 'number' ? b.started_at : Date.now() / 1000,
+        messages: Array.isArray(b.messages)
+          ? (b.messages as { role?: unknown; content?: unknown }[]).map((m) => ({ role: String(m.role ?? 'user'), content: String(m.content ?? '') }))
+          : [],
       });
       return c.json({ id });
     }
@@ -392,6 +395,8 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const brk = opts.breaks?.[key];
     if (brk?.status) return c.json(brk.body ?? { error: 'broken by fake-hermes' }, brk.status as 404);
     if (brk && 'body' in brk) return c.json(brk.body as object);
+
+    if (via === 'dash' && method === 'GET' && path === '/api/sessions/search') return searchSessions(sim, c.req.query(), deleted);
 
     const prof = profiles.handle(via, method, path, body);
     if (prof) return prof;
@@ -437,6 +442,35 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
+/**
+ * Dashboard `GET /api/sessions/search`: substring (case-insensitive) in titles and messages, snippet of about
+ * 40 characters with the hit between `>>>` and `<<<`, like Hermes' FTS5 answer. `panne-recherche` → 500.
+ */
+function searchSessions(sim: Simulator, query: Record<string, string>, deleted: Set<string>): Response {
+  const q = (query.q ?? '').trim().toLowerCase();
+  if (!q) return json({ results: [] });
+  if (q.includes('panne-recherche')) return json({ detail: 'Search failed' }, 500);
+  const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20) || 20));
+  const snip = (text: string): string | null => {
+    const i = text.toLowerCase().indexOf(q);
+    if (i < 0) return null;
+    const from = Math.max(0, i - 20);
+    return `${text.slice(from, i)}>>>${text.slice(i, i + q.length)}<<<${text.slice(i + q.length, i + q.length + 20)}`;
+  };
+  const rows: { id: string; session_id: string; source: string | null; title: string | null; snippet: string; last_active: number; message_count: number; profile: string }[] = [];
+  const consider = (id: string, source: string | null, title: string | null, msgs: { content: unknown }[], at: number) => {
+    if (deleted.has(id)) return;
+    if (query.source && source !== query.source) return;
+    let snippet: string | null = null;
+    for (const msg of msgs) if (!snippet && typeof msg.content === 'string') snippet = snip(msg.content);
+    if (!snippet && title) snippet = snip(title);
+    if (snippet) rows.push({ id, session_id: id, source, title, snippet, last_active: at, message_count: msgs.length, profile: 'default' });
+  };
+  for (const [id, list] of sim.messages) consider(id, 'api_server', sim.titles.get(id) ?? null, list, list.at(-1)!.timestamp);
+  for (const e of sim.extraSessions.values()) consider(e.id, e.source, e.title, e.messages, e.started_at);
+  return json({ results: rows.sort((a, b) => b.last_active - a.last_active).slice(0, limit) });
 }
 
 const NOT_FOUND_SESSION = (id: string) => json({ error: { message: `Session not found: ${id}`, code: 'session_not_found' } }, 404);
@@ -488,10 +522,12 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const simulated = [...sim.messages.entries()]
       .filter(([id]) => !recorded.some((s) => s.id === id))
       .map(([id, list]) => ({ id, source: 'api_server', title: sim.titles.get(id) ?? null, started_at: list[0]!.timestamp, message_count: list.length }));
-    const extra = [...sim.extraSessions.values()].map((e) => ({ ...e, message_count: 0 }));
-    const all = [...simulated, ...extra].sort((a, b) => b.started_at - a.started_at).concat(recorded as never[]);
+    const extra = [...sim.extraSessions.values()].map(({ messages, ...e }) => ({ ...e, message_count: messages.length }));
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get('limit') ?? 50);
+    const source = url.searchParams.get('source');
+    const all = [...simulated, ...extra].sort((a, b) => b.started_at - a.started_at).concat(recorded as never[])
+      .filter((s) => !source || (s as { source?: string | null }).source === source);
+    const limit = Math.min(200, Number(url.searchParams.get('limit') ?? 50));
     const offset = Number(url.searchParams.get('offset') ?? 0);
     return json({ object: 'list', data: all.slice(offset, offset + limit), limit, offset, has_more: offset + limit < all.length });
   }
@@ -501,7 +537,11 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const simulated = sim.messages.get(id);
     if (deleted.has(id)) return NOT_FOUND_SESSION(id);
     if (m[2] && method === 'GET' && !simulated && sim.extraSessions.has(id)) {
-      return json({ object: 'list', session_id: id, data: [], pagination: { limit: 500, offset: 0, order: 'latest', returned: 0 } });
+      const extra = sim.extraSessions.get(id)!;
+      const data = extra.messages.map((msg, i) => ({
+        id: i + 1, session_id: id, role: msg.role, content: msg.content, tool_calls: null, tool_name: null, timestamp: extra.started_at + i,
+      })).reverse();
+      return json({ object: 'list', session_id: id, data, pagination: { limit: 500, offset: 0, order: 'latest', returned: data.length } });
     }
     if (m[2] && method === 'GET') {
       if (!simulated) return id === 'intendia-probe-1' ? null : NOT_FOUND_SESSION(id);

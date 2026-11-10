@@ -1,11 +1,17 @@
 import type { CompatService } from '../compat/service.js';
-import { callOp } from '../connectors/runtime.js';
+import { callOp, HermesError, ModuleUnavailableError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { PublicSession, WorkspaceService } from '../workspaces/service.js';
 
 const TIMEOUT_MS = 3_000;
-/** One page of Hermes sessions per instance and profile (the home page shows a few lines). */
-const HERMES_PAGE = 50;
+/** Lines of a search answer. */
+export const SEARCH_LIMIT = 30;
+
+export const SESSION_SOURCES = ['all', 'intendia', 'telegram', 'cron'] as const;
+export type SessionSource = (typeof SESSION_SOURCES)[number];
+
+type Owned = PublicSession & { workspaceName: string; profile: string };
+type Err = { instance: string; message: string };
 
 export interface RecentSession {
   kind: 'intendia' | 'hermes';
@@ -21,6 +27,8 @@ export interface RecentSession {
   workspace: string | null;
   /** Last activity, ms. */
   at: number;
+  /** Search hit in the messages (Hermes text, hit between `>>>` and `<<<`); null outside a search. */
+  snippet: string | null;
 }
 
 export interface HermesSessionRaw {
@@ -31,7 +39,11 @@ export interface HermesSessionRaw {
   started_at?: unknown;
   last_active?: unknown;
   message_count?: unknown;
+  snippet?: unknown;
 }
+
+/** The snippet without its hit markers. */
+export const stripMarks = (v: string): string => v.replace(/>>>|<<</g, '');
 
 const secMs = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v * 1000) : null);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -47,13 +59,14 @@ export function lineTitle(title: unknown, preview: unknown): string {
 
 /** Both sources in one list, most recent first, without duplicates (a Hermes may list a session under two profiles). */
 export function mergeRecent(
-  intendia: (PublicSession & { workspaceName: string; profile: string })[],
+  intendia: (Owned & { snippet?: string | null })[],
   hermes: { instanceId: string; label: string; profile: string; sessions: HermesSessionRaw[] }[],
   limit: number,
 ): RecentSession[] {
   const out: RecentSession[] = intendia.map((s) => ({
     kind: 'intendia', instanceId: s.instanceId, profile: s.profile, id: s.id, source: 'intendia',
     title: s.title || 'Nouvelle session', sub: s.workspaceName, workspace: s.workspace, at: s.lastActiveAt ?? s.createdAt,
+    snippet: s.snippet ?? null,
   }));
   const seen = new Set(out.map((s) => `${s.instanceId}:${s.id}`));
   for (const h of hermes) {
@@ -63,18 +76,27 @@ export function mergeRecent(
       if (seen.has(key)) continue;
       seen.add(key);
       const count = typeof raw.message_count === 'number' ? raw.message_count : null;
+      const snippet = text(raw.snippet);
       out.push({
         kind: 'hermes', instanceId: h.instanceId, profile: h.profile, id, source: text(raw.source),
-        title: lineTitle(raw.title, raw.preview),
+        title: lineTitle(raw.title, raw.preview ?? (snippet ? stripMarks(snippet) : null)),
         sub: count === null ? h.label : `${h.label} · ${count} message${count > 1 ? 's' : ''}`,
-        workspace: null, at: secMs(raw.last_active) ?? secMs(raw.started_at) ?? 0,
+        workspace: null, at: secMs(raw.last_active) ?? secMs(raw.started_at) ?? 0, snippet,
       });
     }
   }
   return out.sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1)).slice(0, limit);
 }
 
-/** Recent sessions of every source across instances; an instance that does not answer adds an error line. */
+/** A search the instance cannot serve (no dashboard, route missing, 404 or 500): only Intendia titles are searched there. */
+function searchUnavailable(err: unknown): boolean {
+  if (err instanceof ModuleUnavailableError) return true;
+  return err instanceof HermesError && (err.kind === 'unconfigured' || (err.kind === 'http' && (err.detail.status === 404 || err.detail.status === 500)));
+}
+
+const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** Sessions of every source across instances; an instance that does not answer adds an error line. */
 export class RecentService {
   constructor(
     private readonly compat: CompatService,
@@ -82,28 +104,73 @@ export class RecentService {
     private readonly workspaces: WorkspaceService,
   ) {}
 
-  async list(limit: number): Promise<{ sessions: RecentSession[]; errors: { instance: string; message: string }[] }> {
-    const errors: { instance: string; message: string }[] = [];
-    const intendia = this.workspaces.recentSessions(limit);
+  /** Profiles read on an instance: default plus those of its workspaces (with a key). */
+  private profiles(instanceId: string): string[] {
+    const inst = this.store.get(instanceId);
     const all = this.workspaces.listWorkspaces();
-    const hermes = (await Promise.all(this.store.list().map(async (inst) => {
-      // profiles with a key used by a workspace of this instance, plus default
-      const profiles = [...new Set(['default', ...all.filter((w) => w.instanceId === inst.id && w.profile && inst.profileKeys[w.profile]).map((w) => w.profile!)])];
+    return [...new Set(['default', ...all.filter((w) => w.instanceId === instanceId && w.profile && inst?.profileKeys[w.profile]).map((w) => w.profile!)])];
+  }
+
+  async list(limit: number, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[] }> {
+    const errors: Err[] = [];
+    const intendia = source === 'all' || source === 'intendia' ? this.workspaces.recentSessions(limit) : [];
+    const hermes = source === 'intendia' ? [] : (await Promise.all(this.store.list().map(async (inst) => {
       const owned = this.workspaces.ownedIds(inst.id);
-      const pages = await Promise.all(profiles.map(async (profile) => {
+      const pages = await Promise.all(this.profiles(inst.id).map(async (profile) => {
         try {
           const res = await callOp<{ data: HermesSessionRaw[] }>(this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'list', {
-            profile, query: { limit: HERMES_PAGE, offset: 0 }, timeoutMs: TIMEOUT_MS,
+            profile, query: { limit, offset: 0, ...(source === 'all' ? {} : { source }) }, timeoutMs: TIMEOUT_MS,
           });
           return { instanceId: inst.id, label: inst.label, profile, sessions: res.data.filter((s) => !owned.has(String(s.id))) };
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          if (!errors.some((e) => e.instance === inst.label)) errors.push({ instance: inst.label, message });
+          if (!errors.some((e) => e.instance === inst.label)) errors.push({ instance: inst.label, message: errText(err) });
           return null;
         }
       }));
       return pages.filter((p) => p !== null);
     }))).flat();
     return { sessions: mergeRecent(intendia, hermes, limit), errors };
+  }
+
+  /** Intendia titles containing `q`, plus Hermes' content search on every instance that has it. */
+  async search(q: string, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[]; partial: string[] }> {
+    const errors: Err[] = [];
+    const partial: string[] = [];
+    const withIntendia = source === 'all' || source === 'intendia';
+    const byTitle: (Owned & { snippet?: string | null })[] = withIntendia ? this.workspaces.searchSessions(q, SEARCH_LIMIT) : [];
+    const hermes: { instanceId: string; label: string; profile: string; sessions: HermesSessionRaw[] }[] = [];
+    await Promise.all(this.store.list().map(async (inst) => {
+      const owned = this.workspaces.ownedIds(inst.id);
+      const hits: { id: string; snippet: string | null }[] = [];
+      await Promise.all(this.profiles(inst.id).map(async (profile) => {
+        try {
+          const res = await callOp<{ results: (HermesSessionRaw & { session_id?: unknown })[] }>(
+            this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'search', {
+              profile, query: { q, limit: SEARCH_LIMIT, ...(source === 'telegram' || source === 'cron' ? { source } : {}) }, timeoutMs: TIMEOUT_MS,
+            });
+          const rows: HermesSessionRaw[] = [];
+          for (const r of res.results) {
+            const id = text(r.session_id) ?? text(r.id);
+            if (!id) continue;
+            if (owned.has(id)) {
+              if (withIntendia) hits.push({ id, snippet: text(r.snippet) });
+            } else if (source !== 'intendia') rows.push({ ...r, id });
+          }
+          hermes.push({ instanceId: inst.id, label: inst.label, profile, sessions: rows });
+        } catch (err) {
+          if (searchUnavailable(err)) {
+            if (!partial.includes(inst.label)) partial.push(inst.label);
+          } else if (!errors.some((e) => e.instance === inst.label)) errors.push({ instance: inst.label, message: errText(err) });
+        }
+      }));
+      // an owned hit becomes an Intendia line (with its snippet), replacing the title hit of the same session
+      const snippets = new Map(hits.map((h) => [h.id, h.snippet]));
+      for (const s of this.workspaces.sessionsByIds(inst.id, [...snippets.keys()])) {
+        const at = byTitle.findIndex((t) => t.instanceId === s.instanceId && t.id === s.id);
+        if (at >= 0) byTitle.splice(at, 1);
+        byTitle.push({ ...s, snippet: snippets.get(s.id) ?? null });
+      }
+    }));
+    return { sessions: mergeRecent(byTitle, hermes, SEARCH_LIMIT), errors, partial };
   }
 }

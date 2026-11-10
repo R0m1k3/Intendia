@@ -234,14 +234,20 @@ export interface CronInput {
 
 export interface DeliveryTarget { id: string; name: string }
 
-export interface UpcomingCron {
+/** An active cron of any instance (home page: next runs, timeline, failures, counter). */
+export interface OverviewCron {
   instanceId: string;
   instanceLabel: string;
   id: string;
   profile: string;
   name: string;
-  nextRunAt: string;
   schedule: CronSchedule;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  /** The cron's own IANA time zone, null = Hermes' zone. */
+  timezone: string | null;
 }
 
 export interface Skill {
@@ -510,7 +516,7 @@ export const api = {
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
   recentSessions: (limit = 20) => call<{ sessions: RecentSession[]; errors: { instance: string; message: string }[] }>('GET', `/sessions/recent?limit=${limit}`),
-  upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
+  cronsOverview: () => call<{ crons: OverviewCron[]; errors: { instance: string; message: string }[] }>('GET', '/crons/overview'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
   agent: (inst: string, name: string) => call<{ agent: AgentDetail }>('GET', instPath(inst, `agents/${enc(name)}/detail`)),

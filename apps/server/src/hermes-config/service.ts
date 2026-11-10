@@ -46,9 +46,18 @@ export class ConfigConflictError extends Error {
 
 export class ConfirmRequiredError extends Error {
   readonly code = 'confirm_required';
-  constructor(readonly prompt: string) {
+  constructor(readonly prompt: string, readonly task?: string) {
     super('Confirmation demandée par Hermes');
     this.name = 'ConfirmRequiredError';
+  }
+}
+
+/** Some tasks of a group write may be written and could not be put back: the history copy stays. */
+export class PartialWriteError extends Error {
+  readonly code = 'partial_write';
+  constructor(message = "Écriture peut-être partielle : vérifiez les valeurs ou restaurez la version d'avant dans l'onglet Historique") {
+    super(message);
+    this.name = 'PartialWriteError';
   }
 }
 
@@ -86,6 +95,7 @@ export interface PublicPlatform {
 export interface PublicRestart { running: boolean; exitCode: number | null; lines: string[]; truncated: boolean }
 
 export interface ModelChange { scope: 'main' | 'auxiliary'; provider: string; model: string; task?: string; confirm?: boolean; version: string }
+export interface AuxChange { task: string; provider: string; model: string }
 export interface McpCreate { name: string; url?: string; token?: string; command?: string; args?: string[]; env?: Record<string, string> }
 
 type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatService['get']>; instanceId: string; profile: string };
@@ -433,6 +443,43 @@ export class ConfigService {
       if (out.notice) notice = this.mask.text(out.notice);
     });
     return notice ? { ...res, notice } : res;
+  }
+
+  /**
+   * Several auxiliary tasks in one write, all or nothing: one version check, one history copy, then one
+   * `model/set` per task. When Hermes refuses task k > 0 (nothing written for it), the text read before is
+   * put back by `putRaw` and the refusal goes on (the copy is dropped as for any refusal). An uncertain
+   * error after the first task, or no way to put the file back, gives `PartialWriteError` (copy kept).
+   */
+  async setAuxiliary(instanceId: string, profile: string, input: { version: string; changes: AuxChange[]; confirm?: boolean }): Promise<{ version: string | null; notice?: string }> {
+    const ctx = this.ctx(instanceId, profile);
+    const notices: string[] = [];
+    const res = await this.write(ctx, 'model', input.version, async (original) => {
+      for (const [k, change] of input.changes.entries()) {
+        try {
+          const body: Record<string, unknown> = { scope: 'auxiliary', task: change.task, provider: change.provider, model: change.model };
+          if (input.confirm) body.confirm_expensive_model = true;
+          const out = ModelSetSchema.parse(await this.call<unknown>(ctx, 'setModel', { body }));
+          if (out.ok === false && out.confirm_required) {
+            throw new ConfirmRequiredError(this.mask.text(out.confirm_message ?? 'Confirmer ce modèle ?'), change.task);
+          }
+          if (out.notice) {
+            const n = this.mask.text(out.notice);
+            if (!notices.includes(n)) notices.push(n);
+          }
+        } catch (err) {
+          if (k === 0) throw err;
+          if (!refused(err) || original === null || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
+          try {
+            await this.call(ctx, 'putRaw', { body: { yaml_text: original } });
+          } catch {
+            throw new PartialWriteError();
+          }
+          throw err;
+        }
+      }
+    });
+    return notices.length ? { ...res, notice: notices.join(' ') } : res;
   }
 
   // ---------------------------------------------------------------- env

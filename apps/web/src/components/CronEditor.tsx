@@ -102,7 +102,7 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['crons', instanceId] });
-      await qc.invalidateQueries({ queryKey: ['upcoming-crons'] });
+      await qc.invalidateQueries({ queryKey: ['crons-overview'] });
       onClose();
     },
   });

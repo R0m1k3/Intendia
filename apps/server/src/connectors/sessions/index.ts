@@ -36,6 +36,20 @@ export const MessageSchema = z.looseObject({
 /** `session_id`: the live session (after a context compression, its continuation). */
 export const MessageListSchema = z.looseObject({ data: z.array(MessageSchema), session_id: z.string().nullish().catch(null) });
 
+/** Dashboard search (id, then FTS5 on messages); `snippet` marks the hit with `>>>` and `<<<`. */
+export const SessionSearchSchema = z.looseObject({
+  results: z.array(z.looseObject({
+    id: z.string().nullish(),
+    session_id: z.string().nullish(),
+    source: z.string().nullish(),
+    title: z.string().nullish(),
+    snippet: z.string().nullish(),
+    last_active: z.number().nullish(),
+    message_count: z.number().nullish(),
+    profile: z.string().nullish(),
+  })),
+});
+
 export const sessionsModule: ModuleDef = {
   id: 'sessions',
   label: 'Sessions',
@@ -44,6 +58,11 @@ export const sessionsModule: ModuleDef = {
     list: {
       kind: 'read', required: true, probe: true, schema: SessionListSchema,
       routes: [{ via: 'api', method: 'GET', path: '/api/sessions', capability: 'sessions', feature: 'session_resources' }],
+    },
+    // not probed: without `q` it answers an empty list, which proves nothing
+    search: {
+      kind: 'read', probe: false, schema: SessionSearchSchema,
+      routes: [{ via: 'dash', method: 'GET', path: '/api/sessions/search' }],
     },
     get: {
       kind: 'read', probe: false, schema: SessionGetSchema,

@@ -5,6 +5,7 @@ import { callOp, HermesError } from '../connectors/runtime.js';
 import { EFFORTS } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { pushTitle } from '../workspaces/title.js';
+import { SESSION_SOURCES, type SessionSource } from '../sessions/recent.js';
 import { ValidationError, type WorkspaceService } from '../workspaces/service.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
@@ -36,18 +37,34 @@ export function sessionParams(c: { req: { param: (k: string) => string } }): { i
   return { inst, id };
 }
 
+function sourceOf(raw: string | undefined): SessionSource {
+  if (raw === undefined || raw === '') return 'all';
+  if (!(SESSION_SOURCES as readonly string[]).includes(raw)) throw new ValidationError(`source : ${SESSION_SOURCES.join(', ')}`);
+  return raw as SessionSource;
+}
+
 export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
   const { workspaces } = deps;
   const r = new Hono();
 
-  r.get('/workspaces', (c) => c.json({ workspaces: workspaces.listWorkspaces() }));
+  r.get('/workspaces', (c) => {
+    const counts = workspaces.sessionCounts();
+    return c.json({ workspaces: workspaces.listWorkspaces().map((w) => ({ ...w, sessionCount: counts.get(w.slug) ?? 0 })) });
+  });
 
-  // recent sessions of every source (Intendia, Telegram, crons…) across instances, for the home page
+  // sessions of every source (Intendia, Telegram, crons…) across instances, for the home and Sessions pages
   r.get('/sessions/recent', async (c) => {
     const raw = c.req.query('limit');
     const limit = raw === undefined ? 20 : Number(raw);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new ValidationError('limit : entier de 1 à 50');
-    return c.json(await deps.services.recent.list(limit));
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ValidationError('limit : entier de 1 à 200');
+    return c.json(await deps.services.recent.list(limit, sourceOf(c.req.query('source'))));
+  });
+
+  // search: Intendia titles, plus message content through each instance's dashboard
+  r.get('/sessions/search', async (c) => {
+    const q = (c.req.query('q') ?? '').trim();
+    if (q.length < 2 || q.length > 100) throw new ValidationError('q : de 2 à 100 caractères');
+    return c.json(await deps.services.recent.search(q, sourceOf(c.req.query('source'))));
   });
 
   r.post('/workspaces', async (c) => {
