@@ -24,7 +24,7 @@ import { LinksPage } from './pages/Links';
 import { SessionPage } from './pages/Session';
 import { WorkspacePage } from './pages/Workspace';
 import { WorkspacesPage } from './pages/Workspaces';
-import '@fontsource-variable/instrument-sans';
+import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 

@@ -43,7 +43,7 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
   return createPortal(
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
       <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (nameOk) create.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-paper shadow-xl md:w-[480px] md:border-l md:border-line" aria-label="Nouvel agent">
+        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[480px] md:border-l md:border-line" aria-label="Nouvel agent">
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
           <h2 className="text-[15px] font-medium">Nouvel agent</h2>
           <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>

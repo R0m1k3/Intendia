@@ -121,7 +121,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
             <div className="flex gap-1 overflow-x-auto border-b border-line" role="tablist">
               {tabs.map((t) => (
                 <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go({ tab: t, key: undefined })}
-                  className={cx('-mb-px h-9 shrink-0 border-b-2 px-3 text-sm transition-colors', tab === t ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink')}>
+                  className={cx('-mb-px h-10 shrink-0 border-b-2 px-2.5 text-sm font-medium transition-colors', tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
                   {TAB[t].label}
                 </button>
               ))}

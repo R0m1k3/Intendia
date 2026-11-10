@@ -1,26 +1,32 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, KanbanSquare, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, KanbanSquare, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
-import { Mark, Wordmark, worst } from './ui';
+import { cx, Mark, Wordmark, worst } from './ui';
 
+type NavGroup = 'top' | 'auto' | 'system' | 'hidden';
+
+/** In display order; `group` places each entry in the sidebar (`hidden`: bottom bar only). */
 const NAV = [
-  { to: '/', label: 'Accueil', icon: House },
-  { to: '/w', label: 'Workspaces', icon: FolderOpen },
-  { to: '/liens', label: 'Liens', icon: Link2 },
-  { to: '/crons', label: 'Crons', icon: CalendarClock },
-  { to: '/skills', label: 'Skills', icon: Puzzle },
-  { to: '/agents', label: 'Agents', icon: Bot },
-  { to: '/kanban', label: 'Kanban', icon: KanbanSquare },
-  { to: '/activite', label: 'Activité', icon: Activity },
-  { to: '/config', label: 'Configuration', icon: SlidersHorizontal },
-  { to: '/etat', label: 'État', icon: ListChecks },
-  { to: '/reglages', label: 'Réglages', icon: Settings2 },
-] as const;
+  { to: '/', label: 'Accueil', icon: House, group: 'top' },
+  { to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'top' },
+  { to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto' },
+  { to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto' },
+  { to: '/agents', label: 'Agents', icon: Bot, group: 'auto' },
+  { to: '/w', label: 'Workspaces', icon: FolderOpen, group: 'hidden' },
+  { to: '/activite', label: 'Activité', icon: Activity, group: 'system' },
+  { to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'system' },
+  { to: '/liens', label: 'Liens', icon: Link2, group: 'system' },
+  { to: '/etat', label: 'État', icon: ListChecks, group: 'system' },
+  { to: '/reglages', label: 'Réglages', icon: Settings2, group: 'system' },
+] as const satisfies readonly { to: string; label: string; icon: unknown; group: NavGroup }[];
 
-const ROW = 'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
+const ROW = 'flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
+/** Selected entry: a white tab lifted off the grey frame (the ! classes win over ROW's hover). */
+const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(22_24_27/0.05)]';
+const GROUP = 'flex items-center justify-between px-3 pb-2 pt-6 text-xs font-medium text-ink-faint';
 
 export function Layout() {
   const qc = useQueryClient();
@@ -31,7 +37,6 @@ export function Layout() {
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
   const openSlug = params.slug;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  /** /crons redirects to /i/<instance>/crons: keep its entry active there */
   // per-instance console pages (/i/<inst>/crons, /i/<inst>/skills) light up their entry (/crons, /skills)
   const alsoActive = (to: string) => to !== '/' && new RegExp(`^/i/[^/]+${to}(/|$)`).test(pathname);
   const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
@@ -42,89 +47,92 @@ export function Layout() {
     await navigate({ to: '/connexion' });
   };
 
+  const entries = (group: NavGroup) => NAV.filter((n) => n.group === group).map((n) => (
+    <Link
+      key={n.to}
+      to={n.to}
+      activeOptions={{ exact: n.to === '/' }}
+      className={cx(ROW, alsoActive(n.to) && ACTIVE)}
+      activeProps={{ className: ACTIVE }}
+      // same marks as a router-active link, so assistive tech and tests see the entry as current
+      {...(alsoActive(n.to) ? { 'aria-current': 'page' as const, 'data-status': 'active' } : {})}
+    >
+      <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
+      {n.label}
+    </Link>
+  ));
+
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line md:flex">
-        <div className="flex h-16 items-center px-5">
+      <aside className="hidden w-62 shrink-0 flex-col px-3 pb-3 pt-4 md:flex">
+        <div className="px-2 pb-4 pt-1">
           <Wordmark />
         </div>
-        <nav className="flex flex-col gap-0.5 px-3">
-          {NAV.map((n) => (
-            <Link
-              key={n.to}
-              to={n.to}
-              activeOptions={{ exact: n.to === '/' || n.to === '/w' }}
-              className={ROW + (alsoActive(n.to) ? ' !bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' : '')}
-              activeProps={{ className: '!bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' }}
-            >
-              <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
-              {n.label}
+
+        <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
+          {entries('top')}
+
+          <p className={GROUP}>Automatisation</p>
+          {entries('auto')}
+
+          <p className={GROUP}>
+            Workspaces
+            <Link to="/w" aria-label="Nouveau workspace" title="Nouveau workspace"
+              className="-my-1 flex size-[22px] items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink">
+              <Plus className="size-3.5" strokeWidth={1.5} />
             </Link>
+          </p>
+          {workspaces.data?.workspaces.map((w) => (
+            <div key={w.slug} className="flex flex-col gap-0.5">
+              <Link
+                to="/w/$slug"
+                params={{ slug: w.slug }}
+                activeOptions={{ exact: true }}
+                className={ROW}
+                activeProps={{ className: ACTIVE }}
+              >
+                <Folder className="size-4 shrink-0" strokeWidth={1.5} />
+                <span className="truncate">{w.name}</span>
+              </Link>
+              {openSlug === w.slug && (
+                <ul className="ml-7 flex flex-col gap-0.5">
+                  {sessions.data?.sessions.slice(0, 8).map((s) => (
+                    <li key={s.id}>
+                      <Link
+                        to="/w/$slug/s/$sessionId"
+                        params={{ slug: w.slug, sessionId: s.id }}
+                        className="flex h-7 items-center rounded-md px-2 text-[13px] text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+                        activeProps={{ className: ACTIVE }}
+                      >
+                        <span className="truncate">{s.title || 'Nouvelle session'}</span>
+                      </Link>
+                    </li>
+                  ))}
+                  <li>
+                    <NewSessionLink slug={w.slug} />
+                  </li>
+                </ul>
+              )}
+            </div>
           ))}
+
+          <p className={GROUP}>Système</p>
+          {entries('system')}
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-        {(workspaces.data?.workspaces.length ?? 0) > 0 && (
-          <>
-            <div className="mt-6 px-5 pb-2 text-xs text-ink-faint">Workspaces</div>
-            <ul className="flex flex-col gap-0.5 px-3">
-              {workspaces.data!.workspaces.map((w) => (
-                <li key={w.slug}>
-                  <Link
-                    to="/w/$slug"
-                    params={{ slug: w.slug }}
-                    activeOptions={{ exact: true }}
-                    className={ROW}
-                    activeProps={{ className: '!bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' }}
-                  >
-                    <span className="flex size-4 shrink-0 items-center justify-center font-mono text-[11px] text-ink-faint">#</span>
-                    <span className="truncate">{w.name}</span>
-                  </Link>
-                  {openSlug === w.slug && (
-                    <ul className="ml-[22px] mt-0.5 flex flex-col gap-0.5 border-l border-line pl-2">
-                      {sessions.data?.sessions.slice(0, 8).map((s) => (
-                        <li key={s.id}>
-                          <Link
-                            to="/w/$slug/s/$sessionId"
-                            params={{ slug: w.slug, sessionId: s.id }}
-                            className="flex h-7 items-center rounded-md px-2 text-[13px] text-ink-soft transition-colors hover:bg-raised hover:text-ink"
-                            activeProps={{ className: '!bg-raised !text-ink' }}
-                          >
-                            <span className="truncate">{s.title || 'Nouvelle session'}</span>
-                          </Link>
-                        </li>
-                      ))}
-                      <li>
-                        <NewSessionLink slug={w.slug} />
-                      </li>
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        <div className="mt-6 px-5 pb-2 text-xs text-ink-faint">Instances</div>
-        <ul className="flex flex-col gap-0.5 px-3">
+        <div className="flex flex-col gap-0.5 border-t border-line pt-3">
           {instances.data?.instances.map((i) => {
             const r = compat.data?.reports.find((x) => x.instanceId === i.id);
             return (
-              <li key={i.id}>
-                <Link to="/etat" hash={i.id} className={ROW}>
-                  <span className="flex size-4 shrink-0 items-center justify-center">
-                    <Mark state={r ? worst(r.modules.map((m) => m.state)) : null} />
-                  </span>
-                  <span className="truncate">{i.label}</span>
-                </Link>
-              </li>
+              <Link key={i.id} to="/etat" hash={i.id} className={ROW}>
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                  <Mark state={r ? worst(r.modules.map((m) => m.state)) : null} />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{i.label}</span>
+                {r?.hermesVersion && <span className="shrink-0 font-mono text-xs text-ink-faint">v{r.hermesVersion.replace(/^v/, '')}</span>}
+              </Link>
             );
           })}
-        </ul>
-
-        </div>
-
-        <div className="border-t border-line px-3 py-3">
           <button onClick={logout} className={ROW + ' w-full'}>
             <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
             Se déconnecter
@@ -132,7 +140,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-sheet pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:m-2 md:h-[var(--card-h)] md:rounded-[14px] md:border md:border-line md:pb-0 md:shadow-[var(--shadow-card)]">
         <div className="enter mx-auto max-w-[1440px]">
           <Outlet />
         </div>
@@ -144,13 +152,13 @@ export function Layout() {
 }
 
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
-const MOBILE_MAIN = ['/', '/w', '/activite', '/agents'];
+const MOBILE_MAIN: string[] = ['/', '/w', '/activite', '/agents'];
 
 function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
-  const main = NAV.filter((n) => MOBILE_MAIN.includes(n.to));
+  const main = MOBILE_MAIN.map((to) => NAV.find((n) => n.to === to)!);
   const rest = NAV.filter((n) => !MOBILE_MAIN.includes(n.to));
   const item = 'flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px]';
   return (
@@ -206,7 +214,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-6 pt-8 md:px-8 md:pt-10">
       <div>
-        <h1 className="text-[28px] font-medium leading-tight">{title}</h1>
+        <h1 className="text-[28px] font-semibold leading-tight">{title}</h1>
         {subtitle && <p className="mt-2 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
       </div>
       {action}

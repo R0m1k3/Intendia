@@ -435,7 +435,7 @@ function SkillsView({ inst, profile }: { inst: string; profile: string }) {
             <div className="flex gap-1 border-b border-line" role="tablist">
               {([['installed', 'Installés', FileText], ['hub', 'Hub', Search]] as const).map(([id, label, Icon]) => (
                 <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                  className={cx('-mb-px flex h-9 items-center gap-2 border-b-2 px-3 text-sm transition-colors', tab === id ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink')}>
+                  className={cx('-mb-px flex h-10 items-center gap-2 border-b-2 px-2.5 text-sm font-medium transition-colors', tab === id ? 'border-ink text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
                   <Icon className={ICON} strokeWidth={1.5} />{label}
                 </button>
               ))}
