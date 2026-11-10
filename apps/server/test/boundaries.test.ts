@@ -23,6 +23,12 @@ describe('architecture rules', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('only src/hermes opens WebSockets', () => {
+    const offenders = files(SRC).map((f) => relative(SRC, f))
+      .filter((f) => !f.startsWith('hermes/') && /new WebSocket\(/.test(readFileSync(join(SRC, f), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
   it('no module reads Hermes files or imports its code', () => {
     const offenders = files(SRC).filter((f) => /config\.yaml|state\.db|gateway_state\.json|hermes_cli/.test(readFileSync(f, 'utf8')));
     expect(offenders.map((f) => relative(SRC, f))).toEqual([]);

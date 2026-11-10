@@ -6,7 +6,7 @@ import { mimeOf } from './mime.js';
 /** Headers of every response that carries content from the volume (agent-written HTML/SVG included). */
 export const FILE_CSP = "sandbox; frame-ancestors 'self'";
 
-function disposition(kind: 'inline' | 'attachment', name: string): string {
+export function disposition(kind: 'inline' | 'attachment', name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }

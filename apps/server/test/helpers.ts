@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createFakeHermes, fakeFetch, FAKE_API_KEY, FAKE_DASH_TOKEN, type FakeOptions } from 'fake-hermes';
+import { createFakeHermes, fakeFetch, fakeWebSocketFactory, FAKE_API_KEY, FAKE_DASH_TOKEN, type FakeOptions } from 'fake-hermes';
 import { InstanceConfigSchema, type InstanceConfig } from '../src/config.js';
 import { HermesHttp } from '../src/hermes/http.js';
 
@@ -58,7 +58,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
   const services = createServices({ config, db, store, compat });
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test' });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake) });
   const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
 
   let cookie = '';
