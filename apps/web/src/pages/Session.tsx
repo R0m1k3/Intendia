@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, ArrowLeft, Files, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type ApprovalChoice, type RunStatus } from '../api';
+import { api, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle } from '../chat/Composer';
+import { placeRunStats, shortModel } from '../chat/format';
+import { RunOptions } from '../chat/RunOptions';
 import { ApprovalCard, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
@@ -142,6 +144,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     mutationFn: () => api.updateSession(inst!, sessionId, { archived: true }),
     onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
   });
+  /** Model / effort of the next messages (also remembered as the workspace's last choice). */
+  const setOptions = useMutation({
+    mutationFn: (patch: { model?: string | null; effort?: Effort | null }) => api.updateSession(inst!, sessionId, patch),
+    onSuccess: (res) => {
+      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
+      void qc.invalidateQueries({ queryKey: ['workspace', slug] });
+    },
+    onError: setError,
+  });
   const remove = useMutation({
     mutationFn: () => api.deleteSession(inst!, sessionId),
     onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
@@ -154,6 +165,20 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   // Hermes does not keep the message of a run that failed before starting: keep it on screen.
   const lostInput = endNote && endNote.input && !messages.some((m) => m.role === 'user' && m.content === endNote.input) ? endNote.input : null;
   if (lostInput) entries.push({ kind: 'user', key: 'lost-input', text: lostInput, ts: null });
+  // run lines go under the history entries; the run of a message Hermes did not keep goes under it
+  const runs = history.data?.runs ?? [];
+  const footers = useMemo(() => {
+    const m = placeRunStats(historyEntries(messages), runs);
+    if (lostInput && runs.length) {
+      const last: RunStat = runs[runs.length - 1]!;
+      for (const [k, list] of m) {
+        const rest = list.filter((r) => r.runId !== last.runId);
+        if (rest.length) m.set(k, rest); else m.delete(k);
+      }
+      m.set('lost-input', [last]);
+    }
+    return m;
+  }, [messages, runs, lostInput]);
   const running = Boolean(active);
 
   // Follow the bottom of the thread while it grows, unless the reader scrolled up.
@@ -216,7 +241,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-medium">{title}</h1>
             <p className="truncate font-mono text-[11px] text-ink-faint">
-              {ws.data?.workspace.name} · {sess.data?.profile ?? 'default'}{ws.data?.workspace.model ? ` · ${ws.data.workspace.model}` : ''}
+              {ws.data?.workspace.name} · {sess.data?.profile ?? 'default'} · {sess.data?.session.model ? shortModel(sess.data.session.model) : 'Auto'}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -251,7 +276,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} />
+        <Thread entries={entries} footers={footers} />
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
         )}
@@ -277,6 +302,14 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             onStop={stop}
             running={running}
             disabled={!chat.available || !inst}
+            options={inst && sess.data && (
+              <RunOptions
+                inst={inst} profile={sess.data.profile ?? 'default'}
+                model={sess.data.session.model} effort={sess.data.session.effort}
+                hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
+                onChange={(patch) => setOptions.mutate(patch)}
+              />
+            )}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : undefined}
           />
           <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne · glisser ou coller un fichier pour le joindre</p>

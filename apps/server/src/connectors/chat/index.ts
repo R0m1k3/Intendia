@@ -11,6 +11,11 @@ export const RunStatusSchema = z.looseObject({
   status: z.string(),
   session_id: z.string().nullish(),
   created_at: z.number().optional(),
+  /** Read for the run's consumption; an unreadable value is dropped, never fails the call. */
+  updated_at: z.number().nullish().catch(null),
+  model: z.string().nullish().catch(null),
+  usage: z.record(z.string(), z.unknown()).nullish().catch(null),
+  runtime: z.looseObject({ provider: z.string().nullish(), model: z.string().nullish() }).nullish().catch(null),
   output: z.string().nullish(),
   error: z.string().nullish(),
   pending_controls: z.array(z.unknown()).optional(),

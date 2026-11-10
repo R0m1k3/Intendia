@@ -4,8 +4,9 @@ import type { AppDeps } from '../app.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError, streamOp } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
+import { COST_SETTLE_MS, finishFields, runCost, sessionCost, type CostReading } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
-import { NotFoundError, ValidationError, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
+import { NotFoundError, ValidationError, type RunStatRow, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { SESSION_ID_RE, sessionParams } from './workspaces.js';
 
 const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
@@ -87,31 +88,89 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return runId;
   };
 
-  /** Run status; a run Hermes forgot (404) is "unknown", treated as finished. */
+  interface RawStatus {
+    status: string; session_id?: string | null; created_at?: number; updated_at?: number | null; output?: string | null; error?: string | null;
+    usage?: unknown; runtime?: unknown;
+  }
+  /** Run status; a run Hermes forgot (404) is "unknown", treated as finished. `raw` feeds run_stats. */
   const status = async (ctx: SessionContext, runId: string) => {
     try {
-      const s = await callOp<{ status: string; created_at?: number; output?: string | null; error?: string | null }>(
-        http(ctx), report(ctx), 'chat', 'runStatus', { params: { run_id: runId }, profile: ctx.profile },
-      );
-      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null };
+      const s = await callOp<RawStatus>(http(ctx), report(ctx), 'chat', 'runStatus', { params: { run_id: runId }, profile: ctx.profile });
+      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null, raw: s as RawStatus | null };
     } catch (err) {
-      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null };
+      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null, raw: null };
       throw err;
+    }
+  };
+  const publicStatus = ({ raw: _raw, ...s }: Awaited<ReturnType<typeof status>>) => s;
+
+  /** Messages and the live session id (after a compression, the continuation); 404 = no message yet. */
+  const history = async (instanceId: string, sessionId: string, profile: string, limit?: number) => {
+    try {
+      const res = await callOp<{ data: RawMessage[]; session_id?: string | null }>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'messages', {
+        params: { session_id: sessionId }, profile, ...(limit ? { query: { limit, order: 'latest' } } : {}),
+      });
+      return { messages: toChatMessages(res.data), liveId: res.session_id || sessionId, exists: true };
+    } catch (err) {
+      // an Intendia session before its first message does not exist at Hermes yet
+      if (err instanceof HermesError && err.detail.status === 404) return { messages: [] as ChatMessage[], liveId: sessionId, exists: false };
+      throw err;
+    }
+  };
+  const messages = async (instanceId: string, sessionId: string, profile: string): Promise<ChatMessage[]> =>
+    (await history(instanceId, sessionId, profile)).messages;
+
+  /** Cumulated cost of the live session; null when it cannot be read (the run's cost is then unknown). */
+  const liveCost = async (ctx: SessionContext, known?: { liveId: string; exists: boolean }): Promise<CostReading | null> => {
+    try {
+      const h = known ?? await history(ctx.instance.id, ctx.session.id, ctx.profile, 1);
+      if (!h.exists) return { sessionId: h.liveId, cost: 0 };
+      const s = await callOp<{ actual_cost_usd?: number | null; estimated_cost_usd?: number | null }>(
+        http(ctx), report(ctx), 'sessions', 'get', { params: { session_id: h.liveId }, profile: ctx.profile },
+      );
+      return { sessionId: h.liveId, cost: sessionCost(s) };
+    } catch {
+      return null;
     }
   };
 
-  const messages = async (instanceId: string, sessionId: string, profile: string): Promise<ChatMessage[]> => {
-    try {
-      const res = await callOp<{ data: RawMessage[] }>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'messages', {
-        params: { session_id: sessionId }, profile,
-      });
-      return toChatMessages(res.data);
-    } catch (err) {
-      // an Intendia session before its first message does not exist at Hermes yet
-      if (err instanceof HermesError && err.detail.status === 404) return [];
-      throw err;
+  /**
+   * Records the end of the session's running rows (read once, written once), then re-costs its last finished
+   * row while it is not final. Returns the status of the session's last run when it was read.
+   */
+  const settle = async (
+    ctx: SessionContext, opts: { known?: { liveId: string; exists: boolean }; cost?: CostReading | null; freeze?: boolean } = {},
+  ) => {
+    let last: Awaited<ReturnType<typeof status>> | null = null;
+    const inst = ctx.instance.id;
+    for (const row of workspaces.runStats(inst, ctx.session.id, { running: true }).filter((r) => r.status === 'running')) {
+      const s = await status(ctx, row.runId);
+      if (row.runId === ctx.session.lastRunId) last = s;
+      const now = Date.now();
+      if (s.raw === null) {
+        workspaces.finishRunStat(inst, row.runId, { status: 'unknown', endedAt: now, hermesSessionId: null });
+      } else if (TERMINAL_STATUSES.includes(s.status)) {
+        workspaces.finishRunStat(inst, row.runId, { ...finishFields(s.raw, now), hermesSessionId: s.raw.session_id ?? ctx.session.id });
+      }
     }
+    const done = workspaces.runStats(inst, ctx.session.id);
+    const tail: RunStatRow | undefined = done[done.length - 1];
+    if (tail && !tail.costFinal && tail.status !== 'unknown') {
+      const reading = opts.cost !== undefined ? opts.cost : await liveCost(ctx, opts.known);
+      const final = Boolean(opts.freeze) || (tail.endedAt !== null && Date.now() - tail.endedAt > COST_SETTLE_MS);
+      workspaces.setRunCost(inst, tail.runId, runCost(tail.costBeforeUsd, tail.costBeforeSessionId, reading), final);
+    } else if (tail && !tail.costFinal && opts.freeze) {
+      workspaces.setRunCost(inst, tail.runId, null, true);
+    }
+    return last;
   };
+
+  const publicRun = (r: RunStatRow) => ({
+    runId: r.runId, status: r.status, requestedModel: r.requestedModel, requestedEffort: r.requestedEffort,
+    servedModel: r.servedModel, startedAt: r.startedAt, endedAt: r.endedAt,
+    inputTokens: r.inputTokens, outputTokens: r.outputTokens, cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWriteTokens,
+    costUsd: r.costUsd,
+  });
 
   const instanceProfile = (instanceId: string, profile: string | undefined): string => {
     const inst = deps.store.get(instanceId);
@@ -125,7 +184,10 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   r.get('/sessions/:inst/:id/messages', async (c) => {
     const ctx = ctxOf(c);
-    return c.json({ messages: await messages(ctx.instance.id, ctx.session.id, ctx.profile) });
+    const h = await history(ctx.instance.id, ctx.session.id, ctx.profile);
+    // the consumption rows are settled here: the page re-reads the messages when a run ends
+    await settle(ctx, { known: h });
+    return c.json({ messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun) });
   });
 
   // one run creation at a time per session: two tabs could otherwise both pass the "no run in progress"
@@ -139,19 +201,31 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     starting.add(key);
     try {
       // re-read after the body: the session may have changed while it was received
-      const lastRunId = workspaces.getSession(ctx.instance.id, ctx.session.id).session.lastRunId;
-      if (lastRunId) {
-        const last = await status(ctx, lastRunId);
-        if (last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) {
-          return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
-        }
+      const fresh = workspaces.getSession(ctx.instance.id, ctx.session.id);
+      const lastRunId = fresh.session.lastRunId;
+      // one cost reading: final cost of the previous run and "cost before" of this one
+      const cost = await liveCost(fresh);
+      let last = await settle(fresh, { cost, freeze: true });
+      // a last run without a row (started before run_stats existed) is checked directly
+      if (lastRunId && !last && !workspaces.runStats(fresh.instance.id, fresh.session.id).some((r) => r.runId === lastRunId)) {
+        last = await status(fresh, lastRunId);
       }
+      if (last && last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) {
+        return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
+      }
+      const { model, effort } = fresh.session;
       const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
         profile: ctx.profile,
         body: {
-          input, session_id: ctx.session.id, instructions: workspaces.instructionsFor(ctx),
-          ...(ctx.workspace.model ? { model: ctx.workspace.model } : {}),
+          input, session_id: ctx.session.id, instructions: workspaces.instructionsFor(fresh),
+          ...(model ? { model } : {}),
+          ...(effort ? { model_options: { reasoning_effort: effort } } : {}),
         },
+      });
+      workspaces.insertRunStat({
+        instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running',
+        requestedModel: model, requestedEffort: effort, startedAt: Date.now(),
+        costBeforeUsd: cost?.cost ?? null, costBeforeSessionId: cost?.sessionId ?? null,
       });
       const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
       return c.json({ runId: created.run_id, session });
@@ -162,7 +236,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   r.get('/sessions/:inst/:id/runs/:runId', async (c) => {
     const ctx = ctxOf(c);
-    return c.json(await status(ctx, runOf(ctx, c.req.param('runId'))));
+    const runId = runOf(ctx, c.req.param('runId'));
+    const settled = await settle(ctx);
+    return c.json(publicStatus(settled ?? await status(ctx, runId)));
   });
 
   r.get('/sessions/:inst/:id/runs/:runId/events', async (c) => {

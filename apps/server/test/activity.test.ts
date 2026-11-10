@@ -8,7 +8,7 @@ const AUTH = { Authorization: 'Bearer fake-dashboard-token', 'Content-Type': 'ap
 
 async function session(t: T, slug = 'dev') {
   if ((await t.request('GET', `/x/workspaces/${slug}`)).status === 404) {
-    expect((await t.request('POST', '/x/workspaces', { slug, name: 'Dev', instanceId: 'fake', model: 'opus' })).status).toBe(201);
+    expect((await t.request('POST', '/x/workspaces', { slug, name: 'Dev', instanceId: 'fake' })).status).toBe(201);
   }
   const s = (await t.request('POST', `/x/workspaces/${slug}/sessions`)).json.session;
   return { s, base: `/x/sessions/fake/${s.id}` };

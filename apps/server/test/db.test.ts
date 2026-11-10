@@ -12,7 +12,7 @@ describe('migrations', () => {
     const dir = tempDir();
     const db = new Database(join(dir, 'intendia.db'));
     const r = migrate(db, dir, MIGRATIONS);
-    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql']);
+    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql']);
     expect(r.backup).toBeNull();
   });
 
@@ -32,6 +32,22 @@ describe('migrations', () => {
     const copy = new Database(r.backup!);
     expect(copy.prepare("SELECT value FROM settings WHERE key = 'k'").get()).toEqual({ value: 'before' });
     expect(copy.prepare('SELECT MAX(id) AS v FROM _migrations').get()).toEqual({ v: 1 });
+  });
+
+  it('0003 keeps the model existing sessions use (it came from their workspace)', () => {
+    const dir = tempDir();
+    const mdir = join(dir, 'migrations');
+    mkdirSync(mdir);
+    for (const f of ['0001_init.sql', '0002_sessions.sql']) copyFileSync(join(MIGRATIONS, f), join(mdir, f));
+    const db = new Database(join(dir, 'intendia.db'));
+    migrate(db, dir, mdir);
+    db.prepare("INSERT INTO workspaces (slug, name, instance_id, model, created_at) VALUES ('a', 'A', 'i', 'opus', 1), ('b', 'B', 'i', NULL, 1)").run();
+    db.prepare("INSERT INTO session_workspace (session_id, instance_id, workspace_slug, created_at) VALUES ('s1', 'i', 'a', 1), ('s2', 'i', 'b', 1)").run();
+    copyFileSync(join(MIGRATIONS, '0003_run_options.sql'), join(mdir, '0003_run_options.sql'));
+    expect(migrate(db, dir, mdir).applied).toEqual(['0003_run_options.sql']);
+    expect(db.prepare('SELECT session_id, model, effort FROM session_workspace ORDER BY session_id').all()).toEqual([
+      { session_id: 's1', model: 'opus', effort: null }, { session_id: 's2', model: null, effort: null },
+    ]);
   });
 
   it('keeps only the last five backups', () => {

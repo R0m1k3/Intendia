@@ -7,7 +7,7 @@ const DEV_KEY = 'dev-profile-key-0000000';
 
 async function session(opts: Parameters<typeof testApp>[0] = {}, ws: Record<string, unknown> = {}) {
   const t = await testApp(opts);
-  const created = await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake', model: 'opus', ...ws });
+  const created = await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake', ...ws });
   expect(created.status).toBe(201);
   const s = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
   return { t, s, base: `/x/sessions/fake/${s.id}` };
@@ -16,14 +16,16 @@ async function session(opts: Parameters<typeof testApp>[0] = {}, ws: Record<stri
 const runsPosted = (t: Awaited<ReturnType<typeof testApp>>) => t.fake.requests.filter((r) => r.method === 'POST' && r.path === '/v1/runs');
 
 describe('sending a message', () => {
-  it('sends session_id, the workspace model and the framing block', async () => {
+  it('sends session_id and the framing block, no model nor model_options while on Auto', async () => {
     const { t, s, base } = await session({ instance: { agentMount: '/opt/data/workspace' } });
     writeFileSync(join(t.mount, 'dev', 'AGENTS.md'), `Réponds en français.\n${'é'.repeat(3000)}`);
     const res = await t.request('POST', `${base}/runs`, { input: 'Bonjour' });
     expect(res.status).toBe(200);
     expect(res.json.runId).toMatch(/^run_/);
     const body = runsPosted(t)[0]!.body as Record<string, string>;
-    expect(body).toMatchObject({ input: 'Bonjour', session_id: s.id, model: 'opus' });
+    expect(body).toMatchObject({ input: 'Bonjour', session_id: s.id });
+    expect(body).not.toHaveProperty('model');
+    expect(body).not.toHaveProperty('model_options');
     expect(body.instructions).toContain('[Intendia] Workspace : Dev (dev)');
     expect(body.instructions).toContain('Dossier de travail : /opt/data/workspace/dev/');
     expect(body.instructions).toContain(`Range chaque fichier que tu produis dans /opt/data/workspace/dev/sessions/${s.id}/.`);
@@ -158,5 +160,73 @@ describe('history', () => {
     expect(msgs[0]).toMatchObject({ content: 'Bonjour', toolName: null, toolCalls: [] });
     expect(msgs[1].toolName).toBe('terminal');
     expect(msgs.map((m: any) => m.id)).toEqual([...msgs.map((m: any) => m.id)].sort((a: number, b: number) => a - b));
+  });
+});
+
+describe('run options and consumption', () => {
+  it('sends the session model and effort (model_options) only when chosen', async () => {
+    const { t, base } = await session();
+    await t.request('PATCH', base, { model: 'anthropic/claude-opus-4.6', effort: 'high' });
+    const first = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    expect(runsPosted(t)[0]!.body).toMatchObject({ model: 'anthropic/claude-opus-4.6', model_options: { reasoning_effort: 'high' } });
+    await waitRun(t, base, first);
+    await t.request('PATCH', base, { effort: null });
+    await t.request('POST', `${base}/runs`, { input: 'Encore' });
+    const second = runsPosted(t)[1]!.body as Record<string, unknown>;
+    expect(second.model).toBe('anthropic/claude-opus-4.6');
+    expect(second).not.toHaveProperty('model_options');
+  });
+
+  it('records a row at send time, settles it when the messages are read, and returns it', async () => {
+    const { t, base } = await session();
+    await t.request('PATCH', base, { effort: 'low' });
+    const runId = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    // wait for the fake run to end without going through GET runs/:id (which settles too)
+    while (t.fake.sim.runs.get(runId)!.status !== 'completed') await new Promise((r) => setTimeout(r, 5));
+    const res = (await t.request('GET', `${base}/messages`)).json;
+    expect(res.runs).toHaveLength(1);
+    expect(res.runs[0]).toMatchObject({
+      runId, status: 'completed', requestedModel: null, requestedEffort: 'low', servedModel: 'fake/model-default',
+      inputTokens: 12_000, outputTokens: 800, cacheReadTokens: 9_000, cacheWriteTokens: 500, costUsd: 0.0123,
+    });
+    expect(res.runs[0].endedAt).toBeGreaterThanOrEqual(res.runs[0].startedAt);
+  });
+
+  it('settles a row once when two reads race, costs each run by difference, freezes the previous at send', async () => {
+    const { t, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'un' })).json.runId;
+    while (t.fake.sim.runs.get(a)!.status !== 'completed') await new Promise((r) => setTimeout(r, 5));
+    const [r1, r2] = await Promise.all([t.request('GET', `${base}/messages`), t.request('GET', `${base}/messages`)]);
+    expect(r1.json.runs).toEqual(r2.json.runs);
+    const b = (await t.request('POST', `${base}/runs`, { input: 'deux cher' })).json.runId;
+    await waitRun(t, base, b);
+    const runs = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(runs.map((r: any) => [r.runId, r.costUsd])).toEqual([[a, 0.0123], [b, 0.0123]]);
+    expect(runs[1]).toMatchObject({ inputTokens: 1_250_000, outputTokens: 5_200 });
+    // the first row was frozen by the second send: a later change of the session total does not move it
+    t.fake.sim.costs.set(t.fake.sim.runs.get(a)!.sessionId, 1);
+    const again = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(again[0].costUsd).toBe(0.0123);
+    expect(again[1].costUsd).toBeCloseTo(1 - 0.0123, 6);
+  });
+
+  it('failed runs have no tokens, forgotten runs become unknown, a changed live session gives no cost', async () => {
+    const { t, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'panne' })).json.runId;
+    expect(await waitRun(t, base, a)).toBe('failed');
+    let runs = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(runs[0]).toMatchObject({ status: 'failed', servedModel: null, inputTokens: null, outputTokens: null, costUsd: 0 });
+
+    const b = (await t.request('POST', `${base}/runs`, { input: 'lent' })).json.runId;
+    t.fake.sim.runs.delete(b);
+    runs = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(runs[1]).toMatchObject({ runId: b, status: 'unknown', inputTokens: null, costUsd: null });
+
+    // compression during the run: the live session reported by /messages is another one
+    const c = (await t.request('POST', `${base}/runs`, { input: 'trois' })).json.runId;
+    while (t.fake.sim.runs.get(c)!.status !== 'completed') await new Promise((r) => setTimeout(r, 5));
+    t.fake.sim.liveAlias.set(t.fake.sim.runs.get(c)!.sessionId, 'continuation-1');
+    runs = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(runs[2]).toMatchObject({ runId: c, status: 'completed', inputTokens: 12_000, costUsd: null });
   });
 });

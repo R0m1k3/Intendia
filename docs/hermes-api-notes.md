@@ -33,6 +33,22 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
   newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
 - A run that fails before starting (no provider key) leaves no user message in the session.
 
+### Run options and consumption (read in the 0.23.0 source, 2026-11-10)
+
+- `POST /v1/runs` takes `model_options: {reasoning_effort}` (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+  `max`, `ultra`; unknown values ignored, clamped to what the model accepts). It is not kept in the run status, so
+  the only check from outside is that the request is accepted.
+- Run status: `model` (asked for, or the default), `created_at` and usually `updated_at` (seconds). Only
+  **completed** runs carry `usage` (`input_tokens` cache included, `output_tokens`, `total_tokens`,
+  `cache_read_tokens`, `cache_write_tokens`; unknown counters are `0`) and `runtime {provider, model}` (the model
+  that answered, differs after a fallback). One agent per run: `usage` is the run's own.
+- Cost exists per session only, cumulated: `GET /api/sessions/{id}` → `estimated_cost_usd` / `actual_cost_usd`,
+  `null` before anything is counted, `0` when the price is unknown. Written by a background queue: a read right
+  after the end of a run may miss the last call.
+- Compression: the session is closed (`end_reason: "compression"`) and the conversation goes on in a new one.
+  `GET /api/sessions/{id}/messages` follows it and returns the live id in `session_id`; `GET /api/sessions/{id}`
+  does not (the old total stays frozen); a run's status keeps the id it started on.
+
 ## Dashboard (9119)
 
 - Publishes an **OpenAPI 3.1** spec at `/openapi.json` (335 paths in 0.23.0). Intendia checks dashboard routes against it.

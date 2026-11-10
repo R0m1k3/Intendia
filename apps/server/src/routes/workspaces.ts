@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
+import { EFFORTS } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 
@@ -13,11 +14,17 @@ const CreateWorkspace = z.object({
   name: z.string().trim().min(1).max(80),
   instanceId: z.string().min(1),
   profile: z.string().max(64).nullish(),
-  model: z.string().max(200).nullish(),
 });
-const PatchWorkspace = z.object({ name: z.string().trim().min(1).max(80).optional(), model: z.string().max(200).nullish() });
+// the model is chosen per session, in the chat (a `model` sent here is ignored)
+const PatchWorkspace = z.object({ name: z.string().trim().min(1).max(80).optional() });
 const AgentsMd = z.object({ text: z.string() });
-const PatchSession = z.object({ title: z.string().max(200).nullish(), archived: z.boolean().optional() });
+const PatchSession = z.object({
+  title: z.string().max(200).nullish(),
+  archived: z.boolean().optional(),
+  /** null = Hermes default */
+  model: z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne').nullable().optional(),
+  effort: z.enum(EFFORTS).nullable().optional(),
+});
 
 export function sessionParams(c: { req: { param: (k: string) => string } }): { inst: string; id: string } {
   const inst = c.req.param('inst');
