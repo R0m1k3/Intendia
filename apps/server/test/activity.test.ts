@@ -1,0 +1,142 @@
+import { eq } from 'drizzle-orm';
+import { describe, expect, it } from 'vitest';
+import { sessionWorkspace } from '../src/db/schema.js';
+import { testApp, waitRun } from './helpers.js';
+
+type T = Awaited<ReturnType<typeof testApp>>;
+const AUTH = { Authorization: 'Bearer fake-dashboard-token', 'Content-Type': 'application/json' };
+
+async function session(t: T, slug = 'dev') {
+  if ((await t.request('GET', `/x/workspaces/${slug}`)).status === 404) {
+    expect((await t.request('POST', '/x/workspaces', { slug, name: 'Dev', instanceId: 'fake', model: 'opus' })).status).toBe(201);
+  }
+  const s = (await t.request('POST', `/x/workspaces/${slug}/sessions`)).json.session;
+  return { s, base: `/x/sessions/fake/${s.id}` };
+}
+
+async function dispatchTask(t: T, title: string, board = 'default') {
+  const res = await t.fake.dash.request(`/api/plugins/kanban/tasks?board=${board}`, { method: 'POST', headers: AUTH, body: JSON.stringify({ title, assignee: 'default' }) });
+  const { task } = (await res.json()) as { task: { id: string } };
+  await t.fake.dash.request(`/api/plugins/kanban/dispatch?board=${board}`, { method: 'POST', headers: AUTH });
+  return task.id;
+}
+
+const runStatusCalls = (t: T, runId: string) => t.fake.requests.filter((r) => r.method === 'GET' && r.path === `/v1/runs/${runId}`).length;
+
+describe('activity', () => {
+  it('lists a run in progress and drops it once finished, without asking again', async () => {
+    const t = await testApp({ stepMs: 30 });
+    const { s, base } = await session(t);
+    const runId = (await t.request('POST', `${base}/runs`, { input: 'lent' })).json.runId as string;
+
+    const during = (await t.request('GET', '/x/activity')).json;
+    expect(during.runs).toMatchObject([{ instance: 'fake', workspace: 'dev', sessionId: s.id, runId, profile: 'default' }]);
+    expect(['queued', 'running']).toContain(during.runs[0].status);
+
+    await t.request('POST', `${base}/runs/${runId}/stop`);
+    await waitRun(t, base, runId);
+    expect((await t.request('GET', '/x/activity')).json.runs).toEqual([]);
+    const calls = runStatusCalls(t, runId);
+    await t.request('GET', '/x/activity');
+    expect(runStatusCalls(t, runId)).toBe(calls);
+  });
+
+  it('drops a run Hermes no longer knows (404) and sessions older than 24 h', async () => {
+    const t = await testApp();
+    const a = await session(t);
+    const b = await session(t);
+    t.db.update(sessionWorkspace).set({ lastRunId: 'run_oublie', lastActiveAt: Date.now() }).where(eq(sessionWorkspace.sessionId, a.s.id)).run();
+    t.db.update(sessionWorkspace).set({ lastRunId: 'run_vieux', lastActiveAt: Date.now() - 25 * 3600_000 }).where(eq(sessionWorkspace.sessionId, b.s.id)).run();
+    const res = (await t.request('GET', '/x/activity')).json;
+    expect(res).toEqual({ runs: [], workers: [], errors: [] });
+    expect(runStatusCalls(t, 'run_vieux')).toBe(0);
+    expect(runStatusCalls(t, 'run_oublie')).toBe(1);
+    await t.request('GET', '/x/activity');
+    expect(runStatusCalls(t, 'run_oublie')).toBe(1);
+  });
+
+  it('reports an unreachable instance as an error line', async () => {
+    const t = await testApp();
+    const { s } = await session(t);
+    t.db.update(sessionWorkspace).set({ lastRunId: 'run_x', lastActiveAt: Date.now() }).where(eq(sessionWorkspace.sessionId, s.id)).run();
+    const res = (await t.request('GET', '/x/activity', undefined)).json;
+    expect(res.errors).toEqual([]);
+    const t2 = await testApp({ breaks: { 'api GET /v1/runs/run_x': { status: 500 } } });
+    const { s: s2 } = await session(t2);
+    t2.db.update(sessionWorkspace).set({ lastRunId: 'run_x', lastActiveAt: Date.now() }).where(eq(sessionWorkspace.sessionId, s2.id)).run();
+    const res2 = (await t2.request('GET', '/x/activity')).json;
+    expect(res2.runs).toEqual([]);
+    expect(res2.errors).toHaveLength(1);
+    expect(res2.errors[0].instance).toBe('fake');
+  });
+
+  it('lists the kanban workers of every live board', async () => {
+    const t = await testApp();
+    await t.fake.dash.request('/api/plugins/kanban/boards', { method: 'POST', headers: AUTH, body: JSON.stringify({ slug: 'ventes', name: 'Ventes' }) });
+    const a = await dispatchTask(t, 'Inventaire stuck');
+    const b = await dispatchTask(t, 'Relevé stuck', 'ventes');
+    const res = (await t.request('GET', '/x/activity')).json;
+    expect(res.workers.map((w: any) => [w.board, w.taskId])).toEqual([['default', a], ['ventes', b]]);
+    expect(t.fake.requests.filter((r) => r.path === '/api/plugins/kanban/workers/active' && r.query.board).map((r) => r.query.board)).toEqual(['default', 'ventes']);
+  });
+});
+
+describe('stopping a kanban worker', () => {
+  it('terminates the worker and blocks the task that Hermes put back in ready', async () => {
+    const t = await testApp();
+    const taskId = await dispatchTask(t, 'Analyse stuck');
+    const [w] = (await t.request('GET', '/x/activity')).json.workers;
+    const res = await t.request('POST', `/x/i/fake/kanban/workers/${w.runId}/stop?board=default`);
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ taskId, status: 'blocked' });
+    const term = t.fake.requests.find((r) => r.path === `/api/plugins/kanban/runs/${w.runId}/terminate`)!;
+    expect(term.query).toEqual({ board: 'default' });
+    expect(term.body).toEqual({ reason: 'Arrêté depuis Intendia' });
+    const patch = t.fake.requests.find((r) => r.method === 'PATCH' && r.path === `/api/plugins/kanban/tasks/${taskId}`)!;
+    expect(patch.body).toEqual({ status: 'blocked', block_reason: 'Arrêtée depuis Intendia' });
+    expect((await t.request('GET', '/x/activity')).json.workers).toEqual([]);
+  });
+
+  it('says when the worker already ended (409 worker_ended)', async () => {
+    const t = await testApp();
+    const res = await t.request('POST', '/x/i/fake/kanban/workers/999/stop?board=default');
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('worker_ended');
+  });
+
+  it('leaves a task Hermes put in review', async () => {
+    const t = await testApp();
+    const taskId = await dispatchTask(t, 'Revue stuck');
+    const [w] = (await t.request('GET', '/x/activity')).json.workers;
+    // Hermes' retry status can be review: simulate it by moving the task before the read that follows terminate
+    const orig = t.fake.kanban.handle.bind(t.fake.kanban);
+    t.fake.kanban.handle = (via, method, path, query, body) => {
+      const out = orig(via, method, path, query, body);
+      if (path.endsWith('/terminate')) {
+        const task = t.fake.kanban.boards.get('default')!.tasks.find((x) => x.id === taskId)!;
+        task.status = 'review';
+      }
+      return out;
+    };
+    const res = await t.request('POST', `/x/i/fake/kanban/workers/${w.runId}/stop?board=default`);
+    expect(res.json).toEqual({ taskId, status: 'review' });
+    expect(t.fake.requests.some((r) => r.method === 'PATCH')).toBe(false);
+  });
+
+  it('reports a task restarted by Hermes before it could be blocked (409 task_restarted)', async () => {
+    const t = await testApp({ breaks: { 'dash PATCH /api/plugins/kanban/tasks/t_fake0001': { status: 400, body: { detail: "cannot move t_fake0001 from 'running' to 'blocked'" } } } });
+    await dispatchTask(t, 'Course stuck');
+    const [w] = (await t.request('GET', '/x/activity')).json.workers;
+    const res = await t.request('POST', `/x/i/fake/kanban/workers/${w.runId}/stop?board=default`);
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('task_restarted');
+  });
+
+  it('validates the board and the run id before calling Hermes', async () => {
+    const t = await testApp();
+    expect((await t.request('POST', '/x/i/fake/kanban/workers/12/stop')).status).toBe(400);
+    expect((await t.request('POST', '/x/i/fake/kanban/workers/12/stop?board=../x')).status).toBe(400);
+    expect((await t.request('POST', '/x/i/fake/kanban/workers/abc/stop?board=default')).status).toBe(400);
+    expect(t.fake.requests.some((r) => r.path.includes('/terminate'))).toBe(false);
+  });
+});

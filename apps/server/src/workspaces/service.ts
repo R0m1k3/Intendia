@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { sessionWorkspace, workspaces } from '../db/schema.js';
@@ -29,6 +29,17 @@ export interface SessionContext {
   instance: InstanceConfig;
   /** Hermes profile serving the workspace ("default" when none). */
   profile: string;
+}
+
+export interface RecentRun {
+  instanceId: string;
+  workspaceSlug: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  profile: string;
+  lastActiveAt: number;
 }
 
 export class NotFoundError extends Error {
@@ -187,6 +198,19 @@ export class WorkspaceService {
   deleteSession(instanceId: string, sessionId: string): void {
     this.db.delete(sessionWorkspace)
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
+  }
+
+  /** Sessions whose last run started after `sinceMs`, most recent first (Activity page). */
+  recentRuns(sinceMs: number, limit: number): RecentRun[] {
+    return this.db.select({
+      instanceId: sessionWorkspace.instanceId, workspaceSlug: sessionWorkspace.workspaceSlug, sessionId: sessionWorkspace.sessionId,
+      title: sessionWorkspace.title, runId: sessionWorkspace.lastRunId, profile: workspaces.profile, workspaceName: workspaces.name,
+      lastActiveAt: sessionWorkspace.lastActiveAt,
+    }).from(sessionWorkspace)
+      .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+      .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs)))
+      .orderBy(desc(sessionWorkspace.lastActiveAt)).limit(limit).all()
+      .map((r) => ({ ...r, runId: r.runId!, profile: r.profile ?? 'default', lastActiveAt: r.lastActiveAt ?? 0 }));
   }
 
   /** After createRun: last run, activity time, and the title on the first message. */
