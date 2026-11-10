@@ -230,3 +230,30 @@ describe('run options and consumption', () => {
     expect(runs[2]).toMatchObject({ runId: c, status: 'completed', inputTokens: 12_000, costUsd: null });
   });
 });
+
+describe('session title at Hermes', () => {
+  const patches = (t: Awaited<ReturnType<typeof testApp>>, id: string) =>
+    t.fake.requests.filter((r) => r.method === 'PATCH' && r.path === `/api/sessions/${id}`);
+
+  it('is pushed once, by the server, when the first run ends (not on the next ones)', async () => {
+    const { t, s, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'Prépare le rapport' })).json.runId;
+    await waitRun(t, base, a);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(patches(t, s.id).map((r) => r.body)).toEqual([{ title: 'Prépare le rapport' }]);
+    const b = (await t.request('POST', `${base}/runs`, { input: 'Encore' })).json.runId;
+    await waitRun(t, base, b);
+    await t.request('GET', `${base}/messages`);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(patches(t, s.id)).toHaveLength(1);
+  });
+
+  it('is not pushed for a run Hermes forgot', async () => {
+    const { t, s, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'lent' })).json.runId;
+    t.fake.sim.runs.delete(a);
+    await t.request('GET', `${base}/messages`);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(patches(t, s.id)).toHaveLength(0);
+  });
+});

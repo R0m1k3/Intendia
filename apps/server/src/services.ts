@@ -9,6 +9,7 @@ import { ConfigService } from './hermes-config/service.js';
 import type { InstanceStore } from './instances/store.js';
 import { KanbanService } from './kanban/service.js';
 import { LinkService } from './links/service.js';
+import { RecentService } from './sessions/recent.js';
 import { SkillService } from './skills/service.js';
 import { WorkspaceService } from './workspaces/service.js';
 
@@ -21,6 +22,7 @@ export interface Services {
   agents: AgentService;
   kanban: KanbanService;
   activity: ActivityService;
+  recent: RecentService;
   config: ConfigService;
 }
 
@@ -34,6 +36,7 @@ export function createServices(deps: { config: AppConfig; db: Db; store: Instanc
   const kanban = new KanbanService(deps.compat, deps.store, workspaces, deps.config.secret);
   const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban);
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban);
+  const recent = new RecentService(deps.compat, deps.store, workspaces);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
-  return { workspaces, links, files, crons, skills, agents, kanban, activity, config };
+  return { workspaces, links, files, crons, skills, agents, kanban, activity, recent, config };
 }

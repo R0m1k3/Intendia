@@ -4,6 +4,7 @@ import type { AppDeps } from '../app.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError, streamOp } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
+import { pushTitle } from '../workspaces/title.js';
 import { COST_SETTLE_MS, finishFields, runCost, sessionCost, type CostReading } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type RunStatRow, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
@@ -150,7 +151,12 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       if (s.raw === null) {
         workspaces.finishRunStat(inst, row.runId, { status: 'unknown', endedAt: now, hermesSessionId: null });
       } else if (TERMINAL_STATUSES.includes(s.status)) {
-        workspaces.finishRunStat(inst, row.runId, { ...finishFields(s.raw, now), hermesSessionId: s.raw.session_id ?? ctx.session.id });
+        const first = workspaces.finishRunStat(inst, row.runId, { ...finishFields(s.raw, now), hermesSessionId: s.raw.session_id ?? ctx.session.id });
+        // the session exists at Hermes after its first run: give it the same title (Telegram, CLI), once, unawaited
+        if (first && workspaces.runStats(inst, ctx.session.id, { running: true }).length === 1) {
+          const fresh = workspaces.getSession(inst, ctx.session.id);
+          void pushTitle(deps, fresh, fresh.session.title, 5_000);
+        }
       }
     }
     const done = workspaces.runStats(inst, ctx.session.id);
