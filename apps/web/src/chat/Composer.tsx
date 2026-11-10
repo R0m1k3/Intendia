@@ -1,29 +1,48 @@
-import { ArrowUp, Paperclip, Square } from 'lucide-react';
+import { ArrowUp, FileText, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import { cx } from '../components/ui';
 
 export interface ComposerHandle {
-  /** Appends lines (file paths) to the message being written. */
-  append: (lines: string[]) => void;
+  /** Adds files as attachments (uploaded at once, one tile each); used by paste, the paperclip and the drop zones. */
+  addFiles: (files: File[]) => void;
   focus: () => void;
 }
 
+/** Uploads one file; `agentPath` goes into the message, `url` shows the uploaded image. */
+export type Upload = (file: File) => Promise<{ agentPath: string; url: string }>;
+
+interface Attachment {
+  id: number;
+  name: string;
+  image: boolean;
+  /** Local preview (object URL) while uploading, then the uploaded file's URL. */
+  preview: string | null;
+  agentPath: string | null;
+  state: 'pending' | 'done' | 'failed';
+  error?: string;
+}
+
+let nextId = 1;
+
 /**
  * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it.
- * The paperclip uploads files to inbox/ (onAttach) and adds their paths to the message; so does pasting
- * a file or a screenshot (Ctrl+V), which gets a dated name since the clipboard calls every image image.png.
+ * Files (paperclip, paste of a screenshot, drop zones of the page) become tiles above the text: uploaded to inbox/
+ * one by one (`upload`), image thumbnails, a state while uploading or after a failure. Their paths are added to the
+ * message only when it is sent, one per line after the text: that is how the agent reads them. Sending waits for
+ * every tile to be uploaded; a failed tile must be removed first.
  * Bottom bar: `leading` (home page: the workspace) before the paperclip, `hint` (keys) in the middle on wide
  * screens, `options` (session: model, effort) right of it, before the send button.
  */
 export function Composer({
-  onSend, onStop, running, disabled, placeholder, onAttach, leading, options, hint, ref: handle,
+  onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
 }: {
   onSend: (text: string) => Promise<boolean>;
   onStop: () => void;
   running: boolean;
   disabled?: boolean;
   placeholder?: string;
-  onAttach?: (files: File[]) => void;
+  upload?: Upload;
+  onAttachmentsChange?: (count: number) => void;
   leading?: ReactNode;
   options?: ReactNode;
   hint?: string;
@@ -31,15 +50,41 @@ export function Composer({
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [files, setFiles] = useState<Attachment[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  useImperativeHandle(handle, () => ({
-    append: (lines) => {
-      setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')}\n` : '') + lines.join('\n'));
-      ref.current?.focus();
-    },
-    focus: () => ref.current?.focus(),
-  }), []);
+  // object URLs still alive, freed when the tile goes, the upload ends or the composer unmounts
+  const blobs = useRef(new Set<string>());
+  const free = (url: string | null) => { if (url && blobs.current.delete(url)) URL.revokeObjectURL(url); };
+  useEffect(() => () => { for (const u of blobs.current) URL.revokeObjectURL(u); blobs.current.clear(); }, []);
+  useEffect(() => { onAttachmentsChange?.(files.length); }, [files.length, onAttachmentsChange]);
+
+  const patch = (id: number, p: Partial<Attachment>) => setFiles((list) => list.map((a) => (a.id === id ? { ...a, ...p } : a)));
+  const addFiles = (added: File[]) => {
+    if (!upload || disabled || !added.length) return;
+    const tiles = added.map((f) => {
+      const image = f.type.startsWith('image/');
+      const preview = image ? URL.createObjectURL(f) : null;
+      if (preview) blobs.current.add(preview);
+      return { file: f, tile: { id: nextId++, name: f.name, image, preview, agentPath: null, state: 'pending' as const } };
+    });
+    setFiles((list) => [...list, ...tiles.map((t) => t.tile)]);
+    ref.current?.focus();
+    void (async () => {
+      for (const { file, tile } of tiles) {
+        try {
+          const done = await upload(file);
+          free(tile.preview);
+          patch(tile.id, { state: 'done', agentPath: done.agentPath, preview: tile.image ? done.url : null });
+        } catch (err) {
+          patch(tile.id, { state: 'failed', error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    })();
+  };
+  const remove = (a: Attachment) => { free(a.preview); setFiles((list) => list.filter((x) => x.id !== a.id)); };
+
+  useImperativeHandle(handle, () => ({ addFiles, focus: () => ref.current?.focus() }));
 
   useEffect(() => {
     const el = ref.current;
@@ -49,24 +94,35 @@ export function Composer({
   }, [text]);
 
   const paste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!onAttach || disabled) return;
-    const files = Array.from(e.clipboardData.files);
-    if (!files.length) return;
+    if (!upload || disabled) return;
+    const pasted = Array.from(e.clipboardData.files);
+    if (!pasted.length) return;
     e.preventDefault();
-    onAttach(files.map((f, i) => new File([f], pastedName(f, i, files.length), { type: f.type })));
+    addFiles(pasted.map((f, i) => new File([f], pastedName(f, i, pasted.length), { type: f.type })));
   };
 
+  const waiting = files.some((a) => a.state !== 'done');
+  const canSend = (text.trim() !== '' || files.length > 0) && !waiting && !sending && !disabled;
   const send = async () => {
-    const t = text.trim();
-    if (!t || running || sending || disabled) return;
+    if (!canSend || running) return;
+    const message = [text.trim(), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
     setSending(true);
-    const ok = await onSend(t);
+    const ok = await onSend(message);
     setSending(false);
-    if (ok) setText('');
+    if (ok) {
+      setText('');
+      for (const a of files) free(a.preview);
+      setFiles([]);
+    }
   };
 
   return (
-    <div className={cx('rounded-xl border border-line bg-sheet p-2 transition-colors focus-within:border-ink-faint/60', disabled && 'opacity-60')}>
+    <div className={cx('card p-2 transition-colors focus-within:border-ink-faint/60', disabled && 'opacity-60')}>
+      {files.length > 0 && (
+        <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label="Pièces jointes">
+          {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
+        </ul>
+      )}
       <textarea
         ref={ref}
         rows={1}
@@ -86,9 +142,9 @@ export function Composer({
       />
       <div className="flex items-center gap-1">
         {leading}
-        {onAttach && (
+        {upload && (
           <>
-            <input ref={picker} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) onAttach(f); }} />
+            <input ref={picker} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) addFiles(f); }} />
             <button
               type="button"
               onClick={() => picker.current?.click()}
@@ -117,9 +173,9 @@ export function Composer({
           <button
             type="button"
             onClick={() => void send()}
-            disabled={!text.trim() || sending || disabled}
+            disabled={!canSend}
             aria-label="Envoyer"
-            title="Envoyer (Entrée)"
+            title={waiting ? (files.some((a) => a.state === 'failed') ? 'Retirez les pièces jointes en échec' : 'Envoi des pièces jointes…') : 'Envoyer (Entrée)'}
             className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-40"
           >
             <ArrowUp className="size-4" strokeWidth={1.75} />
@@ -127,6 +183,36 @@ export function Composer({
         )}
       </div>
     </div>
+  );
+}
+
+function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
+  const failed = a.state === 'failed';
+  return (
+    <li
+      data-attachment={a.state} title={failed ? `Échec : ${a.error ?? ''}` : a.name}
+      className={cx('group relative', a.image ? 'size-16' : 'flex h-16 max-w-[14rem] items-center')}
+    >
+      {a.image && a.preview ? (
+        <img src={a.preview} alt={a.name} className={cx('size-16 rounded-lg border object-cover', failed ? 'border-bad' : 'border-line')} />
+      ) : (
+        <span className={cx('file-chip h-9', failed && '!border-bad')}>
+          <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />
+          <span>{a.name}</span>
+        </span>
+      )}
+      {a.state === 'pending' && (
+        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" aria-label="Envoi…">
+          <Loader2 className="size-4 animate-spin text-ink-soft" strokeWidth={1.75} />
+        </span>
+      )}
+      <button
+        type="button" onClick={onRemove} aria-label={`Retirer ${a.name}`} title={`Retirer ${a.name}`}
+        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
+      >
+        <X className="size-3" strokeWidth={2} />
+      </button>
+    </li>
   );
 }
 

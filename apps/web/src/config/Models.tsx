@@ -93,7 +93,7 @@ function MainModel({ data, disabled, onSave, onKey }: {
   const changed = provider !== data.main.provider || model !== data.main.model;
   return (
     <Section title="Modèle principal" description="Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.">
-      <div className="rounded-xl border border-line bg-sheet p-5">
+      <div className="card p-5">
       <div className="flex flex-wrap items-end gap-3">
         <label className="block">
           <span className="mb-2 block text-sm font-medium">Fournisseur</span>

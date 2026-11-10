@@ -133,7 +133,7 @@ export function AgentPage() {
             </Panel>
 
             {x.soul !== null && (
-              <section className="rounded-xl border border-line bg-sheet">
+              <section className="card">
                 <button type="button" onClick={() => setSoulOpen((o) => !o)} aria-expanded={soulOpen}
                   className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left">
                   <span>

@@ -121,7 +121,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
         )}
       </div>
       )}
-      <DropZone onFiles={onDrop} label="Déposer dans inbox/ et citer dans le message" className="m-3 shrink-0">
+      <DropZone onFiles={onDrop} label="Déposer dans inbox/ et joindre au message" className="m-3 shrink-0">
         <p className="rounded-xl border border-dashed border-line px-4 py-4 text-center text-xs text-ink-faint">
           Glissez un fichier ici pour le joindre à la session
         </p>

@@ -2,10 +2,12 @@ import { Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, X } from 'lu
 import { useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ApprovalChoice, RunStat } from '../api';
+import { rawUrl, type ApprovalChoice, type RunStat } from '../api';
 import { Button, copyText, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
+import { baseName, fileKind } from '../files/paths';
 import { rehypePaths } from '../files/rehypePaths';
+import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
 import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
@@ -90,7 +92,7 @@ function Step({ e }: { e: ToolEntry }) {
 function Steps({ tools }: { tools: ToolEntry[] }) {
   const [open, setOpen] = useState(() => tools.length <= 3 || tools.some((t) => t.state === 'running'));
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-sheet" data-steps>
+    <div className="overflow-hidden card" data-steps>
       <button
         type="button" onClick={() => setOpen(!open)} aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-soft hover:text-ink"
@@ -129,7 +131,7 @@ function CopyReply({ text }: { text: string }) {
     <button
       type="button" title="Copier la réponse" aria-label="Copier la réponse"
       onClick={() => void copyText(text, 'Réponse').then(() => { setDone(true); setTimeout(() => setDone(false), 1500); })}
-      className="flex size-7 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink"
+      className="flex size-7 items-center justify-center rounded-md text-ink-faint transition-[color,background-color,opacity] hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
     >
       {done ? <Check className="size-3.5" strokeWidth={2} /> : <Copy className="size-3.5" strokeWidth={1.5} />}
     </button>
@@ -147,18 +149,60 @@ export function AgentHeader({ ts }: { ts: number | null }) {
   );
 }
 
+/** One file joined to a user message: thumbnail for an existing image, chip for another file, grey label otherwise. */
+function Joined({ written }: { written: string }) {
+  const paths = useFilePaths()!;
+  const rel = paths.found.get(written);
+  const name = baseName(written);
+  if (rel && fileKind(name) === 'image') {
+    return (
+      <button type="button" onClick={() => paths.open(rel)} title={name} className="overflow-hidden rounded-xl border border-line transition-opacity hover:opacity-90">
+        <img src={rawUrl(paths.slug, rel)} alt={name} loading="lazy" className="block h-24 w-auto max-w-[16rem] object-cover" />
+      </button>
+    );
+  }
+  if (rel) {
+    return (
+      <a href="#" className="file-chip" title={rel} onClick={(e) => { e.preventDefault(); paths.open(rel); }}>
+        <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
+      </a>
+    );
+  }
+  return (
+    <span className="file-chip text-ink-faint" title={written}>
+      <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
+    </span>
+  );
+}
+
+/** The user's message: the text in a bubble, the files joined to it below (thumbnails), as the composer showed them. */
+function UserMessage({ text }: { text: string }) {
+  const paths = useFilePaths();
+  const split = useMemo(() => (paths?.mounts ? splitAttachments(text, paths.mounts) : { text, files: [] }), [text, paths?.mounts]);
+  return (
+    <>
+      {split.text && <div className="max-w-[85%] rounded-2xl bg-accent/8 px-4 py-2.5 text-sm whitespace-pre-wrap md:max-w-[80%]">{split.text}</div>}
+      {split.files.length > 0 && (
+        <div className={cx('flex max-w-[85%] flex-wrap justify-end gap-2 md:max-w-[80%]', split.text && 'mt-1.5')} data-joined>
+          {split.files.map((f) => <Joined key={f} written={f} />)}
+        </div>
+      )}
+    </>
+  );
+}
+
 function TurnView({ t }: { t: Turn }) {
   if (t.kind === 'user') {
     return (
       <div className="flex flex-col items-end" data-turn="user">
-        <div className="max-w-[85%] rounded-2xl bg-raised px-4 py-2.5 text-sm whitespace-pre-wrap md:max-w-[80%]">{t.entry.text}</div>
+        <UserMessage text={t.entry.text} />
         {t.entry.ts !== null && <span className="mt-1 text-[11px] text-ink-faint">{clock(t.entry.ts)}</span>}
         {t.footers.map((r) => <div key={r.runId} className="w-full"><RunFooter r={r} /></div>)}
       </div>
     );
   }
   return (
-    <div data-turn="agent">
+    <div data-turn="agent" className="group">
       <AgentHeader ts={t.ts} />
       <div className={cx('mt-2 space-y-3', AGENT_INDENT)}>
         {t.parts.map((p) => <PartView key={p.key} p={p} />)}

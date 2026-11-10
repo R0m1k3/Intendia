@@ -65,7 +65,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div data-share={instanceId} className="space-y-4 rounded-xl border border-line bg-sheet p-5">
+    <div data-share={instanceId} className="space-y-4 card p-5">
       {many && <p className="text-sm font-semibold">{label}</p>}
       {!d.publicUrlSet && (
         <p className="rounded-lg border border-warn/40 bg-warn-soft/40 p-3 text-[13px]">
@@ -136,7 +136,7 @@ export function SettingsPage() {
             {list.map((i) => {
               const r = reports.find((x) => x.instanceId === i.id);
               return (
-                <div key={i.id} data-instance={i.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-line bg-sheet p-4">
+                <div key={i.id} data-instance={i.id} className="flex flex-wrap items-start justify-between gap-3 card p-4">
                   <div className="min-w-0 text-sm">
                     <div className="flex items-center gap-2">
                       <Mark state={r ? worst(r.modules.map((m) => m.state)) : null} />
@@ -158,7 +158,7 @@ export function SettingsPage() {
               );
             })}
             {!declarative && (adding ? (
-              <div className="rounded-xl border border-line bg-sheet p-4">
+              <div className="card p-4">
                 <InstanceForm onSaved={async () => { setAdding(false); await qc.invalidateQueries(); }} />
                 <Button variant="ghost" className="mt-2" onClick={() => setAdding(false)}>Annuler</Button>
               </div>

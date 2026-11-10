@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Folder } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { api, type Workspace } from '../api';
-import { Composer, type ComposerHandle } from '../chat/Composer';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, rawUrl, type Workspace } from '../api';
+import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
 import { useChatAvailability } from '../components/ChatNotice';
 import { Picker } from '../components/Menu';
 import { ErrorText } from '../components/ui';
@@ -53,15 +53,12 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
     }
   };
 
-  const attach = async (files: File[]) => {
-    setError(null);
-    try {
-      const done = await uploadFiles(ws.slug, 'inbox', files);
-      composer.current?.append(done.map((d) => d.agentPath));
-    } catch (err) {
-      setError(err);
-    }
-  };
+  const upload = useCallback<Upload>(async (file) => {
+    const [done] = await uploadFiles(slug, 'inbox', [file]);
+    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path) };
+  }, [slug]);
+  // the files are already in this workspace's inbox/: the workspace stays while there are attachments
+  const [attached, setAttached] = useState(0);
 
   return (
     <div className="space-y-2">
@@ -71,12 +68,13 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
         onStop={() => {}}
         running={false}
         disabled={!chat.available}
-        onAttach={(f) => void attach(f)}
+        upload={upload}
+        onAttachmentsChange={setAttached}
         placeholder="Demander quelque chose à Hermes…"
         hint="Entrée pour envoyer · une nouvelle session est créée"
         leading={(
           <Picker
-            title="Workspace de la nouvelle session" placement="below" value={ws.slug}
+            title="Workspace de la nouvelle session" placement="below" value={ws.slug} disabled={attached > 0}
             items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? `agent ${w.profile}` : undefined }))}
             onPick={(v) => v && setSlug(v)}
             triggerClass="flex h-8 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] text-ink transition-colors hover:bg-raised aria-expanded:bg-raised"
@@ -84,6 +82,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
           />
         )}
       />
+      {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">Retirez les pièces jointes pour changer de workspace</p>}
       {!chat.available && <p className="text-xs text-ink-faint">Le chat n’est pas disponible sur l’instance de ce workspace</p>}
       <ErrorText error={error} />
     </div>

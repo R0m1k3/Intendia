@@ -92,7 +92,7 @@ export function ActivityPage() {
       <div className="space-y-6 px-5 pb-10 md:px-8">
         <ErrorText error={activity.error} />
         {stopped.length > 0 && (
-          <ul role="status" className="space-y-1.5 rounded-xl border border-line bg-sheet px-5 py-3">
+          <ul role="status" className="space-y-1.5 card px-5 py-3">
             {stopped.map((t, i) => (
               <li key={i} className="flex items-center gap-2 text-sm text-ink-soft">
                 <Mark state="unavailable" /><span className="min-w-0 flex-1">{t}</span>

@@ -49,7 +49,7 @@ export function RecentSessions() {
   const recent = useQuery({ queryKey: ['sessions-recent'], queryFn: () => api.recentSessions(20), refetchInterval: 60_000, refetchOnWindowFocus: false });
   const list = filterRecent(recent.data?.sessions ?? [], filter);
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-sheet" aria-labelledby="recent-title">
+    <section className="overflow-hidden card" aria-labelledby="recent-title">
       <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <h2 id="recent-title" className="text-[15px] font-semibold">Sessions récentes</h2>
         <div role="radiogroup" aria-label="Source" className="inline-flex gap-0.5 rounded-[9px] bg-raised p-[3px]">

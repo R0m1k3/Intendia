@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
+import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
-import { Composer, type ComposerHandle } from '../chat/Composer';
+import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
 import { placeRunStats } from '../chat/format';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, Thread } from '../chat/Thread';
@@ -14,6 +14,7 @@ import { SessionFiles } from '../components/SessionFiles';
 import { DropZone } from '../files/DropZone';
 import { FilePaths, type FilePathsValue } from '../files/FilePaths';
 import { findPathCandidates } from '../files/paths';
+import { splitAttachments } from '../chat/attachments';
 import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
 import { takeHandoff } from '../home/handoff';
@@ -183,13 +184,27 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [messages, runs, lostInput]);
   const running = Boolean(active);
 
-  // Follow the bottom of the thread while it grows, unless the reader scrolled up.
+  // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
+  // scrolled up. Whether the reader is at the bottom is noted on each scroll, before the content grows: a turn can be
+  // taller than any threshold measured afterwards. The page opens at the bottom.
   const bottom = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
+  const toEnd = () => { const main = bottom.current?.closest('main'); if (main) main.scrollTop = main.scrollHeight; };
   const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
   useEffect(() => {
     const main = bottom.current?.closest('main');
-    if (!main) return;
-    if (main.scrollHeight - main.scrollTop - main.clientHeight < 200 || tail < 2) bottom.current?.scrollIntoView({ block: 'end' });
+    const thread = bottom.current?.parentElement;
+    if (!main || !thread) return;
+    const onScroll = () => { pinned.current = main.scrollHeight - main.scrollTop - main.clientHeight < 120; };
+    const follow = () => { if (pinned.current) toEnd(); };
+    const grow = new ResizeObserver(follow);
+    grow.observe(thread);
+    main.addEventListener('scroll', onScroll, { passive: true });
+    return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
+  }, []);
+  useEffect(() => {
+    if (pinned.current) toEnd();
   }, [tail, live?.approval]);
 
   const title = sess.data?.session.title || 'Nouvelle session';
@@ -198,7 +213,11 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const candidates = useMemo(() => {
     if (!mounts) return [];
     const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : e.kind === 'subagents' ? e.nodes.map((n) => n.summary ?? '').join('\n') : '')).join('\n');
-    return findPathCandidates(text, { agentMount: mounts.agentMount, mount: mounts.mount }).sort();
+    const m = { agentMount: mounts.agentMount, mount: mounts.mount };
+    const cited = findPathCandidates(text, m).sort();
+    // files joined to the user's messages come after, so they never push the agent's out of the 200 checked
+    const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : [])).filter((f) => !cited.includes(f));
+    return [...cited, ...new Set(joined)];
   }, [entries, mounts]);
   const exists = useQuery({
     queryKey: ['exists', slug, candidates.join('\n'), runCount],
@@ -209,32 +228,30 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const filePaths = useMemo<FilePathsValue>(() => {
     const found = new Map<string, string>();
     for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
-    return { found, open: (path) => { setPreviewPath(path); setPanel(true); } };
-  }, [exists.data]);
+    return {
+      found, open: (path) => { setPreviewPath(path); setPanel(true); }, slug,
+      mounts: mounts ? { agentMount: mounts.agentMount, mount: mounts.mount } : null,
+    };
+  }, [exists.data, slug, mounts]);
   const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);
 
-  const [uploadError, setUploadError] = useState<unknown>(null);
-  const attach = async (files: File[]) => {
-    setUploadError(null);
-    try {
-      const done = await uploadFiles(slug, 'inbox', files);
-      composer.current?.append(done.map((d) => d.agentPath));
-      void qc.invalidateQueries({ queryKey: ['tree', slug] });
-    } catch (err) {
-      setUploadError(err);
-    }
-  };
+  const upload = useCallback<Upload>(async (file) => {
+    const [done] = await uploadFiles(slug, 'inbox', [file]);
+    void qc.invalidateQueries({ queryKey: ['tree', slug] });
+    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path) };
+  }, [slug, qc]);
+  const addFiles = (f: File[]) => composer.current?.addFiles(f);
 
   const side = previewPath ? (
     <Preview slug={slug} path={previewPath} onClose={() => setPreviewPath(null)} />
   ) : (
-    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={(f) => void attach(f)} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
+    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
   );
 
   return (
     <FilePaths.Provider value={filePaths}>
     <div className="flex min-h-full">
-    <DropZone onFiles={(f) => void attach(f)} label="Déposer dans inbox/ et citer dans le message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
+    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
       <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
         <div className="flex items-center gap-3 px-5 py-3 md:px-6">
           <div className="min-w-0 flex-1">
@@ -299,10 +316,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
 
       <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent pt-4">
         <div className="mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
-          <div className="mb-2 empty:hidden"><ErrorText error={error ?? uploadError} /></div>
+          <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
           <Composer
             ref={composer}
-            onAttach={(f) => void attach(f)}
+            upload={upload}
             onSend={send}
             onStop={stop}
             running={running}

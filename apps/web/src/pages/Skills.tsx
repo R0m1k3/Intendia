@@ -86,7 +86,7 @@ function ActionsStrip({ actions }: { actions: Actions }) {
   const done = Object.entries(actions.outcomes);
   if (!actions.pending.length && !done.length) return null;
   return (
-    <ul className="space-y-1.5 rounded-xl border border-line bg-sheet px-5 py-3" aria-label="Actions" role="status">
+    <ul className="space-y-1.5 card px-5 py-3" aria-label="Actions" role="status">
       {actions.pending.map((p) => (
         <li key={p.action} className="flex items-center gap-2 font-mono text-[12px] text-ink-soft">
           <Mark state="readonly" className="animate-pulse" />{p.label} : en cours…

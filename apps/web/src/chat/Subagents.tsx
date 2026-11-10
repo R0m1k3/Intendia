@@ -71,7 +71,7 @@ export function Subagents({ nodes }: { nodes: SubagentNode[] }) {
   const rows = subagentTree(nodes);
   const running = nodes.filter((n) => n.status === 'running').length;
   return (
-    <div className="rounded-xl border border-line bg-sheet px-2 py-2">
+    <div className="card px-2 py-2">
       <p className="flex items-center gap-2 px-1.5 pb-1 text-xs text-ink-faint">
         <GitBranch className="size-3.5" strokeWidth={1.5} />
         {nodes.length} sous-agent{nodes.length > 1 ? 's' : ''}{running ? `, ${running} en cours` : ''}

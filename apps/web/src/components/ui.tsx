@@ -55,7 +55,7 @@ export function Panel({ title, action, children, className, bodyClassName }: {
   title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string;
 }) {
   return (
-    <section className={cx('rounded-xl border border-line bg-sheet', className)}>
+    <section className={cx('card', className)}>
       {(title || action) && (
         <header className="flex min-h-14 items-center justify-between gap-4 border-b border-line px-5 py-3">
           <h2 className="text-[15px] font-semibold">{title}</h2>

@@ -36,7 +36,7 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
   const mods = report?.modules ?? [];
   const full = mods.filter((m) => m.state === 'full').length;
   return (
-    <section data-instance={instance.id} className="rounded-xl border border-line bg-sheet p-5" aria-label={`Instance ${instance.label}`}>
+    <section data-instance={instance.id} className="card p-5" aria-label={`Instance ${instance.label}`}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-[15px] font-semibold">{instance.label}</h2>
@@ -69,7 +69,7 @@ function UpcomingCrons() {
   const list = up.data?.upcoming ?? [];
   if (list.length === 0) return null;
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-sheet" aria-labelledby="crons-title">
+    <section className="overflow-hidden card" aria-labelledby="crons-title">
       <header className="flex items-center justify-between px-5 py-4">
         <h2 id="crons-title" className="text-[15px] font-semibold">Prochains crons</h2>
         <Link to="/crons" className="text-[13px] font-medium text-accent hover:underline">Gérer</Link>

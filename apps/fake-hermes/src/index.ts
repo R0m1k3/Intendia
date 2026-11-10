@@ -12,7 +12,7 @@
  * - "panne": the run ends in `failed` (run.failed, no usage)
  * - "cher": large token counts in `usage` (k / M formats)
  * Completed runs carry `usage`, `runtime` and `updated_at`; each one adds 0.0123 $ to its session's
- * `estimated_cost_usd` (null before). `GET /_fake/runs/last` (no token) = model options of the last run.
+ * `estimated_cost_usd` (null before). `GET /_fake/runs/last` (no token) = model options and input of the last run.
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
@@ -364,7 +364,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // test route (Playwright runs cannot read the in-memory log): options of the last created run
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/last') {
       const last = sim.lastRun;
-      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions } : { run_id: null });
+      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, input: last.input } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
     if (via === 'api' && method === 'POST' && path === '/_fake/sessions') {
