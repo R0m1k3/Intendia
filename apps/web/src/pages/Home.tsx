@@ -120,7 +120,7 @@ function RecentWorkspaces() {
           <li key={w.slug}>
             <Link to="/w/$slug" params={{ slug: w.slug }} className="flex h-full flex-col gap-1 rounded-xl border border-line bg-sheet p-4 transition-colors hover:bg-raised/50">
               <span className="text-sm font-medium">{w.name}</span>
-              <span className="font-mono text-[11px] text-ink-faint">{w.slug} · {w.profile ?? 'default'}{w.model ? ` · ${w.model}` : ''}</span>
+              <span className="font-mono text-[11px] text-ink-faint">{w.slug} · {w.profile ?? 'default'}</span>
             </Link>
           </li>
         ))}

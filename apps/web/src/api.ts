@@ -58,8 +58,26 @@ export interface Workspace {
   name: string;
   instanceId: string;
   profile: string | null;
+  /** Last model / effort chosen in one of its sessions (start of the next ones); not a setting. */
   model: string | null;
+  effort: string | null;
   createdAt: number;
+}
+export type Effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+/** One run started from Intendia: options asked for, then what Hermes reported (times in ms). */
+export interface RunStat {
+  runId: string;
+  status: string;
+  requestedModel: string | null;
+  requestedEffort: string | null;
+  servedModel: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  costUsd: number | null;
 }
 export interface Session {
   id: string;
@@ -70,6 +88,9 @@ export interface Session {
   lastRunId: string | null;
   lastActiveAt: number | null;
   createdAt: number;
+  /** null = Hermes default ("Auto") */
+  model: string | null;
+  effort: Effort | null;
 }
 export interface ChatMessage {
   id: number;
@@ -407,18 +428,18 @@ export const api = {
 
   workspaces: () => call<{ workspaces: Workspace[] }>('GET', '/workspaces'),
   workspace: (slug: string) => call<{ workspace: Workspace }>('GET', `/workspaces/${enc(slug)}`),
-  createWorkspace: (w: { slug: string; name: string; instanceId: string; profile?: string | null; model?: string | null }) =>
+  createWorkspace: (w: { slug: string; name: string; instanceId: string; profile?: string | null }) =>
     call<{ workspace: Workspace }>('POST', '/workspaces', w),
-  updateWorkspace: (slug: string, patch: { name?: string; model?: string | null }) => call<{ workspace: Workspace }>('PATCH', `/workspaces/${enc(slug)}`, patch),
+  updateWorkspace: (slug: string, patch: { name?: string }) => call<{ workspace: Workspace }>('PATCH', `/workspaces/${enc(slug)}`, patch),
   agentsMd: (slug: string) => call<{ text: string }>('GET', `/workspaces/${enc(slug)}/agents-md`),
   saveAgentsMd: (slug: string, text: string) => call<{ ok: true }>('PUT', `/workspaces/${enc(slug)}/agents-md`, { text }),
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
-  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean }) =>
+  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; model?: string | null; effort?: Effort | null }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
   deleteSession: (inst: string, id: string) => call<{ ok: true }>('DELETE', sessionPath(inst, id)),
-  messages: (inst: string, id: string) => call<{ messages: ChatMessage[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
   send: (inst: string, id: string, input: string) => call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, { input }),
   runStatus: (inst: string, id: string, runId: string) => call<RunStatus>('GET', `${sessionPath(inst, id)}/runs/${enc(runId)}`),
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),

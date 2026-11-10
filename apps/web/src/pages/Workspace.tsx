@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { PageHeader } from '../components/Layout';
-import { ModelInput } from '../components/NewWorkspace';
 import { Button, ErrorText, Field, Input, Panel, timeAgo } from '../components/ui';
 
 export function WorkspacePage() {
@@ -18,12 +17,11 @@ export function WorkspacePage() {
   const agents = useQuery({ queryKey: ['agents-md', slug], queryFn: () => api.agentsMd(slug) });
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const [text, setText] = useState<string | null>(null);
-  const [model, setModel] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const w = ws.data?.workspace;
   const inst = instances.data?.instances.find((i) => i.id === w?.instanceId);
 
-  useEffect(() => { setText(null); setModel(null); setName(null); }, [slug]);
+  useEffect(() => { setText(null); setName(null); }, [slug]);
 
   const create = useMutation({
     mutationFn: () => api.createSession(slug),
@@ -36,10 +34,6 @@ export function WorkspacePage() {
     mutationFn: (t: string) => api.saveAgentsMd(slug, t),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
   });
-  const saveModel = useMutation({
-    mutationFn: (m: string) => api.updateWorkspace(slug, { model: m.trim() || null }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace', slug] }).then(() => { setModel(null); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }),
-  });
 
   const saveName = useMutation({
     mutationFn: (n: string) => api.updateWorkspace(slug, { name: n.trim() }),
@@ -48,7 +42,6 @@ export function WorkspacePage() {
 
   if (ws.isError) return <div className="p-8"><ErrorText error={ws.error} /></div>;
   const agentsValue = text ?? agents.data?.text ?? '';
-  const modelValue = model ?? w?.model ?? '';
   const nameValue = name ?? w?.name ?? '';
 
   return (
@@ -98,15 +91,6 @@ export function WorkspacePage() {
               </Field>
               <ErrorText error={saveName.error} />
               {name !== null && name.trim() !== '' && name.trim() !== w?.name && <Button variant="secondary" disabled={saveName.isPending}>Renommer</Button>}
-            </form>
-          </Panel>
-          <Panel title="Modèle">
-            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); saveModel.mutate(modelValue); }}>
-              <Field label="Modèle des prochains messages" hint="Vide : celui de l’agent">
-                {w && <ModelInput id="ws-model" inst={w.instanceId} profile={w.profile ?? 'default'} value={modelValue} onChange={setModel} />}
-              </Field>
-              <ErrorText error={saveModel.error} />
-              {model !== null && model !== (w?.model ?? '') && <Button variant="secondary" disabled={saveModel.isPending}>Enregistrer</Button>}
             </form>
           </Panel>
           <Panel title="Consignes" action={<span className="font-mono text-[11px] text-ink-faint">AGENTS.md</span>}>

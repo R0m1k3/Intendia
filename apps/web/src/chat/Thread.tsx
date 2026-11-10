@@ -1,12 +1,13 @@
 import { ChevronRight, FileText } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ApprovalChoice } from '../api';
+import type { ApprovalChoice, RunStat } from '../api';
 import { Button, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
 import { rehypePaths } from '../files/rehypePaths';
 import type { Approval, Entry } from './events';
+import { RunFooter } from './RunFooter';
 import { Subagents } from './Subagents';
 
 export function clock(ts: number | null): string {
@@ -125,8 +126,11 @@ function EntryView({ e }: { e: Entry }) {
   }
 }
 
-/** Groups consecutive tool lines so the register reads as blocks. */
-export function Thread({ entries }: { entries: Entry[] }) {
+/**
+ * Groups consecutive tool lines so the register reads as blocks; `footers` = run lines shown after the
+ * entry of the same key (see placeRunStats).
+ */
+export function Thread({ entries, footers }: { entries: Entry[]; footers?: Map<string, RunStat[]> }) {
   const blocks: Entry[][] = [];
   for (const e of entries) {
     const last = blocks.at(-1);
@@ -137,7 +141,12 @@ export function Thread({ entries }: { entries: Entry[] }) {
     <div className="space-y-5">
       {blocks.map((b) => (
         <div key={b[0]!.key} className={b[0]!.kind === 'tool' ? 'space-y-1' : undefined}>
-          {b.map((e) => <EntryView key={e.key} e={e} />)}
+          {b.map((e) => (
+            <Fragment key={e.key}>
+              <EntryView e={e} />
+              {footers?.get(e.key)?.map((r) => <RunFooter key={r.runId} r={r} />)}
+            </Fragment>
+          ))}
         </div>
       ))}
     </div>

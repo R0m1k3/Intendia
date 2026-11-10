@@ -1,39 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { api, type ModelOptions } from '../api';
+import { api } from '../api';
 import { Button, ErrorText, Field, Input } from './ui';
 
 export function slugify(name: string): string {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
-}
-
-/** Model names offered by Hermes, whatever the shape of each entry. */
-export function modelNames(o: ModelOptions | undefined): string[] {
-  const out = new Set<string>();
-  if (o?.model) out.add(o.model);
-  for (const p of o?.providers ?? []) {
-    for (const m of p.models ?? []) {
-      if (typeof m === 'string') out.add(m);
-      else if (m && typeof m === 'object') {
-        const v = (m as { id?: unknown; name?: unknown; model?: unknown }).id ?? (m as { model?: unknown }).model ?? (m as { name?: unknown }).name;
-        if (typeof v === 'string') out.add(v);
-      }
-    }
-  }
-  return [...out];
-}
-
-export function ModelInput({ inst, profile, value, onChange, id }: { inst: string; profile: string; value: string; onChange: (v: string) => void; id: string }) {
-  const models = useQuery({ queryKey: ['models', inst, profile], queryFn: () => api.models(inst, profile), enabled: Boolean(inst), retry: false });
-  const names = modelNames(models.data);
-  return (
-    <>
-      <Input list={`${id}-list`} value={value} onChange={(e) => onChange(e.target.value)} placeholder={models.data?.model ? `Par défaut : ${models.data.model}` : 'Modèle par défaut de l’agent'} className="font-mono" />
-      <datalist id={`${id}-list`}>{names.map((n) => <option key={n} value={n} />)}</datalist>
-    </>
-  );
 }
 
 export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
@@ -46,7 +19,6 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
   const [slugEdited, setSlugEdited] = useState(false);
   const [inst, setInst] = useState('');
   const [profile, setProfile] = useState('default');
-  const [model, setModel] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -60,7 +32,7 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const { workspace } = await api.createWorkspace({ slug, name: name.trim(), instanceId: inst, profile, model: model.trim() || null });
+      const { workspace } = await api.createWorkspace({ slug, name: name.trim(), instanceId: inst, profile });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
       await navigate({ to: '/w/$slug', params: { slug: workspace.slug } });
     } catch (err) {
@@ -93,9 +65,6 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
             <option value="default">default</option>
             {current?.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-        </Field>
-        <Field label="Modèle" hint="Vide : celui de l’agent">
-          <ModelInput id="new-ws-model" inst={inst} profile={profile} value={model} onChange={setModel} />
         </Field>
       </div>
       <ErrorText error={error} />

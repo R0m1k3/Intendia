@@ -82,7 +82,7 @@ export function WorkspacesPage() {
                   <Link to="/w/$slug" params={{ slug: w.slug }} className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 transition-colors hover:bg-raised/50">
                     <span className="text-sm font-medium">{w.name}</span>
                     <span className="font-mono text-xs text-ink-faint">{w.slug}</span>
-                    <span className="ml-auto text-xs text-ink-soft">{label(w.instanceId)} · {w.profile ?? 'default'}{w.model ? ` · ${w.model}` : ''}</span>
+                    <span className="ml-auto text-xs text-ink-soft">{label(w.instanceId)} · {w.profile ?? 'default'}</span>
                   </Link>
                 </li>
               ))}
