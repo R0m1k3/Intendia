@@ -57,6 +57,22 @@ demand from the State screen. State changes go to the webhook.
   The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
   becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
 - One run at a time per session: sending while the last run is not terminal answers 409.
+- Session title at Hermes: after the first run of a session settles, `settle()` copies the Intendia title to Hermes
+  (`src/workspaces/title.ts`, `pushTitle`, 5 s), so Telegram and the dashboard show the same name.
+- Home page: "Demander quelque chose à Hermes…" (`apps/web/src/home/Ask.tsx`) creates the session in the chosen
+  workspace, sends the message, then opens the session page. The message is handed over in memory
+  (`home/handoff.ts`, read once) so the page shows it while it plugs into the run. "Nouvelle session" in the sidebar
+  is `/?nouvelle=1`, which puts the cursor in that box.
+- Recent sessions: `GET /x/sessions/recent?limit=` (`src/sessions/recent.ts`) merges the Intendia sessions with
+  the Hermes sessions of every instance (`default` and the workspace profiles that have a key; 3 s per call, errors
+  listed per instance, not fatal). The home page filters them by source (`home/labels.ts`).
+- Attachments: the composer (`chat/Composer.tsx`) turns pasted, picked or dropped files into tiles, uploads them to
+  `inbox/` one by one (`upload` prop), and only adds their paths to the message at send time, one per line after the
+  text: that is how the agent reads them. In the thread, `chat/attachments.ts` (`splitAttachments`) takes those last
+  path lines out of the user's bubble and shows them as thumbnails or chips, without a server call.
+- Thread: entries are grouped into turns (`chat/turns.ts`): one user turn per message, one agent turn up to the
+  next message, consecutive tool calls folded into one "étapes" card. Floating menus (`components/Menu.tsx`) are
+  portalled to `<body>`.
 
 ## Files, share links and MCP
 
@@ -146,7 +162,8 @@ sequenceDiagram
   dropped again if Hermes or Intendia refuses the write), Hermes call, new version. Without the raw route, config writes
   are a 409 `config_unavailable`; env and MCP writes go through without copy.
 - The browser (`apps/web/src/config/`, page `pages/Config.tsx`) shows the diff before saving, reloads after a 409
-  keeping the draft, and offers the gateway restart after a write that needs it (polled every 1.5 s, 5 min at most).
+  keeping the draft, and offers the gateway restart after a write that needs it (polled every 1.5 s, 5 min at most; `config/restart.tsx`, shared
+  with Réglages, which offers the restart after adding the `share_file` block).
 
 ## Agents and activity
 

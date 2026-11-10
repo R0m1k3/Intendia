@@ -1,11 +1,11 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { api, ApiError, type RestartStatus } from '../api';
-import { PageHeader } from '../components/Layout';
+import { useState } from 'react';
+import { api } from '../api';
+import { Narrow, PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, cx, ErrorText } from '../components/ui';
+import { Button, cx } from '../components/ui';
 import { ICON, SELECT, configKey } from '../config/common';
 import { ConfigEnv } from '../config/Env';
 import { ConfigForm } from '../config/Form';
@@ -14,6 +14,7 @@ import { ConfigMcp } from '../config/Mcp';
 import { ConfigModelsTab } from '../config/Models';
 import { ConfigPlatforms } from '../config/Platforms';
 import { ConfigYaml } from '../config/Yaml';
+import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 
 const REQUIRED: OpRef[] = [['config', 'get']];
 const OPTIONAL: OptionalOp[] = [
@@ -37,9 +38,6 @@ const TAB: Record<ConfigTab, { label: string; op: string }> = {
   historique: { label: 'Historique', op: 'raw' },
 };
 
-const POLL_MS = 1500;
-const POLL_MAX_MS = 5 * 60_000;
-const RESTART_CONFIRM = 'Redémarrer la passerelle ? Les runs en cours seront interrompus. Si la passerelle sert plusieurs agents, tous sont concernés.';
 
 export function ConfigPage() {
   const { inst } = useParams({ strict: false }) as { inst: string };
@@ -75,18 +73,19 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   const props = { inst, profile, can, onSaved: (r: boolean) => { if (r) setNeedRestart(true); } };
 
   return (
-    <div>
+    <Narrow>
       <PageHeader
         title="Configuration"
         subtitle={<>Les réglages d’Hermes pour l’agent <span className="font-mono text-ink">{profile}</span> sur {current ? <span className="text-ink">{current.label}</span> : 'l’instance'}.</>}
         action={(
-          <div className="flex flex-wrap gap-2">
-            {options.length > 1 && (
-              <select className={SELECT} value={profile} aria-label="Agent"
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs text-ink-soft">
+              Profil
+              <select className={SELECT} value={profile} aria-label="Profil"
                 onChange={(e) => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value, tab } })}>
                 {options.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
-            )}
+            </label>
             {a.available && can('restartGateway') && (
               <Button disabled={restart.running} onClick={() => { if (confirm(RESTART_CONFIRM)) restart.start(); }}>
                 <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? 'Redémarrage…' : 'Redémarrer la passerelle'}
@@ -136,66 +135,6 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-interface RestartState { running: boolean; done: boolean; status: RestartStatus | null; error: unknown; timedOut: boolean; start: () => void; dismiss: () => void }
-
-/** Starts the restart, then polls its action status until it ends (or 5 min). */
-function useRestart(inst: string, profile: string, onDone: () => void): RestartState {
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [status, setStatus] = useState<RestartStatus | null>(null);
-  const [done, setDone] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const [pollError, setPollError] = useState<unknown>(null);
-  const begin = useMutation({
-    mutationFn: () => api.restartGateway(inst, profile),
-    onSuccess: () => { setStatus(null); setDone(false); setTimedOut(false); setPollError(null); setStartedAt(Date.now()); },
-  });
-  useEffect(() => {
-    if (startedAt === null) return;
-    let cancelled = false;
-    const timer = setInterval(() => {
-      void api.restartStatus(inst, profile).then((s) => {
-        if (cancelled) return;
-        setStatus(s);
-        if (!s.running && s.exitCode !== null) { setStartedAt(null); setDone(true); onDone(); }
-      }).catch((e: unknown) => {
-        if (cancelled) return;
-        // the gateway may answer nothing while it restarts: keep polling
-        if (!(e instanceof ApiError) || e.status >= 500) return;
-        setPollError(e); setStartedAt(null);
-      });
-      if (Date.now() - startedAt > POLL_MAX_MS) { setTimedOut(true); setStartedAt(null); }
-    }, POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [startedAt, inst, profile]); // eslint-disable-line react-hooks/exhaustive-deps
-  return {
-    running: begin.isPending || startedAt !== null, done, status, error: begin.error ?? pollError, timedOut,
-    start: () => begin.mutate(), dismiss: () => { setDone(false); setTimedOut(false); setStatus(null); begin.reset(); setPollError(null); },
-  };
-}
-
-function RestartStrip({ state }: { state: RestartState }) {
-  const { running, done, status, error, timedOut } = state;
-  if (!running && !done && !error && !timedOut) return null;
-  const failed = done && status?.exitCode !== 0;
-  return (
-    <div className={cx('space-y-2 rounded-xl border p-4 text-sm', failed || error ? 'border-bad/40' : 'border-line')}>
-      <div className="flex items-center justify-between gap-3">
-        <span>
-          {running ? 'Redémarrage de la passerelle…'
-            : timedOut ? 'Le redémarrage ne s’est pas terminé en 5 minutes : voir l’état de l’instance.'
-            : error ? 'Le redémarrage n’a pas pu être lancé ou suivi.'
-            : failed ? `Le redémarrage a échoué (code ${status?.exitCode}).` : 'Passerelle redémarrée.'}
-        </span>
-        {!running && <Button variant="ghost" className="h-7" onClick={state.dismiss}>Fermer</Button>}
-      </div>
-      <ErrorText error={error} />
-      {status && status.lines.length > 0 && (
-        <pre className="max-h-40 overflow-auto rounded-lg bg-raised p-3 font-mono text-[12px] text-ink-soft">{status.lines.join('\n')}</pre>
-      )}
-    </div>
+    </Narrow>
   );
 }

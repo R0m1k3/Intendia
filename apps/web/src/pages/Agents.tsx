@@ -112,7 +112,7 @@ export function AgentsPage() {
           <ModuleNotice instanceId={inst} module="agents" title="La liste des agents" required={REQUIRED} optional={OPTIONAL} />
         </div>
         {created && (
-          <div role="status" className="flex items-start gap-3 rounded-xl border border-line bg-sheet px-5 py-4 text-sm">
+          <div role="status" className="flex items-start gap-3 card px-5 py-4 text-sm">
             <Mark state="full" className="mt-1" />
             <div className="min-w-0 flex-1 space-y-1">
               <p>Agent <span className="font-medium">{created.name}</span> créé.</p>

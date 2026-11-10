@@ -12,7 +12,7 @@
  * - "panne": the run ends in `failed` (run.failed, no usage)
  * - "cher": large token counts in `usage` (k / M formats)
  * Completed runs carry `usage`, `runtime` and `updated_at`; each one adds 0.0123 $ to its session's
- * `estimated_cost_usd` (null before). `GET /_fake/runs/last` (no token) = model options of the last run.
+ * `estimated_cost_usd` (null before). `GET /_fake/runs/last` (no token) = model options and input of the last run.
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
@@ -135,6 +135,12 @@ class Simulator {
   lastRun: SimRun | null = null;
   /** Tests: session id → live session id reported by /messages (simulates a context compression). */
   liveAlias = new Map<string, string>();
+  /** Tests: sessions born elsewhere (Telegram, cron…) added by POST /_fake/sessions. */
+  extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number }>();
+  /** Session titles set by PATCH /api/sessions/{id}. */
+  titles = new Map<string, string>();
+  /** POST /v1/runs received since start. */
+  runsPosted = 0;
   private counter = 0;
   private msgId = 1000;
 
@@ -358,8 +364,20 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // test route (Playwright runs cannot read the in-memory log): options of the last created run
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/last') {
       const last = sim.lastRun;
-      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions } : { run_id: null });
+      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, input: last.input } : { run_id: null });
     }
+    if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
+    if (via === 'api' && method === 'POST' && path === '/_fake/sessions') {
+      const b = (body ?? {}) as Record<string, unknown>;
+      const id = typeof b.id === 'string' ? b.id : `fake_extra_${sim.extraSessions.size + 1}`;
+      sim.extraSessions.set(id, {
+        id, source: typeof b.source === 'string' ? b.source : null, title: typeof b.title === 'string' ? b.title : null,
+        started_at: typeof b.started_at === 'number' ? b.started_at : Date.now() / 1000,
+      });
+      return c.json({ id });
+    }
+    const titleMatch = /^\/_fake\/sessions\/([^/]+)\/title$/.exec(path);
+    if (via === 'api' && method === 'GET' && titleMatch) return c.json({ title: sim.titles.get(decodeURIComponent(titleMatch[1]!)) ?? null });
     if (path !== '/health') {
       const token = via === 'dash' ? FAKE_DASH_TOKEN : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
       if (!token || c.req.header('authorization') !== `Bearer ${token}`) return c.json({ error: 'unauthorized' }, 401);
@@ -422,6 +440,7 @@ const NOT_FOUND_SESSION = (id: string) => json({ error: { message: `Session not 
 function handleRuns(req: Request, method: string, path: string, body: unknown, sim: Simulator, opts: FakeOptions, deleted: Set<string>): Response | null {
   const b = (body ?? {}) as Record<string, unknown>;
   if (method === 'POST' && path === '/v1/runs') {
+    sim.runsPosted += 1;
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
     const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''),
       typeof b.model === 'string' ? b.model : null, b.model_options ?? null);
@@ -463,8 +482,9 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const recorded = ((fx?.body as { data?: { id: string }[] } | undefined)?.data ?? []).filter((s) => !deleted.has(s.id));
     const simulated = [...sim.messages.entries()]
       .filter(([id]) => !recorded.some((s) => s.id === id))
-      .map(([id, list]) => ({ id, source: 'api_server', title: null, started_at: list[0]!.timestamp, message_count: list.length }));
-    const all = [...simulated.reverse(), ...recorded];
+      .map(([id, list]) => ({ id, source: 'api_server', title: sim.titles.get(id) ?? null, started_at: list[0]!.timestamp, message_count: list.length }));
+    const extra = [...sim.extraSessions.values()].map((e) => ({ ...e, message_count: 0 }));
+    const all = [...simulated, ...extra].sort((a, b) => b.started_at - a.started_at).concat(recorded as never[]);
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get('limit') ?? 50);
     const offset = Number(url.searchParams.get('offset') ?? 0);
@@ -475,6 +495,9 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const id = decodeURIComponent(m[1]!);
     const simulated = sim.messages.get(id);
     if (deleted.has(id)) return NOT_FOUND_SESSION(id);
+    if (m[2] && method === 'GET' && !simulated && sim.extraSessions.has(id)) {
+      return json({ object: 'list', session_id: id, data: [], pagination: { limit: 500, offset: 0, order: 'latest', returned: 0 } });
+    }
     if (m[2] && method === 'GET') {
       if (!simulated) return id === 'intendia-probe-1' ? null : NOT_FOUND_SESSION(id);
       return json({
@@ -490,11 +513,12 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
         sim.messages.delete(id);
         return json({ object: 'hermes.session.deleted', id, deleted: true });
       }
+      if (typeof b.title === 'string') sim.titles.set(id, b.title);
       return json({ object: 'hermes.session', session: { id, ...b } });
     }
     if (!m[2] && method === 'GET' && simulated) {
       return json({ object: 'hermes.session', session: {
-        id, source: 'api_server', title: null, started_at: simulated[0]!.timestamp, message_count: simulated.length,
+        id, source: 'api_server', title: sim.titles.get(id) ?? null, started_at: simulated[0]!.timestamp, message_count: simulated.length,
         estimated_cost_usd: sim.costs.get(id) ?? null, actual_cost_usd: null,
       } });
     }

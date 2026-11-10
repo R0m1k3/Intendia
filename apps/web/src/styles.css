@@ -31,12 +31,22 @@
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+/* Inner card: rounded sheet with a hairline and a light shadow (none in the dark theme). */
+@utility card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-line);
+  background-color: var(--color-sheet);
+  box-shadow: var(--shadow-soft);
+}
+
 @layer base {
   /* Shell geometry (desktop card: 8 px margin, 1 px border) and its shadow; not Tailwind theme values. */
   :root {
     --card-h: calc(100dvh - 1rem);
     --content-h: calc(var(--card-h) - 2px);
     --shadow-card: 0 1px 2px rgb(22 24 27 / 0.03), 0 12px 32px -16px rgb(22 24 27 / 0.12);
+    /* Inner cards (utility `card`): a light lift in the light theme, none in the dark one. */
+    --shadow-soft: 0 1px 2px rgb(22 24 27 / 0.04), 0 2px 6px -2px rgb(22 24 27 / 0.06);
   }
   :root.dark {
     --color-paper: #0e1012;
@@ -58,6 +68,7 @@
     --color-bad: #ee8e80;
     --color-bad-soft: #3a2220;
     --shadow-card: none;
+    --shadow-soft: none;
   }
   /* Same values as :root.dark: keep both blocks identical. */
   @media (prefers-color-scheme: dark) {
@@ -81,6 +92,7 @@
       --color-bad: #ee8e80;
       --color-bad-soft: #3a2220;
       --shadow-card: none;
+      --shadow-soft: none;
     }
   }
 
@@ -120,12 +132,12 @@
 .md hr { border: 0; border-top: 1px solid var(--color-line); }
 
 /* File chip: an existing workspace file cited in the chat; opens the preview. */
-.md a.file-chip, a.file-chip {
+.md .file-chip, .file-chip {
   display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: -3px;
   padding: 1px 7px 1px 5px; border: 1px solid var(--color-line); border-radius: 6px;
   background: var(--color-sheet); color: var(--color-ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   text-decoration: none; transition: border-color 150ms, background-color 150ms;
 }
 .md a.file-chip:hover { border-color: var(--color-accent); background: var(--color-accent-soft); }
-.md a.file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md .file-chip span, .file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md code:has(> a.file-chip) { background: none; padding: 0; }

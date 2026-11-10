@@ -62,7 +62,7 @@ export function SetupPage() {
         Intendia teste chaque module contre l’instance avant d’enregistrer. Les clés sont chiffrées dans la base et ne
         sont jamais renvoyées au navigateur.
       </p>
-      <div className="mt-8 rounded-xl border border-line bg-sheet p-5 md:p-6">
+      <div className="mt-8 card p-5 md:p-6">
         <InstanceForm onSaved={async () => { await qc.invalidateQueries(); await navigate({ to: '/' }); }} />
       </div>
       <Button variant="ghost" className="mt-4" onClick={() => navigate({ to: '/' })}>Plus tard</Button>

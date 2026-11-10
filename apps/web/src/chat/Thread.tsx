@@ -1,28 +1,21 @@
-import { ChevronRight, FileText } from 'lucide-react';
-import { Fragment, useMemo, useState } from 'react';
+import { Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ApprovalChoice, RunStat } from '../api';
-import { Button, cx, Mark } from '../components/ui';
+import { rawUrl, type ApprovalChoice, type RunStat } from '../api';
+import { Button, copyText, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
+import { baseName, fileKind } from '../files/paths';
 import { rehypePaths } from '../files/rehypePaths';
+import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
 import { RunFooter } from './RunFooter';
+import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
 import { Subagents } from './Subagents';
 
 export function clock(ts: number | null): string {
   if (!ts) return '';
   return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** One register line: time in the margin, content on the right. */
-function Row({ ts, children, className }: { ts: number | null; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cx('grid grid-cols-[44px_minmax(0,1fr)] gap-3 md:grid-cols-[56px_minmax(0,1fr)] md:gap-4', className)}>
-      <div className="pt-0.5 text-right font-mono text-[11px] text-ink-faint">{clock(ts)}</div>
-      <div className="min-w-0">{children}</div>
-    </div>
-  );
 }
 
 /**
@@ -58,97 +51,178 @@ export function Md({ text }: { text: string }) {
   );
 }
 
-function ToolEntry({ e }: { e: Extract<Entry, { kind: 'tool' }> }) {
+/** Width of the avatar column: the agent's content and its cards line up after it. */
+export const AGENT_INDENT = 'pl-9';
+
+function StepIcon({ state }: { state: ToolEntry['state'] }) {
+  if (state === 'running') return <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-faint" strokeWidth={1.75} />;
+  if (state === 'failed') return <X className="size-3.5 shrink-0 text-bad" strokeWidth={2} />;
+  return <Check className="size-3.5 shrink-0 text-ok" strokeWidth={2} />;
+}
+
+function Step({ e }: { e: ToolEntry }) {
   const [open, setOpen] = useState(false);
   const hasResult = Boolean(e.result);
   return (
-    <Row ts={e.ts}>
+    <li className="border-t border-line first:border-t-0">
       <button
         type="button"
         onClick={() => hasResult && setOpen(!open)}
         aria-expanded={hasResult ? open : undefined}
-        className={cx('flex w-full min-w-0 items-center gap-2.5 rounded-md py-0.5 text-left font-mono text-xs', hasResult && 'hover:text-ink')}
+        className={cx('flex w-full min-w-0 items-center gap-2.5 px-3 py-2 text-left text-xs', hasResult && 'hover:bg-raised/50')}
       >
-        <Mark state={e.state === 'ok' ? 'full' : e.state === 'failed' ? 'unavailable' : null} />
-        <span className="shrink-0 text-ink">{e.tool}</span>
-        <span className="min-w-0 truncate text-ink-faint">{e.preview}</span>
-        <span className="ml-auto shrink-0 text-ink-faint">
+        <StepIcon state={e.state} />
+        <span className="shrink-0 font-mono text-ink">{e.tool}</span>
+        <span className="min-w-0 truncate text-ink-soft">{e.preview}</span>
+        <span className="ml-auto shrink-0 font-mono text-ink-faint">
           {e.state === 'running' ? 'en cours' : e.duration !== null ? `${e.duration.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s` : ''}
         </span>
         {hasResult && <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform duration-150', open && 'rotate-90')} strokeWidth={1.5} />}
       </button>
       {open && e.result && (
-        <pre className={cx('mt-2 max-h-72 overflow-auto rounded-lg border border-line bg-sheet p-3 font-mono text-xs whitespace-pre-wrap', e.state === 'failed' && 'text-bad')}>
+        <pre className={cx('mx-3 mb-3 max-h-72 overflow-auto rounded-lg border border-line bg-paper p-3 font-mono text-xs whitespace-pre-wrap', e.state === 'failed' && 'text-bad')}>
           {e.result}
         </pre>
       )}
-    </Row>
+    </li>
   );
 }
 
-function EntryView({ e }: { e: Entry }) {
-  switch (e.kind) {
-    case 'user':
-      return (
-        <Row ts={e.ts}>
-          <div className="rounded-xl border border-line bg-sheet px-4 py-3 text-sm whitespace-pre-wrap">{e.text}</div>
-        </Row>
-      );
+/** Consecutive tool calls of a reply: open at first while one runs or when there are 3 or fewer, then only by click. */
+function Steps({ tools }: { tools: ToolEntry[] }) {
+  const [open, setOpen] = useState(() => tools.length <= 3 || tools.some((t) => t.state === 'running'));
+  return (
+    <div className="overflow-hidden card" data-steps>
+      <button
+        type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-soft hover:text-ink"
+      >
+        <ChevronDown className={cx('size-3.5 shrink-0 transition-transform duration-150', !open && '-rotate-90')} strokeWidth={1.75} />
+        {stepsLabel(tools)}
+      </button>
+      {open && <ul className="border-t border-line">{tools.map((t) => <Step key={t.key} e={t} />)}</ul>}
+    </div>
+  );
+}
+
+function PartView({ p }: { p: Part }) {
+  switch (p.kind) {
+    case 'steps':
+      return <Steps tools={p.tools} />;
     case 'assistant':
-      return (
-        <Row ts={e.ts}>
-          <Md text={e.text} />
-        </Row>
-      );
+      return <Md text={p.text} />;
     case 'reasoning':
       return (
-        <Row ts={e.ts}>
-          <details className="text-[13px] text-ink-faint">
-            <summary className="cursor-pointer select-none">Raisonnement</summary>
-            <p className="mt-2 whitespace-pre-wrap">{e.text}</p>
-          </details>
-        </Row>
+        <details className="text-[13px] text-ink-faint">
+          <summary className="cursor-pointer select-none">Raisonnement</summary>
+          <p className="mt-2 whitespace-pre-wrap">{p.text}</p>
+        </details>
       );
-    case 'tool':
-      return <ToolEntry e={e} />;
     case 'note':
-      return (
-        <Row ts={e.ts}>
-          <p className={cx('text-xs', e.tone === 'bad' ? 'text-bad' : 'text-ink-faint')}>{e.text}</p>
-        </Row>
-      );
+      return <p className={cx('text-xs', p.tone === 'bad' ? 'text-bad' : 'text-ink-faint')}>{p.text}</p>;
     case 'subagents':
-      return (
-        <Row ts={e.ts}>
-          <Subagents nodes={e.nodes} />
-        </Row>
-      );
+      return <Subagents nodes={p.nodes} />;
   }
 }
 
-/**
- * Groups consecutive tool lines so the register reads as blocks; `footers` = run lines shown after the
- * entry of the same key (see placeRunStats).
- */
-export function Thread({ entries, footers }: { entries: Entry[]; footers?: Map<string, RunStat[]> }) {
-  const blocks: Entry[][] = [];
-  for (const e of entries) {
-    const last = blocks.at(-1);
-    if (last && e.kind === 'tool' && last[0]!.kind === 'tool') last.push(e);
-    else blocks.push([e]);
+function CopyReply({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button" title="Copier la réponse" aria-label="Copier la réponse"
+      onClick={() => void copyText(text, 'Réponse').then(() => { setDone(true); setTimeout(() => setDone(false), 1500); })}
+      className="flex size-7 items-center justify-center rounded-md text-ink-faint transition-[color,background-color,opacity] hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+    >
+      {done ? <Check className="size-3.5" strokeWidth={2} /> : <Copy className="size-3.5" strokeWidth={1.5} />}
+    </button>
+  );
+}
+
+/** The agent's header: avatar, name, time of the turn. */
+export function AgentHeader({ ts }: { ts: number | null }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-on-accent">H</span>
+      <span className="text-sm font-semibold">Hermes</span>
+      {ts !== null && <span className="text-xs text-ink-faint">{clock(ts)}</span>}
+    </div>
+  );
+}
+
+/** One file joined to a user message: thumbnail for an existing image, chip for another file, grey label otherwise. */
+function Joined({ written }: { written: string }) {
+  const paths = useFilePaths()!;
+  const rel = paths.found.get(written);
+  const name = baseName(written);
+  if (rel && fileKind(name) === 'image') {
+    return (
+      <button type="button" onClick={() => paths.open(rel)} title={name} className="overflow-hidden rounded-xl border border-line transition-opacity hover:opacity-90">
+        <img src={rawUrl(paths.slug, rel)} alt={name} loading="lazy" className="block h-24 w-auto max-w-[16rem] object-cover" />
+      </button>
+    );
+  }
+  if (rel) {
+    return (
+      <a href="#" className="file-chip" title={rel} onClick={(e) => { e.preventDefault(); paths.open(rel); }}>
+        <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
+      </a>
+    );
   }
   return (
-    <div className="space-y-5">
-      {blocks.map((b) => (
-        <div key={b[0]!.key} className={b[0]!.kind === 'tool' ? 'space-y-1' : undefined}>
-          {b.map((e) => (
-            <Fragment key={e.key}>
-              <EntryView e={e} />
-              {footers?.get(e.key)?.map((r) => <RunFooter key={r.runId} r={r} />)}
-            </Fragment>
-          ))}
+    <span className="file-chip text-ink-faint" title={written}>
+      <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
+    </span>
+  );
+}
+
+/** The user's message: the text in a bubble, the files joined to it below (thumbnails), as the composer showed them. */
+function UserMessage({ text }: { text: string }) {
+  const paths = useFilePaths();
+  const split = useMemo(() => (paths?.mounts ? splitAttachments(text, paths.mounts) : { text, files: [] }), [text, paths?.mounts]);
+  return (
+    <>
+      {split.text && <div className="max-w-[85%] rounded-2xl bg-accent/8 px-4 py-2.5 text-sm whitespace-pre-wrap md:max-w-[80%]">{split.text}</div>}
+      {split.files.length > 0 && (
+        <div className={cx('flex max-w-[85%] flex-wrap justify-end gap-2 md:max-w-[80%]', split.text && 'mt-1.5')} data-joined>
+          {split.files.map((f) => <Joined key={f} written={f} />)}
         </div>
-      ))}
+      )}
+    </>
+  );
+}
+
+function TurnView({ t }: { t: Turn }) {
+  if (t.kind === 'user') {
+    return (
+      <div className="flex flex-col items-end" data-turn="user">
+        <UserMessage text={t.entry.text} />
+        {t.entry.ts !== null && <span className="mt-1 text-[11px] text-ink-faint">{clock(t.entry.ts)}</span>}
+        {t.footers.map((r) => <div key={r.runId} className="w-full"><RunFooter r={r} /></div>)}
+      </div>
+    );
+  }
+  return (
+    <div data-turn="agent" className="group">
+      <AgentHeader ts={t.ts} />
+      <div className={cx('mt-2 space-y-3', AGENT_INDENT)}>
+        {t.parts.map((p) => <PartView key={p.key} p={p} />)}
+        {(t.footers.length > 0 || (t.text && !t.streaming)) && (
+          <div className="space-y-0.5">
+            {t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
+            {t.text && !t.streaming && <CopyReply text={t.text} />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
+export function Thread({ entries, footers }: { entries: Entry[]; footers?: Map<string, RunStat[]> }) {
+  const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
+  return (
+    <div className="space-y-6">
+      {turns.map((t) => <TurnView key={t.key} t={t} />)}
     </div>
   );
 }
@@ -162,7 +236,7 @@ const CHOICES: Record<string, { label: string; variant: 'primary' | 'secondary' 
 
 export function ApprovalCard({ approval, onChoose, busy }: { approval: Approval; onChoose: (c: ApprovalChoice) => void; busy: boolean }) {
   return (
-    <Row ts={null}>
+    <div className={AGENT_INDENT}>
       <div className="rounded-xl border border-warn/40 bg-warn-soft/40 p-4">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Mark state="readonly" />
@@ -180,6 +254,6 @@ export function ApprovalCard({ approval, onChoose, busy }: { approval: Approval;
           ))}
         </div>
       </div>
-    </Row>
+    </div>
   );
 }

@@ -4,7 +4,8 @@ import type { AppDeps } from '../app.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import { EFFORTS } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
-import { ValidationError, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
+import { pushTitle } from '../workspaces/title.js';
+import { ValidationError, type WorkspaceService } from '../workspaces/service.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
 export const SESSION_ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
@@ -33,23 +34,19 @@ export function sessionParams(c: { req: { param: (k: string) => string } }): { i
   return { inst, id };
 }
 
-/** Sends the title to Hermes so Telegram or the CLI show the same; failures are ignored. */
-async function pushTitle(deps: AppDeps, ctx: SessionContext, title: string | null): Promise<void> {
-  if (!title) return;
-  try {
-    await callOp(deps.compat.http(ctx.instance.id), deps.compat.get(ctx.instance.id), 'sessions', 'update', {
-      params: { session_id: ctx.session.id }, body: { title }, profile: ctx.profile,
-    });
-  } catch {
-    // the session may not exist at Hermes yet, or the route may be missing: the local title stays right
-  }
-}
-
 export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
   const { workspaces } = deps;
   const r = new Hono();
 
   r.get('/workspaces', (c) => c.json({ workspaces: workspaces.listWorkspaces() }));
+
+  // recent sessions of every source (Intendia, Telegram, crons…) across instances, for the home page
+  r.get('/sessions/recent', async (c) => {
+    const raw = c.req.query('limit');
+    const limit = raw === undefined ? 20 : Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new ValidationError('limit : entier de 1 à 50');
+    return c.json(await deps.services.recent.list(limit));
+  });
 
   r.post('/workspaces', async (c) => {
     const body = CreateWorkspace.parse(await c.req.json());

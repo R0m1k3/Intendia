@@ -68,6 +68,7 @@ export function Layout() {
         <div className="px-2 pb-4 pt-1">
           <Wordmark />
         </div>
+        <NewSessionButton className="mb-4" />
 
         <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
           {entries('top')}
@@ -167,6 +168,7 @@ function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
         <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
           <nav aria-label="Plus" onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
+            <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
             {rest.map((n) => (
               <Link key={n.to} to={n.to} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>
                 <n.icon className="size-5" strokeWidth={1.5} />
@@ -194,6 +196,19 @@ function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
   );
 }
 
+/** "Nouvelle session": the home page, cursor in "Demander quelque chose à Hermes…". */
+function NewSessionButton({ className, onClick }: { className?: string; onClick?: () => void }) {
+  return (
+    <Link
+      to="/" search={{ nouvelle: 1 }} onClick={onClick}
+      className={cx('flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong', className)}
+    >
+      <Plus className="size-4" strokeWidth={1.75} />
+      Nouvelle session
+    </Link>
+  );
+}
+
 function NewSessionLink({ slug }: { slug: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -210,14 +225,20 @@ function NewSessionLink({ slug }: { slug: string }) {
   );
 }
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: React.ReactNode; action?: React.ReactNode }) {
+export function PageHeader({ title, subtitle, action, eyebrow }: { title: string; subtitle?: React.ReactNode; action?: React.ReactNode; eyebrow?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-6 pt-8 md:px-8 md:pt-10">
       <div>
+        {eyebrow && <p className="mb-1.5 text-[13px] text-ink-faint">{eyebrow}</p>}
         <h1 className="text-[28px] font-semibold leading-tight">{title}</h1>
         {subtitle && <p className="mt-2 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
       </div>
       {action}
     </div>
   );
+}
+
+/** Reading width of the form pages (Configuration, Réglages) and of the home page. */
+export function Narrow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={['mx-auto w-full max-w-[960px]', className].filter(Boolean).join(' ')}>{children}</div>;
 }

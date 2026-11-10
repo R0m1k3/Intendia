@@ -55,7 +55,7 @@ export function Panel({ title, action, children, className, bodyClassName }: {
   title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string;
 }) {
   return (
-    <section className={cx('rounded-xl border border-line bg-sheet', className)}>
+    <section className={cx('card', className)}>
       {(title || action) && (
         <header className="flex min-h-14 items-center justify-between gap-4 border-b border-line px-5 py-3">
           <h2 className="text-[15px] font-semibold">{title}</h2>
@@ -143,4 +143,28 @@ export function host(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Copies to the clipboard; where the browser refuses (plain http, old browser), shows the text to copy by hand. */
+export async function copyText(text: string, label: string): Promise<void> {
+  // navigator.clipboard is undefined outside secure contexts (plain http): reading .writeText would throw
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(text);
+  } catch {
+    prompt(label, text);
+  }
+}
+
+/** A settings section: title and explanation on the left third (≥ 768 px), content on the right; rule above but the first. */
+export function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="grid gap-4 border-t border-line py-8 first:border-t-0 first:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-8">
+      <div>
+        <h2 className="text-[15px] font-semibold">{title}</h2>
+        {description && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{description}</p>}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
 }

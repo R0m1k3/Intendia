@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, RotateCcw, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type ConfigModels, type ModelInput } from '../api';
-import { Button, ErrorText, Input, Panel } from '../components/ui';
+import { Button, ErrorText, Input, Panel, Section } from '../components/ui';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
@@ -92,7 +92,8 @@ function MainModel({ data, disabled, onSave, onKey }: {
   const p = data.providers.find((x) => x.slug === provider);
   const changed = provider !== data.main.provider || model !== data.main.model;
   return (
-    <Panel title="Modèle principal">
+    <Section title="Modèle principal" description="Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.">
+      <div className="card p-5">
       <div className="flex flex-wrap items-end gap-3">
         <label className="block">
           <span className="mb-2 block text-sm font-medium">Fournisseur</span>
@@ -117,7 +118,8 @@ function MainModel({ data, disabled, onSave, onKey }: {
         </p>
       )}
       {p?.warning && <p className="mt-1 text-xs text-ink-faint">{p.warning}</p>}
-    </Panel>
+      </div>
+    </Section>
   );
 }
 

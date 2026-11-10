@@ -53,7 +53,7 @@ describe('sessions', () => {
 
     const renamed = await t.request('PATCH', base, { title: 'Ventes S45' });
     expect(renamed.json.session.title).toBe('Ventes S45');
-    const patch = t.fake.requests.find((r) => r.method === 'PATCH' && r.path === `/api/sessions/${s.id}`);
+    const patch = t.fake.requests.filter((r) => r.method === 'PATCH' && r.path === `/api/sessions/${s.id}`).at(-1);
     expect(patch?.body).toEqual({ title: 'Ventes S45' });
   });
 
