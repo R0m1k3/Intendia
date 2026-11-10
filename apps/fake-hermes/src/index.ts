@@ -11,6 +11,8 @@
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
+ * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
+ * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   translated by `pathMap` (agent path → local folder), then cites its path
@@ -20,6 +22,8 @@ import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CronStore } from './crons.js';
+import { KanbanStore } from './kanban.js';
+import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
 import { SkillStore } from './skills.js';
 
@@ -51,6 +55,8 @@ export interface FakeOptions {
   skillStepMs?: number;
   /** Step of a simulated gateway restart (3 steps), in ms (default: stepMs). */
   configStepMs?: number;
+  /** Duration of a simulated kanban worker, in ms (default: stepMs). */
+  kanbanStepMs?: number;
   /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
   pathMap?: { from: string; to: string };
 }
@@ -175,6 +181,7 @@ class Simulator {
       }
     }
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
+    if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     await sleep(step);
     this.push(run, { event: 'message.delta', delta: 'Je regarde ' });
     await sleep(step);
@@ -208,6 +215,26 @@ class Simulator {
     this.addMessage(run.sessionId, 'tool', `Wrote ${path}`, { tool_name: 'write_file' });
     await sleep(step);
     this.finish(run, `Voilà le rapport : \`${path}\`. Il reprend les ventes des deux magasins.`);
+  }
+
+  /** "delegue" scenario: two sub-agents, the second one a child of the first. */
+  private async playDelegate(run: SimRun, step: number) {
+    const base = { task_count: 1, task_index: 0, model: 'fake/model-mini' };
+    this.push(run, { event: 'subagent.start', ...base, subagent_id: 'sa_1', depth: 1, goal: 'Lire les ventes de Frouard', preview: 'Lire les ventes de Frouard' });
+    await sleep(step);
+    this.push(run, { event: 'subagent.start', ...base, subagent_id: 'sa_2', parent_id: 'sa_1', depth: 2, goal: 'Calculer le total par rayon' });
+    await sleep(step * 2);
+    this.push(run, {
+      event: 'subagent.complete', ...base, subagent_id: 'sa_2', parent_id: 'sa_1', depth: 2, status: 'completed',
+      summary: 'Total : 1 240 €.', duration_seconds: 2.4, cost_usd: 0.0031, input_tokens: 820, output_tokens: 64, tool_count: 1,
+    });
+    await sleep(step);
+    this.push(run, {
+      event: 'subagent.complete', ...base, subagent_id: 'sa_1', depth: 1, status: 'completed',
+      summary: 'Ventes de Frouard lues.', duration_seconds: 4.1, cost_usd: 0.0123, input_tokens: 2100, output_tokens: 180, tool_count: 3,
+    });
+    await sleep(step);
+    this.finish(run, 'Les deux sous-agents ont fini : 1 240 € de ventes à Frouard.');
   }
 
   private finish(run: SimRun, output: string) {
@@ -264,7 +291,10 @@ class Simulator {
 
 // ---------------------------------------------------------------- apps
 
-function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, skills: SkillStore, config: ConfigStore, log: LoggedRequest[]): Hono {
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore }
+
+function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
+  const { crons, skills, config, profiles, kanban } = stores;
   const app = new Hono();
   const deleted = new Set<string>();
 
@@ -294,6 +324,10 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, crons: CronStore, 
     if (brk?.status) return c.json(brk.body ?? { error: 'broken by fake-hermes' }, brk.status as 404);
     if (brk && 'body' in brk) return c.json(brk.body as object);
 
+    const prof = profiles.handle(via, method, path, body);
+    if (prof) return prof;
+    const kb = kanban.handle(via, method, path, c.req.query(), body);
+    if (kb) return kb;
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
     if (cron) return cron;
     // before skills: SkillStore answers every /api/actions/{name}/status (404 for unknown actions)
@@ -419,10 +453,13 @@ export function createFakeHermes(opts: FakeOptions) {
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
+  const profiles = new ProfileStore(opts.fixturesDir);
+  const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), opts.pathMap);
+  const stores: Stores = { crons, skills, config, profiles, kanban };
   const requests: LoggedRequest[] = [];
   return {
-    api: makeApp('api', opts, sim, crons, skills, config, requests), dash: makeApp('dash', opts, sim, crons, skills, config, requests),
-    requests, sim, crons, skills, config,
+    api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
+    requests, sim, crons, skills, config, profiles, kanban,
   };
 }
 

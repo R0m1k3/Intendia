@@ -268,6 +268,53 @@ export interface RestartStatus { running: boolean; exitCode: number | null; line
 export interface WriteResult { version: string | null }
 export interface ModelInput { scope: 'main' | 'auxiliary'; provider: string; model: string; task?: string; confirm?: boolean; version: string }
 
+export interface Agent {
+  name: string;
+  isDefault: boolean;
+  description: string;
+  model: string | null;
+  provider: string | null;
+  skillCount: number | null;
+  gatewayRunning: boolean | null;
+  /** Intendia can chat with it (default: instance key; others: profileKeys[name]) */
+  hasKey: boolean;
+  /** active kanban workers assigned to it; null when the kanban cannot be read */
+  workers: number | null;
+}
+export interface KanbanWorker {
+  instance: string;
+  board: string;
+  runId: number;
+  taskId: string;
+  taskTitle: string | null;
+  assignee: string | null;
+  /** seconds */
+  startedAt: number | null;
+}
+export interface AgentDetail extends Agent {
+  soul: string | null;
+  soulTruncated: boolean;
+  activeWorkers: KanbanWorker[];
+}
+export interface ActiveRun {
+  instance: string;
+  workspace: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  status: string;
+  profile: string;
+  /** ms */
+  lastActiveAt: number;
+}
+export interface Activity {
+  runs: ActiveRun[];
+  workers: KanbanWorker[];
+  errors: { instance: string; message: string }[];
+}
+export interface KanbanBoard { slug: string; name: string; total: number }
+
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
 const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
 const cronPath = (inst: string, id: string, profile: string, sub?: string) =>
@@ -364,6 +411,16 @@ export const api = {
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
   upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
+  agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
+  agent: (inst: string, name: string) => call<{ agent: AgentDetail }>('GET', instPath(inst, `agents/${enc(name)}/detail`)),
+  createAgent: (inst: string, a: { name: string; description?: string; cloneFrom?: string }) =>
+    call<{ name: string; keySource: 'env' | 'db' }>('POST', instPath(inst, 'agents'), a),
+  setAgentDescription: (inst: string, name: string, description: string) =>
+    call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
+  activity: () => call<Activity>('GET', '/activity'),
+  kanbanBoards: (inst: string) => call<{ boards: KanbanBoard[] }>('GET', instPath(inst, 'kanban/boards')),
+  stopWorker: (inst: string, board: string, runId: number) =>
+    call<{ taskId: string; status: string }>('POST', instPath(inst, `kanban/workers/${runId}/stop`, undefined, { board }), {}),
   skills: (inst: string, profile: string) => call<{ skills: Skill[] }>('GET', instPath(inst, 'skills', profile)),
   skillContent: (inst: string, profile: string, name: string) =>
     call<{ name: string; content: string; truncated: boolean }>('GET', instPath(inst, 'skills/content', profile, { name })),

@@ -1,3 +1,4 @@
+import { ActivityService } from './agents/activity.js';
 import { AgentService } from './agents/service.js';
 import type { CompatService } from './compat/service.js';
 import type { AppConfig } from './config.js';
@@ -6,6 +7,7 @@ import type { Db } from './db/index.js';
 import { FileService } from './files/service.js';
 import { ConfigService } from './hermes-config/service.js';
 import type { InstanceStore } from './instances/store.js';
+import { KanbanService } from './kanban/service.js';
 import { LinkService } from './links/service.js';
 import { SkillService } from './skills/service.js';
 import { WorkspaceService } from './workspaces/service.js';
@@ -17,6 +19,8 @@ export interface Services {
   crons: CronService;
   skills: SkillService;
   agents: AgentService;
+  kanban: KanbanService;
+  activity: ActivityService;
   config: ConfigService;
 }
 
@@ -27,7 +31,9 @@ export function createServices(deps: { config: AppConfig; db: Db; store: Instanc
   const files = new FileService(deps.db, workspaces, links, deps.config.uploadMaxBytes);
   const crons = new CronService(deps.compat, workspaces, deps.store);
   const skills = new SkillService(deps.compat, deps.store);
-  const agents = new AgentService(deps.compat, deps.store);
+  const kanban = new KanbanService(deps.compat, deps.store);
+  const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban);
+  const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
-  return { workspaces, links, files, crons, skills, agents, config };
+  return { workspaces, links, files, crons, skills, agents, kanban, activity, config };
 }

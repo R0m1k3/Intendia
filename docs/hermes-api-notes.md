@@ -135,6 +135,52 @@ Masking risks: secrets are found by key name, by section (`mcp_servers.*.headers
 shape (token prefixes, Telegram tokens, URL passwords, query values, webhook paths). A secret with an ordinary key and
 an ordinary look would stay visible; a new Hermes section holding secrets needs a rule.
 
+## Agents, kanban and sub-agents (checked on 0.23.0, phase 7, 2026-11-10)
+
+Profiles (agents):
+1. `GET /api/profiles` → `{profiles: [{name, is_default, model, provider, description, skill_count, gateway_running,
+   has_env, path, ...}]}`; `GET /api/plugins/kanban/profiles` gives a shorter copy of the same list.
+2. `POST /api/profiles {name, description?, clone_from?, ...}` creates a profile; name `^[a-z0-9][a-z0-9_-]{0,63}$`,
+   reserved names refused (400 with a message). It also accepts `provider`, `model`, `api_key`, `mcp_servers`: Intendia
+   never sends them.
+3. `PATCH /api/profiles/{name}` **renames** the profile (`{new_name}`). The description goes through
+   `PUT /api/profiles/{name}/description {description}` or `PATCH /api/plugins/kanban/profiles/{name} {description}`.
+4. `GET /api/profiles/{name}/soul` → `{content}` (SOUL.md). It may quote tokens: Intendia masks it (`Masker.text`).
+5. A new profile has no API server key in Intendia: no chat with it until its key is added to `profileKeys`.
+
+Kanban (`/api/plugins/kanban/...`):
+6. One kanban for **every profile** (database under the Hermes root): no `?profile=`. The "current board" is global
+   (`POST /boards/{slug}/switch` changes it for the dashboard, the CLI and the agents): Intendia always passes
+   `?board=` and never switches. Every route accepts `?board=`; an unknown board is a 404.
+7. `GET /boards` → `{boards: [{slug, name, archived, is_current, total, counts}], current}`; `POST /boards {slug, name?}`
+   returns the existing board when the slug exists.
+8. `GET /board?board=` → `{columns: [{name, tasks}], assignees, latest_event_id, now}`; task ids `t_xxxxxxxx`, dates in
+   seconds. `GET /workflow` → `columns` and `manual` (allowed manual moves per status). Moving to `running` by hand, or
+   to `done` with an unfinished parent, is a 400.
+9. `POST /tasks {title, body?, assignee?, priority?, triage?, workspace_kind?, workspace_path?, parents?}`: without
+   `triage: true` the task starts in `ready` and the dispatcher launches it if it has an assignee. With
+   `auto_decompose` (on by default) the gateway also splits and launches `triage` tasks: only `todo` stays idle.
+   `workspace_kind: "dir"` with an absolute path: Hermes creates the folder at launch.
+10. `PATCH /tasks/{id} {status?, assignee?, priority?, title?, body?, block_reason?}`; transition errors are 400
+    `{detail}`. `POST /tasks/{id}/specify|decompose` call an auxiliary model; without one: 200 `{ok: false, reason}`.
+11. `POST /dispatch?board=&dry_run=&max=` (default `max` 8); Hermes also dispatches by itself every 60 s.
+12. `GET/PUT /orchestration {orchestrator_profile, default_assignee, auto_decompose, auto_promote_children}`; the `GET`
+    adds `active_profile`, whose `config.yaml` the `PUT` rewrites.
+13. `GET /workers/active?board=` → `{workers: [{run_id (integer), task_id, task_title, task_status, task_assignee,
+    profile, worker_pid, started_at}], count}`.
+14. `POST /runs/{run_id}/terminate?board= {reason?}` kills the worker and puts the task back in **`ready`** (the
+    dispatcher relaunches it) or `review`. Unknown run: 404 `run N not found` (seen on the reference instance); run
+    already ended: 409. Intendia's "Stop" blocks a task found in `ready` afterwards (`block_reason`).
+15. WebSocket `/api/plugins/kanban/events?board=&since=&token=` (dashboard token in the query, not in `/openapi.json`):
+    `{events: [{id, task_id, run_id, kind, payload, created_at}], cursor}`; unknown or archived board: close 1008.
+
+Sub-agents and runs (API server):
+16. A run's event stream carries `subagent.start` and `subagent.complete` with `subagent_id`, `parent_id`, `depth`,
+    `goal`, `model`, `status`, `summary`, `duration_seconds`, `cost_usd`, `input_tokens`, `output_tokens`,
+    `tool_count` (absent when unknown). Opened without `last_seq`, the stream replays what Hermes kept of the run. The
+    session history (`/v1/sessions/{id}/messages`) has no sub-agent events.
+17. There is **no run list**: only `GET /v1/runs/{id}`, kept in memory (404 after a Hermes restart).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

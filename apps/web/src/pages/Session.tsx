@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, ArrowLeft, Files, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ApprovalChoice, type RunStatus } from '../api';
-import { historyEntries, isTerminal, mergeHistory, type Entry, type RunState } from '../chat/events';
+import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle } from '../chat/Composer';
 import { ApprovalCard, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
@@ -65,6 +65,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [runCount, setRunCount] = useState(0);
+  /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
+  const [trees, setTrees] = useState<Extract<Entry, { kind: 'subagents' }>[]>([]);
   const composer = useRef<ComposerHandle>(null);
 
   // Reopened during a run (reload, other tab, network cut): plug back into its stream.
@@ -74,6 +76,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [lastRun.data, lastRunId, active]);
 
   const onEnd = useCallback(async (state: RunState) => {
+    const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
+    if (tree) setTrees((t) => [...t, tree]);
     const input = state.entries.find((e) => e.kind === 'user')?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
@@ -144,7 +148,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   });
 
   const messages = history.data?.messages ?? [];
-  const entries: Entry[] = active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages);
+  const entries: Entry[] = withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees);
   const lastStatus = lastRun.data;
   const endNote = !active && (outcome ?? (lastStatus && OUTCOME[lastStatus.status] ? { status: lastStatus.status, error: lastStatus.error ?? lastStatus.output, input: null } : null));
   // Hermes does not keep the message of a run that failed before starting: keep it on screen.
@@ -166,7 +170,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
   const candidates = useMemo(() => {
     if (!mounts) return [];
-    const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : '')).join('\n');
+    const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : e.kind === 'subagents' ? e.nodes.map((n) => n.summary ?? '').join('\n') : '')).join('\n');
     return findPathCandidates(text, { agentMount: mounts.agentMount, mount: mounts.mount }).sort();
   }, [entries, mounts]);
   const exists = useQuery({

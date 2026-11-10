@@ -8,7 +8,27 @@ export type Entry =
   | { kind: 'assistant'; key: string; text: string; ts: number | null; streaming?: boolean }
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
-  | { kind: 'note'; key: string; text: string; tone: 'muted' | 'bad'; ts: number | null };
+  | { kind: 'note'; key: string; text: string; tone: 'muted' | 'bad'; ts: number | null }
+  | { kind: 'subagents'; key: string; nodes: SubagentNode[]; ts: number | null };
+
+/** One delegated sub-agent of a run (Hermes subagent.start / subagent.complete). */
+export interface SubagentNode {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  goal: string;
+  model: string | null;
+  /** running until subagent.complete, then Hermes' status (completed when absent) */
+  status: string;
+  /** seconds (event timestamp), null when unknown */
+  startedAt: number | null;
+  duration: number | null;
+  cost: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  toolCount: number | null;
+  summary: string | null;
+}
 
 export interface Approval {
   requestId: string | null;
@@ -121,11 +141,8 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
         entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: `Approbation : ${CHOICE_LABEL[str(ev.choice)] ?? str(ev.choice)}`, tone: 'muted', ts }],
       };
     case 'subagent.start':
-    case 'subagent.complete': {
-      const what = str(ev.goal) || str(ev.summary) || str(ev.preview);
-      const text = ev.event === 'subagent.start' ? `Sous-agent lancé${what ? ` : ${what}` : ''}` : `Sous-agent terminé${what ? ` : ${what}` : ''}`;
-      return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text, tone: 'muted', ts }] };
-    }
+    case 'subagent.complete':
+      return { ...s, entries: reduceSubagent(s.entries, ev, ts) };
     case 'run.completed': {
       const entries = closeStreaming(s.entries);
       const hasAnswer = entries.some((e) => e.kind === 'assistant' && e.text.trim());
@@ -148,6 +165,93 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     default:
       return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.event, tone: 'muted', ts }] };
   }
+}
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/**
+ * One `subagents` entry per run, placed where the first sub-agent started; nodes are keyed by
+ * subagent_id (without it: goal + rank). A complete without a matching start adds a finished node.
+ */
+function reduceSubagent(entries: Entry[], ev: RunEvent, ts: number | null): Entry[] {
+  const at = entries.findIndex((e) => e.kind === 'subagents');
+  // seq is local to a run: the run id keeps the trees of two runs of the same session apart (withTrees)
+  const runId = typeof ev.run_id === 'string' && ev.run_id ? ev.run_id : null;
+  const tree = at >= 0 ? (entries[at] as Extract<Entry, { kind: 'subagents' }>)
+    : { kind: 'subagents' as const, key: runId ? `sa-${runId}-${ev.seq ?? 0}` : key('sa', ev.seq), nodes: [], ts };
+  const nodes = [...tree.nodes];
+  const goal = str(ev.goal);
+  let id = typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null;
+  if (!id) {
+    const same = nodes.filter((n) => n.id.startsWith(`${goal}#`));
+    // a complete without id closes the oldest running node with that goal
+    const open = ev.event === 'subagent.complete' ? same.find((n) => n.status === 'running') : undefined;
+    id = open?.id ?? `${goal}#${same.length + 1}`;
+  }
+  const i = nodes.findIndex((n) => n.id === id);
+  const prev: SubagentNode = i >= 0 ? nodes[i]! : {
+    id, parentId: null, depth: 0, goal, model: null, status: 'running', startedAt: ts,
+    duration: null, cost: null, inputTokens: null, outputTokens: null, toolCount: null, summary: null,
+  };
+  const parent = typeof ev.parent_id === 'string' && ev.parent_id ? ev.parent_id : null;
+  const next: SubagentNode = {
+    ...prev,
+    parentId: parent ?? prev.parentId,
+    depth: num(ev.depth) ?? prev.depth,
+    goal: goal || prev.goal,
+    model: (typeof ev.model === 'string' && ev.model) || prev.model,
+  };
+  if (ev.event === 'subagent.complete') {
+    next.status = str(ev.status) || 'completed';
+    next.duration = num(ev.duration_seconds) ?? prev.duration;
+    next.cost = num(ev.cost_usd) ?? prev.cost;
+    next.inputTokens = num(ev.input_tokens) ?? prev.inputTokens;
+    next.outputTokens = num(ev.output_tokens) ?? prev.outputTokens;
+    next.toolCount = num(ev.tool_count) ?? prev.toolCount;
+    next.summary = str(ev.summary) || prev.summary;
+  }
+  if (i >= 0) nodes[i] = next;
+  else nodes.push(next);
+  const updated = { ...tree, nodes };
+  return at >= 0 ? [...entries.slice(0, at), updated, ...entries.slice(at + 1)] : [...closeStreaming(entries), updated];
+}
+
+/** Nodes in display order (depth-first by parent), each with its depth in the tree; unknown parents hang off the root. */
+export function subagentTree(nodes: SubagentNode[]): { node: SubagentNode; level: number }[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  const children = new Map<string | null, SubagentNode[]>();
+  for (const n of nodes) {
+    const p = n.parentId && ids.has(n.parentId) && n.parentId !== n.id ? n.parentId : null;
+    children.set(p, [...(children.get(p) ?? []), n]);
+  }
+  const out: { node: SubagentNode; level: number }[] = [];
+  const seen = new Set<string>();
+  const walk = (p: string | null, level: number) => {
+    for (const n of children.get(p) ?? []) {
+      if (seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push({ node: n, level });
+      walk(n.id, level + 1);
+    }
+  };
+  walk(null, 0);
+  // cycles (a → b → a) never reach the root: show them flat at the end
+  for (const n of nodes) if (!seen.has(n.id)) out.push({ node: n, level: 0 });
+  return out;
+}
+
+/**
+ * Hermes' history has no sub-agent events: the trees of runs followed on this page are put back
+ * into it, each before the first entry that came after its first sub-agent (else at the end).
+ */
+export function withTrees(entries: Entry[], trees: Extract<Entry, { kind: 'subagents' }>[]): Entry[] {
+  const out = [...entries];
+  for (const t of trees) {
+    if (out.some((e) => e.key === t.key)) continue;
+    const at = t.ts === null ? -1 : out.findIndex((e) => e.kind !== 'subagents' && e.ts !== null && e.ts > (t.ts as number));
+    out.splice(at < 0 ? out.length : at, 0, t);
+  }
+  return out;
 }
 
 export const CHOICE_LABEL: Record<string, string> = {

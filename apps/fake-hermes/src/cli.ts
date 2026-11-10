@@ -17,6 +17,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   skillStepMs: Number(process.env.FAKE_SKILL_STEP_MS ?? 500),
   // gateway restart (3 steps)
   configStepMs: Number(process.env.FAKE_CONFIG_STEP_MS ?? 500),
+  // kanban workers last 5 s so they can be seen (and stopped) on the Activity page
+  kanbanStepMs: Number(process.env.FAKE_KANBAN_STEP_MS ?? 5000),
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);

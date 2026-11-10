@@ -122,8 +122,8 @@ sequenceDiagram
   `actionName` in the connector). The status keeps only the lines of the last run (after `=== <name> started`).
 - The browser polls the status every 1.5 s, keeps pending actions in `sessionStorage` (resumed after a reload) and
   stops on the end, on a 404 (dashboard restarted) or after 5 minutes.
-- `src/agents/service.ts` (`AgentService.profiles`, `/x/i/:inst/agents/profiles`) feeds the agent selector:
-  dashboard profiles, else `default` plus the profiles that have an API server key.
+- `AgentService.profiles` (`/x/i/:inst/agents/profiles`) feeds the agent selectors: dashboard profiles, else
+  `default` plus the profiles that have an API server key.
 
 ## Configuration
 
@@ -139,6 +139,31 @@ sequenceDiagram
   are a 409 `config_unavailable`; env and MCP writes go through without copy.
 - The browser (`apps/web/src/config/`, page `pages/Config.tsx`) shows the diff before saving, reloads after a 409
   keeping the draft, and offers the gateway restart after a write that needs it (polled every 1.5 s, 5 min at most).
+
+## Agents and activity
+
+- `src/agents/service.ts` (`AgentService`) calls the `agents` connector; `src/routes/agents.ts` serves
+  `/x/i/:inst/agents` (list, create), `/agents/profiles` (names only, registered first: a profile may be called
+  `profiles`), `/agents/:name/detail` and `/agents/:name/description`.
+- An agent is a Hermes profile. `hasKey` says whether Intendia can chat with it (`default`: the instance key; the
+  others: `profileKeys[name]`). Creation sends only `name`, `description` and `clone_from`; the page then tells where
+  the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `POST /x/instances` for a `db` one). SOUL.md is shown
+  read-only, capped at 64 KiB and masked with `Masker.text`. Renaming is not offered (`PATCH /api/profiles/{name}`
+  renames).
+- The kanban is shared by every profile. `src/kanban/service.ts` (`KanbanService`) never sends `?profile=` and
+  always names its board. In this phase it lists boards and active workers, and stops a worker: `terminate`, then a
+  task Hermes put back in `ready` is moved to `blocked` so the dispatcher does not relaunch it. A 404 or 409 from
+  `terminate` is a 409 `worker_ended`; a refused block a 409 `task_restarted`.
+- `src/agents/activity.ts` (`ActivityService`, `GET /x/activity`): Hermes has no run list, so the candidates are the
+  last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`, read by pages and
+  skipping runs already known as finished, so an older run still going is reached), checked 4 at a time
+  with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
+  never asked again. Kanban workers come from every live board of every instance. An unreachable instance is an
+  `errors` line, not a failure of the page. The page rereads every 5 s while visible.
+- Sub-agents (`apps/web/src/chat/events.ts`, `Subagents.tsx`): one `subagents` entry per run, at the first
+  `subagent.start` (keyed by its `run_id`: `seq` is local to a run), nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
+  root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page
+  keeps the trees of the runs that ended while it was open, and they are gone after a reload.
 
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
