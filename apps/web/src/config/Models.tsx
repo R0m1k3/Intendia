@@ -3,6 +3,7 @@ import { KeyRound, RotateCcw, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type ConfigModels, type ModelInput } from '../api';
 import { Button, ErrorText, Input, Panel, Section } from '../components/ui';
+import { ChatModels } from './ChatModels';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
@@ -52,6 +53,7 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey }: TabProps
       {otherError && <p className="text-sm text-bad">{errorCode(otherError) === 'config_changed' ? `${CHANGED_TEXT} Les valeurs ont été relues : recommencez.` : <ErrorText error={otherError} />}</p>}
       {notice && <p className="text-sm text-warn">{notice}</p>}
       <MainModel data={m} disabled={!writable || set.isPending} onSave={(provider, model) => submit({ scope: 'main', provider, model })} onKey={onKey} />
+      <ChatModels inst={inst} profile={profile} providers={m.providers} />
       <Panel title="Modèles auxiliaires"
         action={<Button variant="ghost" disabled={!writable || set.isPending} onClick={() => { if (confirm('Remettre toutes les tâches sur auto ?')) submit({ scope: 'auxiliary', task: '__reset__', provider: 'auto', model: 'auto' }); }}>
           <RotateCcw className={ICON} strokeWidth={1.5} />Tout remettre sur auto</Button>}

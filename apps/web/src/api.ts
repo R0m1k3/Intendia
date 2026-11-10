@@ -131,10 +131,11 @@ export interface RecentSession {
   /** ms */
   at: number;
 }
-export interface ModelOptions {
-  model?: string | null;
-  provider?: string | null;
-  providers: { slug: string; name?: string; authenticated?: boolean; models?: unknown[] }[];
+/** Models of the chat's picker for one agent (instance + profile). `managed` = the list can be edited (Modèles tab). */
+export interface ChatModelList {
+  auto: string | null;
+  models: { id: string; available: boolean }[];
+  managed: boolean;
 }
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny';
 
@@ -459,7 +460,10 @@ export const api = {
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/approval`, { choice, requestId }),
-  models: (inst: string, profile = 'default') => call<ModelOptions>('GET', `/i/${enc(inst)}/models?profile=${enc(profile)}`),
+  chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
+  savedChatModels: (inst: string, profile = 'default') => call<{ models: string[] }>('GET', `/i/${enc(inst)}/chat-models/saved?profile=${enc(profile)}`),
+  setChatModels: (inst: string, profile: string, models: string[]) =>
+    call<{ models: string[] }>('PUT', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`, { models }),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>

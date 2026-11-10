@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { api, type Effort } from '../api';
 import { Picker, type PickerItem as Item } from '../components/Menu';
 import { EFFORTS, effortLabel, shortModel } from './format';
-import { modelNames } from './models';
+import { modelItems as pickerModels } from './model-items';
 
 /**
  * Model and reasoning effort of the session's next messages. "Auto" = what the Hermes agent is set to.
@@ -13,14 +14,11 @@ export function RunOptions({ inst, profile, model, effort, hasRuns, disabled, on
   inst: string; profile: string; model: string | null; effort: Effort | null; hasRuns: boolean; disabled?: boolean;
   onChange: (patch: { model?: string | null; effort?: Effort | null }) => void;
 }) {
-  const options = useQuery({ queryKey: ['models', inst, profile], queryFn: () => api.models(inst, profile), enabled: Boolean(inst), retry: false, staleTime: 60_000 });
-  const fallback = options.data?.model ?? null;
-  const names = modelNames(options.data);
-  if (model && !names.includes(model)) names.unshift(model);
-  const modelItems: Item[] = [
-    { value: null, label: fallback ? `Auto · ${shortModel(fallback)}` : 'Auto', hint: 'Le modèle réglé pour l’agent Hermes' },
-    ...names.map((n) => ({ value: n, label: n, mono: true })),
-  ];
+  const navigate = useNavigate();
+  // the agent's list, kept by Intendia (Configuration › Modèles › Modèles du chat)
+  const list = useQuery({ queryKey: ['chat-models', inst, profile], queryFn: () => api.chatModels(inst, profile), enabled: Boolean(inst), retry: false, staleTime: 60_000 });
+  const manage = () => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: profile === 'default' ? undefined : profile, tab: 'modeles' } });
+  const modelItems = pickerModels(list.data, model, manage);
   const effortItems: Item[] = [
     { value: null, label: 'Auto', hint: 'Le réglage de l’agent Hermes' },
     ...EFFORTS.map((e) => ({ value: e.value, label: e.label, hint: e.hint })),

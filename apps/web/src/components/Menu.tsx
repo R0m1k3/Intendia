@@ -100,7 +100,10 @@ export function Menu({ title, items, trigger, triggerClass, placement = 'below',
   );
 }
 
-export interface PickerItem { value: string | null; label: string; hint?: string; mono?: boolean }
+export interface PickerChoice { value: string | null; label: string; hint?: string; mono?: boolean }
+/** An action shown after the choices (e.g. "Gérer les modèles…"): no value, never checked. */
+export interface PickerAction { action: () => void; label: string }
+export type PickerItem = PickerChoice | PickerAction;
 
 const PICKER_BTN = 'flex h-7 max-w-[14rem] min-w-0 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50 aria-expanded:bg-raised';
 
@@ -114,7 +117,16 @@ export function Picker({ label, title, items, value, disabled, onPick, placement
       title={title} disabled={disabled} placement={placement} triggerClass={triggerClass ?? PICKER_BTN}
       trigger={<><span className="truncate">{label}</span><ChevronDown className="size-3 shrink-0" strokeWidth={1.75} /></>}
     >
-      {(close) => items.map((it) => (
+      {(close) => items.map((it, i) => 'action' in it ? (
+        <button
+          key={`action:${it.label}`} type="button" role="menuitem" onClick={() => { close(); it.action(); }}
+          className={cx('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-ink-soft hover:bg-raised hover:text-ink focus:bg-raised focus:outline-none',
+            i > 0 && !('action' in items[i - 1]!) && 'mt-1 border-t border-line')}
+        >
+          <span className="size-3.5 shrink-0" />
+          {it.label}
+        </button>
+      ) : (
         <button
           key={it.value ?? 'auto'} type="button" role="menuitemradio" aria-checked={it.value === value}
           onClick={() => { close(); if (it.value !== value) onPick(it.value); }}
