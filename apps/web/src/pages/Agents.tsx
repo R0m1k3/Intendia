@@ -131,31 +131,32 @@ export function AgentsPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-line text-left text-xs text-ink-faint">
-                      <th className="px-5 py-2.5 font-normal">Agent</th>
-                      <th className="px-3 py-2.5 font-normal">Modèle</th>
-                      <th className="px-3 py-2.5 text-right font-normal">Skills</th>
+                      <th className="px-4 py-2.5 font-normal md:px-5">Agent</th>
+                      <th className="hidden px-3 py-2.5 font-normal md:table-cell">Modèle</th>
+                      <th className="hidden px-3 py-2.5 text-right font-normal md:table-cell">Skills</th>
                       <th className="px-3 py-2.5 font-normal">Chat</th>
-                      {showWorkers && <th className="px-5 py-2.5 text-right font-normal">Workers</th>}
+                      {showWorkers && <th className="px-4 py-2.5 text-right font-normal md:px-5">Workers</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
                     {items.map((x) => (
                       <tr key={x.name} className="transition-colors hover:bg-raised/60">
-                        <td className="max-w-[340px] px-5 py-3">
+                        <td className="max-w-[150px] px-4 py-3 md:max-w-[340px] md:px-5">
                           <Link to="/i/$inst/agents/$name" params={{ inst, name: x.name }} className="font-medium hover:text-accent">{x.name}</Link>
                           {x.isDefault && <span className="ml-2 text-xs text-ink-faint">par défaut</span>}
                           {x.description && <p className="mt-0.5 truncate text-xs text-ink-soft" title={x.description}>{x.description}</p>}
+                          {x.model && <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint md:hidden">{x.model}</p>}
                         </td>
-                        <td className="px-3 py-3 font-mono text-[12px] text-ink-soft">{x.model ?? '—'}</td>
-                        <td className="px-3 py-3 text-right font-mono text-[12px] text-ink-soft">{x.skillCount ?? '—'}</td>
+                        <td className="hidden px-3 py-3 font-mono text-[12px] text-ink-soft md:table-cell">{x.model ?? '—'}</td>
+                        <td className="hidden px-3 py-3 text-right font-mono text-[12px] text-ink-soft md:table-cell">{x.skillCount ?? '—'}</td>
                         <td className="px-3 py-3">
-                          <span className={cx('inline-flex items-center gap-2 text-xs', x.hasKey ? 'text-ink-faint' : 'text-warn')}
+                          <span className={cx('inline-flex items-center gap-2 whitespace-nowrap text-xs', x.hasKey ? 'text-ink-faint' : 'text-warn')}
                             title={x.hasKey ? undefined : 'Ajoutez sa clé API server dans profileKeys de l’instance'}>
                             <Mark state={x.hasKey ? 'full' : 'unavailable'} />{x.hasKey ? 'prêt' : 'clé manquante'}
                           </span>
                         </td>
                         {showWorkers && (
-                          <td className={cx('px-5 py-3 text-right font-mono text-[12px]', x.workers ? 'text-ink' : 'text-ink-faint')}>{x.workers ?? '—'}</td>
+                          <td className={cx('px-4 py-3 text-right font-mono text-[12px] md:px-5', x.workers ? 'text-ink' : 'text-ink-faint')}>{x.workers ?? '—'}</td>
                         )}
                       </tr>
                     ))}

@@ -1,6 +1,8 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
@@ -135,21 +137,51 @@ export function Layout() {
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 flex border-t border-line bg-sheet pb-[env(safe-area-inset-bottom)] md:hidden">
-        {NAV.map((n) => (
-          <Link
-            key={n.to}
-            to={n.to}
-            activeOptions={{ exact: n.to === '/' }}
-            className={`flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px] ${alsoActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}
-            activeProps={{ className: '!text-accent' }}
-          >
+      <MobileNav isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
+    </div>
+  );
+}
+
+/** Bottom bar on phones: the first entries, the others behind "Plus". */
+const MOBILE_MAIN = ['/', '/w', '/activite', '/agents'];
+
+function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
+  const [more, setMore] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => setMore(false), [pathname]);
+  const main = NAV.filter((n) => MOBILE_MAIN.includes(n.to));
+  const rest = NAV.filter((n) => !MOBILE_MAIN.includes(n.to));
+  const item = 'flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px]';
+  return (
+    <>
+      {more && createPortal(
+        <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
+          <nav aria-label="Plus" onClick={(e) => e.stopPropagation()}
+            className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
+            {rest.map((n) => (
+              <Link key={n.to} to={n.to} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>
+                <n.icon className="size-5" strokeWidth={1.5} />
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+        </div>,
+        document.body,
+      )}
+      <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-line bg-sheet pb-[env(safe-area-inset-bottom)] md:hidden">
+        {main.map((n) => (
+          <Link key={n.to} to={n.to} className={`${item} ${isActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}>
             <n.icon className="size-5" strokeWidth={1.5} />
             {n.label}
           </Link>
         ))}
+        <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more}
+          className={`${item} ${more || rest.some((n) => isActive(n.to)) ? 'text-accent' : 'text-ink-faint'}`}>
+          <Ellipsis className="size-5" strokeWidth={1.5} />
+          Plus
+        </button>
       </nav>
-    </div>
+    </>
   );
 }
 
