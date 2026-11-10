@@ -132,7 +132,8 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
 4. `PUT /api/env {key, value}` and `DELETE /api/env {key}` also rewrite copies of the value in `config.yaml`; the MCP
    writes call `save_config` too. `GET /api/env` sometimes shows the start and end of a value (`redacted_value`):
    never display it, never call `/api/env/reveal`.
-5. `GET /api/model/options` can persist discovered models into the config (a read that writes).
+5. `GET /api/model/options` can persist discovered models into the config (a read that writes). Hermes 0.23.0 has
+   no list of favourite models (only the providers' catalogues): the chat's list is kept by Intendia.
 6. `POST /api/model/set {scope, provider, model, task?, confirm_expensive_model?}`: with `api_key` it writes the key in
    clear in the config (Intendia never sends `api_key` nor `base_url`). An expensive model answers 200
    `{ ok: false, confirm_required, confirm_message }`.
