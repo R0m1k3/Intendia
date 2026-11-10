@@ -4,6 +4,7 @@ import {
   ActionStartSchema, ActionStatusSchema, actionName, ContentSchema, HubOfficialSchema, HubSearchSchema, ScanSchema,
   SkillListSchema, ToolsetListSchema, UPDATE_ACTION, type HermesHubResult, type HermesScan, type HermesSkill,
 } from '../connectors/skills/index.js';
+import { lastRunLines } from '../connectors/actions.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 
@@ -78,8 +79,6 @@ export const CONTENT_MAX = 200_000;
 const SLOW_MS = 40_000;
 const INSTALL_MS = 60_000;
 const STATUS_LINES = 200;
-const KEEP_LINES = 20;
-const LINE_MAX = 300;
 const EMOJI_RE = /^\p{Extended_Pictographic}️?\s*/u;
 
 /** Hermes 404 → NotFoundError (unknown profile, skill or action, with Hermes' message), 400/422 → ValidationError. */
@@ -134,16 +133,7 @@ function toHub(r: HermesHubResult, installedIds?: Record<string, unknown>): Publ
   };
 }
 
-/** Lines of the last run only (Hermes appends every run to one log per action name), capped. */
-export function lastRunLines(name: string, lines: string[]): { lines: string[]; truncated: boolean } {
-  const header = `=== ${name} started`;
-  let start = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i]!.startsWith(header)) { start = i + 1; break; }
-  }
-  const run = (start >= 0 ? lines.slice(start) : lines).filter((l, i, all) => l !== '' || (i > 0 && i < all.length - 1));
-  return { lines: run.slice(-KEEP_LINES).map((l) => (l.length > LINE_MAX ? `${l.slice(0, LINE_MAX)}…` : l)), truncated: start < 0 };
-}
+export { lastRunLines };
 
 export class SkillService {
   /** Starts in flight (`inst:action`): closes the gap between the busy check and the Hermes call. */

@@ -1,7 +1,68 @@
 {
   "status": 200,
   "body": {
-    "providers": [],
+    "providers": [
+      {
+        "slug": "nous",
+        "name": "Nous Portal",
+        "is_current": false,
+        "is_user_defined": false,
+        "models": [],
+        "total_models": 0,
+        "source": "canonical",
+        "authenticated": false,
+        "auth_type": "oauth_device_code",
+        "key_env": "",
+        "warning": "run `hermes model` to configure (oauth_device_code)",
+        "capabilities": {},
+        "featured_models": []
+      },
+      {
+        "slug": "openrouter",
+        "name": "OpenRouter",
+        "is_current": false,
+        "is_user_defined": false,
+        "models": [],
+        "total_models": 0,
+        "source": "canonical",
+        "authenticated": false,
+        "auth_type": "api_key",
+        "key_env": "",
+        "warning": "run `hermes model` to configure (api_key)",
+        "capabilities": {},
+        "featured_models": []
+      },
+      {
+        "slug": "anthropic",
+        "name": "Anthropic",
+        "is_current": false,
+        "is_user_defined": false,
+        "models": [],
+        "total_models": 0,
+        "source": "canonical",
+        "authenticated": false,
+        "auth_type": "api_key",
+        "key_env": "ANTHROPIC_API_KEY",
+        "warning": "paste ANTHROPIC_API_KEY to activate",
+        "capabilities": {},
+        "featured_models": []
+      },
+      {
+        "slug": "deepseek",
+        "name": "DeepSeek",
+        "is_current": false,
+        "is_user_defined": false,
+        "models": [],
+        "total_models": 0,
+        "source": "canonical",
+        "authenticated": false,
+        "auth_type": "api_key",
+        "key_env": "DEEPSEEK_API_KEY",
+        "warning": "paste DEEPSEEK_API_KEY to activate",
+        "capabilities": {},
+        "featured_models": []
+      }
+    ],
     "model": "anthropic/claude-opus-4.6",
     "provider": "auto"
   }

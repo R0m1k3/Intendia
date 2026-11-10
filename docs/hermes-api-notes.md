@@ -102,6 +102,39 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
   Uninstalling a non-hub skill exits 1 (`Error: '<name>' is not a hub-installed skill`); an unknown identifier exits 1
   (`Error: Could not download ...`).
 
+## Settings (checked on 0.23.0, phase 6, 2026-11-09)
+
+1. `GET /api/config` masks nothing: `${VAR}` references come back resolved (secret values included).
+   `?include_defaults=false` returns the file as written. `GET /api/config/schema` → `{ fields: { path: { type,
+   description, category, options? } }, category_order }`; every field whose default is `None` is typed `string`
+   (e.g. `agent.max_turns` holds 500).
+2. `PUT /api/config {config}` deep-merges into the file; a `null` over a section is ignored, over a scalar it
+   replaces the value.
+3. `GET /api/config/raw` → `{ yaml, path }`. `PUT /api/config/raw {yaml_text}` replaces the content but writes it the
+   Hermes way: it keeps the comments and layout of the file on disk and drops comments added in the text sent.
+   In the raw file `model` is a table.
+4. `PUT /api/env {key, value}` and `DELETE /api/env {key}` also rewrite copies of the value in `config.yaml`; the MCP
+   writes call `save_config` too. `GET /api/env` sometimes shows the start and end of a value (`redacted_value`):
+   never display it, never call `/api/env/reveal`.
+5. `GET /api/model/options` can persist discovered models into the config (a read that writes).
+6. `POST /api/model/set {scope, provider, model, task?, confirm_expensive_model?}`: with `api_key` it writes the key in
+   clear in the config (Intendia never sends `api_key` nor `base_url`). An expensive model answers 200
+   `{ ok: false, confirm_required, confirm_message }`.
+7. `POST /api/mcp/servers` needs `auth: "header"` with `bearer_token`; the token goes to the env file as
+   `MCP_<NAME>_API_KEY` (name upper-cased, `-` → `_`). Deleting the server may leave it: Intendia deletes it after.
+   `POST /api/mcp/servers/{name}/test` can take 30 s or more.
+8. `GET /api/messaging/platforms` → states are not a closed list (`disabled`, `not_configured`, `pending_restart`,
+   `connected`...); `error_message` may quote a token.
+9. `POST /api/gateway/restart` runs `hermes gateway restart --interrupt` (running turns are cut, for every profile the
+   gateway serves); follow it with `/api/actions/gateway-restart/status` (log header `=== gateway-restart started`).
+10. Writes are not versioned by Hermes: there is no ETag; Intendia compares a SHA-256 of the raw text.
+11. PyYAML reads `.` and `1e5` as strings; the `yaml` library in 1.1 mode reads them as NaN and 100000 unless its
+    float tags are narrowed (`pyTags` in `hermes-config/mask.ts`).
+
+Masking risks: secrets are found by key name, by section (`mcp_servers.*.headers|env`, `extra_headers`) and by value
+shape (token prefixes, Telegram tokens, URL passwords, query values, webhook paths). A secret with an ordinary key and
+an ordinary look would stay visible; a new Hermes section holding secrets needs a rule.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

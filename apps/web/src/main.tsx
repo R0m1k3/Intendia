@@ -13,6 +13,7 @@ import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
 import { CronsPage } from './pages/Crons';
 import { SkillsPage, type SkillsSearch } from './pages/Skills';
+import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { LinksPage } from './pages/Links';
@@ -90,10 +91,27 @@ const skillsRoute = createRoute({
     profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
   }),
 });
+/** /config: the first instance (creation order) */
+const configIndexRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/config',
+  beforeLoad: async () => {
+    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+    const first = instances[0];
+    throw first ? redirect({ to: '/i/$inst/config', params: { inst: first.id } }) : redirect({ to: '/' });
+  },
+});
+const configRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/config', component: ConfigPage,
+  validateSearch: (s: Record<string, unknown>): ConfigSearch => ({
+    profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+    tab: typeof s.tab === 'string' && (CONFIG_TABS as readonly string[]).includes(s.tab) ? (s.tab as ConfigTab) : undefined,
+    key: typeof s.key === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(s.key) ? s.key : undefined,
+  }),
+});
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute])]),
   defaultPreload: 'intent',
 });
 

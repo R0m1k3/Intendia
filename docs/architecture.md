@@ -125,6 +125,21 @@ sequenceDiagram
 - `src/agents/service.ts` (`AgentService.profiles`, `/x/i/:inst/agents/profiles`) feeds the agent selector:
   dashboard profiles, else `default` plus the profiles that have an API server key.
 
+## Configuration
+
+- `src/hermes-config/service.ts` (`ConfigService`) calls the `config` connector; `src/routes/config.ts` serves
+  `/x/i/:inst/config...` (form, raw YAML, versions and restore, models, env, MCP servers, platforms, gateway restart),
+  every route with `?profile=`. Lists come wrapped (`{versions}`, `{env}`, `{servers}`, `{platforms}`).
+- No secret reaches the browser: `mask.ts` (`Masker`) replaces each one with `«secret:<id>»` (HMAC of the value) in
+  values, YAML text and every text that comes from Hermes; the YAML editor puts them back by id on save and refuses a
+  secret moved under a key shown in clear (`secret_moved`).
+- Every write that can change the file goes through `ConfigService.write`: per-profile lock, reread of the raw text,
+  version check (SHA-256, 16 hex) for form, YAML, restore and model, encrypted copy (10 kept per instance and profile,
+  dropped again if Hermes or Intendia refuses the write), Hermes call, new version. Without the raw route, config writes
+  are a 409 `config_unavailable`; env and MCP writes go through without copy.
+- The browser (`apps/web/src/config/`, page `pages/Config.tsx`) shows the diff before saving, reloads after a 409
+  keeping the draft, and offers the gateway restart after a write that needs it (polled every 1.5 s, 5 min at most).
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

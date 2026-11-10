@@ -15,6 +15,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   cronStepMs: Number(process.env.FAKE_CRON_STEP_MS ?? 500),
   // skills actions (install, uninstall, update): long enough to see the follow-up
   skillStepMs: Number(process.env.FAKE_SKILL_STEP_MS ?? 500),
+  // gateway restart (3 steps)
+  configStepMs: Number(process.env.FAKE_CONFIG_STEP_MS ?? 500),
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);

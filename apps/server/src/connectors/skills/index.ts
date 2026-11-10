@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { ActionStatusSchema } from '../actions.js';
 import type { ModuleDef } from '../types.js';
 
 export const SkillSchema = z.looseObject({
@@ -61,11 +62,7 @@ export type HermesScan = z.infer<typeof ScanSchema>;
 
 export const ContentSchema = z.looseObject({ name: z.string(), content: z.string() });
 export const ActionStartSchema = z.looseObject({ name: z.string().min(1) });
-export const ActionStatusSchema = z.looseObject({
-  running: z.boolean(),
-  exit_code: z.number().nullable(),
-  lines: z.array(z.string()),
-});
+export { ActionStatusSchema };
 
 export const UPDATE_ACTION = 'skills-update';
 

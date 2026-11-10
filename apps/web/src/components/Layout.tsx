@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2 } from 'lucide-react';
+import { CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/liens', label: 'Liens', icon: Link2 },
   { to: '/crons', label: 'Crons', icon: CalendarClock },
   { to: '/skills', label: 'Skills', icon: Puzzle },
+  { to: '/config', label: 'Configuration', icon: SlidersHorizontal },
   { to: '/etat', label: 'État', icon: ListChecks },
   { to: '/reglages', label: 'Réglages', icon: Settings2 },
 ] as const;
