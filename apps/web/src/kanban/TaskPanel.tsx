@@ -6,6 +6,7 @@ import { api, kanbanPath, type KanbanTask, type KanbanTaskDetail, type KanbanTas
 import { Button, cx, ErrorText, Field, Input, Mark, timeAgo } from '../components/ui';
 import { moveTargets, statusLabel } from './moves';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
+import { POLL_MS } from './useLive';
 
 const ICON = 'size-4';
 const when = (s: number | null) => (s ? timeAgo(s * 1000) : '');
@@ -22,8 +23,8 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-/** Title and text, edited together. */
-function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTaskPatch) => void; busy: boolean }) {
+/** Title and text, edited together; the draft is kept until the save succeeds (a failed save loses nothing). */
+function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTaskPatch) => Promise<unknown>; busy: boolean }) {
   const [draft, setDraft] = useState<{ title: string; body: string } | null>(null);
   if (!draft) {
     return (
@@ -45,7 +46,12 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
       <div className="flex justify-end gap-2">
         <Button onClick={() => setDraft(null)}>Annuler</Button>
         <Button variant="primary" disabled={busy || !draft.title.trim()}
-          onClick={() => { save({ ...(draft.title !== task.title ? { title: draft.title } : {}), ...(draft.body !== task.body ? { body: draft.body } : {}) }); setDraft(null); }}>
+          onClick={() => {
+            const sent = draft;
+            save({ ...(sent.title !== task.title ? { title: sent.title } : {}), ...(sent.body !== task.body ? { body: sent.body } : {}) })
+              // Close only if nothing was typed while the save was pending; the error is shown by the panel.
+              .then(() => setDraft((cur) => (cur && cur.title === sent.title && cur.body === sent.body ? null : cur)), () => {});
+          }}>
           Enregistrer
         </Button>
       </div>
@@ -53,13 +59,15 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
   );
 }
 
-export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, onClose, onOpen }: {
+export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, polling, onClose, onOpen }: {
   inst: string; board: string; taskId: string; workflow: KanbanWorkflow | undefined; assignees: string[];
+  /** Live events unavailable: the open task is polled like the board. */
+  polling: boolean;
   allTasks: KanbanTask[]; onClose: () => void; onOpen: (id: string) => void;
 }) {
   const qc = useQueryClient();
   const key = ['kanban-task', inst, board, taskId];
-  const detail = useQuery({ queryKey: key, queryFn: () => api.kanbanTask(inst, board, taskId) });
+  const detail = useQuery({ queryKey: key, queryFn: () => api.kanbanTask(inst, board, taskId), refetchInterval: polling ? POLL_MS : false });
   const [comment, setComment] = useState('');
   const [linkTo, setLinkTo] = useState('');
   const [showLog, setShowLog] = useState(false);
@@ -97,7 +105,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
       {notice && <p role="status" className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ink">{notice}</p>}
       {!t ? <p className="text-sm text-ink-faint">Chargement…</p> : (
         <>
-          <TextEditor task={t} save={(p) => update.mutate(p)} busy={update.isPending} />
+          <TextEditor task={t} save={(p) => update.mutateAsync(p)} busy={update.isPending} />
 
           {t.status === 'blocked' && (
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 px-4 py-3 text-sm">

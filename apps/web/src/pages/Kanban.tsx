@@ -388,7 +388,7 @@ export function KanbanPage() {
       {dialog === 'dispatch' && board && <Dispatch inst={inst} board={board} onClose={() => setDialog(null)} />}
       {dialog === 'orchestration' && <Orchestration inst={inst} assignees={assignees.data ?? []} onClose={() => setDialog(null)} />}
       {search.task && board && (
-        <TaskPanel key={search.task} inst={inst} board={board} taskId={search.task} workflow={wf} assignees={assignees.data ?? []} allTasks={allTasks}
+        <TaskPanel key={search.task} inst={inst} board={board} taskId={search.task} workflow={wf} assignees={assignees.data ?? []} allTasks={allTasks} polling={live.polling}
           onClose={() => go({ task: undefined })} onOpen={(id) => go({ task: id })} />
       )}
     </div>
