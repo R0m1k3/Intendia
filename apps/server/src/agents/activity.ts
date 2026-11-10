@@ -62,8 +62,9 @@ export class ActivityService {
       if (!errors.some((e) => e.instance === instance && e.message === message)) errors.push({ instance, message });
     };
     const known = new Set(this.store.list().map((i) => i.id));
-    const candidates = this.workspaces.recentRuns(now - WINDOW_MS, MAX_CANDIDATES)
-      .filter((r) => known.has(r.instanceId) && !this.done.has(`${r.instanceId}:${r.runId}`));
+    // finished runs are skipped before the limit, so an older run still going is reached
+    const candidates = this.workspaces.recentRuns(now - WINDOW_MS, MAX_CANDIDATES,
+      (r) => known.has(r.instanceId) && !this.done.has(`${r.instanceId}:${r.runId}`));
 
     const checked = await inBatches(candidates, PARALLEL, async (c): Promise<ActiveRun | null> => {
       const key = `${c.instanceId}:${c.runId}`;

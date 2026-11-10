@@ -155,12 +155,13 @@ sequenceDiagram
   task Hermes put back in `ready` is moved to `blocked` so the dispatcher does not relaunch it. A 404 or 409 from
   `terminate` is a 409 `worker_ended`; a refused block a 409 `task_restarted`.
 - `src/agents/activity.ts` (`ActivityService`, `GET /x/activity`): Hermes has no run list, so the candidates are the
-  last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`), checked 4 at a time
+  last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`, read by pages and
+  skipping runs already known as finished, so an older run still going is reached), checked 4 at a time
   with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
   never asked again. Kanban workers come from every live board of every instance. An unreachable instance is an
   `errors` line, not a failure of the page. The page rereads every 5 s while visible.
 - Sub-agents (`apps/web/src/chat/events.ts`, `Subagents.tsx`): one `subagents` entry per run, at the first
-  `subagent.start`, nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
+  `subagent.start` (keyed by its `run_id`: `seq` is local to a run), nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
   root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page
   keeps the trees of the runs that ended while it was open, and they are gone after a reload.
 
