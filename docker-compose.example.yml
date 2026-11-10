@@ -2,7 +2,7 @@
 # three external names (workspace volume, Hermes network, reverse-proxy network).
 services:
   intendia:
-    image: ghcr.io/r0m1k3/intendia:1        # major alias: patch releases only
+    image: ghcr.io/r0m1k3/intendia:0.0      # development versions (0.0.x); from 1.0, use the major alias :1
     container_name: intendia
     restart: unless-stopped
     init: true

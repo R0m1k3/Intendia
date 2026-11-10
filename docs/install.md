@@ -41,6 +41,9 @@ curl -o .env https://raw.githubusercontent.com/R0m1k3/Intendia/main/.env.example
 mv docker-compose.example.yml docker-compose.yml
 ```
 
+The image is `ghcr.io/r0m1k3/intendia`. While the repository is private, the image is too: log in once with a GitHub
+token that has `read:packages` (`echo <token> | docker login ghcr.io -u <user> --password-stdin`).
+
 Edit `.env`: `INTENDIA_PUBLIC_URL` (your domain) and `INTENDIA_SECRET` (`openssl rand -hex 32`).
 Edit `docker-compose.yml`: the names of the Hermes workspace volume, the Hermes network and your reverse-proxy network.
 `PUID`/`PGID` must own the workspace volume (official Hermes image: 10000).
@@ -140,6 +143,7 @@ and give the returned link in your answer. Never paste the file's content instea
 
 - **Hermes** can stay on `latest`. After each update Intendia re-tests every module; the State screen shows the result,
   and `INTENDIA_WEBHOOK_URL` can notify you when a module changes state.
-- **Intendia** publishes `X.Y.Z`, `X.Y` and `X` tags. Follow the major tag (`:1`) to receive fixes only.
+- **Intendia** publishes `X.Y.Z`, `X.Y` and (from 1.0) `X` tags. During development (`0.0.x`) follow `:0.0`; from 1.0,
+  follow the major tag (`:1`) to receive fixes only.
 - **Database**: before each migration Intendia copies it with `VACUUM INTO` into `/data/backups/` (last five kept).
   Migrations only add tables or columns, so going back one version works without a restore.

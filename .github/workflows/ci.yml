@@ -21,4 +21,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
-        with: { context: ., push: false, tags: intendia:ci }
+        with: { context: ., push: false, load: true, tags: 'intendia:ci' }
+      # installation as in docs/install.md, against fake-hermes on the host
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - name: Start fake-hermes
+        run: |
+          (cd apps/fake-hermes && nohup pnpm dev > /tmp/fake.log 2>&1 &)
+          for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:18642/health && break; sleep 1; done
+      - name: Install and check
+        run: .github/scripts/install-smoke.sh
