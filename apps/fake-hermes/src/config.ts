@@ -31,6 +31,13 @@ type Obj = Record<string, unknown>;
 export const OPENROUTER_MODELS = [
   'anthropic/claude-opus-4.6', 'anthropic/claude-sonnet-4.5', 'openai/gpt-5.5', 'google/gemini-3-pro', 'deepseek/deepseek-v3.2', 'qwen/qwen3-coder',
 ] as const;
+/** Hermes `_declared_model_ids`: a string, a list of strings or `{id|name}` objects, or a `{id: meta}` mapping. */
+function declaredIds(v: unknown): string[] {
+  const raw = typeof v === 'string' ? [v]
+    : Array.isArray(v) ? v.map((x) => (isObj(x) ? (typeof x.id === 'string' && x.id.trim() ? x.id : x.name) : x))
+    : isObj(v) ? Object.keys(v).filter((k) => !k.startsWith('__')) : [];
+  return raw.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim());
+}
 const isObj = (v: unknown): v is Obj => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 function deepMerge(base: Obj, over: Obj): Obj {
@@ -144,14 +151,20 @@ export class ConfigStore {
    * with a key and 6 models (the recorded entry, made authenticated), any other profile only Anthropic with 2.
    */
   modelOptionsFor(profile: string): { providers: Obj[] } {
-    if (profile !== 'default') {
-      const base = this.modelOptions.providers.find((p) => p.slug === 'anthropic') ?? { slug: 'anthropic', name: 'Anthropic' };
-      return { providers: [{ ...base, authenticated: true, key_env: 'ANTHROPIC_API_KEY', models: ['claude-opus-4.6', 'claude-haiku-4.5'], total_models: 2 }] };
-    }
+    const rows = profile !== 'default'
+      ? [{ ...(this.modelOptions.providers.find((p) => p.slug === 'anthropic') ?? { slug: 'anthropic', name: 'Anthropic' }), authenticated: true, key_env: 'ANTHROPIC_API_KEY', models: ['claude-opus-4.6', 'claude-haiku-4.5'] }]
+      : this.modelOptions.providers.map((p) => p.slug === 'openrouter' ? { ...p, authenticated: true, models: [...OPENROUTER_MODELS] } : p);
+    // like Hermes `_lap_builtin_rows`: providers.<slug>.models declared in the file go first, without duplicates
+    const declared = isObj(this.file().providers) ? (this.file().providers as Obj) : {};
     return {
-      providers: this.modelOptions.providers.map((p) => p.slug === 'openrouter'
-        ? { ...p, authenticated: true, models: [...OPENROUTER_MODELS], total_models: OPENROUTER_MODELS.length }
-        : p),
+      providers: rows.map((p) => {
+        const entry = declared[String(p.slug)];
+        if (!isObj(entry) || p.is_user_defined) return { ...p, total_models: Array.isArray(p.models) ? p.models.length : p.total_models };
+        const seen = new Set<string>();
+        const models = [...declaredIds(entry.models), ...((p.models as string[] | undefined) ?? [])]
+          .filter((m) => !seen.has(m.toLowerCase()) && Boolean(seen.add(m.toLowerCase())));
+        return { ...p, models, total_models: models.length };
+      }),
     };
   }
 

@@ -107,6 +107,7 @@ interface SimRun {
   updatedAt: number;
   model: string | null;
   modelOptions: unknown;
+  provider: string | null;
   status: string;
   output: string;
   usage: Record<string, number> | null;
@@ -147,12 +148,12 @@ class Simulator {
 
   constructor(private readonly stepMs: number, private readonly pathMap?: { from: string; to: string }) {}
 
-  create(sessionId: string, input: string, instructions = '', model: string | null = null, modelOptions: unknown = null): SimRun {
+  create(sessionId: string, input: string, instructions = '', model: string | null = null, modelOptions: unknown = null, provider: string | null = null): SimRun {
     this.counter += 1;
     const now = Date.now() / 1000;
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
-      sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, status: 'queued', output: '', usage: null,
+      sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, provider, status: 'queued', output: '', usage: null,
       events: [], listeners: new Set(), approval: null,
     };
     this.runs.set(run.id, run);
@@ -365,7 +366,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // test route (Playwright runs cannot read the in-memory log): options of the last created run
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/last') {
       const last = sim.lastRun;
-      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, input: last.input } : { run_id: null });
+      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
     if (via === 'api' && method === 'POST' && path === '/_fake/sessions') {
@@ -444,7 +445,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     sim.runsPosted += 1;
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
     const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''),
-      typeof b.model === 'string' ? b.model : null, b.model_options ?? null);
+      typeof b.model === 'string' ? b.model : null, b.model_options ?? null, typeof b.provider === 'string' ? b.provider : null);
     return json({ run_id: run.id, status: 'started', replayed: false });
   }
   let m = /^\/v1\/runs\/([^/]+)(\/[a-z]+)?$/.exec(path);
