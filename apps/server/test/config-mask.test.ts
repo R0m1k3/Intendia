@@ -64,6 +64,10 @@ describe('Masker.text', () => {
     expect(m.text('api_key: opaque-value')).not.toContain('opaque-value');
     expect(m.text('bad token 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).not.toContain('AAAAAAAAAA');
     expect(m.text('max_tokens=4096')).toBe('max_tokens=4096');
+    // a placeholder written by an earlier rule is not masked again
+    const bearer = m.text('Example header: Authorization: Bearer fake-soul-token-1234567890');
+    expect(bearer).toMatch(/Bearer «secret:[0-9a-f]{8}»$/);
+    expect(m.text('api_key: opaque-value')).toMatch(/^api_key: «secret:[0-9a-f]{8}»$/);
     expect(m.text('Gateway restarted')).toBe('Gateway restarted');
   });
 });
