@@ -113,7 +113,7 @@ export function FilesPage() {
           </Panel>
         </DropZone>
         {open && (
-          <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(100vh-3rem)] lg:rounded-xl lg:border lg:border-line">
+          <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:rounded-xl lg:border lg:border-line">
             <Preview slug={slug} path={open} onClose={() => void go({ path: dir || undefined })} />
           </section>
         )}

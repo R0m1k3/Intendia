@@ -115,7 +115,7 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); if (!scheduleError) save.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-paper shadow-xl md:w-[520px] md:border-l md:border-line"
+        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[520px] md:border-l md:border-line"
         aria-label={cron ? 'Modifier le cron' : 'Nouveau cron'}
       >
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">

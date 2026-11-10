@@ -20,7 +20,7 @@ export function Button({ variant = 'secondary', className, ...p }: ButtonHTMLAtt
         'inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-medium [&>svg]:shrink-0 transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
         pad,
         variant === 'primary' && 'bg-accent text-on-accent hover:bg-accent-strong',
-        variant === 'secondary' && 'border border-line bg-sheet text-ink hover:border-ink-faint/60 hover:bg-raised/60',
+        variant === 'secondary' && 'border border-line bg-sheet text-ink hover:bg-raised',
         variant === 'ghost' && 'text-ink-soft hover:bg-raised hover:text-ink',
         variant === 'danger' && 'border border-line bg-sheet text-bad hover:border-bad/50 hover:bg-bad-soft',
         className,
@@ -58,7 +58,7 @@ export function Panel({ title, action, children, className, bodyClassName }: {
     <section className={cx('rounded-xl border border-line bg-sheet', className)}>
       {(title || action) && (
         <header className="flex min-h-14 items-center justify-between gap-4 border-b border-line px-5 py-3">
-          <h2 className="text-[15px] font-medium">{title}</h2>
+          <h2 className="text-[15px] font-semibold">{title}</h2>
           {action}
         </header>
       )}
@@ -67,9 +67,9 @@ export function Panel({ title, action, children, className, bodyClassName }: {
   );
 }
 
-/* Register box: the state of a module, readable without colour (full, half, empty). */
+/* State dot: full, half, empty, so the state reads without colour. */
 const MARK: Record<ModuleState, { label: string; text: string; box: string }> = {
-  full: { label: 'Complet', text: 'text-ok', box: 'border-ok bg-ok' },
+  full: { label: 'Complet', text: 'text-ok', box: 'border-dot-ok bg-dot-ok shadow-[0_0_0_3px_var(--color-ok-soft)]' },
   readonly: { label: 'Lecture seule', text: 'text-warn', box: 'border-warn bg-[linear-gradient(to_right,var(--color-warn)_50%,transparent_50%)]' },
   unavailable: { label: 'Indisponible', text: 'text-bad', box: 'border-bad' },
 };
@@ -79,7 +79,7 @@ export function Mark({ state, className }: { state: ModuleState | null; classNam
     <span
       aria-hidden
       className={cx(
-        'inline-block size-2.5 shrink-0 rounded-[2px] border-[1.5px]',
+        'inline-block size-2.5 shrink-0 rounded-full border-[1.5px]',
         state ? MARK[state].box : 'border-ink-faint/50',
         className,
       )}
@@ -123,8 +123,8 @@ export function ErrorText({ error }: { error: unknown }) {
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
     <span className="flex items-center gap-2.5">
-      <img src="/favicon.svg" alt="" className={size === 'lg' ? 'size-7' : 'size-6'} />
-      <span className={cx('font-medium', size === 'lg' ? 'text-lg' : 'text-base')}>Intendia</span>
+      <img src="/favicon.svg" alt="" className={size === 'lg' ? 'size-8' : 'size-7'} />
+      <span className={cx('font-semibold', size === 'lg' ? 'text-lg' : 'text-base')}>Intendia</span>
     </span>
   );
 }

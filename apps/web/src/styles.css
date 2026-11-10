@@ -1,74 +1,86 @@
 @import "tailwindcss";
 
 /*
- * Intendia: a steward's register. Quiet paper and ink for the chrome; one ink-green accent
- * for actions and selection. States read as register boxes (full, half, empty), never as pills.
+ * Intendia: quiet grey frame, white work card, one navy accent for actions and selection;
+ * module states are dots: full, half, empty.
  */
 @theme {
-  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --color-paper: #f3f2ee;
-  --color-sheet: #fbfbf9;
-  --color-raised: #eceae4;
-  --color-line: #e2e0d9;
-  --color-ink: #1c1d1c;
-  --color-ink-soft: #595b57;
-  --color-ink-faint: #8a8b86;
-  --color-accent: #1f4d3a;
-  --color-accent-strong: #163a2b;
-  --color-accent-soft: #e2ebe5;
-  --color-on-accent: #fbfbf9;
+  --color-paper: #f5f6f7;
+  --color-sheet: #ffffff;
+  --color-raised: #eef0f2;
+  --color-line: #e3e6ea;
+  --color-ink: #16181b;
+  --color-ink-soft: #464a50;
+  --color-ink-faint: #646971;
+  --color-accent: #1f4e79;
+  --color-accent-strong: #183f63;
+  --color-accent-soft: #e7eef5;
+  --color-on-accent: #ffffff;
 
-  --color-ok: #2f6b4a;
-  --color-ok-soft: #e2eee6;
+  --color-ok: #24704a;
+  --color-ok-soft: #ddf0e5;
+  --color-dot-ok: #2f8f5b;
   --color-warn: #8a5a12;
-  --color-warn-soft: #f6ead2;
-  --color-bad: #9b2c22;
-  --color-bad-soft: #f5e1dd;
+  --color-warn-soft: #f8ecd4;
+  --color-bad: #9b2c1f;
+  --color-bad-soft: #fbeae7;
 
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 @layer base {
-  :root.dark {
-    --color-paper: #151615;
-    --color-sheet: #1b1c1b;
-    --color-raised: #232523;
-    --color-line: #2c2e2c;
-    --color-ink: #e8e7e2;
-    --color-ink-soft: #a6a6a0;
-    --color-ink-faint: #737470;
-    --color-accent: #8cc0a3;
-    --color-accent-strong: #a4cfb6;
-    --color-accent-soft: #213028;
-    --color-on-accent: #121312;
-    --color-ok: #8cc0a3;
-    --color-ok-soft: #1f2d26;
-    --color-warn: #d9ab5c;
-    --color-warn-soft: #33291a;
-    --color-bad: #e38c80;
-    --color-bad-soft: #3a2220;
+  /* Shell geometry (desktop card: 8 px margin, 1 px border) and its shadow; not Tailwind theme values. */
+  :root {
+    --card-h: calc(100dvh - 1rem);
+    --content-h: calc(var(--card-h) - 2px);
+    --shadow-card: 0 1px 2px rgb(22 24 27 / 0.03), 0 12px 32px -16px rgb(22 24 27 / 0.12);
   }
+  :root.dark {
+    --color-paper: #0e1012;
+    --color-sheet: #16191c;
+    --color-raised: #20242a;
+    --color-line: #2a2f35;
+    --color-ink: #e7e9ec;
+    --color-ink-soft: #b3b8bf;
+    --color-ink-faint: #8b929b;
+    --color-accent: #8db5dd;
+    --color-accent-strong: #a8c8e8;
+    --color-accent-soft: #1b2a39;
+    --color-on-accent: #0e1012;
+    --color-ok: #74c69d;
+    --color-ok-soft: #1a2c23;
+    --color-dot-ok: #4fb67f;
+    --color-warn: #dcae62;
+    --color-warn-soft: #33291a;
+    --color-bad: #ee8e80;
+    --color-bad-soft: #3a2220;
+    --shadow-card: none;
+  }
+  /* Same values as :root.dark: keep both blocks identical. */
   @media (prefers-color-scheme: dark) {
     :root:not(.light) {
-      --color-paper: #151615;
-      --color-sheet: #1b1c1b;
-      --color-raised: #232523;
-      --color-line: #2c2e2c;
-      --color-ink: #e8e7e2;
-      --color-ink-soft: #a6a6a0;
-      --color-ink-faint: #737470;
-      --color-accent: #8cc0a3;
-      --color-accent-strong: #a4cfb6;
-      --color-accent-soft: #213028;
-      --color-on-accent: #121312;
-      --color-ok: #8cc0a3;
-      --color-ok-soft: #1f2d26;
-      --color-warn: #d9ab5c;
+      --color-paper: #0e1012;
+      --color-sheet: #16191c;
+      --color-raised: #20242a;
+      --color-line: #2a2f35;
+      --color-ink: #e7e9ec;
+      --color-ink-soft: #b3b8bf;
+      --color-ink-faint: #8b929b;
+      --color-accent: #8db5dd;
+      --color-accent-strong: #a8c8e8;
+      --color-accent-soft: #1b2a39;
+      --color-on-accent: #0e1012;
+      --color-ok: #74c69d;
+      --color-ok-soft: #1a2c23;
+      --color-dot-ok: #4fb67f;
+      --color-warn: #dcae62;
       --color-warn-soft: #33291a;
-      --color-bad: #e38c80;
+      --color-bad: #ee8e80;
       --color-bad-soft: #3a2220;
+      --shadow-card: none;
     }
   }
 

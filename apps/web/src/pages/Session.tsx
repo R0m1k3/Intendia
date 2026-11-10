@@ -207,8 +207,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   return (
     <FilePaths.Provider value={filePaths}>
     <div className="flex min-h-full">
-    <DropZone onFiles={(f) => void attach(f)} label="Déposer dans inbox/ et citer dans le message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur-sm">
+    <DropZone onFiles={(f) => void attach(f)} label="Déposer dans inbox/ et citer dans le message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
+      <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-3 md:px-8">
           <Link to="/w/$slug" params={{ slug }} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink" aria-label="Retour au workspace">
             <ArrowLeft className="size-4" strokeWidth={1.5} />
@@ -267,7 +267,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         <div ref={bottom} className="h-4" />
       </div>
 
-      <div className="sticky bottom-0 bg-linear-to-t from-paper from-70% to-transparent pt-4">
+      <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent pt-4">
         <div className="mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
           <div className="mb-2 empty:hidden"><ErrorText error={error ?? uploadError} /></div>
           <Composer
@@ -285,7 +285,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     </DropZone>
     {panel && (
       <aside className={cx(
-        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:shrink-0 lg:border-l lg:border-line',
+        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-[var(--content-h)] lg:shrink-0 lg:border-l lg:border-line',
         previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]',
       )}>
         {side}

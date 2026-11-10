@@ -12,7 +12,7 @@ export function ExternalSessionPage() {
   const entries = historyEntries(messages.data?.messages ?? []);
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-3 md:px-8">
           <Link to="/w" className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink" aria-label="Retour">
             <ArrowLeft className="size-4" strokeWidth={1.5} />

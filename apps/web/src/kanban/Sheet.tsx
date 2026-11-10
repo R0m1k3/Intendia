@@ -13,7 +13,7 @@ export function Sheet({ title, onClose, children, footer, width = 'md:w-[520px]'
       <Tag
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         onSubmit={onSubmit ? (e: React.FormEvent) => { e.preventDefault(); onSubmit(); } : undefined}
-        className={`enter flex h-full w-full flex-col bg-paper shadow-xl ${width} md:border-l md:border-line`}
+        className={`enter flex h-full w-full flex-col bg-sheet shadow-xl ${width} md:border-l md:border-line`}
         role="dialog" aria-label={typeof title === 'string' ? title : undefined}
       >
         <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3">

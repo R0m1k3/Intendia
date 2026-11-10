@@ -112,7 +112,7 @@ export function SettingsPage() {
           )}
         </Panel>
         <Panel title="Thème">
-          <div role="radiogroup" aria-label="Thème" className="inline-flex rounded-lg border border-line bg-paper p-0.5">
+          <div role="radiogroup" aria-label="Thème" className="inline-flex gap-0.5 rounded-[9px] bg-raised p-[3px]">
             {(['system', 'light', 'dark'] as const).map((t) => (
               <button
                 key={t}
@@ -120,8 +120,8 @@ export function SettingsPage() {
                 aria-checked={theme === t}
                 onClick={() => { setTheme(t); applyTheme(t); }}
                 className={cx(
-                  'h-8 rounded-md px-4 text-sm transition-colors',
-                  theme === t ? 'bg-sheet text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' : 'text-ink-soft hover:text-ink',
+                  'h-[26px] rounded-md px-2.5 text-xs font-medium transition-colors',
+                  theme === t ? 'bg-sheet text-ink shadow-[0_1px_2px_rgb(22_24_27/0.08)]' : 'text-ink-soft hover:text-ink',
                 )}
               >
                 {t === 'system' ? 'Système' : t === 'light' ? 'Clair' : 'Sombre'}
