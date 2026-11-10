@@ -64,6 +64,8 @@ export interface Workspace {
   modelProvider: string | null;
   effort: string | null;
   createdAt: number;
+  /** Non-archived sessions (GET /x/workspaces only). */
+  sessionCount?: number;
 }
 export type Effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 /** One run started from Intendia: options asked for, then what Hermes reported (times in ms). */

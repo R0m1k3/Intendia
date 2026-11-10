@@ -39,6 +39,8 @@ export function Layout() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 60_000 });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
+  const counts: Record<string, number | undefined> = { '/crons': overview.data?.crons.length };
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
   const openSlug = params.slug;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -88,7 +90,8 @@ export function Layout() {
       {...(alsoActive(n.to) ? { 'aria-current': 'page' as const, 'data-status': 'active' } : {})}
     >
       <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
-      {n.label}
+      <span className="flex-1 truncate">{n.label}</span>
+      <Count n={counts[n.to]} />
     </Link>
   ));
 
@@ -129,7 +132,8 @@ export function Layout() {
                 activeProps={{ className: ACTIVE }}
               >
                 <Folder className="size-4 shrink-0" strokeWidth={1.5} />
-                <span className="truncate">{w.name}</span>
+                <span className="flex-1 truncate">{w.name}</span>
+                <Count n={w.sessionCount} />
               </Link>
               {openSlug === w.slug && (
                 <ul className="ml-7 flex flex-col gap-0.5">
@@ -187,6 +191,12 @@ export function Layout() {
       <MobileNav onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
     </div>
   );
+}
+
+/** Small counter at the end of a sidebar entry; hidden for 0. */
+function Count({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return <span className="shrink-0 font-mono text-[11px] text-ink-faint" aria-label={`(${n})`}>{n}</span>;
 }
 
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
@@ -257,6 +267,7 @@ function NewSessionLink({ slug }: { slug: string }) {
   const create = async () => {
     const { session } = await api.createSession(slug);
     await qc.invalidateQueries({ queryKey: ['sessions'] });
+    void qc.invalidateQueries({ queryKey: ['workspaces'] });
     await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
   };
   return (
