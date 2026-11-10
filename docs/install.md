@@ -25,6 +25,13 @@ Do not publish 8642 or 9119 on the host nor in your reverse proxy: these keys co
 
 **Multi-profile routing**: each `/p/<profile>/` prefix has its own API key; add them to the instance as `profileKeys`.
 
+**Chatting with a new agent**: an agent created from the Agents page (a Hermes profile) has no key in Intendia yet;
+its page says "clé manquante". Give its profile an API server key in Hermes, then add it to the instance:
+- instance declared in `INTENDIA_INSTANCES`: add `"profileKeys": {"<name>": "<key>"}` to that instance, restart
+  Intendia;
+- instance added from the setup page: send its whole configuration again with `POST /x/instances` (same `id`, API key
+  and dashboard token included, since a saved instance is replaced), with every `profileKeys` entry it should keep.
+
 ## 2. Intendia
 
 ```bash

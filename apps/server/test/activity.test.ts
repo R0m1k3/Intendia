@@ -97,11 +97,16 @@ describe('stopping a kanban worker', () => {
     expect((await t.request('GET', '/x/activity')).json.workers).toEqual([]);
   });
 
-  it('says when the worker already ended (409 worker_ended)', async () => {
-    const t = await testApp();
-    const res = await t.request('POST', '/x/i/fake/kanban/workers/999/stop?board=default');
-    expect(res.status).toBe(409);
-    expect(res.json.code).toBe('worker_ended');
+  it('says when the worker already ended or is unknown (409 worker_ended)', async () => {
+    const t = await testApp({ kanbanStepMs: 10 });
+    const unknown = await t.request('POST', '/x/i/fake/kanban/workers/999/stop?board=default');
+    expect(unknown.status).toBe(409);
+    expect(unknown.json.code).toBe('worker_ended');
+    await dispatchTask(t, 'Courte');
+    const runId = t.fake.kanban.boards.get('default')!.events.find((e) => e.kind === 'spawned')!.run_id;
+    await new Promise((r) => setTimeout(r, 50));
+    const ended = await t.request('POST', `/x/i/fake/kanban/workers/${runId}/stop?board=default`);
+    expect(ended.json.code).toBe('worker_ended');
   });
 
   it('leaves a task Hermes put in review', async () => {

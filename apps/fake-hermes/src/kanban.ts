@@ -234,6 +234,8 @@ export class KanbanStore {
       const id = Number(m[1]);
       if (!Number.isInteger(id)) return json({ detail: [{ type: 'int_parsing', msg: 'Input should be a valid integer' }] }, 422);
       const w = this.workers.get(id);
+      // Hermes 0.23.0: an unknown run is a 404, a run that already ended a 409
+      if (!w && !b.events.some((e) => e.run_id === id)) return json({ detail: `run ${id} not found` }, 404);
       if (!w || w.board !== b.slug) return json({ detail: `cannot terminate run ${id}: task is no longer in a reclaimable state` }, 409);
       clearTimeout(w.timer);
       this.workers.delete(id);

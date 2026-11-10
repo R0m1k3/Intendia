@@ -86,7 +86,8 @@ export class KanbanService {
       }, 'Worker introuvable');
       taskId = String(res.task_id ?? '');
     } catch (err) {
-      if (err instanceof KanbanError) throw new KanbanError('worker_ended', 'Worker déjà terminé');
+      // 409: the run already ended; 404: Hermes does not know it (anymore). Either way nothing runs.
+      if (err instanceof KanbanError || err instanceof NotFoundError) throw new KanbanError('worker_ended', 'Ce worker est déjà terminé');
       throw err;
     }
     if (!taskId) return { taskId: '', status: 'unknown' };
