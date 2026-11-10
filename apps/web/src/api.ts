@@ -80,6 +80,10 @@ export interface RunStat {
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   costUsd: number | null;
+  /** Runs covered by costUsd (more than 1: sent while the previous cost was settling, whose own cost is unknown). */
+  costRuns: number;
+  /** False while Hermes may still write the cost (re-read for COST_SETTLE_MS after the end). */
+  costFinal: boolean;
 }
 export interface Session {
   id: string;

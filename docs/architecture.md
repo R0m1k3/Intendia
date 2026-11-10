@@ -61,8 +61,12 @@ demand from the State screen. State changes go to the webhook.
 - One `run_stats` row per run started from Intendia: written `running` at send time (options asked for, cost of
   the live session before), settled by `settle()` in `routes/chat.ts` when the messages or the run status are
   read (status, served model, tokens, Hermes times), cost = difference of the live session's cumulated cost,
-  re-read for 30 s then frozen. Pure parts in `src/chat/run-stats.ts`; the page shows one line per run under the
-  reply (`chat/RunFooter.tsx`, placement `placeRunStats`).
+  re-read for 30 s then frozen (the page re-reads the messages every 5 s meanwhile, `costSettling`). At the next
+  send (`handOverCost`), the previous row is frozen on its cost; if Hermes has visibly not costed it yet (tokens
+  measured, nothing counted, ended less than 30 s ago), its cost becomes unknown and the new row starts from its
+  baseline: its cost then covers both (`cost_runs`, shown as « (2 réponses) »). Pure parts in
+  `src/chat/run-stats.ts`; the page shows one line per run under the reply (`chat/RunFooter.tsx`, placement
+  `placeRunStats`). fake-hermes: the word `tard` writes the run's cost 8 s after its end.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session

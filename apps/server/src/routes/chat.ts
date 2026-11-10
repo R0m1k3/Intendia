@@ -142,7 +142,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
    * row while it is not final. Returns the status of the session's last run when it was read.
    */
   const settle = async (
-    ctx: SessionContext, opts: { known?: { liveId: string; exists: boolean }; cost?: CostReading | null; freeze?: boolean } = {},
+    ctx: SessionContext, opts: { known?: { liveId: string; exists: boolean }; cost?: CostReading | null } = {},
   ) => {
     let last: Awaited<ReturnType<typeof status>> | null = null;
     const inst = ctx.instance.id;
@@ -165,19 +165,42 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const tail: RunStatRow | undefined = done[done.length - 1];
     if (tail && !tail.costFinal && tail.status !== 'unknown') {
       const reading = opts.cost !== undefined ? opts.cost : await liveCost(ctx, opts.known);
-      const final = Boolean(opts.freeze) || (tail.endedAt !== null && Date.now() - tail.endedAt > COST_SETTLE_MS);
+      const final = tail.endedAt !== null && Date.now() - tail.endedAt > COST_SETTLE_MS;
       workspaces.setRunCost(inst, tail.runId, runCost(tail.costBeforeUsd, tail.costBeforeSessionId, reading), final);
-    } else if (tail && !tail.costFinal && opts.freeze) {
-      workspaces.setRunCost(inst, tail.runId, null, true);
     }
     return last;
+  };
+
+  /**
+   * At send time, closes the cost of the session's last finished row and gives the new row its baseline. A row
+   * Hermes has visibly not costed yet (ended less than COST_SETTLE_MS ago, tokens measured, nothing counted) is
+   * not frozen at 0: its cost becomes unknown and the new row starts from its baseline, so the new row's cost
+   * covers both. A row already costed is frozen (at worst its last call, still queued, lands on the next run).
+   */
+  const handOverCost = (ctx: SessionContext, cost: CostReading | null) => {
+    const done = workspaces.runStats(ctx.instance.id, ctx.session.id);
+    const tail: RunStatRow | undefined = done[done.length - 1];
+    const fresh = { costBeforeUsd: cost?.cost ?? null, costBeforeSessionId: cost?.sessionId ?? null, costRuns: 1 };
+    if (!tail || tail.costFinal) return fresh;
+    if (tail.status === 'unknown') {
+      workspaces.setRunCost(ctx.instance.id, tail.runId, null, true);
+      return fresh;
+    }
+    const own = runCost(tail.costBeforeUsd, tail.costBeforeSessionId, cost);
+    const pending = own === 0 && tail.inputTokens !== null && tail.endedAt !== null && Date.now() - tail.endedAt <= COST_SETTLE_MS;
+    if (pending) {
+      workspaces.setRunCost(ctx.instance.id, tail.runId, null, true);
+      return { costBeforeUsd: tail.costBeforeUsd, costBeforeSessionId: tail.costBeforeSessionId, costRuns: tail.costRuns + 1 };
+    }
+    workspaces.setRunCost(ctx.instance.id, tail.runId, own, true);
+    return fresh;
   };
 
   const publicRun = (r: RunStatRow) => ({
     runId: r.runId, status: r.status, requestedModel: r.requestedModel, requestedEffort: r.requestedEffort,
     servedModel: r.servedModel, startedAt: r.startedAt, endedAt: r.endedAt,
     inputTokens: r.inputTokens, outputTokens: r.outputTokens, cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWriteTokens,
-    costUsd: r.costUsd,
+    costUsd: r.costUsd, costRuns: r.costRuns, costFinal: r.costFinal,
   });
 
   const instanceProfile = (instanceId: string, profile: string | undefined): string => {
@@ -211,9 +234,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       // re-read after the body: the session may have changed while it was received
       const fresh = workspaces.getSession(ctx.instance.id, ctx.session.id);
       const lastRunId = fresh.session.lastRunId;
-      // one cost reading: final cost of the previous run and "cost before" of this one
+      // one cost reading: cost of the previous run and "cost before" of this one
       const cost = await liveCost(fresh);
-      let last = await settle(fresh, { cost, freeze: true });
+      let last = await settle(fresh, { cost });
       // a last run without a row (started before run_stats existed) is checked directly
       if (lastRunId && !last && !workspaces.runStats(fresh.instance.id, fresh.session.id).some((r) => r.runId === lastRunId)) {
         last = await status(fresh, lastRunId);
@@ -231,10 +254,10 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
           ...(effort ? { model_options: { reasoning_effort: effort } } : {}),
         },
       });
+      // after the run was accepted: a refused send leaves the previous row settling
       workspaces.insertRunStat({
         instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running',
-        requestedModel: model, requestedEffort: effort, startedAt: Date.now(),
-        costBeforeUsd: cost?.cost ?? null, costBeforeSessionId: cost?.sessionId ?? null,
+        requestedModel: model, requestedEffort: effort, startedAt: Date.now(), ...handOverCost(fresh, cost),
       });
       const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
       return c.json({ runId: created.run_id, session });

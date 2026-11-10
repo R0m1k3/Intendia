@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { COST_SETTLE_MS } from '../src/chat/run-stats.js';
 import { readSse, testApp, waitRun } from './helpers.js';
 
 const DEV_KEY = 'dev-profile-key-0000000';
@@ -215,22 +216,59 @@ describe('run options and consumption', () => {
     expect(res.runs[0].endedAt).toBeGreaterThanOrEqual(res.runs[0].startedAt);
   });
 
-  it('settles a row once when two reads race, costs each run by difference, freezes the previous at send', async () => {
+  it('settles a row once when two reads race, costs each run by difference, freezes a settled previous at send', async () => {
     const { t, base } = await session();
     const a = (await t.request('POST', `${base}/runs`, { input: 'un' })).json.runId;
     while (t.fake.sim.runs.get(a)!.status !== 'completed') await new Promise((r) => setTimeout(r, 5));
     const [r1, r2] = await Promise.all([t.request('GET', `${base}/messages`), t.request('GET', `${base}/messages`)]);
     expect(r1.json.runs).toEqual(r2.json.runs);
-    const b = (await t.request('POST', `${base}/runs`, { input: 'deux cher' })).json.runId;
+    expect(r1.json.runs[0]).toMatchObject({ costUsd: 0.0123, costFinal: false, costRuns: 1 });
+    // the next message comes after the settling delay: the previous cost is frozen on the current total
+    const realNow = Date.now.bind(Date);
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + COST_SETTLE_MS + 1_000);
+    try {
+      const b = (await t.request('POST', `${base}/runs`, { input: 'deux cher' })).json.runId;
+      await waitRun(t, base, b);
+      const runs = (await t.request('GET', `${base}/messages`)).json.runs;
+      expect(runs.map((r: any) => [r.runId, r.costUsd, r.costRuns])).toEqual([[a, 0.0123, 1], [b, 0.0123, 1]]);
+      expect(runs[0].costFinal).toBe(true);
+      expect(runs[1]).toMatchObject({ inputTokens: 1_250_000, outputTokens: 5_200 });
+      // the first row is frozen: a later change of the session total does not move it
+      t.fake.sim.costs.set(t.fake.sim.runs.get(a)!.sessionId, 1);
+      const again = (await t.request('GET', `${base}/messages`)).json.runs;
+      expect(again[0].costUsd).toBe(0.0123);
+      expect(again[1].costUsd).toBeCloseTo(1 - 0.0123, 6);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('a message sent before Hermes costed the previous run: that cost becomes unknown, the new run covers both', async () => {
+    const { t, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'un' })).json.runId;
+    while (t.fake.sim.runs.get(a)!.status !== 'completed') await new Promise((r) => setTimeout(r, 5));
+    const sid = t.fake.sim.runs.get(a)!.sessionId;
+    // Hermes has not written the first run's cost yet
+    t.fake.sim.costs.set(sid, 0);
+    const b = (await t.request('POST', `${base}/runs`, { input: 'deux' })).json.runId;
     await waitRun(t, base, b);
+    // both costs arrive later: 0.0123 each
+    t.fake.sim.costs.set(sid, 0.0246);
     const runs = (await t.request('GET', `${base}/messages`)).json.runs;
-    expect(runs.map((r: any) => [r.runId, r.costUsd])).toEqual([[a, 0.0123], [b, 0.0123]]);
-    expect(runs[1]).toMatchObject({ inputTokens: 1_250_000, outputTokens: 5_200 });
-    // the first row was frozen by the second send: a later change of the session total does not move it
-    t.fake.sim.costs.set(t.fake.sim.runs.get(a)!.sessionId, 1);
-    const again = (await t.request('GET', `${base}/messages`)).json.runs;
-    expect(again[0].costUsd).toBe(0.0123);
-    expect(again[1].costUsd).toBeCloseTo(1 - 0.0123, 6);
+    expect(runs.map((r: any) => [r.runId, r.costUsd, r.costRuns, r.costFinal])).toEqual([[a, null, 1, true], [b, 0.0246, 2, false]]);
+    // b is costed now: sending again freezes it on its own cost (no hand-over)
+    const c2 = (await t.request('POST', `${base}/runs`, { input: 'trois' })).json.runId;
+    await waitRun(t, base, c2);
+    const r3 = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(r3.map((r: any) => [r.costUsd, r.costRuns])).toEqual([[null, 1], [0.0246, 2], [0.0123, 1]]);
+    // c2 not costed yet when the next message goes out: handed over to it
+    t.fake.sim.costs.set(sid, 0.0246);
+    const c = (await t.request('POST', `${base}/runs`, { input: 'quatre lent' })).json.runId;
+    // a refused send (run in progress) inserts nothing
+    expect((await t.request('POST', `${base}/runs`, { input: 'cinq' })).status).toBe(409);
+    // c (still running, not listed) took over from c2
+    const after = (await t.request('GET', `${base}/messages`)).json.runs;
+    expect(after.map((r: any) => [r.runId, r.costUsd, r.costRuns, r.costFinal])).toEqual([[a, null, 1, true], [b, 0.0246, 2, true], [c2, null, 1, true]]);
   });
 
   it('failed runs have no tokens, forgotten runs become unknown, a changed live session gives no cost', async () => {

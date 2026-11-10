@@ -269,8 +269,8 @@ export class WorkspaceService {
 
   // ---- run consumption (run_stats)
 
-  insertRunStat(row: Omit<RunStatRow, 'costFinal' | 'endedAt' | 'hermesSessionId' | 'servedModel' | 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd'>): void {
-    this.db.insert(runStats).values({ ...row, costFinal: false }).onConflictDoNothing().run();
+  insertRunStat(row: Omit<RunStatRow, 'costFinal' | 'costRuns' | 'endedAt' | 'hermesSessionId' | 'servedModel' | 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd'> & { costRuns?: number }): void {
+    this.db.insert(runStats).values({ ...row, costRuns: row.costRuns ?? 1, costFinal: false }).onConflictDoNothing().run();
   }
 
   /** Rows of a session, oldest first; `running` ones included only when asked. */

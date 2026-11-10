@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunStat } from '../api';
 import type { Entry } from './events';
-import { cacheShare, formatCost, formatDuration, formatShare, formatTokens, placeRunStats, shortModel } from './format';
+import { cacheShare, costSettling, formatCost, formatDuration, formatShare, formatTokens, placeRunStats, shortModel } from './format';
 
 describe('formats', () => {
   it('tokens', () => {
@@ -31,7 +31,7 @@ describe('formats', () => {
 
 const run = (id: string, startedAt: number, endedAt: number | null): RunStat => ({
   runId: id, status: 'completed', requestedModel: null, requestedEffort: null, servedModel: null, startedAt, endedAt,
-  inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null,
+  inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, costUsd: null, costRuns: 1, costFinal: true,
 });
 const e = (key: string, ts: number | null, kind: 'user' | 'assistant' = 'assistant'): Entry => ({ kind, key, text: key, ts });
 
@@ -62,5 +62,20 @@ describe('placeRunStats', () => {
   it('runs older than the loaded history are not shown; entries without time are not anchors', () => {
     const m = placeRunStats([e('x', null), ...history], [run('old', 10_000, 20_000)]);
     expect(m.size).toBe(0);
+  });
+});
+
+describe('costSettling', () => {
+  const now = 1_000_000;
+  it('re-reads only the last reply, while its cost is not final and for a bounded time', () => {
+    expect(costSettling(undefined, now)).toBe(false);
+    expect(costSettling([], now)).toBe(false);
+    expect(costSettling([run('a', 0, now - 1_000)], now)).toBe(false); // final
+    const settling = { ...run('a', 0, now - 1_000), costFinal: false };
+    expect(costSettling([settling], now)).toBe(true);
+    expect(costSettling([settling, run('b', 0, now)], now)).toBe(false);
+    expect(costSettling([{ ...settling, endedAt: now - 60_000 }], now)).toBe(false);
+    expect(costSettling([{ ...settling, endedAt: null }], now)).toBe(false);
+    expect(costSettling([{ ...settling, status: 'unknown' }], now)).toBe(false);
   });
 });

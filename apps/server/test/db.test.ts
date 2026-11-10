@@ -12,7 +12,7 @@ describe('migrations', () => {
     const dir = tempDir();
     const db = new Database(join(dir, 'intendia.db'));
     const r = migrate(db, dir, MIGRATIONS);
-    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0005_model_provider.sql']);
+    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0004_run_cost_runs.sql', '0005_model_provider.sql']);
     expect(r.backup).toBeNull();
   });
 
