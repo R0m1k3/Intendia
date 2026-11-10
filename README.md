@@ -19,15 +19,22 @@ agent's code nor reads or writes its files. Hermes updates itself (tag `latest`)
 
 ## Status
 
-| Phase | Content | State |
-|---|---|---|
-| 0 | API reconnaissance, `probe`, fixtures for Hermes 0.23.0 | done |
-| 1 | Skeleton: auth, instances, compatibility engine, State screen, Docker image | done |
-| 2 | Workspaces, sessions, chat | next |
-| 3 | Files, share links, `share_file` MCP tool | |
-| 4 | Crons and skills | |
-| 5 | Hermes settings and agents | |
-| 6 | Kanban | |
+**0.0.x: development versions.** Every module below is written and tested against a fake Hermes and checked by hand
+on a reference Hermes 0.23.0, but Intendia has not been used on a live installation yet. Expect rough edges.
+
+| Area | Content |
+|---|---|
+| Base | Auth, instances, compatibility engine and State screen, Docker image |
+| Work | Workspaces (real folders), sessions, streamed chat with approvals and sub-agents |
+| Files | File explorer, previews, share links, `share_file` MCP tool for the agent |
+| Console | Crons, skills (hub with security scan), Hermes settings (form, YAML, history), agents, activity, kanban |
+
+| | |
+|---|---|
+| ![Chat](docs/screenshots/chat.png) | ![File produced by the agent](docs/screenshots/session-files.png) |
+| ![Kanban](docs/screenshots/kanban.png) | ![Crons](docs/screenshots/crons.png) |
+| ![Skills](docs/screenshots/skills.png) | ![Hermes settings](docs/screenshots/settings.png) |
+| ![State of each module](docs/screenshots/state.png) | |
 
 ## Install
 

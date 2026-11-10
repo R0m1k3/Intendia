@@ -30,7 +30,7 @@ ENV NODE_ENV=production \
     INTENDIA_WEB_DIR=/app/web \
     INTENDIA_DATA_DIR=/data
 # Default uid/gid 10000 (same as the official Hermes image). Override with `user:` in compose.
-RUN mkdir -p /data /workspace && chown 10000:10000 /data
+RUN mkdir -p /data /workspace && chown 10000:10000 /data /workspace
 USER 10000:10000
 EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["node", "/app/dist/healthcheck.js"]
