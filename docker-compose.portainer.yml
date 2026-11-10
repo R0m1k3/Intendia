@@ -1,0 +1,60 @@
+# Portainer stack (Repository mode): builds Intendia from this repository and runs it next to an
+# existing Hermes stack. Compose path in Portainer: docker-compose.portainer.yml
+#
+# Stack environment variables (set them in Portainer, never in this file):
+#   INTENDIA_SECRET          required, openssl rand -hex 32
+#   INTENDIA_PUBLIC_URL      optional, e.g. https://intendia.example.com
+#   INTENDIA_PASSWORD_HASH   optional, $argon2id$... (empty: installation code in the logs)
+#   INTENDIA_HOST_PORT       optional, host port of the web UI (default 3012)
+#   HERMES_WORKSPACE_VOLUME  optional, workspace volume of the Hermes stack (default hermes_hermes-workspace)
+#   PUID / PGID              optional, owner of that volume (default 1000:1000)
+services:
+  # One-shot: the image creates /data for uid 10000; give the named volume to PUID:PGID.
+  intendia-perms:
+    image: alpine:3.20
+    command: ["sh", "-c", "chown -R ${PUID:-1000}:${PGID:-1000} /data"]
+    volumes:
+      - intendia-data:/data
+    restart: "no"
+
+  intendia:
+    build:
+      context: .
+      args:
+        VERSION: git
+    image: intendia:local
+    container_name: intendia
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    depends_on:
+      intendia-perms:
+        condition: service_completed_successfully
+    environment:
+      INTENDIA_SECRET: ${INTENDIA_SECRET}
+      INTENDIA_PUBLIC_URL: ${INTENDIA_PUBLIC_URL:-}
+      INTENDIA_PASSWORD_HASH: ${INTENDIA_PASSWORD_HASH:-}
+      INTENDIA_WEBHOOK_URL: ${INTENDIA_WEBHOOK_URL:-}
+      INTENDIA_UPLOAD_MAX_MB: ${INTENDIA_UPLOAD_MAX_MB:-200}
+    volumes:
+      - intendia-data:/data
+      - workspace:/workspace
+    networks:
+      - nginx_default
+    # Web UI only. Port 3001 (MCP share_file) stays on the Docker network: Hermes calls
+    # http://intendia:3001/mcp/<instance-id>. Never publish 3001.
+    ports:
+      - "${INTENDIA_HOST_PORT:-3012}:3000"
+    expose: ["3001"]
+    logging:
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  intendia-data:
+  workspace:
+    name: ${HERMES_WORKSPACE_VOLUME:-hermes_hermes-workspace}
+    external: true
+
+networks:
+  nginx_default:
+    external: true
