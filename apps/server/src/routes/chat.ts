@@ -7,6 +7,8 @@ import type { CompatReport } from '../connectors/types.js';
 import { pushTitle } from '../workspaces/title.js';
 import { COST_SETTLE_MS, finishFields, runCost, sessionCost, type CostReading } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
+import { CHAT_MODELS_MAX, chatModelsManaged, offeredModels, readChatModels, writeChatModels } from '../chat/models-list.js';
+import type { ModelOptionsSchema } from '../connectors/chat/index.js';
 import { NotFoundError, ValidationError, type RunStatRow, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { SESSION_ID_RE, sessionParams } from './workspaces.js';
 
@@ -70,6 +72,13 @@ function sseError(status: number, message: string): Response {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
 }
+
+/** Same rule as a session's model (PatchSession.model in routes/workspaces.ts). */
+const ModelName = z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne');
+const ChatModelsBody = z.object({
+  models: z.array(ModelName).max(CHAT_MODELS_MAX, `${CHAT_MODELS_MAX} modèles au plus`)
+    .refine((a) => new Set(a).size === a.length, 'modèle en double'),
+});
 
 export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
   const { workspaces, compat } = deps;
@@ -288,10 +297,38 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   // ---- instance-level
 
-  r.get('/i/:inst/models', async (c) => {
+  // Models of the chat's picker, per agent (see chat/models-list.ts).
+  r.get('/i/:inst/chat-models', async (c) => {
     const inst = c.req.param('inst');
     const profile = instanceProfile(inst, c.req.query('profile'));
-    return c.json(await callOp(compat.http(inst), compat.get(inst), 'chat', 'modelOptions', { profile }));
+    const managed = chatModelsManaged(compat.get(inst));
+    let options: z.infer<typeof ModelOptionsSchema> | null = null;
+    try {
+      options = await callOp(compat.http(inst), compat.get(inst), 'chat', 'modelOptions', { profile });
+    } catch (err) {
+      if (!managed) throw err;
+    }
+    if (!managed) {
+      return c.json({ auto: options?.model || null, models: offeredModels(options!).map((id) => ({ id, available: true })), managed });
+    }
+    const offered = options ? new Set(offeredModels(options)) : null;
+    const models = readChatModels(deps.db, inst, profile).map((id) => ({ id, available: offered ? offered.has(id) : true }));
+    return c.json({ auto: options?.model || null, models, managed });
+  });
+
+  // The saved list only, without calling Hermes (GET /api/model/options can write its config: 409 on the main model).
+  r.get('/i/:inst/chat-models/saved', (c) => {
+    const inst = c.req.param('inst');
+    const profile = instanceProfile(inst, c.req.query('profile'));
+    return c.json({ models: readChatModels(deps.db, inst, profile) });
+  });
+
+  r.put('/i/:inst/chat-models', async (c) => {
+    const inst = c.req.param('inst');
+    const profile = instanceProfile(inst, c.req.query('profile'));
+    const { models } = ChatModelsBody.parse(await c.req.json());
+    writeChatModels(deps.db, inst, profile, models);
+    return c.json({ models });
   });
 
   r.get('/i/:inst/other-sessions', async (c) => {

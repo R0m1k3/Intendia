@@ -395,7 +395,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
     if (cron) return cron;
     // before skills: SkillStore answers every /api/actions/{name}/status (404 for unknown actions)
-    const conf = config.handle(via, method, path, c.req.query(), body);
+    const conf = config.handle(via, method, path, c.req.query(), body, profile);
     if (conf) return conf;
     const skill = await skills.handle(via, method, path, c.req.query(), body);
     if (skill) return skill;

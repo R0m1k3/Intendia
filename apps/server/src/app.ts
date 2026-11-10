@@ -1,3 +1,4 @@
+import { forgetChatModels } from './chat/models-list.js';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { existsSync, readFileSync } from 'node:fs';
@@ -153,6 +154,7 @@ export function createApp(deps: AppDeps) {
   priv.delete('/instances/:id', (c) => {
     store.remove(c.req.param('id'));
     forgetMcpToken(deps.db, c.req.param('id'));
+    forgetChatModels(deps.db, c.req.param('id'));
     compat.forget(c.req.param('id'));
     return c.json({ ok: true });
   });
