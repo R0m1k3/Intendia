@@ -3,7 +3,7 @@ import { Download, ExternalLink, Link2, Pencil, Save, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, ApiError, rawUrl } from '../api';
 import { Md } from '../chat/Thread';
-import { Button, cx, ErrorText } from '../components/ui';
+import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { baseName, fileKind, formatSize } from './paths';
 
 const CodeView = lazy(() => import('./CodeView'));
@@ -17,7 +17,7 @@ export function ShareButton({ slug, path, compact = false }: { slug: string; pat
   const share = async () => {
     try {
       const { url } = await api.shareFile(slug, path);
-      await navigator.clipboard.writeText(absoluteUrl(url)).catch(() => prompt('Lien de partage', absoluteUrl(url)));
+      await copyText(absoluteUrl(url), 'Lien de partage');
       setState('copied');
     } catch {
       setState('error');

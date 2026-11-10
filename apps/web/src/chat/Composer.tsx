@@ -5,16 +5,18 @@ import { cx } from '../components/ui';
 export interface ComposerHandle {
   /** Appends lines (file paths) to the message being written. */
   append: (lines: string[]) => void;
+  focus: () => void;
 }
 
 /**
  * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it.
  * The paperclip uploads files to inbox/ (onAttach) and adds their paths to the message; so does pasting
  * a file or a screenshot (Ctrl+V), which gets a dated name since the clipboard calls every image image.png.
- * `options` (model, effort) sit in the bottom bar, left of the send button.
+ * Bottom bar: `leading` (home page: the workspace) before the paperclip, `hint` (keys) in the middle on wide
+ * screens, `options` (session: model, effort) right of it, before the send button.
  */
 export function Composer({
-  onSend, onStop, running, disabled, placeholder, onAttach, options, ref: handle,
+  onSend, onStop, running, disabled, placeholder, onAttach, leading, options, hint, ref: handle,
 }: {
   onSend: (text: string) => Promise<boolean>;
   onStop: () => void;
@@ -22,7 +24,9 @@ export function Composer({
   disabled?: boolean;
   placeholder?: string;
   onAttach?: (files: File[]) => void;
+  leading?: ReactNode;
   options?: ReactNode;
+  hint?: string;
   ref?: Ref<ComposerHandle>;
 }) {
   const [text, setText] = useState('');
@@ -34,6 +38,7 @@ export function Composer({
       setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')}\n` : '') + lines.join('\n'));
       ref.current?.focus();
     },
+    focus: () => ref.current?.focus(),
   }), []);
 
   useEffect(() => {
@@ -80,6 +85,7 @@ export function Composer({
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-2 py-2 text-sm placeholder:text-ink-faint focus:outline-none"
       />
       <div className="flex items-center gap-1">
+        {leading}
         {onAttach && (
           <>
             <input ref={picker} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) onAttach(f); }} />
@@ -95,7 +101,8 @@ export function Composer({
             </button>
           </>
         )}
-        <div className="min-w-0 flex-1">{options}</div>
+        <div className="hidden min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint md:block">{hint}</div>
+        <div className="flex min-w-0 flex-1 justify-end md:flex-none">{options}</div>
         {running ? (
           <button
             type="button"

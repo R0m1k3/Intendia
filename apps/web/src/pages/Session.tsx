@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArrowLeft, Files, Pencil, Trash2 } from 'lucide-react';
+import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle } from '../chat/Composer';
-import { placeRunStats, shortModel } from '../chat/format';
+import { placeRunStats } from '../chat/format';
 import { RunOptions } from '../chat/RunOptions';
-import { ApprovalCard, Thread } from '../chat/Thread';
+import { AGENT_INDENT, ApprovalCard, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
 import { SessionFiles } from '../components/SessionFiles';
@@ -16,7 +16,9 @@ import { FilePaths, type FilePathsValue } from '../files/FilePaths';
 import { findPathCandidates } from '../files/paths';
 import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
-import { Button, cx, ErrorText } from '../components/ui';
+import { takeHandoff } from '../home/handoff';
+import { Menu } from '../components/Menu';
+import { Button, copyText, cx, ErrorText } from '../components/ui';
 
 interface ActiveRun {
   id: string;
@@ -60,22 +62,29 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const [outcome, setOutcome] = useState<{ status: string; error: string | null; input: string | null } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const firstRun = useRef(false);
   const chat = useChatAvailability(inst);
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const mounts = instances.data?.instances.find((i) => i.id === inst);
   const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [runCount, setRunCount] = useState(0);
   /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
   const [trees, setTrees] = useState<Extract<Entry, { kind: 'subagents' }>[]>([]);
   const composer = useRef<ComposerHandle>(null);
 
-  // Reopened during a run (reload, other tab, network cut): plug back into its stream.
+  // Reopened during a run (reload, other tab, network cut, sent from the home page): plug back into its stream.
+  // A message sent from the home page is shown at once (handoff), and kept on screen if its run failed.
   useEffect(() => {
     const s = lastRun.data;
-    if (!active && s && lastRunId && !isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, seed: [] });
-  }, [lastRun.data, lastRunId, active]);
+    if (active || !s || !lastRunId || !inst) return;
+    const h = takeHandoff(inst, sessionId, lastRunId);
+    const seed: Entry[] = h ? [{ kind: 'user', key: `u-${lastRunId}`, text: h.text, ts: h.ts }] : [];
+    if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, seed });
+    else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
+  }, [lastRun.data, lastRunId, active, inst, sessionId]);
+  // the last workspace used is the home page's starting choice
+  useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
 
   const onEnd = useCallback(async (state: RunState) => {
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
@@ -89,12 +98,6 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     ]);
     setActive(null);
     setRunCount((n) => n + 1);
-    if (firstRun.current && inst) {
-      firstRun.current = false;
-      // the session now exists at Hermes: give it the same title (Telegram, CLI)
-      const s = await api.session(inst, sessionId).catch(() => null);
-      if (s?.session.title) await api.updateSession(inst, sessionId, { title: s.session.title }).catch(() => {});
-    }
     void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
   }, [qc, inst, sessionId]);
 
@@ -106,7 +109,6 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     setError(null);
     setOutcome(null);
     try {
-      firstRun.current = (history.data?.messages.length ?? 0) === 0 && !lastRunId;
       const res = await api.send(inst, sessionId, text);
       const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
@@ -226,7 +228,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const side = previewPath ? (
     <Preview slug={slug} path={previewPath} onClose={() => setPreviewPath(null)} />
   ) : (
-    <SessionFiles slug={slug} sessionId={sessionId} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
+    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={(f) => void attach(f)} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
   );
 
   return (
@@ -234,32 +236,36 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     <div className="flex min-h-full">
     <DropZone onFiles={(f) => void attach(f)} label="Déposer dans inbox/ et citer dans le message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
       <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-3 md:px-8">
-          <Link to="/w/$slug" params={{ slug }} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink" aria-label="Retour au workspace">
-            <ArrowLeft className="size-4" strokeWidth={1.5} />
-          </Link>
+        <div className="flex items-center gap-3 px-5 py-3 md:px-6">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[15px] font-medium">{title}</h1>
-            <p className="truncate font-mono text-[11px] text-ink-faint">
-              {ws.data?.workspace.name} · {sess.data?.profile ?? 'default'} · {sess.data?.session.model ? shortModel(sess.data.session.model) : 'Auto'}
+            <p className="truncate text-xs text-ink-faint">
+              <Link to="/w/$slug" params={{ slug }} className="transition-colors hover:text-ink">{ws.data?.workspace.name ?? slug}</Link>
+              <span className="mx-1">/</span>
+              <span className="font-mono">{sess.data?.profile ?? 'default'}</span>
             </p>
+            <h1 className="truncate text-[15px] font-semibold">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" className="size-8 px-0" aria-label="Copier le lien de la session" title="Copier le lien de la session"
+              onClick={() => void copyText(window.location.href, 'Lien de la session').then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
+              {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
+            </Button>
             <Button variant="ghost" className={cx('size-8 px-0', panel && 'lg:bg-raised lg:text-ink')} aria-label="Fichiers de la session" title="Fichiers de la session"
               aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
-              <Files className="size-4" strokeWidth={1.5} />
+              <PanelRight className="size-4" strokeWidth={1.5} />
             </Button>
-            <Button variant="ghost" className="size-8 px-0" aria-label="Renommer" title="Renommer"
-              onClick={() => { const t = prompt('Nouveau titre', sess.data?.session.title ?? ''); if (t?.trim()) rename.mutate(t.trim()); }}>
-              <Pencil className="size-4" strokeWidth={1.5} />
-            </Button>
-            <Button variant="ghost" className="size-8 px-0" aria-label="Archiver" title="Archiver" disabled={running} onClick={() => archive.mutate()}>
-              <Archive className="size-4" strokeWidth={1.5} />
-            </Button>
-            <Button variant="ghost" className="size-8 px-0 hover:text-bad" aria-label="Supprimer" title="Supprimer" disabled={running}
-              onClick={() => { if (confirm('Supprimer cette session chez Hermes ? Les fichiers de son dossier restent sur le disque.')) remove.mutate(); }}>
-              <Trash2 className="size-4" strokeWidth={1.5} />
-            </Button>
+            <Menu
+              title="Actions de la session"
+              trigger={<Ellipsis className="size-4" strokeWidth={1.5} />}
+              triggerClass="flex size-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink aria-expanded:bg-raised"
+              items={[
+                { label: 'Renommer', icon: <Pencil className="size-4" strokeWidth={1.5} />,
+                  onSelect: () => { const t = prompt('Nouveau titre', sess.data?.session.title ?? ''); if (t?.trim()) rename.mutate(t.trim()); } },
+                { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate() },
+                { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true,
+                  onSelect: () => { if (confirm('Supprimer cette session chez Hermes ? Les fichiers de son dossier restent sur le disque.')) remove.mutate(); } },
+              ]}
+            />
           </div>
         </div>
       </header>
@@ -281,8 +287,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
         )}
         {endNote && (
-          <div className="mt-5 grid grid-cols-[44px_minmax(0,1fr)] gap-3 md:grid-cols-[56px_minmax(0,1fr)] md:gap-4">
-            <div />
+          <div className={cx('mt-5', AGENT_INDENT)}>
             <div className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
               <span className="font-medium">{OUTCOME[endNote.status]}</span>
               {endNote.error ? ` : ${endNote.error}` : ''}
@@ -310,9 +315,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : undefined}
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : entries.length ? 'Répondre à Hermes…' : 'Écrire à Hermes…'}
+            hint="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
           />
-          <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">Entrée pour envoyer, Maj+Entrée pour aller à la ligne · glisser ou coller un fichier pour le joindre</p>
         </div>
       </div>
     </DropZone>

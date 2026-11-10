@@ -56,7 +56,11 @@ const appRoute = createRoute({
     if (s.needsInstance && !s.declarativeInstances) throw redirect({ to: '/installation' });
   },
 });
-const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage });
+export interface HomeSearch { nouvelle?: 1 }
+const homeRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/', component: HomePage,
+  validateSearch: (s: Record<string, unknown>): HomeSearch => (s.nouvelle !== undefined ? { nouvelle: 1 } : {}),
+});
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
 const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: '/w', component: WorkspacesPage });

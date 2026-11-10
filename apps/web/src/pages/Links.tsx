@@ -4,7 +4,7 @@ import { Copy, Globe, Lock, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, type ShareLink } from '../api';
 import { PageHeader } from '../components/Layout';
-import { Button, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
+import { Button, copyText, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
 import { absoluteUrl } from '../files/Preview';
 
 const DAY = 86_400_000;
@@ -54,7 +54,7 @@ function LinkRow({ l }: { l: ShareLink }) {
   const name = l.path.slice(l.path.lastIndexOf('/') + 1);
   const inWs = l.workspace ? l.path.slice(l.workspace.length + 1) : null;
   const copy = async () => {
-    await navigator.clipboard.writeText(absoluteUrl(l.url)).catch(() => prompt('Lien', absoluteUrl(l.url)));
+    await copyText(absoluteUrl(l.url), 'Lien');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

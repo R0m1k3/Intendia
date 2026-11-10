@@ -117,6 +117,20 @@ export interface OtherSession {
   lastActive: number | null;
   messageCount: number | null;
 }
+/** A line of the home page's recent sessions (GET /x/sessions/recent). */
+export interface RecentSession {
+  kind: 'intendia' | 'hermes';
+  instanceId: string;
+  profile: string;
+  id: string;
+  /** "intendia", else Hermes' source (telegram, cron, cli, api_server…) or null */
+  source: string | null;
+  title: string;
+  sub: string;
+  workspace: string | null;
+  /** ms */
+  at: number;
+}
 export interface ModelOptions {
   model?: string | null;
   provider?: string | null;
@@ -476,6 +490,7 @@ export const api = {
     call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
+  recentSessions: (limit = 20) => call<{ sessions: RecentSession[]; errors: { instance: string; message: string }[] }>('GET', `/sessions/recent?limit=${limit}`),
   upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),

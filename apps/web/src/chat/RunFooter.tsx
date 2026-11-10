@@ -37,12 +37,9 @@ export function RunFooter({ r }: { r: RunStat }) {
   const st = STATUS[r.status];
   if (!items.length && !st) return null;
   return (
-    <div className="mt-1.5 grid grid-cols-[44px_minmax(0,1fr)] gap-3 md:grid-cols-[56px_minmax(0,1fr)] md:gap-4" data-run-footer={r.runId}>
-      <div />
-      <p className="flex min-w-0 items-start gap-1.5 text-xs text-ink-faint" title={detail(r)}>
-        {st && <span className="flex h-4 shrink-0 items-center" aria-label={st.label}>{st.icon}</span>}
-        <span className="min-w-0 font-mono tabular-nums">{items.join(' · ')}</span>
-      </p>
-    </div>
+    <p className="flex min-w-0 items-start gap-1.5 text-xs text-ink-faint" title={detail(r)} data-run-footer={r.runId}>
+      {st && <span className="flex h-4 shrink-0 items-center" aria-label={st.label}>{st.icon}</span>}
+      <span className="min-w-0 font-mono tabular-nums">{items.join(' · ')}</span>
+    </p>
   );
 }
