@@ -177,6 +177,29 @@ describe('run options and consumption', () => {
     expect(second).not.toHaveProperty('model_options');
   });
 
+  it('sends the provider with a model picked in a group; a model alone clears it; new sessions take both', async () => {
+    const { t, base } = await session();
+    expect((await t.request('PATCH', base, { model: 'claude-haiku-4.5', provider: 'anthropic' })).json.session)
+      .toMatchObject({ model: 'claude-haiku-4.5', modelProvider: 'anthropic' });
+    const first = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    expect(runsPosted(t)[0]!.body).toMatchObject({ model: 'claude-haiku-4.5', provider: 'anthropic' });
+    await waitRun(t, base, first);
+    // a new session of the workspace starts from both
+    const next = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    expect(next).toMatchObject({ model: 'claude-haiku-4.5', modelProvider: 'anthropic' });
+    // a model alone (older client, old session) clears the provider: model sent alone
+    expect((await t.request('PATCH', base, { model: 'openai/gpt-5.5' })).json.session.modelProvider).toBeNull();
+    await t.request('POST', `${base}/runs`, { input: 'Encore' });
+    const second = runsPosted(t)[1]!.body as Record<string, unknown>;
+    expect(second.model).toBe('openai/gpt-5.5');
+    expect(second).not.toHaveProperty('provider');
+    // Auto clears both; a provider without a model is refused; custom:<name> keys are accepted
+    expect((await t.request('PATCH', base, { model: null })).json.session).toMatchObject({ model: null, modelProvider: null });
+    expect((await t.request('PATCH', base, { provider: 'anthropic' })).status).toBe(400);
+    expect((await t.request('PATCH', base, { model: 'm', provider: 'bad provider' })).status).toBe(400);
+    expect((await t.request('PATCH', base, { model: 'llama3:8b', provider: 'custom:local' })).json.session.modelProvider).toBe('custom:local');
+  });
+
   it('records a row at send time, settles it when the messages are read, and returns it', async () => {
     const { t, base } = await session();
     await t.request('PATCH', base, { effort: 'low' });

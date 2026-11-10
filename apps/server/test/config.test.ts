@@ -332,3 +332,81 @@ describe('config: without the raw config', () => {
     expect(put.json.code).toBe('config_unavailable');
   });
 });
+
+describe('config: models declared per provider (chat models)', () => {
+  const URL = `${BASE}/provider-models`;
+  const declaredIn = (t: T, slug: string) => {
+    const p = (parse(t.fake.config.raw).toJS() as any).providers?.[slug];
+    return p?.models;
+  };
+  const versionsCount = async (t: T) => (await t.request('GET', `${BASE}/versions`)).json.versions.length;
+  const withEntry = (t: T, slug: string, yaml: string) =>
+    t.fake.config.setRaw(t.fake.config.raw.replace(/^providers:\n/m, `providers:\n  ${slug}:\n${yaml}`));
+
+  it('adds and removes one model at a time, down to an empty list; other entries untouched; no secret returned', async () => {
+    const t = await testApp();
+    const a = await t.request('POST', URL, { provider: 'openrouter', add: 'openai/gpt-5.5' });
+    expect(a.status).toBe(200);
+    expect(a.json).toEqual({ declared: ['openai/gpt-5.5'] });
+    await t.request('POST', URL, { provider: 'openrouter', add: ' qwen/qwen3-coder ' });
+    expect(declaredIn(t, 'openrouter')).toEqual(['openai/gpt-5.5', 'qwen/qwen3-coder']);
+    expect((parse(t.fake.config.raw).toJS() as any).providers.custom).toBeTruthy();
+    const models = (await t.request('GET', `${BASE}/models`)).json.providers.find((p: any) => p.slug === 'openrouter');
+    expect(models).toMatchObject({ declared: ['openai/gpt-5.5', 'qwen/qwen3-coder'], editable: true });
+    await t.request('POST', URL, { provider: 'openrouter', remove: 'openai/gpt-5.5' });
+    const last = await t.request('POST', URL, { provider: 'openrouter', remove: 'qwen/qwen3-coder' });
+    expect(last.json).toEqual({ declared: [] });
+    expect(declaredIn(t, 'openrouter')).toEqual([]);
+    expect(JSON.stringify(a.json) + JSON.stringify(last.json)).not.toMatch(LEAKS);
+    expect(dashCalls(t, 'PUT', '/api/config').every((r) => !('yaml_text' in (r.body as object)))).toBe(true);
+  });
+
+  it('a change that changes nothing writes nothing and adds no history copy', async () => {
+    const t = await testApp();
+    await t.request('POST', URL, { provider: 'openrouter', add: 'openai/gpt-5.5' });
+    const puts = dashCalls(t, 'PUT', '/api/config').length;
+    const copies = await versionsCount(t);
+    expect((await t.request('POST', URL, { provider: 'openrouter', add: 'OpenAI/GPT-5.5' })).json).toEqual({ declared: ['openai/gpt-5.5'] });
+    expect((await t.request('POST', URL, { provider: 'openrouter', remove: 'absent/model' })).status).toBe(200);
+    expect(dashCalls(t, 'PUT', '/api/config').length).toBe(puts);
+    expect(await versionsCount(t)).toBe(copies);
+  });
+
+  it('a single string is rewritten as a list; the write keeps a history copy', async () => {
+    const t = await testApp();
+    withEntry(t, 'openrouter', '    models: openai/gpt-5.5\n');
+    const copies = await versionsCount(t);
+    await t.request('POST', URL, { provider: 'openrouter', add: 'qwen/qwen3-coder' });
+    expect(declaredIn(t, 'openrouter')).toEqual(['openai/gpt-5.5', 'qwen/qwen3-coder']);
+    expect(await versionsCount(t)).toBe(copies + 1);
+  });
+
+  it('refuses mappings, lists of objects, custom endpoints and custom: keys; invalid bodies', async () => {
+    const t = await testApp();
+    withEntry(t, 'mapped', '    models:\n      a/b: {context_length: 1000}\n');
+    withEntry(t, 'objects', '    models:\n      - id: a/b\n        context_length: 1000\n');
+    withEntry(t, 'local', '    base_url: http://localhost:11434/v1\n    models: [llama3]\n');
+    const copies = await versionsCount(t);
+    for (const provider of ['mapped', 'objects', 'local']) {
+      const r = await t.request('POST', URL, { provider, add: 'x/y' });
+      expect(r.status).toBe(400);
+      expect(r.json.code ?? r.json.error).toBeTruthy();
+    }
+    expect(await versionsCount(t)).toBe(copies);
+    expect((await t.request('POST', URL, { provider: 'custom:local', add: 'x' })).status).toBe(400);
+    expect((await t.request('POST', URL, { provider: 'openrouter', add: 'a', remove: 'b' })).status).toBe(400);
+    expect((await t.request('POST', URL, { provider: 'openrouter' })).status).toBe(400);
+    expect((await t.request('POST', URL, { provider: 'openrouter', add: 'bad name' })).status).toBe(400);
+    expect((await t.request('POST', URL, { provider: 'openrouter', add: 'x'.repeat(201) })).status).toBe(400);
+    const models = (await t.request('GET', `${BASE}/models`)).json.providers;
+    expect(models.filter((p: any) => ['mapped', 'objects', 'local'].includes(p.slug)).every((p: any) => !p.editable)).toBe(true);
+  });
+
+  it('file not readable → 409, nothing written', async () => {
+    const t = await testApp();
+    t.fake.config.failRaw = 500;
+    const puts = dashCalls(t, 'PUT', '/api/config').length;
+    expect((await t.request('POST', URL, { provider: 'openrouter', add: 'openai/gpt-5.5' })).status).toBe(409);
+    expect(dashCalls(t, 'PUT', '/api/config').length).toBe(puts);
+  });
+});

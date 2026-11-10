@@ -4,7 +4,7 @@ import { testApp, waitRun } from './helpers.js';
 
 const own = (id: string, at: number, extra: Record<string, unknown> = {}) => ({
   id, instanceId: 'a', workspace: 'dev', title: null, archived: false, lastRunId: null, lastActiveAt: at, createdAt: at,
-  model: null, effort: null, workspaceName: 'Dev', profile: 'default', ...extra,
+  model: null, modelProvider: null, effort: null, workspaceName: 'Dev', profile: 'default', ...extra,
 });
 
 describe('mergeRecent', () => {

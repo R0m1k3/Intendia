@@ -60,6 +60,7 @@ export const ModelOptionsSchema = z.looseObject({
     slug: z.string(),
     name: z.string(),
     authenticated: z.boolean().optional(),
+    is_user_defined: z.boolean().optional(),
     key_env: z.string().nullish(),
     models: z.array(z.string()).optional(),
     warning: z.string().nullish(),

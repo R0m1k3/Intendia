@@ -26,6 +26,7 @@ export const workspaces = sqliteTable('workspaces', {
   profile: text('profile'),
   /** Last model / effort chosen in one of its sessions: starting point of its new sessions. */
   model: text('model'),
+  modelProvider: text('model_provider'),
   effort: text('effort'),
   createdAt: integer('created_at').notNull(),
 });
@@ -43,6 +44,8 @@ export const sessionWorkspace = sqliteTable(
     lastActiveAt: integer('last_active_at'),
     /** Model and reasoning effort sent with each run (NULL = Hermes default). */
     model: text('model'),
+    /** Provider of `model` (group of the picker), sent with it; NULL = model sent alone. */
+    modelProvider: text('model_provider'),
     effort: text('effort'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
