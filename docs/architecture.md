@@ -150,10 +150,8 @@ sequenceDiagram
   the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `POST /x/instances` for a `db` one). SOUL.md is shown
   read-only, capped at 64 KiB and masked with `Masker.text`. Renaming is not offered (`PATCH /api/profiles/{name}`
   renames).
-- The kanban is shared by every profile. `src/kanban/service.ts` (`KanbanService`) never sends `?profile=` and
-  always names its board. In this phase it lists boards and active workers, and stops a worker: `terminate`, then a
-  task Hermes put back in `ready` is moved to `blocked` so the dispatcher does not relaunch it. A 404 or 409 from
-  `terminate` is a 409 `worker_ended`; a refused block a 409 `task_restarted`.
+- Activity and the agent page read the kanban workers through `KanbanService` (see Kanban below), and stop one
+  there.
 - `src/agents/activity.ts` (`ActivityService`, `GET /x/activity`): Hermes has no run list, so the candidates are the
   last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`), checked 4 at a time
   with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
@@ -163,6 +161,36 @@ sequenceDiagram
   `subagent.start`, nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
   root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page
   keeps the trees of the runs that ended while it was open, and they are gone after a reload.
+
+## Kanban
+
+- One kanban for every profile of an instance. `src/kanban/service.ts` (`KanbanService`) never sends `?profile=`,
+  always names its board (`?board=`) and never calls `/switch` (the current board is global to Hermes).
+  `src/routes/kanban.ts` serves everything under `/x/i/:inst/kanban`. Errors are `KanbanError` with their own status
+  (`hermes_conflict`, `worker_ended`, `task_restarted`, `board_exists` 409; `aux_failed` 422).
+- A new task starts in `scheduled` ("Planifiée", the only state Hermes leaves alone; `todo` is promoted to `ready`
+  as soon as its parents are done): created `ready` **without** its agent (the dispatcher skips it), moved to
+  `scheduled`, then given its agent. `ready` (launched by the dispatcher) and `triage` (split by Hermes with
+  `auto_decompose`) on request. A task attached to a workspace gets `workspace_kind: "dir"`,
+  the folder `<workspace>/kanban/<slug of the title>-<4 hex>` (as seen by the agent) and the `[Intendia]` framing
+  block in its body (`src/workspaces/framing.ts`, shared with the crons); the board and the panel show the body
+  without it and a badge that opens the folder. Editing the body keeps the block.
+- Moves: never to `running` (only the dispatcher starts a worker), only along `GET /workflow`'s `manual` list
+  (`apps/web/src/kanban/moves.ts`); drag and drop on wide screens, a "Déplacer vers…" menu on each card everywhere.
+  The board moves the card at once and puts it back if Hermes refuses.
+- Stopping a worker: `terminate`, then a task Hermes put back in `ready` is moved to `blocked` so the dispatcher does
+  not relaunch it. A 404 or 409 from `terminate` is a 409 `worker_ended`; a refused block a 409 `task_restarted`.
+- Orchestration (`PUT /kanban/orchestration`) rewrites the `config.yaml` of Hermes' `active_profile`: it goes through
+  `ConfigService.write` (source `orchestration`), so the previous file is kept in `config_versions` and can be
+  restored from Configuration → History.
+- Worker log: the last 200 lines, masked with `Masker.text`. Attachments are served as downloads
+  (`Content-Disposition: attachment`, the files CSP, `nosniff`).
+- Live updates: `GET /kanban/events?board=` opens Hermes' WebSocket (`src/hermes/events.ts`, the only place allowed
+  to open one; the dashboard token stays on the server) and relays each batch as an SSE `event: change` with the task
+  ids only, plus a ping every 25 s. If the WebSocket fails, closes or is not open after 10 s (Hermes leaves a wrong
+  token's handshake unanswered), the server sends `event: closed` and ends the
+  stream; the page (`apps/web/src/kanban/useLive.ts`) then rereads the board every 5 s, says so, and tries the stream
+  again after 60 s. The browser never sees the token.
 
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 

@@ -158,9 +158,17 @@ Kanban (`/api/plugins/kanban/...`):
    seconds. `GET /workflow` → `columns` and `manual` (allowed manual moves per status). Moving to `running` by hand, or
    to `done` with an unfinished parent, is a 400.
 9. `POST /tasks {title, body?, assignee?, priority?, triage?, workspace_kind?, workspace_path?, parents?}`: without
-   `triage: true` the task starts in `ready` and the dispatcher launches it if it has an assignee. With
-   `auto_decompose` (on by default) the gateway also splits and launches `triage` tasks: only `todo` stays idle.
-   `workspace_kind: "dir"` with an absolute path: Hermes creates the folder at launch.
+   `triage: true` the task starts in `ready` and the dispatcher launches it if it has an assignee (a task without
+   assignee is never launched: `skipped_unassigned`). With `auto_decompose` (on by default) the gateway splits
+   `triage` tasks and launches the pieces when an auxiliary model answers. **`todo` is not idle**: it means
+   "waiting for its parents"; `recompute_ready` (after writes and on each dispatcher tick) promotes a `todo` task
+   whose parents are all done to `ready` (seen within 15 s on the reference instance), and a non-sticky `blocked`
+   one too. `link_tasks` sends a `ready` child of an unfinished parent back to `todo` (`gated: true`).
+   **`scheduled` is the idle state**: only an explicit unblock (a move to `ready`, which re-checks the parents)
+   takes a task out of it; `schedule_task` accepts `todo`, `ready`, `running`, `blocked` (from `triage`: 409). A
+   block set through `PATCH {status: "blocked"}` (`block_task`, from `ready`/`running` only) is sticky: not
+   promoted back. Checked 2026-11-10: a task created `ready` without assignee, then `scheduled`, then assigned,
+   was still `scheduled` after 70 s.
 10. `PATCH /tasks/{id} {status?, assignee?, priority?, title?, body?, block_reason?}`; transition errors are 400
     `{detail}`. `POST /tasks/{id}/specify|decompose` call an auxiliary model; without one: 200 `{ok: false, reason}`.
 11. `POST /dispatch?board=&dry_run=&max=` (default `max` 8); Hermes also dispatches by itself every 60 s.
@@ -174,12 +182,20 @@ Kanban (`/api/plugins/kanban/...`):
 15. WebSocket `/api/plugins/kanban/events?board=&since=&token=` (dashboard token in the query, not in `/openapi.json`):
     `{events: [{id, task_id, run_id, kind, payload, created_at}], cursor}`; unknown or archived board: close 1008.
 
+16. `GET /tasks/{id}` → `{task, comments, events, attachments, links, link_tasks, child_results, runs}`.
+    `GET /tasks/{id}/log` → `{task_id, path, exists, size_bytes, content, truncated}`: the worker's raw output, which
+    may quote tokens (Intendia keeps the last 200 lines, masks them and drops `path`, a path on the Hermes host).
+    `GET /attachments/{id}` returns the file.
+17. On that WebSocket a good token opens at once and messages come only when the board changes. A **wrong token
+    gets no answer** to its handshake: neither open nor close (still pending after 6 s, checked 2026-11-10).
+    Intendia gives up after 10 s (`OPEN_TIMEOUT_MS`) and the page falls back to polling.
+
 Sub-agents and runs (API server):
-16. A run's event stream carries `subagent.start` and `subagent.complete` with `subagent_id`, `parent_id`, `depth`,
+18. A run's event stream carries `subagent.start` and `subagent.complete` with `subagent_id`, `parent_id`, `depth`,
     `goal`, `model`, `status`, `summary`, `duration_seconds`, `cost_usd`, `input_tokens`, `output_tokens`,
     `tool_count` (absent when unknown). Opened without `last_seq`, the stream replays what Hermes kept of the run. The
     session history (`/v1/sessions/{id}/messages`) has no sub-agent events.
-17. There is **no run list**: only `GET /v1/runs/{id}`, kept in memory (404 after a Hermes restart).
+19. There is **no run list**: only `GET /v1/runs/{id}`, kept in memory (404 after a Hermes restart).
 
 ## Official Docker image
 
