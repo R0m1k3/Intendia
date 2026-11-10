@@ -457,7 +457,9 @@ function searchSessions(sim: Simulator, query: Record<string, string>, deleted: 
     const i = text.toLowerCase().indexOf(q);
     if (i < 0) return null;
     const from = Math.max(0, i - 20);
-    return `${text.slice(from, i)}>>>${text.slice(i, i + q.length)}<<<${text.slice(i + q.length, i + q.length + 20)}`;
+    const to = i + q.length + 20;
+    // like FTS5's snippet(): an ellipsis where the text is cut
+    return `${from > 0 ? '...' : ''}${text.slice(from, i)}>>>${text.slice(i, i + q.length)}<<<${text.slice(i + q.length, to)}${to < text.length ? '...' : ''}`;
   };
   const rows: { id: string; session_id: string; source: string | null; title: string | null; snippet: string; last_active: number; message_count: number; profile: string }[] = [];
   const consider = (id: string, source: string | null, title: string | null, msgs: { content: unknown }[], at: number) => {

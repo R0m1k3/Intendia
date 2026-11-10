@@ -586,6 +586,9 @@ export const api = {
   configModels: (inst: string, profile: string) => call<ConfigModels>('GET', instPath(inst, 'config/models', profile)),
   changeProviderModels: (inst: string, profile: string, body: { provider: string; add?: string; remove?: string }) =>
     call<{ declared: string[] }>('POST', instPath(inst, 'config/provider-models', profile), body),
+  /** Several auxiliary tasks in one write, all or nothing. */
+  setAuxiliary: (inst: string, profile: string, body: { version: string; changes: { task: string; provider: string; model: string }[]; confirm?: boolean }) =>
+    call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/auxiliary', profile), body),
   setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
   configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),
   setEnv: (inst: string, profile: string, key: string, value: string) => call<WriteResult>('PUT', instPath(inst, 'config/env', profile), { key, value }),
