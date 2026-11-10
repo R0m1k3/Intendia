@@ -23,6 +23,8 @@ services:
       args:
         VERSION: git
     image: intendia:local
+    # Local image only: never pulled (Portainer's "re-pull image" would fail), rebuilt on each deploy.
+    pull_policy: build
     container_name: intendia
     restart: unless-stopped
     init: true
