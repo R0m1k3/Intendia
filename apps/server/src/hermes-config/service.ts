@@ -26,7 +26,7 @@ const HISTORY_PURPOSE = 'config-history-v1';
 const STATUS_LINES = 200;
 const TEST_MS = 40_000;
 
-export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp';
+export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
 
 export class ConfigInputError extends Error {
@@ -405,6 +405,39 @@ export class ConfigService {
     return this.write(ctx, 'env', null, async () => {
       await this.call(ctx, 'deleteEnv', { body: { key } }, 'Variable introuvable');
     });
+  }
+
+  // ---------------------------------------------------------------- kanban orchestration
+
+  /**
+   * `PUT /api/plugins/kanban/orchestration` rewrites the config file of the dashboard's launch profile
+   * (`active_profile`): it goes through `write` for that profile, so the file is copied first.
+   */
+  async setOrchestration(instanceId: string, body: Record<string, unknown>): Promise<{ version: string | null; profile: string }> {
+    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    const http = this.compat.http(instanceId);
+    const report = this.compat.get(instanceId);
+    const kanban = async <T>(op: string, opts: CallOptions = {}): Promise<T> => {
+      try {
+        return await callOp<T>(http, report, 'kanban', op, opts);
+      } catch (err) {
+        if (err instanceof HermesError && err.kind === 'http') {
+          const detail = this.mask.text(hermesDetail(err));
+          const status = err.detail.status;
+          if (status === 400 || status === 422) throw new ConfigInputError('hermes_refused', `Requête refusée par Hermes : ${detail}`);
+          if (status === 409) throw new ConfigConflictError('hermes_conflict', `Conflit signalé par Hermes : ${detail}`);
+          if (status === 404) throw new NotFoundError(`Orchestration : ${detail}`);
+        }
+        throw err;
+      }
+    };
+    const current = await kanban<{ active_profile?: unknown }>('orchestration');
+    const profile = typeof current.active_profile === 'string' && current.active_profile ? current.active_profile : 'default';
+    const ctx = this.ctx(instanceId, profile);
+    const res = await this.write(ctx, 'orchestration', null, async () => {
+      await kanban('setOrchestration', { body });
+    });
+    return { ...res, profile };
   }
 
   // ---------------------------------------------------------------- MCP

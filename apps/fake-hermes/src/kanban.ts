@@ -19,6 +19,7 @@ interface Board {
   slug: string; name: string; archived: boolean; created_at: number | null;
   tasks: Task[]; comments: { id: number; task_id: string; author: string; body: string; created_at: number }[];
   links: { parent: string; child: string }[];
+  attachments: { id: number; task_id: string; filename: string; content_type: string; data: Uint8Array<ArrayBuffer> }[];
   events: { id: number; task_id: string | null; run_id: number | null; kind: string; payload: unknown; created_at: number }[];
 }
 interface Worker {
@@ -45,6 +46,7 @@ export class KanbanStore {
   private taskSeq = 0;
   private runSeq = 0;
   private eventSeq = 0;
+  private attachSeq = 0;
   private listeners = new Set<(board: string) => void>();
 
   constructor(
@@ -60,13 +62,21 @@ export class KanbanStore {
   }
 
   private newBoard(slug: string, name: string, created: number | null): Board {
-    return { slug, name, archived: false, created_at: created, tasks: [], comments: [], links: [], events: [] };
+    return { slug, name, archived: false, created_at: created, tasks: [], comments: [], links: [], events: [], attachments: [] };
   }
 
   /** Called after every change of a board (WebSocket /events). */
   subscribe(listener: (board: string) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Test helper: a file attached to a task (Hermes stores uploads under the board's attachments root). */
+  addAttachment(board: string, taskId: string, filename: string, data: string, contentType = 'text/plain'): number {
+    const b = this.boards.get(board)!;
+    this.attachSeq += 1;
+    b.attachments.push({ id: this.attachSeq, task_id: taskId, filename, content_type: contentType, data: new TextEncoder().encode(data) });
+    return this.attachSeq;
   }
 
   eventsSince(board: string, cursor: number) {
@@ -128,11 +138,33 @@ export class KanbanStore {
       t.completed_at = now();
       t.result = 'Terminé par fake-hermes.';
       this.emit(b, 'completed', t.id, null, w.run_id);
+      this.recompute(b);
     }, this.stepMs);
+  }
+
+  /**
+   * Like Hermes' `recompute_ready` (run after its writes and on each dispatcher tick): a `todo` task whose
+   * parents are all done is promoted to `ready`. `todo` means "waiting for its parents", not "idle".
+   */
+  private recompute(b: Board) {
+    for (const t of b.tasks) {
+      if (t.status !== 'todo') continue;
+      const parents = b.links.filter((l) => l.child === t.id).map((l) => b.tasks.find((x) => x.id === l.parent));
+      if (parents.every((x) => !x || x.status === 'done')) {
+        t.status = 'ready';
+        this.emit(b, 'promoted', t.id);
+      }
+    }
   }
 
   /** null when the route is not a kanban route. */
   handle(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
+    const res = this.route(via, method, path, query, body);
+    if (res && method !== 'GET') for (const b of this.boards.values()) this.recompute(b);
+    return res;
+  }
+
+  private route(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
     if (via !== 'dash' || !path.startsWith('/api/plugins/kanban/')) return null;
     const p = path.slice('/api/plugins/kanban'.length);
     const b0 = (body ?? {}) as Record<string, unknown>;
@@ -197,6 +229,8 @@ export class KanbanStore {
       };
       b.tasks.push(t);
       for (const parent of Array.isArray(b0.parents) ? b0.parents.map(String) : []) b.links.push({ parent, child: t.id });
+      // a ready task with an unfinished parent waits in todo
+      if (t.status === 'ready' && b.links.some((l) => l.child === t.id && b.tasks.find((x) => x.id === l.parent)?.status !== 'done')) t.status = 'todo';
       this.emit(b, 'created', t.id, { status: t.status, assignee: t.assignee });
       return json({ task: this.view(b, t) });
     }
@@ -220,14 +254,24 @@ export class KanbanStore {
         if (!b.tasks.some((t) => t.id === parent) || !b.tasks.some((t) => t.id === child)) return json({ detail: 'unknown task' }, 404);
         if (parent === child) return json({ detail: 'a task cannot depend on itself' }, 400);
         if (!b.links.some((l) => l.parent === parent && l.child === child)) b.links.push({ parent, child });
+        // like Hermes' link_tasks: a ready child of an unfinished parent goes back to todo
+        const c = b.tasks.find((t) => t.id === child)!;
+        const gated = c.status === 'ready' && b.tasks.find((t) => t.id === parent)!.status !== 'done';
+        if (gated) c.status = 'todo';
         this.emit(b, 'linked', child, { parent });
-        return json({ ok: true, gated: false });
+        return json({ ok: true, gated });
       }
       if (method === 'DELETE') {
         b.links = b.links.filter((l) => !(l.parent === query.parent_id && l.child === query.child_id));
         this.emit(b, 'unlinked', query.child_id ?? null, { parent: query.parent_id });
         return json({ ok: true });
       }
+    }
+    const att = /^\/attachments\/(\d+)$/.exec(p);
+    if (att && method === 'GET') {
+      const a = b.attachments.find((x) => x.id === Number(att[1]));
+      if (!a) return json({ detail: 'attachment not found' }, 404);
+      return new Response(new Uint8Array(a.data), { headers: { 'Content-Type': a.content_type, 'Content-Disposition': `attachment; filename="${a.filename}"` } });
     }
     let m = /^\/runs\/([^/]+)\/terminate$/.exec(p);
     if (m && method === 'POST') {
@@ -256,7 +300,8 @@ export class KanbanStore {
         task: this.view(b, t),
         comments: b.comments.filter((c) => c.task_id === t.id),
         events: b.events.filter((e) => e.task_id === t.id),
-        attachments: [], links: { parents, children },
+        attachments: b.attachments.filter((a) => a.task_id === t.id).map(({ data, ...a }) => ({ ...a, size: data.length, uploaded_by: 'test', stored_path: `/opt/data/kanban/attachments/${a.filename}` })),
+        links: { parents, children },
         link_tasks: [...parents, ...children].map((id) => b.tasks.find((x) => x.id === id)).filter(Boolean)
           .map((x) => ({ id: x!.id, title: x!.title, status: x!.status })),
         child_results: [], runs: [],
@@ -295,7 +340,9 @@ export class KanbanStore {
       return json({ ok: true, task_id: t.id, children: [] });
     }
     if (sub === '/log' && method === 'GET') {
-      return json({ task_id: t.id, path: `/opt/data/kanban/logs/${t.id}.log`, exists: false, size_bytes: 0, content: '', truncated: false });
+      const ran = b.events.some((e) => e.task_id === t.id && e.kind === 'spawned');
+      const content = ran ? Array.from({ length: 250 }, (_, i) => `ligne ${i + 1}`).concat('Authorization: Bearer sk-test-log-0123456789').join('\n') : '';
+      return json({ task_id: t.id, path: `/opt/data/kanban/logs/${t.id}.log`, exists: ran, size_bytes: content.length, content, truncated: false });
     }
     return null;
   }

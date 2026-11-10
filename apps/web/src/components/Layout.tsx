@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, KanbanSquare, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/crons', label: 'Crons', icon: CalendarClock },
   { to: '/skills', label: 'Skills', icon: Puzzle },
   { to: '/agents', label: 'Agents', icon: Bot },
+  { to: '/kanban', label: 'Kanban', icon: KanbanSquare },
   { to: '/activite', label: 'Activité', icon: Activity },
   { to: '/config', label: 'Configuration', icon: SlidersHorizontal },
   { to: '/etat', label: 'État', icon: ListChecks },

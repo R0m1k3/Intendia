@@ -6,6 +6,7 @@ import {
 } from '../connectors/crons/index.js';
 import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
+import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 
 /** A Hermes 400 on a cron write: shown under the matching editor field. */
@@ -79,36 +80,8 @@ export interface CronInput {
   paused?: boolean;
 }
 
-// ---------------------------------------------------------------- framing block (pure)
-
-const BLOCK_RE = /^\[Intendia\] Workspace : .+ \(([a-z0-9-]+)\) ; dossier : crons\/([a-z0-9-]+)\n[\s\S]*?\n\[\/Intendia\](?:\n\n?|$)/;
-
-/** Prepends the framing block (its lines, without the closing marker) to a bare prompt. */
-export function frame(prompt: string, lines: string[]): string {
-  return `${lines.join('\n')}\n[/Intendia]\n\n${prompt}`;
-}
-
-/** Splits a cron prompt into Michael's prompt and the workspace it is framed for (block at the very start only). */
-export function unframe(prompt: string): { prompt: string; slug: string | null; folder: string | null } {
-  const m = BLOCK_RE.exec(prompt);
-  if (!m) return { prompt, slug: null, folder: null };
-  return { prompt: prompt.slice(m[0].length), slug: m[1]!, folder: m[2]! };
-}
-
-const KEY_MAX = 40;
-
-/** Folder key under `crons/`: slug of the cron name, suffixed -2, -3… when taken. */
-export function folderKey(name: string, taken: Iterable<string>): string {
-  const used = new Set(taken);
-  const base = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, KEY_MAX).replace(/-+$/, '') || 'cron';
-  if (!used.has(base)) return base;
-  for (let n = 2; ; n++) {
-    const suffix = `-${n}`;
-    const key = `${base.slice(0, KEY_MAX - suffix.length).replace(/-+$/, '')}${suffix}`;
-    if (!used.has(key)) return key;
-  }
-}
+// framing block: workspaces/framing.ts (shared with the kanban)
+export { folderKey, frame, unframe } from '../workspaces/framing.js';
 
 function schedule(raw: HermesJob['schedule'], display: string | null | undefined): PublicSchedule {
   if (raw && typeof raw === 'object') {
@@ -213,9 +186,7 @@ export class CronService {
   }
 
   private blockLines(ws: Workspace, folder: string): string[] {
-    const path = this.workspaces.agentPath(ws);
-    const l = this.workspaces.framingLines(ws, `crons/${folder}`);
-    return [`[Intendia] Workspace : ${ws.name} (${ws.slug}) ; dossier : crons/${folder}`, l.workdir, `Lis ${path}/AGENTS.md avant de commencer.`, l.store, l.share];
+    return blockLines(ws, 'crons', folder, this.workspaces.framingLines(ws, `crons/${folder}`), this.workspaces.agentPath(ws));
   }
 
   /** Keys already used by the instance's crons, and folders already on disk under the workspace's crons/. */

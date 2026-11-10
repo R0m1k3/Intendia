@@ -15,6 +15,7 @@ import { ActivityPage } from './pages/Activity';
 import { AgentPage } from './pages/Agent';
 import { AgentsPage } from './pages/Agents';
 import { CronsPage } from './pages/Crons';
+import { KanbanPage, type KanbanSearch } from './pages/Kanban';
 import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
 import { ExternalSessionPage } from './pages/ExternalSession';
@@ -122,11 +123,27 @@ const agentsIndexRoute = createRoute({
 });
 const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents', component: AgentsPage });
 const agentRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents/$name', component: AgentPage });
+/** /kanban: the first instance (creation order) */
+const kanbanIndexRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/kanban',
+  beforeLoad: async () => {
+    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+    const first = instances[0];
+    throw first ? redirect({ to: '/i/$inst/kanban', params: { inst: first.id } }) : redirect({ to: '/' });
+  },
+});
+const kanbanRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/kanban', component: KanbanPage,
+  validateSearch: (s: Record<string, unknown>): KanbanSearch => ({
+    board: typeof s.board === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(s.board) ? s.board : undefined,
+    task: typeof s.task === 'string' && /^t_[a-z0-9]{4,32}$/.test(s.task) ? s.task : undefined,
+  }),
+});
 const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/activite', component: ActivityPage });
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

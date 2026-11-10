@@ -59,6 +59,8 @@ export interface FakeOptions {
   kanbanStepMs?: number;
   /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
   pathMap?: { from: string; to: string };
+  /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
+  kanbanWs?: boolean;
 }
 
 export interface LoggedRequest {
@@ -460,6 +462,68 @@ export function createFakeHermes(opts: FakeOptions) {
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
     requests, sim, crons, skills, config, profiles, kanban,
+    /** Can be switched at run time by tests. */
+    kanbanWs: opts.kanbanWs ?? true,
+  };
+}
+
+type Fake = ReturnType<typeof createFakeHermes>;
+
+/** Like Hermes 0.23.0, a wrong token gets no answer to its handshake (neither open nor close). */
+export function kanbanWsTokenOk(url: string): boolean {
+  return new URL(url, 'ws://fake-dash').searchParams.get('token') === FAKE_DASH_TOKEN;
+}
+
+/**
+ * One connection to `/api/plugins/kanban/events?board=&since=&token=` (token already checked with
+ * `kanbanWsTokenOk`), whatever the transport: `{events, cursor}` messages for the board; unknown board or
+ * `kanbanWs: false` → close 1008. Returns the function that ends the subscription.
+ */
+export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: string) => void; close: (code: number) => void }): () => void {
+  const u = new URL(url, 'ws://fake-dash');
+  const board = u.searchParams.get('board') ?? 'default';
+  if (!fake.kanbanWs || u.pathname !== '/api/plugins/kanban/events' || !kanbanWsTokenOk(url)
+    || !fake.kanban.boards.get(board) || fake.kanban.boards.get(board)!.archived) {
+    io.close(1008);
+    return () => {};
+  }
+  const since = u.searchParams.get('since');
+  let cursor = since && /^\d+$/.test(since) ? Number(since) : fake.kanban.latestEvent(board);
+  return fake.kanban.subscribe((b) => {
+    if (b !== board) return;
+    const events = fake.kanban.eventsSince(board, cursor);
+    if (!events.length) return;
+    cursor = events.at(-1)!.id;
+    io.send(JSON.stringify({ events, cursor }));
+  });
+}
+
+/** WebSocket-like factory for tests (same shape as the server's `WsFactory`), backed by `connectKanbanEvents`. */
+export function fakeWebSocketFactory(fake: Fake) {
+  return (url: string) => {
+    const listeners = new Map<string, ((ev: { data?: unknown; code?: number }) => void)[]>();
+    const fire = (type: string, ev: { data?: unknown; code?: number } = {}) => { for (const l of listeners.get(type) ?? []) l(ev); };
+    let open = true;
+    let stop = () => {};
+    const end = (code: number) => {
+      if (!open) return;
+      open = false;
+      stop();
+      fire('close', { code });
+    };
+    queueMicrotask(() => {
+      if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
+      fire('open');
+      stop = connectKanbanEvents(fake, url, { send: (data) => { if (open) fire('message', { data }); }, close: end });
+    });
+    return {
+      addEventListener(type: string, l: (ev: { data?: unknown; code?: number }) => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), l]);
+      },
+      close: (code = 1000) => end(code),
+      /** test helper: is the connection still open? */
+      get isOpen() { return open; },
+    };
   };
 }
 

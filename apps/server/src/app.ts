@@ -23,6 +23,7 @@ import { skillRoutes } from './routes/skills.js';
 import { agentRoutes } from './routes/agents.js';
 import { activityRoutes } from './routes/activity.js';
 import { kanbanRoutes } from './routes/kanban.js';
+import type { WsFactory } from './connectors/kanban/index.js';
 import { AgentConflictError } from './agents/service.js';
 import { KanbanError } from './kanban/service.js';
 import { configRoutes } from './routes/config.js';
@@ -39,6 +40,10 @@ export interface AppDeps {
   compat: CompatService;
   services: Services;
   fetchImpl?: FetchLike;
+  /** Kanban live events (tests inject fake-hermes' factory; default: Node's WebSocket). */
+  wsFactory?: WsFactory;
+  /** Delay before an unanswered kanban WebSocket handshake is given up (tests shorten it). */
+  wsOpenTimeoutMs?: number;
   version: string;
 }
 
@@ -63,7 +68,8 @@ export function createApp(deps: AppDeps) {
     if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
     if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
     if (err instanceof ActionBusyError) return c.json({ error: err.message, code: err.code, action: err.action }, 409);
-    if (err instanceof KanbanError || err instanceof AgentConflictError) return c.json({ error: err.message, code: err.code }, 409);
+    if (err instanceof KanbanError) return c.json({ error: err.message, code: err.code }, err.status);
+    if (err instanceof AgentConflictError) return c.json({ error: err.message, code: err.code }, 409);
     if (err instanceof ConfigInputError) return c.json({ ...err.extra, error: err.message, code: err.code }, 400);
     if (err instanceof ConfigConflictError) return c.json({ error: err.message, code: err.code }, 409);
     if (err instanceof ConfirmRequiredError) return c.json({ error: err.message, code: err.code, message: err.prompt }, 409);
@@ -182,7 +188,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', configRoutes(deps.services.config));
   priv.route('/', agentRoutes(deps.services.agents));
   priv.route('/', activityRoutes(deps.services.activity));
-  priv.route('/', kanbanRoutes(deps.services.kanban));
+  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);
   app.route('/x', x);

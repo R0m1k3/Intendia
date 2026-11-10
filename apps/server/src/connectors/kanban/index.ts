@@ -102,3 +102,6 @@ export const kanbanModule: ModuleDef = {
     terminate: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: `${K}/runs/{run_id}/terminate` }] },
   },
 };
+
+/** Live events of a board (dashboard WebSocket, not in the OpenAPI): routes reach it through the connector. */
+export { openKanbanEvents, type KanbanEvent, type WsFactory, type WsLike } from '../../hermes/events.js';
