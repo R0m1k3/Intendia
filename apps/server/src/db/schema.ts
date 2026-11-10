@@ -71,6 +71,8 @@ export const runStats = sqliteTable(
     costBeforeSessionId: text('cost_before_session_id'),
     costUsd: real('cost_usd'),
     costFinal: integer('cost_final', { mode: 'boolean' }).notNull().default(false),
+    /** Runs covered by `costUsd`: more than 1 when the previous runs' costs were still settling at send time. */
+    costRuns: integer('cost_runs').notNull().default(1),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.runId] }), index('run_stats_session').on(t.instanceId, t.sessionId, t.startedAt)],
 );

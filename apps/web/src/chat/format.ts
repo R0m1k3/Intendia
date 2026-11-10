@@ -79,3 +79,15 @@ export function placeRunStats(history: Entry[], runs: RunStat[]): Map<string, Ru
   });
   return out;
 }
+
+/** Re-read delay of a cost Hermes may still be writing. */
+export const COST_POLL_MS = 5_000;
+/** The server freezes a cost 30 s after the run's end; past this, the page stops asking (clock drift margin). */
+const COST_POLL_LIMIT_MS = 45_000;
+
+/** True while the last reply's cost may still change: the page re-reads it. */
+export function costSettling(runs: RunStat[] | undefined, now = Date.now()): boolean {
+  const last = runs?.[runs.length - 1];
+  if (!last || last.costFinal || last.status === 'unknown' || last.endedAt === null) return false;
+  return now - last.endedAt < COST_POLL_LIMIT_MS;
+}

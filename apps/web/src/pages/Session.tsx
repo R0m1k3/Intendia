@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle } from '../chat/Composer';
-import { placeRunStats, shortModel } from '../chat/format';
+import { costSettling, COST_POLL_MS, placeRunStats, shortModel } from '../chat/format';
 import { RunOptions } from '../chat/RunOptions';
 import { ApprovalCard, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
@@ -51,6 +51,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const history = useQuery({
     queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
     enabled: Boolean(inst), refetchOnWindowFocus: false,
+    // Hermes writes costs late: the last reply's cost is re-read until the server freezes it
+    refetchInterval: (q) => (!active && costSettling(q.state.data?.runs) ? COST_POLL_MS : false),
   });
   const lastRunId = sess.data?.session.lastRunId ?? null;
   const lastRun = useQuery({

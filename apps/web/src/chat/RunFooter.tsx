@@ -12,6 +12,10 @@ function detail(r: RunStat): string {
   } else {
     parts.push('Jetons non communiqués par Hermes pour ce run');
   }
+  if (r.costRuns > 1) {
+    const prev = r.costRuns - 1 === 1 ? 'la précédente, envoyée' : `les ${r.costRuns - 1} précédentes, envoyées`;
+    parts.push(`Coût : cette réponse et ${prev} avant qu'Hermes ait compté leur coût`);
+  }
   parts.push(`Demandé : ${r.requestedModel ?? 'Auto'}, effort ${effortLabel(r.requestedEffort)}`);
   return parts.join('\n');
 }
@@ -30,7 +34,8 @@ export function RunFooter({ r }: { r: RunStat }) {
   else if (r.requestedModel) items.push(`${shortModel(r.requestedModel)} (demandé)`);
   // Hermes dates interrupted / forgotten runs when it notices them: no meaningful duration
   if (r.endedAt !== null && r.status !== 'interrupted' && r.status !== 'unknown') items.push(formatDuration(r.endedAt - r.startedAt));
-  if (r.costUsd) items.push(formatCost(r.costUsd));
+  // a cost covering previous replies too (sent before their cost was known) says so
+  if (r.costUsd) items.push(r.costRuns > 1 ? `${formatCost(r.costUsd)} (${r.costRuns} réponses)` : formatCost(r.costUsd));
   if (r.inputTokens !== null && r.outputTokens !== null) items.push(`${formatTokens(r.inputTokens)} → ${formatTokens(r.outputTokens)}`);
   const share = cacheShare(r);
   if (share !== null) items.push(`Cache ${formatShare(share)}`);

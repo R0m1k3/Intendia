@@ -271,7 +271,10 @@ class Simulator {
     };
     run.status = 'completed';
     run.output = output;
-    this.costs.set(run.sessionId, Math.round(((this.costs.get(run.sessionId) ?? 0) + 0.0123) * 1e6) / 1e6);
+    // "tard": the cost is written 8 s after the end (Hermes counts costs from a background queue)
+    const addCost = () => this.costs.set(run.sessionId, Math.round(((this.costs.get(run.sessionId) ?? 0) + 0.0123) * 1e6) / 1e6);
+    if (/tard/i.test(run.input)) setTimeout(addCost, 8_000).unref?.();
+    else addCost();
     this.addMessage(run.sessionId, 'assistant', output);
     this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run) });
   }
