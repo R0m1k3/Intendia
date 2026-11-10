@@ -7,6 +7,7 @@ import { Button, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
 import { rehypePaths } from '../files/rehypePaths';
 import type { Approval, Entry } from './events';
+import { Subagents } from './Subagents';
 
 export function clock(ts: number | null): string {
   if (!ts) return '';
@@ -113,6 +114,12 @@ function EntryView({ e }: { e: Entry }) {
       return (
         <Row ts={e.ts}>
           <p className={cx('text-xs', e.tone === 'bad' ? 'text-bad' : 'text-ink-faint')}>{e.text}</p>
+        </Row>
+      );
+    case 'subagents':
+      return (
+        <Row ts={e.ts}>
+          <Subagents nodes={e.nodes} />
         </Row>
       );
   }

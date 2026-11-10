@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatMessage } from '../api';
-import { historyEntries, initialRun, mergeHistory, reduceEvent, type RunEvent } from './events';
+import { historyEntries, initialRun, mergeHistory, reduceEvent, subagentTree, withTrees, type Entry, type RunEvent } from './events';
 
 const run = (events: RunEvent[]) => events.reduce(reduceEvent, initialRun());
 const msg = (id: number, role: string, content: string, timestamp: number, extra: Partial<ChatMessage> = {}): ChatMessage => ({
@@ -81,5 +81,56 @@ describe('history', () => {
     // sent from this page: the live entries already carry the user message
     const own = mergeHistory(history, 199.5, [{ kind: 'user', key: 'u', text: 'Pendant', ts: null }, ...live]);
     expect(own.filter((e) => e.kind === 'user')).toHaveLength(2);
+  });
+});
+
+describe('sub-agents', () => {
+  const tree = (events: RunEvent[]) => {
+    const s = run(events);
+    const entries = s.entries.filter((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
+    expect(entries).toHaveLength(1);
+    return { s, nodes: entries[0]!.nodes };
+  };
+
+  it('builds one tree per run, where the first sub-agent started', () => {
+    const { s, nodes } = tree([
+      { event: 'message.delta', delta: 'Je délègue.' },
+      { event: 'subagent.start', subagent_id: 'sa_1', depth: 1, goal: 'Chercher', model: 'm1', timestamp: 10 },
+      { event: 'subagent.start', subagent_id: 'sa_2', parent_id: 'sa_1', depth: 2, goal: 'Lire', timestamp: 11 },
+      { event: 'subagent.complete', subagent_id: 'sa_2', status: 'completed', duration_seconds: 1.5, cost_usd: 0.01, tool_count: 2, summary: 'Lu' },
+      { event: 'message.delta', delta: 'Fini.' },
+    ]);
+    expect(s.entries.map((e) => e.kind)).toEqual(['assistant', 'subagents', 'assistant']);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0]).toMatchObject({ id: 'sa_1', status: 'running', model: 'm1', startedAt: 10 });
+    expect(nodes[1]).toMatchObject({ id: 'sa_2', parentId: 'sa_1', status: 'completed', duration: 1.5, cost: 0.01, toolCount: 2, summary: 'Lu' });
+    expect(subagentTree(nodes).map((x) => [x.node.id, x.level])).toEqual([['sa_1', 0], ['sa_2', 1]]);
+  });
+
+  it('keeps Hermes status, defaults to completed, keys by goal without id', () => {
+    const { nodes } = tree([
+      { event: 'subagent.start', goal: 'A' },
+      { event: 'subagent.start', goal: 'A' },
+      { event: 'subagent.complete', goal: 'A', status: 'failed' },
+      { event: 'subagent.complete', goal: 'A' },
+      { event: 'subagent.complete', subagent_id: 'x', goal: 'Sans début' },
+    ]);
+    expect(nodes.map((n) => [n.id, n.status])).toEqual([['A#1', 'failed'], ['A#2', 'completed'], ['x', 'completed']]);
+  });
+
+  it('hangs unknown parents and cycles off the root', () => {
+    const { nodes } = tree([
+      { event: 'subagent.start', subagent_id: 'b', parent_id: 'inconnu' },
+      { event: 'subagent.start', subagent_id: 'c', parent_id: 'd' },
+      { event: 'subagent.start', subagent_id: 'd', parent_id: 'c' },
+    ]);
+    expect(subagentTree(nodes).map((x) => [x.node.id, x.level])).toEqual([['b', 0], ['c', 0], ['d', 0]]);
+  });
+
+  it('puts the trees of finished runs back into the history, by time', () => {
+    const history = historyEntries([msg(1, 'user', 'Délègue', 100), msg(2, 'assistant', 'Fini', 120), msg(3, 'user', 'Merci', 130)]);
+    const t = { kind: 'subagents' as const, key: 'sa-1', nodes: [], ts: 105 };
+    expect(withTrees(history, [t]).map((e) => e.key)).toEqual(['h1', 'sa-1', 'h2', 'h3']);
+    expect(withTrees(history, [{ ...t, ts: 200 }]).map((e) => e.key).at(-1)).toBe('sa-1');
   });
 });
