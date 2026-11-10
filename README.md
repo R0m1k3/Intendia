@@ -31,10 +31,10 @@ on a reference Hermes 0.23.0, but Intendia has not been used on a live installat
 
 | | |
 |---|---|
-| ![Chat](docs/screenshots/chat.png) | ![File produced by the agent](docs/screenshots/session-files.png) |
-| ![Kanban](docs/screenshots/kanban.png) | ![Crons](docs/screenshots/crons.png) |
-| ![Skills](docs/screenshots/skills.png) | ![Hermes settings](docs/screenshots/settings.png) |
-| ![State of each module](docs/screenshots/state.png) | |
+| ![Home: ask Hermes, recent sessions of every source](docs/screenshots/home.png) | ![Chat](docs/screenshots/chat.png) |
+| ![File produced by the agent](docs/screenshots/session-files.png) | ![Kanban](docs/screenshots/kanban.png) |
+| ![Crons](docs/screenshots/crons.png) | ![Skills](docs/screenshots/skills.png) |
+| ![Hermes settings](docs/screenshots/settings.png) | ![State of each module](docs/screenshots/state.png) |
 
 ## Install
 
