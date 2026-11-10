@@ -175,7 +175,10 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
  */
 function reduceSubagent(entries: Entry[], ev: RunEvent, ts: number | null): Entry[] {
   const at = entries.findIndex((e) => e.kind === 'subagents');
-  const tree = at >= 0 ? (entries[at] as Extract<Entry, { kind: 'subagents' }>) : { kind: 'subagents' as const, key: key('sa', ev.seq), nodes: [], ts };
+  // seq is local to a run: the run id keeps the trees of two runs of the same session apart (withTrees)
+  const runId = typeof ev.run_id === 'string' && ev.run_id ? ev.run_id : null;
+  const tree = at >= 0 ? (entries[at] as Extract<Entry, { kind: 'subagents' }>)
+    : { kind: 'subagents' as const, key: runId ? `sa-${runId}-${ev.seq ?? 0}` : key('sa', ev.seq), nodes: [], ts };
   const nodes = [...tree.nodes];
   const goal = str(ev.goal);
   let id = typeof ev.subagent_id === 'string' && ev.subagent_id ? ev.subagent_id : null;

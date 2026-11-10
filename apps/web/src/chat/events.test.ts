@@ -133,4 +133,13 @@ describe('sub-agents', () => {
     expect(withTrees(history, [t]).map((e) => e.key)).toEqual(['h1', 'sa-1', 'h2', 'h3']);
     expect(withTrees(history, [{ ...t, ts: 200 }]).map((e) => e.key).at(-1)).toBe('sa-1');
   });
+
+  it('keeps apart the trees of two runs whose first sub-agent has the same seq', () => {
+    const first = (runId: string) => reduceEvent(initialRun(), { event: 'subagent.start', run_id: runId, seq: 2, subagent_id: 'x', goal: runId })
+      .entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents')!;
+    const a = first('run_a');
+    const b = first('run_b');
+    expect(a.key).not.toBe(b.key);
+    expect(withTrees([], [a, b]).length).toBe(2);
+  });
 });

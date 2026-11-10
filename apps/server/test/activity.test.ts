@@ -55,6 +55,22 @@ describe('activity', () => {
     expect(runStatusCalls(t, 'run_oublie')).toBe(1);
   });
 
+  it('reaches an older run still going once 20 newer runs are known as finished', async () => {
+    const t = await testApp({ stepMs: 100 });
+    const live = await session(t);
+    const runId = (await t.request('POST', `${live.base}/runs`, { input: 'lent' })).json.runId as string;
+    t.db.update(sessionWorkspace).set({ lastActiveAt: Date.now() - 3600_000 }).where(eq(sessionWorkspace.sessionId, live.s.id)).run();
+    for (let i = 0; i < 20; i++) {
+      const o = await session(t);
+      t.db.update(sessionWorkspace).set({ lastRunId: `run_fini_${i}`, lastActiveAt: Date.now() }).where(eq(sessionWorkspace.sessionId, o.s.id)).run();
+    }
+    // first pass: the 20 newer runs fill the checks (Hermes no longer knows them)
+    expect((await t.request('GET', '/x/activity')).json.runs).toEqual([]);
+    // second pass: they are skipped before the limit, the older run is checked
+    expect((await t.request('GET', '/x/activity')).json.runs).toMatchObject([{ runId, sessionId: live.s.id }]);
+    await t.request('POST', `${live.base}/runs/${runId}/stop`);
+  });
+
   it('reports an unreachable instance as an error line', async () => {
     const t = await testApp();
     const { s } = await session(t);

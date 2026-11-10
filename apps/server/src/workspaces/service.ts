@@ -201,16 +201,27 @@ export class WorkspaceService {
   }
 
   /** Sessions whose last run started after `sinceMs`, most recent first (Activity page). */
-  recentRuns(sinceMs: number, limit: number): RecentRun[] {
-    return this.db.select({
-      instanceId: sessionWorkspace.instanceId, workspaceSlug: sessionWorkspace.workspaceSlug, sessionId: sessionWorkspace.sessionId,
-      title: sessionWorkspace.title, runId: sessionWorkspace.lastRunId, profile: workspaces.profile, workspaceName: workspaces.name,
-      lastActiveAt: sessionWorkspace.lastActiveAt,
-    }).from(sessionWorkspace)
-      .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs)))
-      .orderBy(desc(sessionWorkspace.lastActiveAt)).limit(limit).all()
-      .map((r) => ({ ...r, runId: r.runId!, profile: r.profile ?? 'default', lastActiveAt: r.lastActiveAt ?? 0 }));
+  /**
+   * Last run of the sessions active since `sinceMs`, most recent first, `limit` at most among those `keep`
+   * accepts: read by pages, so runs already known as finished do not hide older ones still going.
+   */
+  recentRuns(sinceMs: number, limit: number, keep: (r: RecentRun) => boolean = () => true): RecentRun[] {
+    const PAGE = 100;
+    const out: RecentRun[] = [];
+    for (let offset = 0; out.length < limit; offset += PAGE) {
+      const page = this.db.select({
+        instanceId: sessionWorkspace.instanceId, workspaceSlug: sessionWorkspace.workspaceSlug, sessionId: sessionWorkspace.sessionId,
+        title: sessionWorkspace.title, runId: sessionWorkspace.lastRunId, profile: workspaces.profile, workspaceName: workspaces.name,
+        lastActiveAt: sessionWorkspace.lastActiveAt,
+      }).from(sessionWorkspace)
+        .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+        .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs)))
+        .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(PAGE).offset(offset).all()
+        .map((r) => ({ ...r, runId: r.runId!, profile: r.profile ?? 'default', lastActiveAt: r.lastActiveAt ?? 0 }));
+      for (const r of page) if (out.length < limit && keep(r)) out.push(r);
+      if (page.length < PAGE) break;
+    }
+    return out;
   }
 
   /** After createRun: last run, activity time, and the title on the first message. */
