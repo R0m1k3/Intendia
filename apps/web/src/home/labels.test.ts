@@ -3,7 +3,7 @@ import type { RecentSession, ShareLink } from '../api';
 import { sessionLinks } from '../components/SessionFiles';
 import { filterRecent, sourceLabel } from './labels';
 
-const rs = (id: string, source: string | null): RecentSession => ({ kind: 'hermes', instanceId: 'a', profile: 'default', id, source, title: id, sub: '', workspace: null, at: 0 });
+const rs = (id: string, source: string | null): RecentSession => ({ kind: 'hermes', instanceId: 'a', profile: 'default', id, source, title: id, sub: '', workspace: null, at: 0, snippet: null });
 
 describe('recent sessions', () => {
   it('labels sources', () => {

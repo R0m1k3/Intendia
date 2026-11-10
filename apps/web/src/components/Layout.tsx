@@ -1,9 +1,10 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, KanbanSquare, Link2, ListChecks, LogOut, Plus, Puzzle, Settings2, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, KanbanSquare, Link2, ListChecks, LogOut, MessagesSquare, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
+import { CommandPalette, shortcutLabel } from './CommandPalette';
 import { cx, Mark, Wordmark, worst } from './ui';
 
 type NavGroup = 'top' | 'auto' | 'system' | 'hidden';
@@ -11,6 +12,7 @@ type NavGroup = 'top' | 'auto' | 'system' | 'hidden';
 /** In display order; `group` places each entry in the sidebar (`hidden`: bottom bar only). */
 const NAV = [
   { to: '/', label: 'Accueil', icon: House, group: 'top' },
+  { to: '/sessions', label: 'Sessions', icon: MessagesSquare, group: 'top' },
   { to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'top' },
   { to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto' },
   { to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto' },
@@ -26,6 +28,9 @@ const NAV = [
 const ROW = 'flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
 /** Selected entry: a white tab lifted off the grey frame (the ! classes win over ROW's hover). */
 const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(22_24_27/0.05)]';
+/** Entries offered by the search palette (every page but the bottom-bar-only ones). */
+const PALETTE_NAV = NAV.filter((n) => n.group !== 'hidden');
+
 const GROUP = 'flex items-center justify-between px-3 pb-2 pt-6 text-xs font-medium text-ink-faint';
 
 export function Layout() {
@@ -40,6 +45,31 @@ export function Layout() {
   // per-instance console pages (/i/<inst>/crons, /i/<inst>/skills) light up their entry (/crons, /skills)
   const alsoActive = (to: string) => to !== '/' && new RegExp(`^/i/[^/]+${to}(/|$)`).test(pathname);
   const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
+
+  // Ctrl/Cmd K anywhere (even in a field) toggles the palette; closing gives the focus back
+  const [palette, setPalette] = useState(false);
+  const before = useRef<HTMLElement | null>(null);
+  const openPalette = useCallback(() => {
+    before.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPalette(true);
+  }, []);
+  const closePalette = useCallback(() => {
+    setPalette(false);
+    const el = before.current;
+    before.current = null;
+    if (el?.isConnected) requestAnimationFrame(() => el.focus());
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (palette) closePalette();
+        else openPalette();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [palette, openPalette, closePalette]);
 
   const logout = async () => {
     await api.logout();
@@ -68,6 +98,12 @@ export function Layout() {
         <div className="px-2 pb-4 pt-1">
           <Wordmark />
         </div>
+        <button type="button" onClick={openPalette} aria-haspopup="dialog"
+          className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-3 text-sm text-ink-soft transition-colors hover:text-ink">
+          <Search className="size-4 shrink-0" strokeWidth={1.5} />
+          <span className="flex-1 text-left">Rechercher</span>
+          <kbd className="font-mono text-[11px] text-ink-faint">{shortcutLabel()}</kbd>
+        </button>
         <NewSessionButton className="mb-4" />
 
         <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
@@ -147,7 +183,8 @@ export function Layout() {
         </div>
       </main>
 
-      <MobileNav isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
+      {palette && <CommandPalette nav={PALETTE_NAV} onClose={closePalette} />}
+      <MobileNav onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
     </div>
   );
 }
@@ -155,7 +192,7 @@ export function Layout() {
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
 const MOBILE_MAIN: string[] = ['/', '/w', '/activite', '/agents'];
 
-function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
+function MobileNav({ isActive, onSearch }: { isActive: (to: string) => boolean; onSearch: () => void }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
@@ -168,6 +205,11 @@ function MobileNav({ isActive }: { isActive: (to: string) => boolean }) {
         <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
           <nav aria-label="Plus" onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
+            <button type="button" onClick={() => { setMore(false); onSearch(); }}
+              className="col-span-3 flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft">
+              <Search className="size-4" strokeWidth={1.5} />
+              Rechercher
+            </button>
             <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
             {rest.map((n) => (
               <Link key={n.to} to={n.to} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>

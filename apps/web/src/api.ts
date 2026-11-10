@@ -138,7 +138,11 @@ export interface RecentSession {
   workspace: string | null;
   /** ms */
   at: number;
+  /** Search hit in the messages (hit between `>>>` and `<<<`); null outside a search. */
+  snippet: string | null;
 }
+export type SessionSource = 'all' | 'intendia' | 'telegram' | 'cron';
+export interface SessionErrors { errors: { instance: string; message: string }[] }
 /**
  * Models of the chat's picker for one agent (instance + profile), one group per provider with a key: the models
  * declared in Hermes for it (`declared`), else its whole catalogue. `managed` = editable in the Modèles tab.
@@ -515,7 +519,11 @@ export const api = {
     call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
-  recentSessions: (limit = 20) => call<{ sessions: RecentSession[]; errors: { instance: string; message: string }[] }>('GET', `/sessions/recent?limit=${limit}`),
+  recentSessions: (limit = 20, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[] } & SessionErrors>('GET', `/sessions/recent?limit=${limit}${source === 'all' ? '' : `&source=${source}`}`),
+  /** Intendia titles + message content (dashboard); `partial` = instances where only titles were searched. */
+  searchSessions: (q: string, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[]; partial: string[] } & SessionErrors>('GET', `/sessions/search?q=${encodeURIComponent(q)}${source === 'all' ? '' : `&source=${source}`}`),
   cronsOverview: () => call<{ crons: OverviewCron[]; errors: { instance: string; message: string }[] }>('GET', '/crons/overview'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),

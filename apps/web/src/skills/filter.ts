@@ -1,4 +1,5 @@
 import type { Skill } from '../api';
+import { fold } from '../components/text';
 
 export type StateFilter = 'all' | 'on' | 'off';
 export interface SkillFilter { text: string; category: string; state: StateFilter }
@@ -12,7 +13,6 @@ export const PROVENANCE_LABEL: Record<string, string> = {
 
 export const provenanceLabel = (p: string | null) => (p ? PROVENANCE_LABEL[p] ?? p : 'origine inconnue');
 
-const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 export function filterSkills(skills: Skill[], f: SkillFilter): Skill[] {
   const words = fold(f.text).split(/\s+/).filter(Boolean);
