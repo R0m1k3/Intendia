@@ -1,3 +1,4 @@
+import { thinkingState } from './thinking';
 import { Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
@@ -215,6 +216,19 @@ function TurnView({ t }: { t: Turn }) {
       </div>
     </div>
   );
+}
+
+/** Shown at the end of the thread while a run is going on: what the agent is doing, with three moving dots. */
+export function ThinkingIndicator({ entries }: { entries: Entry[] }) {
+  const t = thinkingState(entries);
+  const line = (
+    <div role="status" aria-live="polite" data-thinking className={cx('flex items-center gap-2.5 text-sm text-ink-soft', t.inTurn ? AGENT_INDENT : cx('mt-2', AGENT_INDENT))}>
+      <span aria-hidden className="thinking-dots"><span /><span /><span /></span>
+      <span className="thinking-label">{t.label}</span>
+    </div>
+  );
+  if (t.inTurn) return <div className="mt-3">{line}</div>;
+  return <div className="mt-6"><AgentHeader ts={null} />{line}</div>;
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */

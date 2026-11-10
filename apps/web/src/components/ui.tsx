@@ -147,7 +147,13 @@ export function host(url: string): string {
 
 /** Copies to the clipboard; where the browser refuses (plain http, old browser), shows the text to copy by hand. */
 export async function copyText(text: string, label: string): Promise<void> {
-  await navigator.clipboard.writeText(text).catch(() => { prompt(label, text); });
+  // navigator.clipboard is undefined outside secure contexts (plain http): reading .writeText would throw
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(text);
+  } catch {
+    prompt(label, text);
+  }
 }
 
 /** A settings section: title and explanation on the left third (≥ 768 px), content on the right; rule above but the first. */

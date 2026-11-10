@@ -106,13 +106,16 @@ export function Composer({
   const send = async () => {
     if (!canSend || running) return;
     const message = [text.trim(), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
+    // what was sent: a file added or text typed while the send is pending stays in the draft
+    const sentText = text;
+    const sent = new Set(files.map((a) => a.id));
     setSending(true);
     const ok = await onSend(message);
     setSending(false);
     if (ok) {
-      setText('');
+      setText((t) => (t === sentText ? '' : t));
       for (const a of files) free(a.preview);
-      setFiles([]);
+      setFiles((all) => all.filter((a) => !sent.has(a.id)));
     }
   };
 
