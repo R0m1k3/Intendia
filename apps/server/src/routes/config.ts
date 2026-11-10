@@ -40,6 +40,15 @@ function checkName(name: string): string {
   return name;
 }
 
+/** Same rule as a session's model (PatchSession.model in routes/workspaces.ts). */
+const ModelName = z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne');
+/** Built-in provider keys only (`custom:<name>` providers keep their own list, edited in the YAML tab). */
+const ProviderModelsBody = z.object({
+  provider: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, 'fournisseur non modifiable ici'),
+  add: ModelName.optional(),
+  remove: ModelName.optional(),
+});
+
 export function configRoutes(config: ConfigService): Hono {
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
@@ -74,6 +83,15 @@ export function configRoutes(config: ConfigService): Hono {
       throw new ConfigInputError('invalid_task', 'Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui');
     }
     return c.json(await config.setModel(inst(c), profileOf(c), body));
+  });
+
+  r.post('/i/:inst/config/provider-models', async (c) => {
+    const body = ProviderModelsBody.parse(await c.req.json());
+    if ((body.add === undefined) === (body.remove === undefined)) {
+      throw new ConfigInputError('invalid_change', 'Donner un modèle à ajouter ou à retirer (un seul)');
+    }
+    const change = body.add !== undefined ? { add: body.add } : { remove: body.remove! };
+    return c.json(await config.changeProviderModels(inst(c), profileOf(c), body.provider, change));
   });
 
   r.get('/i/:inst/config/env', async (c) => c.json({ env: await config.env(inst(c), profileOf(c)) }));

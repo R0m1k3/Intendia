@@ -36,6 +36,7 @@ export const ModelOptionsSchema = z.looseObject({
     slug: z.string(),
     name: z.string().optional(),
     authenticated: z.boolean().optional(),
+    is_user_defined: z.boolean().optional(),
     models: z.array(z.unknown()).optional(),
   })),
 });

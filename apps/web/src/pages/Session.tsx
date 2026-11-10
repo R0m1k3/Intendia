@@ -149,7 +149,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   });
   /** Model / effort of the next messages (also remembered as the workspace's last choice). */
   const setOptions = useMutation({
-    mutationFn: (patch: { model?: string | null; effort?: Effort | null }) => api.updateSession(inst!, sessionId, patch),
+    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null }) => api.updateSession(inst!, sessionId, patch),
     onSuccess: (res) => {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
       void qc.invalidateQueries({ queryKey: ['workspace', slug] });
@@ -328,7 +328,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             options={inst && sess.data && (
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
-                model={sess.data.session.model} effort={sess.data.session.effort}
+                model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
                 onChange={(patch) => setOptions.mutate(patch)}
               />

@@ -19,8 +19,11 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
 
 ### Runs and sessions (checked 2026-11-09)
 
-- `instructions` is added to the system prompt for that run only; `model` picks the route. Do not send `provider`:
-  Hermes answers 400 when it contradicts a pinned model route.
+- `instructions` is added to the system prompt for that run only; `model` picks the route. `provider` is sent only
+  with a model picked in a provider group of the chat (checked 2026-11-10: `_select_agent_runtime` uses the request
+  provider first, so a model of another provider than the agent's works; without it the model goes to the agent's
+  current provider). Hermes answers 400 when it contradicts a pinned model route (`model_routes`); a `/model` typed
+  from a messaging platform in the same session wins over the request.
 - `GET /v1/runs/{id}` → `{object: "hermes.run", run_id, status, session_id, created_at, model, output, usage}`;
   `created_at` in seconds (float). Statuses: `queued`, `running`, `waiting_for_approval`, `stopping`, then
   `completed`, `failed`, `cancelled`, `interrupted`. Unknown run → 404 (also on `/events`, as JSON).
@@ -132,7 +135,13 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
 4. `PUT /api/env {key, value}` and `DELETE /api/env {key}` also rewrite copies of the value in `config.yaml`; the MCP
    writes call `save_config` too. `GET /api/env` sometimes shows the start and end of a value (`redacted_value`):
    never display it, never call `/api/env/reveal`.
-5. `GET /api/model/options` can persist discovered models into the config (a read that writes).
+5. `GET /api/model/options` can persist discovered models into the config (a read that writes). Models declared
+   per provider live in `providers.<slug>.models` (a string, a list of strings or `{id|name}` objects, or a
+   `{id: meta}` mapping; `_declared_model_ids`). For a built-in provider they are put first in its row and do not
+   restrict the catalogue (`_lap_builtin_rows`); custom endpoints (`base_url`) use them as their list. No
+   `max_models` cap on this route. `PUT /api/config` deep-merges mappings and replaces lists (`_deep_merge`).
+   `explicit_only=true` (only explicitly configured providers) is understood by the dashboard, ignored by the API
+   server.
 6. `POST /api/model/set {scope, provider, model, task?, confirm_expensive_model?}`: with `api_key` it writes the key in
    clear in the config (Intendia never sends `api_key` nor `base_url`). An expensive model answers 200
    `{ ok: false, confirm_required, confirm_message }`.

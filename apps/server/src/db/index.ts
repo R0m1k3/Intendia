@@ -53,7 +53,10 @@ export function backupBeforeMigration(sqlite: Database.Database, dataDir: string
 export function migrate(sqlite: Database.Database, dataDir: string, migrationsDir = defaultMigrationsDir()) {
   sqlite.exec('CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL)');
   const row = sqlite.prepare('SELECT COALESCE(MAX(id), 0) AS v FROM _migrations').get() as { v: number };
-  const pending = listMigrations(migrationsDir).filter((m) => m.id > row.v);
+  // every migration not applied yet, not only those above the highest: branches merged in any order (0005 before
+  // 0004) still get all of theirs
+  const done = new Set((sqlite.prepare('SELECT id FROM _migrations').all() as { id: number }[]).map((r) => r.id));
+  const pending = listMigrations(migrationsDir).filter((m) => !done.has(m.id));
   if (pending.length === 0) return { applied: [] as string[], backup: null as string | null };
   const backup = backupBeforeMigration(sqlite, dataDir, row.v);
   const applied: string[] = [];

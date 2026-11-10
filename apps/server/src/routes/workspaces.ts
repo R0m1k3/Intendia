@@ -24,6 +24,8 @@ const PatchSession = z.object({
   archived: z.boolean().optional(),
   /** null = Hermes default */
   model: z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne').nullable().optional(),
+  /** Provider of `model` (picker group); accepts `custom:<name>` keys. Only with `model`. */
+  provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, 'fournisseur invalide').nullable().optional(),
   effort: z.enum(EFFORTS).nullable().optional(),
 });
 

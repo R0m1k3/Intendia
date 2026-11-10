@@ -12,6 +12,7 @@ import type { Db } from '../db/index.js';
 import { configVersions } from '../db/schema.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
+import { declaredModels, editableShape, type Declared } from './declared.js';
 import { Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
 
@@ -26,7 +27,7 @@ const HISTORY_PURPOSE = 'config-history-v1';
 const STATUS_LINES = 200;
 const TEST_MS = 40_000;
 
-export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration';
+export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
 
 export class ConfigInputError extends Error {
@@ -37,7 +38,7 @@ export class ConfigInputError extends Error {
 }
 
 export class ConfigConflictError extends Error {
-  constructor(readonly code: 'config_changed' | 'config_unavailable' | 'hermes_conflict', message: string) {
+  constructor(readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict', message: string) {
     super(message);
     this.name = 'ConfigConflictError';
   }
@@ -60,7 +61,13 @@ export interface PublicConfig {
 export interface PublicVersion { id: number; createdAt: number; source: string; readable: boolean }
 export interface PublicModels {
   main: { provider: string; model: string; contextLength: number | null };
-  providers: { slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null }[];
+  providers: {
+    slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null;
+    /** Models declared in `providers.<slug>.models` (what the chat offers; none = the whole catalogue). */
+    declared: string[];
+    /** The declaration can be changed from Intendia (plain list, built-in provider). */
+    editable: boolean;
+  }[];
   auxiliary: { task: string; label: string | null; provider: string; model: string }[];
   version: string | null;
 }
@@ -84,8 +91,11 @@ export interface McpCreate { name: string; url?: string; token?: string; command
 type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatService['get']>; instanceId: string; profile: string };
 
 /** Hermes or Intendia said no before writing (a timeout or a 5xx may have written, so the copy stays). */
+/** Thrown inside `write()` when the change would not modify the file: nothing written, no history copy. */
+class NoChange extends Error {}
+
 function refused(err: unknown): boolean {
-  return err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
+  return err instanceof NoChange || err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
     || (err instanceof ConfigConflictError && err.code === 'hermes_conflict');
 }
 
@@ -355,15 +365,59 @@ export class ConfigService {
     ]);
     // reading the options may write discovered models into the file: version after it
     const raw = await this.readRaw(ctx);
+    const declared = raw === null ? null : declaredModels(raw);
     return {
       main: { provider: info.provider, model: info.model, contextLength: info.effective_context_length ?? null },
-      providers: options.providers.map((p) => ({
-        slug: p.slug, name: p.name, authenticated: p.authenticated ?? false, keyEnv: p.key_env || null,
-        models: p.models ?? [], warning: p.warning ? this.mask.text(p.warning) : null,
-      })),
+      providers: options.providers.map((p) => {
+        const d = declared?.get(p.slug);
+        return {
+          slug: p.slug, name: p.name, authenticated: p.authenticated ?? false, keyEnv: p.key_env || null,
+          models: p.models ?? [], warning: p.warning ? this.mask.text(p.warning) : null,
+          declared: d?.ids ?? [],
+          editable: declared !== null && p.is_user_defined !== true && !p.slug.startsWith('custom:')
+            && !(d && (d.custom || !editableShape(d.shape))),
+        };
+      }),
       auxiliary: aux.tasks.map((t) => ({ task: t.task, label: t.label ?? null, provider: t.provider ?? 'auto', model: t.model ?? '' })),
       version: raw === null ? null : versionOf(raw),
     };
+  }
+
+  /** Declared models of every provider entry of the file, null when Hermes does not give the file. */
+  async declaredFor(instanceId: string, profile: string): Promise<Map<string, Declared> | null> {
+    const raw = await this.readRaw(this.ctx(instanceId, profile));
+    return raw === null ? null : declaredModels(raw);
+  }
+
+  /**
+   * Adds or removes one model in `providers.<provider>.models`. Applied to the current text under the lock, without a
+   * version check (the change is targeted and idempotent); the list is sent whole by PUT /api/config, whose merge
+   * replaces lists.
+   */
+  async changeProviderModels(instanceId: string, profile: string, provider: string, change: { add: string } | { remove: string }): Promise<{ declared: string[] }> {
+    const ctx = this.ctx(instanceId, profile);
+    let next: string[] = [];
+    try {
+      await this.write(ctx, 'provider-models', null, async (current) => {
+        if (current === null) throw new ConfigConflictError('config_unreadable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+        const d = declaredModels(current).get(provider);
+        if (d && (d.custom || !editableShape(d.shape))) {
+          throw new ConfigInputError('not_editable', 'Les modèles de ce fournisseur se modifient dans l\'onglet YAML', { provider });
+        }
+        const ids = d?.ids ?? [];
+        if ('add' in change) {
+          const has = ids.some((m) => m.toLowerCase() === change.add.toLowerCase());
+          next = has ? ids : [...ids, change.add];
+        } else {
+          next = ids.filter((m) => m !== change.remove);
+        }
+        if (next.length === ids.length) throw new NoChange();
+        await this.call(ctx, 'put', { body: { config: { providers: { [provider]: { models: next } } } } });
+      });
+    } catch (err) {
+      if (!(err instanceof NoChange)) throw err;
+    }
+    return { declared: next };
   }
 
   async setModel(instanceId: string, profile: string, change: ModelChange): Promise<{ version: string | null; notice?: string }> {

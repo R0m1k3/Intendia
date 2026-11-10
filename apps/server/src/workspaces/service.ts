@@ -25,6 +25,8 @@ export interface PublicSession {
   createdAt: number;
   /** Model and reasoning effort sent with each run; null = Hermes default ("Auto"). */
   model: string | null;
+  /** Provider of `model` (picker group), sent with it; null = model sent alone. */
+  modelProvider: string | null;
   effort: string | null;
 }
 
@@ -66,7 +68,7 @@ const TITLE_MAX = 60;
 function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
-    lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, effort: r.effort,
+    lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
   };
 }
 
@@ -124,7 +126,7 @@ export class WorkspaceService {
     }
     const dir = createWorkspaceDir(inst.mount, input.slug);
     const row: Workspace = {
-      slug: input.slug, name: input.name, instanceId: inst.id, profile, model: null, effort: null, createdAt: Date.now(),
+      slug: input.slug, name: input.name, instanceId: inst.id, profile, model: null, modelProvider: null, effort: null, createdAt: Date.now(),
     };
     try {
       this.db.insert(workspaces).values(row).run();
@@ -195,14 +197,14 @@ export class WorkspaceService {
     this.db.insert(sessionWorkspace).values({
       sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: null, archived: false, createdAt: now, lastActiveAt: now,
       // a new session starts from the last choice made in this workspace
-      model: ws.model, effort: ws.effort,
+      model: ws.model, modelProvider: ws.modelProvider, effort: ws.effort,
     }).run();
     return this.getSession(ws.instanceId, id).session;
   }
 
   updateSession(
     instanceId: string, sessionId: string,
-    patch: { title?: string | null; archived?: boolean; model?: string | null; effort?: string | null },
+    patch: { title?: string | null; archived?: boolean; model?: string | null; provider?: string | null; effort?: string | null },
   ): PublicSession {
     const { workspace } = this.getSession(instanceId, sessionId);
     const set: Partial<SessionRow> = {};
@@ -210,7 +212,12 @@ export class WorkspaceService {
     if (patch.archived !== undefined) set.archived = patch.archived;
     // the run options are also remembered as the workspace's last choice (start of its next sessions)
     const choice: Partial<Workspace> = {};
-    if (patch.model !== undefined) set.model = choice.model = patch.model || null;
+    // model and provider always change together: a model alone clears the provider
+    if (patch.provider && !patch.model) throw new ValidationError('fournisseur sans modèle');
+    if (patch.model !== undefined) {
+      set.model = choice.model = patch.model || null;
+      set.modelProvider = choice.modelProvider = (patch.model && patch.provider) || null;
+    }
     if (patch.effort !== undefined) set.effort = choice.effort = patch.effort || null;
     if (Object.keys(set).length) {
       this.db.transaction((tx) => {

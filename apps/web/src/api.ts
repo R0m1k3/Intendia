@@ -60,6 +60,8 @@ export interface Workspace {
   profile: string | null;
   /** Last model / effort chosen in one of its sessions (start of the next ones); not a setting. */
   model: string | null;
+  /** Provider of `model` (picker group); null = model sent alone. */
+  modelProvider: string | null;
   effort: string | null;
   createdAt: number;
 }
@@ -90,6 +92,8 @@ export interface Session {
   createdAt: number;
   /** null = Hermes default ("Auto") */
   model: string | null;
+  /** Provider of `model` (picker group), sent with it; null = model sent alone. */
+  modelProvider: string | null;
   effort: Effort | null;
 }
 export interface ChatMessage {
@@ -131,10 +135,15 @@ export interface RecentSession {
   /** ms */
   at: number;
 }
-export interface ModelOptions {
-  model?: string | null;
-  provider?: string | null;
-  providers: { slug: string; name?: string; authenticated?: boolean; models?: unknown[] }[];
+/**
+ * Models of the chat's picker for one agent (instance + profile), one group per provider with a key: the models
+ * declared in Hermes for it (`declared`), else its whole catalogue. `managed` = editable in the Modèles tab.
+ */
+export interface ChatModelGroup { provider: string; name: string; models: string[]; declared: boolean }
+export interface ChatModelList {
+  auto: { model: string; provider: string | null } | null;
+  groups: ChatModelGroup[];
+  managed: boolean;
 }
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny';
 
@@ -279,7 +288,13 @@ export interface ActionStatus {
 export interface ConfigField { type?: string; description?: string; category?: string; options?: unknown[]; clearable?: boolean; searchable?: boolean }
 export interface ConfigForm { values: Record<string, unknown>; schema: Record<string, ConfigField>; categories: string[]; version: string | null }
 export interface ConfigVersion { id: number; createdAt: number; source: string; readable: boolean }
-export interface ModelProvider { slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null }
+export interface ModelProvider {
+  slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null;
+  /** Models declared in Hermes for this provider (what the chat offers; none = whole catalogue). */
+  declared: string[];
+  /** The declaration can be changed from Intendia (else: YAML tab). */
+  editable: boolean;
+}
 export interface ConfigModels {
   main: { provider: string; model: string; contextLength: number | null };
   providers: ModelProvider[];
@@ -450,7 +465,7 @@ export const api = {
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
-  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; model?: string | null; effort?: Effort | null }) =>
+  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
   deleteSession: (inst: string, id: string) => call<{ ok: true }>('DELETE', sessionPath(inst, id)),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
@@ -459,7 +474,7 @@ export const api = {
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/approval`, { choice, requestId }),
-  models: (inst: string, profile = 'default') => call<ModelOptions>('GET', `/i/${enc(inst)}/models?profile=${enc(profile)}`),
+  chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
@@ -549,6 +564,8 @@ export const api = {
   restoreConfig: (inst: string, profile: string, id: number, version: string) =>
     call<WriteResult>('POST', instPath(inst, `config/versions/${id}/restore`, profile), { version }),
   configModels: (inst: string, profile: string) => call<ConfigModels>('GET', instPath(inst, 'config/models', profile)),
+  changeProviderModels: (inst: string, profile: string, body: { provider: string; add?: string; remove?: string }) =>
+    call<{ declared: string[] }>('POST', instPath(inst, 'config/provider-models', profile), body),
   setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
   configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),
   setEnv: (inst: string, profile: string, key: string, value: string) => call<WriteResult>('PUT', instPath(inst, 'config/env', profile), { key, value }),
