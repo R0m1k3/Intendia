@@ -11,11 +11,14 @@ export function cx(...c: (string | false | null | undefined)[]) {
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export function Button({ variant = 'secondary', className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+  // a px-* given by the caller replaces the default padding (both would be in the class list otherwise)
+  const pad = /(^|\s)px-/.test(className ?? '') ? '' : 'px-4';
   return (
     <button
       {...p}
       className={cx(
-        'inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-medium [&>svg]:shrink-0 transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+        pad,
         variant === 'primary' && 'bg-accent text-on-accent hover:bg-accent-strong',
         variant === 'secondary' && 'border border-line bg-sheet text-ink hover:border-ink-faint/60 hover:bg-raised/60',
         variant === 'ghost' && 'text-ink-soft hover:bg-raised hover:text-ink',

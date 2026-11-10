@@ -1,6 +1,7 @@
 /**
- * Workspace folders on the volume shared with the agent. The slug regex (no "/" nor "..") and the
- * administrator-set mount are the only path inputs in phase 2; user-chosen paths come in phase 3.
+ * Workspace folders on the volume shared with the agent. Paths built here come from the slug regex
+ * (no "/" nor "..") and the administrator-set mount only; every path chosen by the browser or the
+ * agent goes through files/paths.ts.
  */
 import { accessSync, chmodSync, constants, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,11 +9,17 @@ import { join } from 'node:path';
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const AGENTS_MD_MAX_BYTES = 65_536;
 export const FRAMING_MAX_BYTES = 4_096;
-const DIR_MODE = 0o775;
-const FILE_MODE = 0o664;
+export const DIR_MODE = 0o775;
+export const FILE_MODE = 0o664;
+
+export type WorkspaceFsCode = 'mount' | 'exists' | 'too_large' | 'invalid' | 'outside' | 'not_found' | 'not_file';
+
+export const FS_ERROR_STATUS: Record<WorkspaceFsCode, 400 | 403 | 404 | 409 | 413 | 422> = {
+  mount: 422, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400,
+};
 
 export class WorkspaceFsError extends Error {
-  constructor(readonly code: 'mount' | 'exists' | 'too_large', message: string) {
+  constructor(readonly code: WorkspaceFsCode, message: string) {
     super(message);
     this.name = 'WorkspaceFsError';
   }

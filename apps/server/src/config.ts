@@ -37,6 +37,8 @@ const EnvSchema = z.object({
   INTENDIA_WEBHOOK_URL: z.url().optional(),
   /** Minutes between two cheap version checks of each instance. */
   INTENDIA_VERSION_CHECK_MINUTES: z.coerce.number().int().min(1).default(5),
+  /** Largest file accepted by an upload, in MB. */
+  INTENDIA_UPLOAD_MAX_MB: z.coerce.number().int().min(1).default(200),
 });
 
 export interface AppConfig {
@@ -51,6 +53,7 @@ export interface AppConfig {
   trustProxy: boolean;
   webhookUrl: string | undefined;
   versionCheckMinutes: number;
+  uploadMaxBytes: number;
 }
 
 export function parseInstances(raw: string): InstanceConfig[] {
@@ -90,5 +93,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: e.INTENDIA_TRUST_PROXY,
     webhookUrl: e.INTENDIA_WEBHOOK_URL,
     versionCheckMinutes: e.INTENDIA_VERSION_CHECK_MINUTES,
+    uploadMaxBytes: e.INTENDIA_UPLOAD_MAX_MB * 1024 * 1024,
   };
 }

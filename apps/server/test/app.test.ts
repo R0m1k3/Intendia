@@ -6,6 +6,7 @@ import type { Notifier } from '../src/compat/notify.js';
 import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db/index.js';
 import { InstanceStore } from '../src/instances/store.js';
+import { createServices } from '../src/services.js';
 import { fakeHttp, fakeInstance, tempDir } from './helpers.js';
 
 function setup(env: Record<string, string> = {}) {
@@ -18,7 +19,7 @@ function setup(env: Record<string, string> = {}) {
   const notifier: Notifier = { moduleStates: async (_r, c) => void changes.push(...c) };
   const { fetchImpl } = fakeHttp();
   const compat = new CompatService(db, store, notifier, fetchImpl);
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, version: 'test' });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services: createServices({ config, db, store }), version: 'test' });
   let cookie = '';
   const req = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
     const res = await app.request(path, {

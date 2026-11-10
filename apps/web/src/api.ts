@@ -103,9 +103,38 @@ export interface ModelOptions {
 }
 export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny';
 
+export interface FileEntry {
+  name: string;
+  /** Relative to the workspace. */
+  path: string;
+  kind: 'file' | 'dir' | 'link';
+  target?: 'file' | 'dir';
+  outside?: true;
+  size: number;
+  mtime: number;
+}
+export interface ShareLink {
+  token: string;
+  instanceId: string;
+  path: string;
+  agentPath: string;
+  workspace: string | null;
+  url: string;
+  publicUntil: number | null;
+  revoked: boolean;
+  createdAt: number;
+  exists: boolean;
+}
+export interface McpInfo {
+  url: string;
+  token: string;
+  publicUrlSet: boolean;
+}
+
 const enc = encodeURIComponent;
 /** Base path of an Intendia session's routes. */
 export const sessionPath = (inst: string, id: string) => `/sessions/${enc(inst)}/${enc(id)}`;
+const filesPath = (slug: string) => `/workspaces/${enc(slug)}/files`;
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly data?: unknown) {
@@ -164,7 +193,25 @@ export const api = {
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
     call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
+
+  tree: (slug: string, path = '') => call<{ path: string; entries: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
+  searchFiles: (slug: string, q: string) => call<{ results: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/search?q=${enc(q)}`),
+  moveFile: (slug: string, from: string, to: string) => call<{ path: string }>('PATCH', `${filesPath(slug)}/move`, { from, to }),
+  deleteFile: (slug: string, path: string) => call<{ ok: true }>('DELETE', `${filesPath(slug)}?path=${enc(path)}`),
+  saveText: (slug: string, path: string, text: string, mtime: number) => call<{ mtime: number }>('PUT', `${filesPath(slug)}/text`, { path, text, mtime }),
+  filesExist: (slug: string, paths: string[]) =>
+    call<{ results: Record<string, { path: string; kind: 'file' | 'dir' } | null> }>('POST', `${filesPath(slug)}/exists`, { paths }),
+  shareFile: (slug: string, path: string) => call<{ token: string; url: string; publicUntil: number | null }>('POST', `${filesPath(slug)}/share`, { path }),
+  links: () => call<{ links: ShareLink[] }>('GET', '/links'),
+  setLinkPublic: (token: string, publicUntil: number | null) => call<{ link: ShareLink }>('PATCH', `/links/${enc(token)}`, { publicUntil }),
+  revokeLink: (token: string) => call<{ ok: true }>('DELETE', `/links/${enc(token)}`),
+  mcp: (inst: string) => call<McpInfo>('GET', `/instances/${enc(inst)}/mcp`),
+  rotateMcp: (inst: string) => call<McpInfo>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
 };
+
+/** URL of a file's content (preview, download); served with CSP sandbox. */
+export const rawUrl = (slug: string, path: string, download = false) =>
+  `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
 
 /** URL of a run's SSE stream (EventSource). */
 export const runEventsUrl = (inst: string, id: string, runId: string) => `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events`;

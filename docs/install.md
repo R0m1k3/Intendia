@@ -85,7 +85,49 @@ intendia.example.com {
 - traefik.http.services.intendia.loadbalancer.server.port=3000
 ```
 
-Never expose port 3001: it is the MCP endpoint for the agents (coming with the files phase).
+Uploads are streamed up to `INTENDIA_UPLOAD_MAX_MB` (default 200): let the proxy accept bodies that big
+(Nginx Proxy Manager, *Advanced*: `client_max_body_size 200m;`).
+
+Never expose port 3001: it is the MCP endpoint for the agents (next section).
+
+## 3b. The `share_file` tool (links for Telegram and crons)
+
+Intendia exposes one MCP tool to the agents, `share_file(path)`: it creates (or reuses) a **private** link
+`<INTENDIA_PUBLIC_URL>/f/<token>` to a file of the workspace volume and returns it, so the agent can give a link
+from Telegram or a cron. The agent can never create a public link; you make a link public (with an expiry date,
+365 days at most) or revoke it on the **Liens** screen.
+
+- Port 3001 must be reachable from the Hermes containers only (same Docker network, see `docker-compose.example.yml`).
+- Each instance has its own address `http://intendia:3001/mcp/<instance-id>` and its own bearer token. Settings →
+  Instances → "Outil share_file" shows both and copies a ready block; "Régénérer le jeton" replaces the token (then update
+  Hermes). Deleting the instance from Intendia deletes its token; changing `INTENDIA_SECRET` does not change it.
+- `INTENDIA_PUBLIC_URL` must be set, otherwise the tool returns `/f/<token>` alone, which only works inside Intendia.
+
+Declare the server in the Hermes configuration of that instance (`mcp_servers`), then restart Hermes:
+
+```yaml
+mcp_servers:
+  intendia:
+    url: http://intendia:3001/mcp/hermes
+    headers:
+      Authorization: "Bearer <token from Settings>"
+```
+
+The dashboard can do it too: `POST /api/mcp/servers` with `{"name":"intendia","url":"…","auth":"header",
+"bearer_token":"<token>"}` (Hermes 0.23.0 then keeps the token in its `.env` as `MCP_INTENDIA_API_KEY`), and
+`POST /api/mcp/servers/intendia/test` checks the connection and lists `share_file`.
+
+In Intendia chats the framing block already asks the agent to call `share_file` for each delivered file. For Telegram
+and crons, give the same rule with a short Hermes skill, for example:
+
+```markdown
+---
+name: share-delivered-files
+description: Give a link for every file you deliver.
+---
+When you deliver a file (report, export, image, document), call the `share_file` tool with its absolute path
+and give the returned link in your answer. Never paste the file's content instead of the link.
+```
 
 ## 4. Updates
 

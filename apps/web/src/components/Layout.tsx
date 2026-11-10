@@ -1,12 +1,13 @@
 import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderOpen, House, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
+import { FolderOpen, House, Link2, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: House },
   { to: '/w', label: 'Workspaces', icon: FolderOpen },
+  { to: '/liens', label: 'Liens', icon: Link2 },
   { to: '/etat', label: 'État', icon: ListChecks },
   { to: '/reglages', label: 'Réglages', icon: Settings2 },
 ] as const;

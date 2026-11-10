@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Plus } from 'lucide-react';
+import { FolderOpen, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
@@ -49,7 +49,14 @@ export function WorkspacePage() {
       <PageHeader
         title={w?.name ?? ''}
         subtitle={w && <span className="font-mono text-xs">{inst?.mount ?? ''}/{w.slug} · {inst?.label ?? w.instanceId} · {w.profile ?? 'default'}</span>}
-        action={<Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}><Plus className="size-4" strokeWidth={1.75} />Nouvelle session</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Link to="/w/$slug/fichiers" params={{ slug }} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-4 text-sm font-medium transition-colors hover:border-ink-faint/60 hover:bg-raised/60">
+              <FolderOpen className="size-4" strokeWidth={1.5} />Fichiers
+            </Link>
+            <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}><Plus className="size-4" strokeWidth={1.75} />Nouvelle session</Button>
+          </div>
+        }
       />
       <div className="grid gap-6 px-5 pb-12 md:px-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">

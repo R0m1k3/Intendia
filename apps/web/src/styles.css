@@ -106,3 +106,14 @@
 .md th, .md td { border: 1px solid var(--color-line); padding: 4px 8px; text-align: left; }
 .md th { font-weight: 500; background: var(--color-raised); }
 .md hr { border: 0; border-top: 1px solid var(--color-line); }
+
+/* File chip: an existing workspace file cited in the chat; opens the preview. */
+.md a.file-chip, a.file-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: -3px;
+  padding: 1px 7px 1px 5px; border: 1px solid var(--color-line); border-radius: 6px;
+  background: var(--color-sheet); color: var(--color-ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+  text-decoration: none; transition: border-color 150ms, background-color 150ms;
+}
+.md a.file-chip:hover { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.md a.file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md code:has(> a.file-chip) { background: none; padding: 0; }

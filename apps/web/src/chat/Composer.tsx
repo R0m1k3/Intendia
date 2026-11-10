@@ -1,20 +1,37 @@
-import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowUp, Paperclip, Square } from 'lucide-react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { cx } from '../components/ui';
 
-/** Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it. */
+export interface ComposerHandle {
+  /** Appends lines (file paths) to the message being written. */
+  append: (lines: string[]) => void;
+}
+
+/**
+ * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it.
+ * The paperclip uploads files to inbox/ (onAttach) and adds their paths to the message.
+ */
 export function Composer({
-  onSend, onStop, running, disabled, placeholder,
+  onSend, onStop, running, disabled, placeholder, onAttach, ref: handle,
 }: {
   onSend: (text: string) => Promise<boolean>;
   onStop: () => void;
   running: boolean;
   disabled?: boolean;
   placeholder?: string;
+  onAttach?: (files: File[]) => void;
+  ref?: Ref<ComposerHandle>;
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  useImperativeHandle(handle, () => ({
+    append: (lines) => {
+      setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')}\n` : '') + lines.join('\n'));
+      ref.current?.focus();
+    },
+  }), []);
 
   useEffect(() => {
     const el = ref.current;
@@ -34,6 +51,21 @@ export function Composer({
 
   return (
     <div className={cx('flex items-end gap-2 rounded-xl border border-line bg-sheet p-2 transition-colors focus-within:border-ink-faint/60', disabled && 'opacity-60')}>
+      {onAttach && (
+        <>
+          <input ref={picker} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) onAttach(f); }} />
+          <button
+            type="button"
+            onClick={() => picker.current?.click()}
+            disabled={disabled}
+            aria-label="Joindre des fichiers"
+            title="Joindre des fichiers (déposés dans inbox/)"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink disabled:opacity-40"
+          >
+            <Paperclip className="size-4" strokeWidth={1.5} />
+          </button>
+        </>
+      )}
       <textarea
         ref={ref}
         rows={1}
