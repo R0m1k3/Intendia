@@ -47,8 +47,10 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
         <Button onClick={() => setDraft(null)}>Annuler</Button>
         <Button variant="primary" disabled={busy || !draft.title.trim()}
           onClick={() => {
-            save({ ...(draft.title !== task.title ? { title: draft.title } : {}), ...(draft.body !== task.body ? { body: draft.body } : {}) })
-              .then(() => setDraft(null), () => {}); // the error is shown by the panel
+            const sent = draft;
+            save({ ...(sent.title !== task.title ? { title: sent.title } : {}), ...(sent.body !== task.body ? { body: sent.body } : {}) })
+              // Close only if nothing was typed while the save was pending; the error is shown by the panel.
+              .then(() => setDraft((cur) => (cur && cur.title === sent.title && cur.body === sent.body ? null : cur)), () => {});
           }}>
           Enregistrer
         </Button>
