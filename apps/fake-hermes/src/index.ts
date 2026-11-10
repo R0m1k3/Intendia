@@ -29,6 +29,7 @@ import { CronStore } from './crons.js';
 import { KanbanStore } from './kanban.js';
 import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
+export { OPENROUTER_MODELS } from './config.js';
 import { SkillStore } from './skills.js';
 
 export const FAKE_API_KEY = 'fake-api-key-000000000000';

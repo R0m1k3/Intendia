@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OPENROUTER_MODELS } from '../../fake-hermes/src/config.js';
+import { OPENROUTER_MODELS } from 'fake-hermes';
 import { forgetChatModels, readChatModels, writeChatModels } from '../src/chat/models-list.js';
 import { testApp } from './helpers.js';
 
