@@ -8,8 +8,13 @@ import { Auth, AuthError, requireAuth } from './auth/auth.js';
 import type { CompatService } from './compat/service.js';
 import { checkInstance } from './compat/engine.js';
 import type { Db } from './db/index.js';
-import { HermesHttp, type FetchLike } from './hermes/http.js';
+import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
 import { InstanceStore } from './instances/store.js';
+import { ModuleUnavailableError } from './connectors/runtime.js';
+import { chatRoutes } from './routes/chat.js';
+import { workspaceRoutes } from './routes/workspaces.js';
+import { WorkspaceFsError } from './workspaces/fs.js';
+import { NotFoundError, ValidationError, WorkspaceService } from './workspaces/service.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -38,6 +43,20 @@ export function createApp(deps: AppDeps) {
   app.onError((err, c) => {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
     if (err instanceof z.ZodError) return c.json({ error: 'invalid request', issues: err.issues }, 400);
+    if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
+    if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
+    if (err instanceof WorkspaceFsError) {
+      return c.json({ error: err.message }, err.code === 'exists' ? 409 : err.code === 'too_large' ? 413 : 422);
+    }
+    if (err instanceof ModuleUnavailableError) {
+      return c.json({ error: err.message, module: err.module, op: err.op, reasons: err.reasons }, 409);
+    }
+    if (err instanceof HermesError) {
+      if (err.kind === 'http') return c.json({ error: err.message, hermesStatus: err.detail.status ?? null }, 502);
+      if (err.kind === 'network' || err.kind === 'timeout') return c.json({ error: err.message }, 504);
+      if (err.kind === 'unconfigured') return c.json({ error: err.message }, 422);
+      return c.json({ error: err.message }, 502);
+    }
     console.error(err);
     return c.json({ error: 'internal error' }, 500);
   });
@@ -114,6 +133,10 @@ export function createApp(deps: AppDeps) {
     if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
     return c.json(await compat.check(id));
   });
+
+  const workspaces = new WorkspaceService(deps.db, store);
+  priv.route('/', workspaceRoutes({ ...deps, workspaces }));
+  priv.route('/', chatRoutes({ ...deps, workspaces }));
 
   x.route('/', priv);
   app.route('/x', x);

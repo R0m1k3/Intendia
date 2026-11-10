@@ -37,6 +37,8 @@ export const sessionWorkspace = sqliteTable(
     title: text('title'),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at').notNull(),
+    lastRunId: text('last_run_id'),
+    lastActiveAt: integer('last_active_at'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );

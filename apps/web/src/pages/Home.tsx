@@ -90,6 +90,44 @@ function InstanceSheet({ instance, report }: { instance: PublicInstance; report?
   );
 }
 
+function RecentWorkspaces() {
+  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+  const list = workspaces.data?.workspaces ?? [];
+  if (!workspaces.isSuccess) return null;
+  if (list.length === 0) {
+    return (
+      <Panel>
+        <p className="text-[15px]">Commencez par un workspace</p>
+        <p className="mt-1 text-sm text-ink-soft">Un dossier partagé avec l’agent, ses consignes et ses sessions de travail</p>
+        <Link to="/w" className="mt-4 inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong">
+          Créer un workspace
+        </Link>
+      </Panel>
+    );
+  }
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-[15px] font-medium">Workspaces</h2>
+        <Link to="/w" className="inline-flex items-center gap-1 text-xs text-ink-soft transition-colors hover:text-ink">
+          Tous
+          <ArrowRight className="size-3.5" strokeWidth={1.5} />
+        </Link>
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {list.slice(0, 4).map((w) => (
+          <li key={w.slug}>
+            <Link to="/w/$slug" params={{ slug: w.slug }} className="flex h-full flex-col gap-1 rounded-xl border border-line bg-sheet p-4 transition-colors hover:bg-raised/50">
+              <span className="text-sm font-medium">{w.name}</span>
+              <span className="font-mono text-[11px] text-ink-faint">{w.slug} · {w.profile ?? 'default'}{w.model ? ` · ${w.model}` : ''}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function summary(reports: CompatReport[], count: number): string {
   if (count === 0) return 'Aucune instance Hermes';
   const mods = reports.flatMap((r) => r.modules);
@@ -120,6 +158,7 @@ export function HomePage() {
             </Link>
           </Panel>
         )}
+        {list.length > 0 && <RecentWorkspaces />}
         {list.map((i) => (
           <InstanceSheet key={i.id} instance={i} report={reports.find((r) => r.instanceId === i.id)} />
         ))}

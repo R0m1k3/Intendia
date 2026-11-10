@@ -34,6 +34,37 @@ At runtime `connectors/runtime.ts` (`callOp`, `streamOp`) only uses the route ch
 Checks run at start-up, when `/health/detailed` announces a new version (polled every 5 minutes), every 24 h and on
 demand from the State screen. State changes go to the webhook.
 
+## Workspaces, sessions and runs
+
+- A workspace (`workspaces` table) = a folder `<mount>/<slug>/` on the volume shared with one instance, served by one
+  Hermes profile and one model. `src/workspaces/fs.ts` creates it (`mkdir` without `recursive`, removed if anything
+  fails); `src/workspaces/service.ts` owns the rows.
+- Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
+  message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
+- Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session
+  folder, and the first 4 KiB of `AGENTS.md`.
+- Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
+  calls Hermes through `/p/<profile>/` with that profile's key.
+- Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
+  The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
+  becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
+- One run at a time per session: sending while the last run is not terminal answers 409.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant I as Intendia
+  participant H as Hermes
+  B->>I: POST /x/sessions/i/s/runs {input}
+  I->>H: POST /v1/runs {input, session_id, instructions, model}
+  H-->>I: {run_id}
+  B->>I: EventSource …/runs/run_x/events
+  I->>H: GET /v1/runs/run_x/events (Last-Event-ID)
+  H-->>B: SSE relayed byte for byte
+  B->>I: POST …/approval {choice}
+  I->>H: POST /v1/runs/run_x/approval
+```
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

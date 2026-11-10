@@ -16,6 +16,8 @@ export const InstanceConfigSchema = z.object({
   dashboardLink: z.url().optional(),
   /** Where this instance's workspace volume is mounted inside the Intendia container. */
   mount: z.string().startsWith('/').default('/workspace'),
+  /** The same volume as seen from the agent's container (defaults to `mount`). */
+  agentMount: z.string().startsWith('/').optional(),
   /** Multi-profile routing: each /p/<profile>/ prefix has its own API key. */
   profileKeys: z.record(z.string(), z.string().min(16)).default({}),
 });

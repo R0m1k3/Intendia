@@ -38,6 +38,14 @@ Edit `.env`: `INTENDIA_PUBLIC_URL` (your domain) and `INTENDIA_SECRET` (`openssl
 Edit `docker-compose.yml`: the names of the Hermes workspace volume, the Hermes network and your reverse-proxy network.
 `PUID`/`PGID` must own the workspace volume (official Hermes image: 10000).
 
+### Workspace volume
+
+Each workspace is a folder `<mount>/<slug>/` on the volume shared with the agent (`files/`, `inbox/`, `sessions/`,
+`AGENTS.md`). Intendia creates folders with mode `0775` and files with `0664`: the agent can write in them when it runs
+with the same uid, or with another uid in the same group. If the agent sees the volume under another path than
+Intendia (for example `/opt/data/workspace` in the Hermes container, `/workspace` in Intendia), set `agentMount` on the
+instance: it is the path written in the instructions sent to the agent.
+
 ```bash
 docker compose up -d
 docker logs intendia      # shows the one-time installation code

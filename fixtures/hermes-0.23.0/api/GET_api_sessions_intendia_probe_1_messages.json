@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "body": {
+    "object": "list",
+    "session_id": "intendia-probe-1",
+    "data": [
+      {
+        "id": 1,
+        "session_id": "intendia-probe-1",
+        "role": "session_meta",
+        "content": null,
+        "tool_call_id": null,
+        "tool_calls": null,
+        "tool_name": null,
+        "timestamp": 1794231618.6652606,
+        "token_count": null,
+        "finish_reason": null,
+        "reasoning": null,
+        "reasoning_content": null,
+        "display_kind": null
+      }
+    ],
+    "pagination": {
+      "limit": 500,
+      "offset": 0,
+      "order": "latest",
+      "returned": 1
+    }
+  }
+}
