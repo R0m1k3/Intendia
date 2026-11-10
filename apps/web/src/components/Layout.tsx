@@ -1,6 +1,6 @@
-import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderOpen, House, Link2, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
+import { CalendarClock, FolderOpen, House, Link2, ListChecks, LogOut, Plus, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { Mark, Wordmark, worst } from './ui';
 
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/', label: 'Accueil', icon: House },
   { to: '/w', label: 'Workspaces', icon: FolderOpen },
   { to: '/liens', label: 'Liens', icon: Link2 },
+  { to: '/crons', label: 'Crons', icon: CalendarClock },
   { to: '/etat', label: 'État', icon: ListChecks },
   { to: '/reglages', label: 'Réglages', icon: Settings2 },
 ] as const;
@@ -22,6 +23,9 @@ export function Layout() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
   const openSlug = params.slug;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  /** /crons redirects to /i/<instance>/crons: keep its entry active there */
+  const alsoActive = (to: string) => to === '/crons' && /^\/i\/[^/]+\/crons$/.test(pathname);
   const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
 
   const logout = async () => {
@@ -42,7 +46,7 @@ export function Layout() {
               key={n.to}
               to={n.to}
               activeOptions={{ exact: n.to === '/' || n.to === '/w' }}
-              className={ROW}
+              className={ROW + (alsoActive(n.to) ? ' !bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' : '')}
               activeProps={{ className: '!bg-raised !text-ink shadow-[inset_0_0_0_1px_var(--color-line)]' }}
             >
               <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
@@ -132,7 +136,7 @@ export function Layout() {
             key={n.to}
             to={n.to}
             activeOptions={{ exact: n.to === '/' }}
-            className="flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-ink-faint"
+            className={`flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px] ${alsoActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}
             activeProps={{ className: '!text-accent' }}
           >
             <n.icon className="size-5" strokeWidth={1.5} />

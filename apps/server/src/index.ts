@@ -38,7 +38,7 @@ function main() {
 
   const auth = new Auth(db, config);
   const compat = new CompatService(db, store, new WebhookNotifier(config.webhookUrl, config.publicUrl));
-  const services = createServices({ config, db, store });
+  const services = createServices({ config, db, store, compat });
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
   const mcpApp = createMcpApp({ db, store, links: services.links, config, version: VERSION });
 

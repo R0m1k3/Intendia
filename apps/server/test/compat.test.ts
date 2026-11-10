@@ -82,7 +82,9 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
   it('without a dashboard, dashboard-only modules are unavailable and the rest works', async () => {
     const { http } = fakeHttp({}, fakeInstance({ dashboard: undefined, dashboardToken: undefined }));
     const { report } = await checkInstance(http);
-    expect(states(report)).toMatchObject({ chat: 'full', sessions: 'full', crons: 'full', config: 'unavailable', kanban: 'unavailable', agents: 'unavailable' });
+    // crons: list/create/update work through the API server; cancel and runs exist only on the dashboard
+    expect(states(report)).toMatchObject({ chat: 'full', sessions: 'full', crons: 'readonly', config: 'unavailable', kanban: 'unavailable', agents: 'unavailable' });
+    expect(state(report, 'crons').ops.list!.ok).toBe(true);
     expect(state(report, 'config').reasons[0]).toContain('non configuré');
   });
 
