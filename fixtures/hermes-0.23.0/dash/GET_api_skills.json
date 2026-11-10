@@ -1,0 +1,356 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "name": "claude-code",
+      "description": "Delegate coding to Claude Code CLI (features, PRs).",
+      "category": "autonomous-ai-agents",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "codex",
+      "description": "Delegate coding to OpenAI Codex CLI (features, PRs).",
+      "category": "autonomous-ai-agents",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "computer-use",
+      "description": "Drive the desktop background-first; escalate on signal.",
+      "category": "autonomous-ai-agents",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "hermes-agent",
+      "description": "Use, configure, theme, extend, and orchestrate Hermes Agent.",
+      "category": "autonomous-ai-agents",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "architecture-diagram",
+      "description": "Dark-themed SVG architecture/cloud/infra diagrams as HTML.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "ascii-video",
+      "description": "ASCII video: convert video/audio to colored ASCII MP4/GIF.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "baoyu-infographic",
+      "description": "Infographics: 21 layouts x 21 styles (信息图, 可视化).",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "claude-design",
+      "description": "Design one-off HTML artifacts (landing, deck, prototype).",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "humanizer",
+      "description": "Humanize text: strip AI-isms and add real voice.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "manim-video",
+      "description": "Manim CE animations: 3Blue1Brown math/algo videos.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "p5js",
+      "description": "p5.js sketches: gen art, shaders, interactive, 3D.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "popular-web-designs",
+      "description": "54 real design systems (Stripe, Linear, Vercel) as HTML/CSS.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "songwriting-and-ai-music",
+      "description": "Songwriting craft and Suno AI music prompts.",
+      "category": "creative",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "email-inbox-triage",
+      "description": "Triage an inbox: prioritize threads, draft replies safely.",
+      "category": "email",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "himalaya",
+      "description": "Himalaya CLI: IMAP/SMTP email from terminal.",
+      "category": "email",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "youtube-content",
+      "description": "YouTube transcripts to summaries, threads, blogs.",
+      "category": "media",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "obsidian",
+      "description": "Read, search, create, and edit notes in the Obsidian vault.",
+      "category": "note-taking",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "document-to-action-items",
+      "description": "Extract cited obligations, deadlines, tasks from documents.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "google-workspace",
+      "description": "Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "maps",
+      "description": "Geocode, POIs, routes, timezones via OpenStreetMap/OSRM.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "meeting-action-items",
+      "description": "Turn meeting notes into cited decisions, owners, tickets.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "microsoft-office",
+      "description": "Create, read, and edit Word, PowerPoint, and Excel files.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "pdf",
+      "description": "PDF files: create, read, merge, fill, OCR, edit text.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "product-price-monitor",
+      "description": "Watch product, flight, or listing prices; alert on target.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "teams-meeting-pipeline",
+      "description": "Teams meeting summaries, job replay, Graph subscriptions.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "weekly-review-planning",
+      "description": "Weekly reset: commitments, stalled work, next-week plan.",
+      "category": "productivity",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "arxiv",
+      "description": "Search arXiv papers by keyword, author, category, or ID.",
+      "category": "research",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "competitor-news-monitor",
+      "description": "Watch named companies for material news; cited digests.",
+      "category": "research",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "grounded-citations",
+      "description": "Ground answers and documents in cited, verifiable sources.",
+      "category": "research",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "xurl",
+      "description": "X/Twitter via xurl CLI: raw post search, posting, DM, media.",
+      "category": "social-media",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "codebase-inspection",
+      "description": "Inspect codebases w/ pygount: LOC, languages, ratios.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "dogfood",
+      "description": "Exploratory QA of web apps: find bugs, evidence, reports.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "github",
+      "description": "GitHub via gh CLI: PRs, issues, reviews, repos, auth.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "requesting-code-review",
+      "description": "Pre-commit review: security scan, quality gates, auto-fix.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "simplify-code",
+      "description": "Parallel 4-agent cleanup of recent code changes.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "spike",
+      "description": "Throwaway experiments to validate an idea before build.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "systematic-debugging",
+      "description": "4-phase root cause debugging: understand bugs before fixing.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "test-driven-development",
+      "description": "TDD: enforce RED-GREEN-REFACTOR, tests before code.",
+      "category": "software-development",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    },
+    {
+      "name": "blocked-page-recovery",
+      "description": "Use when a fetch fails: 403/429, paywall, WAF, bot wall.",
+      "category": "web",
+      "locked": false,
+      "enabled": true,
+      "usage": 0,
+      "provenance": "bundled"
+    }
+  ]
+}

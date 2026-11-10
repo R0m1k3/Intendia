@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "body": {
+    "boards": [
+      {
+        "slug": "default",
+        "name": "Default",
+        "description": "",
+        "icon": "",
+        "color": "",
+        "default_workdir": null,
+        "project_id": null,
+        "created_at": null,
+        "archived": false,
+        "db_path": "<redacted>/.hermes/kanban.db",
+        "is_current": true,
+        "counts": {},
+        "total": 0,
+        "default_workspace_kind": "scratch",
+        "project_name": null
+      }
+    ],
+    "current": "default"
+  }
+}

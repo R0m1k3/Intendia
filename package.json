@@ -1,0 +1,18 @@
+{
+  "name": "intendia",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Web UI to work with and administer Hermes Agent instances through their HTTP APIs only",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/server --filter ./apps/web dev",
+    "dev:fake": "pnpm --filter fake-hermes dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "probe": "pnpm --filter @intendia/server probe"
+  }
+}
