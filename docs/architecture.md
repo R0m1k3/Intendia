@@ -42,14 +42,22 @@ demand from the State screen. State changes go to the webhook.
 - Model and reasoning effort are chosen per session, in the chat (`session_workspace.model` / `effort`, NULL =
   Hermes default) and sent as `model` / `model_options.reasoning_effort`. The workspace keeps the last choice
   (`workspaces.model` / `effort`) as the start of its next sessions; it is not a setting of its own.
-- Models of the chat's picker: one list per agent (instance + profile), kept by Intendia in `settings` under
-  `chat_models:<instance>:<profile>` (`src/chat/models-list.ts`), edited in Configuration › Modèles › « Modèles du
-  chat » (`web/src/config/ChatModels.tsx`). `GET /x/i/:inst/chat-models` (one `chat.modelOptions` call) gives
-  `auto`, the list with `available`, and `managed`; `GET …/chat-models/saved` reads the list without calling Hermes
-  (the options read can write the config: 409 on the main model); `PUT` replaces it (50 names at most, no
-  duplicate). "Offered" = in the `models` of a provider with `authenticated: true`, the main model excluded.
-  `managed` = same condition as the Modèles tab (module `config`, ops `get` and `modelInfo`); when false the chat
-  keeps the whole offered catalogue. The list of a removed instance is dropped with its MCP token.
+- Models of the chat's picker, per agent (instance + profile), grouped by provider (`src/chat/models-list.ts`):
+  one group per provider with `authenticated: true`, holding the models declared in Hermes for it
+  (`providers.<slug>.models` of its config file, read from the raw text by `src/hermes-config/declared.ts`, kept only
+  if Hermes returned them too), else the provider's whole catalogue. Intendia keeps no list of its own.
+  `GET /x/i/:inst/chat-models` gives `{auto, groups, managed}`; `managed` = Modèles tab available and raw file
+  readable (module `config`, ops `get`, `modelInfo`, `raw`); when false, or when the file cannot be read, every group
+  is the catalogue. The session keeps the provider of the picked model (`model_provider`, also the workspace's last
+  choice) and sends it with the model; Auto sends neither; a model alone (older sessions) is sent without provider.
+- Declarations are edited in Configuration › Modèles › « Modèles du chat » (`web/src/config/ChatModels.tsx`):
+  `POST /x/i/:inst/config/provider-models {provider, add|remove}`, one change at a time, through
+  `ConfigService.changeProviderModels` (lock, history copy, no version check: the change is applied to the current
+  text) and `PUT /api/config {config: {providers: {<slug>: {models: [...]}}}}` (Hermes' merge replaces lists). A
+  change that changes nothing writes nothing. Mappings, lists of objects, custom endpoints (`base_url`) and
+  `custom:<name>` providers are read-only here (YAML tab).
+- Migrations: `migrate()` applies every file missing from `_migrations` (not only those above the highest id), so
+  branches can be merged in any order.
 - One `run_stats` row per run started from Intendia: written `running` at send time (options asked for, cost of
   the live session before), settled by `settle()` in `routes/chat.ts` when the messages or the run status are
   read (status, served model, tokens, Hermes times), cost = difference of the live session's cumulated cost,
