@@ -46,6 +46,7 @@ jobs:
           PROBE_DASH=http://127.0.0.1:9119 PROBE_DASH_TOKEN=$DASH_TOKEN \
             pnpm probe record --out /tmp/latest --strict 2>&1 | tee /tmp/record.txt || code=$?
           pnpm --silent probe diff "$previous" /tmp/latest 2>&1 | tee /tmp/diff.txt
+          cp /tmp/diff.txt /tmp/latest/diff.txt
           version=$(node -e "console.log(require('/tmp/latest/surface.json').version)")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           lines=$(grep -cvE '^(Hermes .*)?$' /tmp/diff.txt || true)
@@ -62,7 +63,8 @@ jobs:
           if gh issue list --state open --search "$title in:title" --json number --jq 'length' | grep -q '^0$'; then
             { echo '`probe` against `nousresearch/hermes-agent:latest`. Recording attached to the workflow run.'; echo; \
               echo '### Modules'; echo '```'; tail -12 /tmp/record.txt; echo '```'; \
-              echo '### Diff with the newest fixtures'; echo '```'; cat /tmp/diff.txt; echo '```'; } > /tmp/body.md
+              echo '### Diff with the newest fixtures'; echo '```'; head -c 50000 /tmp/diff.txt; echo; echo '```'; \
+              [ "$(wc -c < /tmp/diff.txt)" -gt 50000 ] && echo "Diff cut at 50 kB: full text in the run's artifact (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."; } > /tmp/body.md
             gh issue create --title "$title" --body-file /tmp/body.md
           fi
       - if: always()
