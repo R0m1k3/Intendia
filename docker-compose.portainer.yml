@@ -2,7 +2,7 @@
 # existing Hermes stack. Compose path in Portainer: docker-compose.portainer.yml
 #
 # Stack environment variables (set them in Portainer, never in this file):
-#   INTENDIA_SECRET          required, openssl rand -hex 32
+#   INTENDIA_SECRET          optional, openssl rand -hex 32 (empty: generated into the data volume)
 #   INTENDIA_PUBLIC_URL      optional, e.g. https://intendia.example.com
 #   INTENDIA_PASSWORD_HASH   optional, $argon2id$... (empty: installation code in the logs)
 #   INTENDIA_HOST_PORT       optional, host port of the web UI (default 3012)
@@ -30,8 +30,19 @@ services:
     depends_on:
       intendia-perms:
         condition: service_completed_successfully
+    # INTENDIA_SECRET left empty: generated once into the data volume and reused on every start.
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$$INTENDIA_SECRET" ]; then
+          umask 077
+          [ -s /data/.intendia-secret ] || node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > /data/.intendia-secret
+          export INTENDIA_SECRET="$$(cat /data/.intendia-secret)"
+        fi
+        exec node /app/dist/index.js
     environment:
-      INTENDIA_SECRET: ${INTENDIA_SECRET}
+      INTENDIA_SECRET: ${INTENDIA_SECRET:-}
       INTENDIA_PUBLIC_URL: ${INTENDIA_PUBLIC_URL:-}
       INTENDIA_PASSWORD_HASH: ${INTENDIA_PASSWORD_HASH:-}
       INTENDIA_WEBHOOK_URL: ${INTENDIA_WEBHOOK_URL:-}
