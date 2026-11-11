@@ -1,7 +1,7 @@
 import type { CompatService } from '../compat/service.js';
 import { callOp, HermesError, ModuleUnavailableError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
-import type { PublicSession, WorkspaceService } from '../workspaces/service.js';
+import { NotFoundError, type PublicSession, type WorkspaceService } from '../workspaces/service.js';
 
 const TIMEOUT_MS = 3_000;
 /** Lines of a search answer. */
@@ -114,10 +114,18 @@ export class RecentService {
     return [...new Set(['default', ...all.filter((w) => w.instanceId === instanceId && w.profile && inst?.profileKeys[w.profile]).map((w) => w.profile!)])];
   }
 
-  async list(limit: number, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[] }> {
+  private instance(instanceId: string) {
+    const inst = this.store.get(instanceId);
+    if (!inst) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    return inst;
+  }
+
+  /** The instance's sessions of every source (Intendia, Telegram, crons…), most recent first. */
+  async list(instanceId: string, limit: number, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[] }> {
+    const one = this.instance(instanceId);
     const errors: Err[] = [];
-    const intendia = source === 'all' || source === 'intendia' ? this.workspaces.recentSessions(limit) : [];
-    const hermes = source === 'intendia' ? [] : (await Promise.all(this.store.list().map(async (inst) => {
+    const intendia = source === 'all' || source === 'intendia' ? this.workspaces.recentSessions(limit, instanceId) : [];
+    const hermes = source === 'intendia' ? [] : (await Promise.all([one].map(async (inst) => {
       const owned = this.workspaces.ownedIds(inst.id);
       const pages = await Promise.all(this.profiles(inst.id).map(async (profile) => {
         try {
@@ -141,14 +149,15 @@ export class RecentService {
     return { sessions: mergeRecent(intendia, hermes, limit), errors };
   }
 
-  /** Intendia titles containing `q`, plus Hermes' content search on every instance that has it. */
-  async search(q: string, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[]; partial: string[] }> {
+  /** The instance's Intendia titles containing `q`, plus its Hermes' content search when it has it. */
+  async search(instanceId: string, q: string, source: SessionSource = 'all'): Promise<{ sessions: RecentSession[]; errors: Err[]; partial: string[] }> {
+    const one = this.instance(instanceId);
     const errors: Err[] = [];
     const partial: string[] = [];
     const withIntendia = source === 'all' || source === 'intendia';
-    const byTitle: (Owned & { snippet?: string | null })[] = withIntendia ? this.workspaces.searchSessions(q, SEARCH_LIMIT) : [];
+    const byTitle: (Owned & { snippet?: string | null })[] = withIntendia ? this.workspaces.searchSessions(q, SEARCH_LIMIT, instanceId) : [];
     const hermes: { instanceId: string; label: string; profile: string; sessions: HermesSessionRaw[] }[] = [];
-    await Promise.all(this.store.list().map(async (inst) => {
+    await Promise.all([one].map(async (inst) => {
       const owned = this.workspaces.ownedIds(inst.id);
       const hits: { id: string; snippet: string | null }[] = [];
       await Promise.all(this.profiles(inst.id).map(async (profile) => {

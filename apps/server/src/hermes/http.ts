@@ -29,6 +29,10 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Overrides the default timeout; 0 disables it (SSE streams). */
   timeoutMs?: number;
+  /** Streamed body sent as is (multipart upload), instead of the JSON `body`. */
+  rawBody?: ReadableStream<Uint8Array>;
+  /** Content-Type of `rawBody`. */
+  contentType?: string;
 }
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
@@ -69,8 +73,11 @@ export class HermesHttp {
     if (via === 'dash' && opts.profile) full.searchParams.set('profile', opts.profile);
 
     const headers: Record<string, string> = { Authorization: `Bearer ${t.token}`, Accept: 'application/json', ...opts.headers };
-    let body: string | undefined;
-    if (opts.body !== undefined) {
+    let body: string | ReadableStream<Uint8Array> | undefined;
+    if (opts.rawBody) {
+      if (opts.contentType) headers['Content-Type'] = opts.contentType;
+      body = opts.rawBody;
+    } else if (opts.body !== undefined) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(opts.body);
     }
@@ -89,7 +96,9 @@ export class HermesHttp {
       return new HermesError('network', `${via} ${method} ${path}: ${(err as Error).message}`, detail);
     };
     try {
-      const res = await this.fetchImpl(full.toString(), { method, headers, body, signal: controller.signal });
+      const init: RequestInit & { duplex?: 'half' } = { method, headers, body, signal: controller.signal };
+      if (opts.rawBody) init.duplex = 'half'; // required by fetch for a streamed request body
+      const res = await this.fetchImpl(full.toString(), init);
       return { res, release, fail };
     } catch (err) {
       throw fail(err);

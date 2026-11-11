@@ -8,7 +8,11 @@ import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Mark, Panel, timeAgo, worst } from '../components/ui';
 import { Ask } from '../home/Ask';
 import { RecentSessions } from '../home/Recent';
-import { CronTimeline, FAILED } from '../home/Timeline';
+import { CronTimeline } from '../home/Timeline';
+import { FAILED, failureLabel } from '../home/summary';
+import { Toggle } from '../home/Toggle';
+import { useStoredFlag } from '../components/useStoredFlag';
+import { useCurrentInstance } from '../instance/current';
 
 function today(): string {
   const d = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -66,18 +70,25 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-/** The 3 next active crons, then a red line per cron whose last run failed; hidden when there is neither. */
+/**
+ * Reduced (default): the next active cron and one red line counting the failures. Enlarged: the 3 next crons, then a
+ * red line per cron whose last run failed. Hidden when there is neither.
+ */
 function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
-  const list = crons.filter((c): c is OverviewCron & { nextRunAt: string } => c.nextRunAt !== null).slice(0, 3);
+  const [open, setOpen] = useStoredFlag('intendia-home-upcoming-open');
+  const list = crons.filter((c): c is OverviewCron & { nextRunAt: string } => c.nextRunAt !== null).slice(0, open ? 3 : 1);
   const failed = crons.filter((c) => FAILED.has(c.lastStatus ?? ''));
   if (list.length === 0 && failed.length === 0) return null;
   return (
-    <section className="overflow-hidden card" aria-labelledby="crons-title">
-      <header className="flex items-center justify-between px-5 py-4">
-        <h2 id="crons-title" className="text-[15px] font-semibold">Prochains crons</h2>
+    <section className="overflow-hidden card" aria-labelledby="crons-title" data-collapsed={open ? undefined : ''}>
+      <header className="flex items-center justify-between gap-3 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <h2 id="crons-title" className="text-[15px] font-semibold">Prochains crons</h2>
+          <Toggle open={open} onToggle={() => setOpen(!open)} controls="upcoming-body" />
+        </div>
         <Link to="/crons" className="text-[13px] font-medium text-accent hover:underline">Gérer</Link>
       </header>
-      <ul className="divide-y divide-line border-t border-line">
+      <ul id="upcoming-body" className="divide-y divide-line border-t border-line">
         {list.map((c) => (
           <li key={`${c.instanceId}/${c.id}`}>
             <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-baseline gap-3 px-5 py-3 transition-colors hover:bg-raised/50">
@@ -89,7 +100,15 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
             </Link>
           </li>
         ))}
-        {failed.map((c) => (
+        {!open && failed.length > 0 && (
+          <li data-cron-failure-summary>
+            <Link to="/crons" className="flex items-center gap-2.5 bg-bad-soft/60 px-5 py-3 text-[13px] font-medium text-bad transition-colors hover:bg-bad-soft">
+              <TriangleAlert className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+              {failureLabel(failed.length)}
+            </Link>
+          </li>
+        )}
+        {open && failed.map((c) => (
           <li key={`f:${c.instanceId}/${c.id}`} data-cron-failure>
             <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-start gap-2.5 bg-bad-soft/60 px-5 py-3 text-bad transition-colors hover:bg-bad-soft">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden />
@@ -108,15 +127,16 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
 
 export function HomePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const { id, instance } = useCurrentInstance();
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
-  const crons = overview.data?.crons ?? [];
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
+  const crons = (overview.data?.crons ?? []).filter((c) => c.instanceId === id);
   const search = useSearch({ from: '/app/' });
   const navigate = useNavigate();
   const list = instances.data?.instances ?? [];
   const reports = compat.data?.reports ?? [];
-  const ws = workspaces.data?.workspaces ?? [];
+  const ws = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === id);
   const focused = useCallback(() => { void navigate({ to: '/', search: {}, replace: true }); }, [navigate]);
 
   return (
@@ -135,10 +155,10 @@ export function HomePage() {
           </Panel>
         )}
         {list.length > 0 && workspaces.isSuccess && (ws.length > 0 ? (
-          <Ask workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} />
+          <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} />
         ) : (
           <Panel>
-            <p className="text-[15px]">Commencez par un workspace</p>
+            <p className="text-[15px]">Commencez par un workspace{instance && list.length > 1 ? ` sur ${instance.label}` : ''}</p>
             <p className="mt-1 text-sm text-ink-soft">Un dossier partagé avec l’agent, ses consignes et ses sessions de travail</p>
             <Link to="/w" className="mt-4 inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong">
               Créer un workspace
@@ -148,10 +168,10 @@ export function HomePage() {
         {list.length > 0 && <CronTimeline crons={crons} />}
         {list.length > 0 && (
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <RecentSessions />
+            {id && <RecentSessions inst={id} />}
             <div className="space-y-6">
               <UpcomingCrons crons={crons} />
-              {list.map((i) => <InstanceCard key={i.id} instance={i} report={reports.find((r) => r.instanceId === i.id)} />)}
+              {instance && <InstanceCard instance={instance} report={reports.find((r) => r.instanceId === instance.id)} />}
             </div>
           </div>
         )}

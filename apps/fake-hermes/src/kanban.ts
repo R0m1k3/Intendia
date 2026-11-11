@@ -4,7 +4,7 @@
  * - POST /tasks without `triage: true` creates a `ready` task; `running` cannot be set by hand;
  * - `done` is refused while a parent is not done;
  * - POST /dispatch turns each assigned `ready` task into `running` with an active worker; after `stepMs`
- *   the task is `done` and the worker gone; a `dir` workspace is created through `pathMap`;
+ *   the task is `done` and the worker gone; a `dir` workspace is created when it is under the managed files root;
  * - POST /runs/{id}/terminate ends the worker and puts the task back in `ready` (Hermes relaunches it);
  * - specify / decompose answer {ok:false} (no auxiliary model) unless the title contains "preciser".
  */
@@ -53,7 +53,8 @@ export class KanbanStore {
     fixturesDir: string,
     private readonly stepMs: number,
     private readonly profiles: () => string[],
-    private readonly pathMap?: { from: string; to: string },
+    /** Managed files root: a `dir` workspace under it is created (the worker writes resultat.md). */
+    private readonly filesRoot?: string,
   ) {
     this.workflow = (fixture(fixturesDir, 'GET_api_plugins_kanban_workflow.json') as KanbanStore['workflow'])
       ?? { columns: [], manual: {} };
@@ -123,8 +124,8 @@ export class KanbanStore {
     this.workers.set(w.run_id, w);
     t.status = 'running';
     t.started_at = now();
-    if (t.workspace_kind === 'dir' && t.workspace_path && this.pathMap && t.workspace_path.startsWith(`${this.pathMap.from}/`)) {
-      const local = `${this.pathMap.to}${t.workspace_path.slice(this.pathMap.from.length)}`;
+    if (t.workspace_kind === 'dir' && t.workspace_path && this.filesRoot && t.workspace_path.startsWith(`${this.filesRoot}/`)) {
+      const local = t.workspace_path;
       mkdirSync(local, { recursive: true });
       writeFileSync(join(local, 'resultat.md'), `# ${t.title}\n\nFichier écrit par le worker fake-hermes.\n`);
     }

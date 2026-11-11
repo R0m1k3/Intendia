@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, ChevronRight, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { api, type CompatReport, type ModuleReport } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, MODULE_META, Panel, StateMark, timeAgo } from '../components/ui';
 
@@ -102,7 +103,7 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
 }
 
 export function StatusPage() {
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const { instance } = useCurrentInstance();
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 30_000 });
   return (
     <>
@@ -111,7 +112,7 @@ export function StatusPage() {
         subtitle="Chaque module est testé contre Hermes au démarrage, à chaque nouvelle version et chaque jour. Ouvrez un module pour voir les routes qu’il utilise."
       />
       <div className="space-y-6 px-5 pb-12 md:px-8">
-        {instances.data?.instances.map((i) => {
+        {(instance ? [instance] : []).map((i) => {
           const r = compat.data?.reports.find((x) => x.instanceId === i.id);
           return r
             ? <InstanceStatus key={i.id} report={r} label={i.label} />

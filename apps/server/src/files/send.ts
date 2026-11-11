@@ -1,9 +1,7 @@
-import { createReadStream, statSync } from 'node:fs';
-import { Readable } from 'node:stream';
 import type { Context } from 'hono';
 import { mimeOf } from './mime.js';
 
-/** Headers of every response that carries content from the volume (agent-written HTML/SVG included). */
+/** Headers of every response that carries content from a workspace (agent-written HTML/SVG included). */
 export const FILE_CSP = "sandbox; frame-ancestors 'self'";
 
 export function disposition(kind: 'inline' | 'attachment', name: string): string {
@@ -11,27 +9,25 @@ export function disposition(kind: 'inline' | 'attachment', name: string): string
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
-/** Streams a regular file (absPath already checked by files/paths.ts). */
-export function sendFile(c: Context, absPath: string, name: string, opts: { download?: boolean } = {}): Response {
-  const st = statSync(absPath);
-  const stream = Readable.toWeb(createReadStream(absPath)) as ReadableStream;
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      'Content-Type': mimeOf(name),
-      'Content-Length': String(st.size),
-      'Content-Security-Policy': FILE_CSP,
-      'X-Frame-Options': 'SAMEORIGIN',
-      'Cache-Control': 'private, no-store',
-      'Content-Disposition': disposition(opts.download ? 'attachment' : 'inline', name),
-    },
-  });
+/** Relays a regular file read from Hermes (files/hermes-fs.ts), with Intendia's own headers. */
+export function sendFile(
+  _c: Context, file: { body: ReadableStream<Uint8Array>; size: number | null }, name: string, opts: { download?: boolean } = {},
+): Response {
+  const headers: Record<string, string> = {
+    'Content-Type': mimeOf(name),
+    'Content-Security-Policy': FILE_CSP,
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Cache-Control': 'private, no-store',
+    'Content-Disposition': disposition(opts.download ? 'attachment' : 'inline', name),
+  };
+  if (file.size !== null) headers['Content-Length'] = String(file.size);
+  return new Response(file.body, { status: 200, headers });
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** Small static error page for /f/* (no script, no external resource). */
-export function errorPage(c: Context, status: 404 | 410, title: string, detail?: string): Response {
+export function errorPage(c: Context, status: 404 | 410 | 502, title: string, detail?: string): Response {
   const body = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · Intendia</title>
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:34rem;margin:15vh auto;padding:0 1.5rem;color:#23251f;background:#f7f6f1}

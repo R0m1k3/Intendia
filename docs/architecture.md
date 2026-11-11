@@ -36,9 +36,13 @@ demand from the State screen. State changes go to the webhook.
 
 ## Workspaces, sessions and runs
 
-- A workspace (`workspaces` table) = a folder `<mount>/<slug>/` on the volume shared with one instance, served by one
-  Hermes profile. `src/workspaces/fs.ts` creates it (`mkdir` without `recursive`, removed if anything
-  fails); `src/workspaces/service.ts` owns the rows.
+- A workspace (`workspaces` table) = a folder `<root>/<slug>/` kept by the Hermes of its instance, served by one Hermes
+  profile. `<root>` (the instance's **workspace root**) is the dashboard's managed files root (`locked_root`, set by
+  `HERMES_DASHBOARD_FILES_ROOT`), read at each compatibility check by `src/compat/files-root.ts` (`report.files`); it is
+  refused when it is `/`, contains `hermes_home`, or when the agent's terminal is not `local`, and the Files module then
+  becomes unavailable with the reason. `src/workspaces/fs.ts` creates the folder through Hermes (refused if the name
+  exists, removed if anything fails); `src/workspaces/service.ts` owns the rows. The chat keeps working when the
+  dashboard is down: the last AGENTS.md read (kept in memory) is sent, else a line saying it is unavailable.
 - Model and reasoning effort are chosen per session, in the chat (`session_workspace.model` / `effort`, NULL =
   Hermes default) and sent as `model` / `model_options.reasoning_effort`. The workspace keeps the last choice
   (`workspaces.model` / `effort`) as the start of its next sessions; it is not a setting of its own.
@@ -77,7 +81,7 @@ demand from the State screen. State changes go to the webhook.
   `placeRunStats`). fake-hermes: the word `tard` writes the run's cost 8 s after its end.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
-- Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session
+- Every run sends `instructions`: workspace name, working folder as the agent sees it (`<workspace root>/<slug>`), the session
   folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`.
 - Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
   calls Hermes through `/p/<profile>/` with that profile's key.
@@ -91,13 +95,14 @@ demand from the State screen. State changes go to the webhook.
   workspace, sends the message, then opens the session page. The message is handed over in memory
   (`home/handoff.ts`, read once) so the page shows it while it plugs into the run. "Nouvelle session" in the sidebar
   is `/?nouvelle=1`, which puts the cursor in that box.
-- Sessions of every source: `GET /x/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
-  (`src/sessions/recent.ts`) merges the Intendia sessions with the Hermes sessions of every instance (`default` and
-  the workspace profiles that have a key; 3 s per call, errors listed per instance, not fatal). The source is
+- Sessions of every source, per instance: `GET /x/i/:inst/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
+  (`src/sessions/recent.ts`) merges the Intendia sessions of the instance's workspaces (filtered before the limit)
+  with the Hermes sessions of that instance only (`default` and the workspace profiles that have a key; 3 s per
+  call, errors listed, not fatal). Unknown instance → 404. The source is
   filtered on the server: `intendia` reads the database only, `telegram`/`cron` ask Hermes for that source only. The
   home page shows 7 lines; the Sessions page (`/sessions`, `pages/Sessions.tsx`) groups them by day (browser time)
   and loads 50 more per click, up to 200.
-- Search: `GET /x/sessions/search?q=(2..100)&source=` → `{sessions, errors, partial}`, 30 lines at most. Intendia
+- Search: `GET /x/i/:inst/sessions/search?q=(2..100)&source=` (the instance only) → `{sessions, errors, partial}`, 30 lines at most. Intendia
   titles are matched in the database (`LIKE`, `%`, `_` and `\` literal); message content goes through the
   dashboard's search (op `sessions.search`, FTS5, the hit between `>>>` and `<<<` in `snippet`). A hit on a session
   Intendia owns becomes its Intendia line with the snippet. An instance without dashboard, or whose search answers
@@ -115,21 +120,29 @@ demand from the State screen. State changes go to the webhook.
 
 ## Files, share links and MCP
 
-- **Every path chosen by the browser or the agent goes through `src/files/paths.ts`** before any disk access:
-  `normalizeRel` (no `..`, NUL, backslash, absolute path), `resolveInside` (realpath must stay under the workspace, or
-  under the mount for `share_file`; `create` mode refuses an existing name, dangling links included, then writes with
-  `wx`), `resolveEntry` (delete and move act on a symbolic link itself, never on its target), `toVolumePath` (agent or
-  Intendia absolute path → path relative to the mount). Known limit: a race between the realpath check and the open
-  (no `openat`/`O_NOFOLLOW` in Node).
-- The disk is the only source: `src/files/service.ts` reads it on each request (tree, search, raw, upload in a stream,
-  move, delete, text save with an mtime check, batch `exists` for chat chips). No file list in the database, no watcher.
-- Everything served from the volume (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
+- **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector
+  `files` (`GET /api/files`, `/api/files/download`, `POST /api/files/upload-stream` multipart, `/api/files/mkdir`,
+  `DELETE /api/files` with a JSON body). `src/files/hermes-fs.ts`: `FileRoots` gives the workspace root of an instance,
+  `HermesFs` (one per service call, with a cache of folder listings dropped by each write) takes volume paths
+  (`<slug>/files/a.txt`). Hermes confines everything to its root and follows symbolic links, writing and deleting their
+  **target**: an entry whose listed `path` is not `<folder>/<name>` (or `broken_link`) is a link, never written, moved
+  nor deleted (403 `outside`); a link leaving the root makes Hermes refuse the whole listing of its folder (403).
+- Paths chosen by the browser or the agent go through `src/files/paths.ts` first: `normalizeRel` (no `..`, NUL,
+  backslash, absolute path), `checkName`, `toVolumePath` (agent absolute path under the root → volume path).
+- Hermes is the only source: `src/files/service.ts` asks it on each request (tree, search breadth first 4 folders at a
+  time and bounded in entries, results and 5 s, raw, upload in a stream with `overwrite=false`, move of a file = copy,
+  links rewritten, then delete of the source; folders cannot be moved, text save with an mtime check, batch `exists`
+  with one listing per folder). No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
+  422 `no_root`.
+- Everything served from a workspace (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
   (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
   (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,
   not for PDFs (Chrome refuses PDFs in sandboxed frames).
-- Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, path relative to the instance mount,
-  private by default, public until a date (365 days max), revoked rows kept so `/f/<token>` can say so. A move from the
-  explorer rewrites link paths by exact prefix in the same SQLite transaction as the rename (the rename is last).
+- Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, volume path (relative to the
+  workspace root of the instance), private by default, public until a date (365 days max), revoked rows kept so
+  `/f/<token>` can say so. A move from the explorer rewrites link paths by exact prefix after the copy and before the
+  source is deleted (a failed delete leaves a duplicate, links on the copy). `exists` of the Liens page: one listing per
+  instance and folder. Hermes down on `/f/<token>` → a 502 page.
   `GET /f/<token>` order: unknown/revoked → 404; logged in → file; private → `/connexion?suite=/f/<token>` (the login
   page sends a logged-in user straight back with a full page load, since the `SameSite=Strict` cookie is not sent on a
   navigation from another site); public expired → 410; public → file; missing file → 404 (old path shown to the owner).
@@ -144,7 +157,8 @@ demand from the State screen. State changes go to the webhook.
   `putRaw` when Hermes refuses the add). Connect and rotate queued per instance; Hermes' test runs after, outside the
   queue. `POST /x/instances` connects a `missing` entry without test. URL: `INTENDIA_MCP_URL` or
   `http://intendia:<INTENDIA_MCP_PORT>`.
-- `src/services.ts` builds `WorkspaceService`, `LinkService` and `FileService` once; the web app and the MCP app share them.
+- `src/services.ts` builds `FileRoots`, `WorkspaceService`, `LinkService` and `FileService` once; the web app and the
+  MCP app share them.
 
 ```mermaid
 sequenceDiagram
@@ -231,12 +245,19 @@ sequenceDiagram
   renames).
 - Activity and the agent page read the kanban workers through `KanbanService` (see Kanban below), and stop one
   there.
-- `src/agents/activity.ts` (`ActivityService`, `GET /x/activity`): Hermes has no run list, so the candidates are the
+- `src/agents/activity.ts` (`ActivityService`, `GET /x/i/:inst/activity`, one instance): Hermes has no run list, so the candidates are the
   last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`, read by pages and
   skipping runs already known as finished, so an older run still going is reached), checked 4 at a time
   with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
-  never asked again. Kanban workers come from every live board of every instance. An unreachable instance is an
+  never asked again. Kanban workers come from every live board of the instance. An unreachable instance is an
   `errors` line, not a failure of the page. The page rereads every 5 s while visible.
+- Approvals of every instance: `GET /x/approvals` (`ActivityService.approvals`, `src/agents/approvals.ts`) takes the
+  same candidates on all instances, and for each run in `waiting_for_approval` reads its events again from the start
+  (the question is only in `approval.request`): the stream of a waiting run stays open, so the reading stops 300 ms
+  after the last frame (2 s at most). Key `<runId>:<request_id>` (or `seq<id>` without request_id); a question not
+  found gives an item without command and choices. One computation at a time, shared 5 s (several tabs poll it).
+  The web (`components/Approvals.tsx`) polls it every 10 s and shows a notification with the question, answered in
+  place through the session's approval route, whatever the current instance.
 - Sub-agents (`apps/web/src/chat/events.ts`, `Subagents.tsx`): one `subagents` entry per run, at the first
   `subagent.start` (keyed by its `run_id`: `seq` is local to a run), nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
   root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page

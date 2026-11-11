@@ -7,12 +7,12 @@ import { parse } from '../src/hermes-config/mask.js';
 import { testApp } from './helpers.js';
 
 async function setup(env: Record<string, string> = { INTENDIA_PUBLIC_URL: 'https://intendia.example.test' }) {
-  const t = await testApp({ instance: { agentMount: '/opt/data/workspace' }, env });
+  const t = await testApp({ env });
   await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
-  const ws = join(t.mount, 'dev');
+  const ws = join(t.root, 'dev');
   writeFileSync(join(ws, 'files', 'r.md'), '# r');
   mkdirSync(join(ws, 'files', 'd'));
-  symlinkSync('/etc/hostname', join(ws, 'files', 'host'));
+  symlinkSync(join(ws, 'files', 'r.md'), join(ws, 'files', 'host'));
   const token = mcpToken(t.db, 'fake');
   const post = (body: unknown, o: { token?: string; inst?: string; raw?: string } = {}) => t.mcp.request(`/mcp/${o.inst ?? 'fake'}`, {
     method: 'POST',
@@ -60,20 +60,20 @@ describe('MCP server', () => {
     const tools = (await t.rpc('tools/list')).result.tools;
     expect(tools).toHaveLength(1);
     expect(tools[0]).toMatchObject({ name: 'share_file', inputSchema: { required: ['path'] } });
-    const ok = await t.call('/opt/data/workspace/dev/files/r.md');
+    const ok = await t.call(`${t.root}/dev/files/r.md`);
     expect(ok.isError).toBeUndefined();
     expect(ok.content[0].text).toMatch(/^https:\/\/intendia\.example\.test\/f\/[0-9A-Za-z]{10}$/);
     const row = t.db.$client.prepare('SELECT path, public_until FROM share_links').get() as any;
     expect(row).toEqual({ path: 'dev/files/r.md', public_until: null });
-    expect((await t.call('/opt/data/workspace/dev/files/r.md')).content[0].text).toBe(ok.content[0].text);
-    for (const bad of ['/etc/passwd', '/opt/data/workspace/dev/files/d', '/opt/data/workspace/dev/files/none.md', '/opt/data/workspace/dev/files/host', 'files/r.md', '/opt/data/workspace/../etc/passwd', 42]) {
+    expect((await t.call(`${t.root}/dev/files/r.md`)).content[0].text).toBe(ok.content[0].text);
+    for (const bad of ['/etc/passwd', `${t.root}/dev/files/d`, `${t.root}/dev/files/none.md`, `${t.root}/dev/files/host`, 'files/r.md', `${t.root}/../etc/passwd`, '/opt/data/workspace/dev/files/r.md', 42]) {
       expect((await t.call(bad)).isError, String(bad)).toBe(true);
     }
   });
 
   it('without INTENDIA_PUBLIC_URL the tool says the link only works in Intendia', async () => {
     const t = await setup({});
-    const text = (await t.call('/opt/data/workspace/dev/files/r.md')).content[0].text as string;
+    const text = (await t.call(`${t.root}/dev/files/r.md`)).content[0].text as string;
     expect(text).toMatch(/^\/f\/[0-9A-Za-z]{10}\n\(INTENDIA_PUBLIC_URL n'est pas configurée/);
   });
 

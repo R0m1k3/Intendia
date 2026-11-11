@@ -3,7 +3,8 @@ import { RunStatusSchema, TERMINAL_STATUSES } from '../connectors/chat/index.js'
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
-import type { WorkspaceService } from '../workspaces/service.js';
+import { NotFoundError, type WorkspaceService } from '../workspaces/service.js';
+import { readApproval } from './approvals.js';
 
 const WINDOW_MS = 24 * 3600_000;
 const MAX_CANDIDATES = 20;
@@ -22,6 +23,27 @@ export interface ActiveRun {
   profile: string;
   lastActiveAt: number;
 }
+
+/** A run waiting for approval, with its question when it could be read. */
+export interface PendingApproval {
+  key: string;
+  instanceId: string;
+  instanceLabel: string;
+  workspace: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  requestId: string | null;
+  command: string | null;
+  description: string | null;
+  choices: string[];
+  /** The instance can answer approvals (module chat, op approval). */
+  canAnswer: boolean;
+}
+
+/** How long an approvals result is shared between callers (several tabs poll it). */
+const APPROVALS_TTL_MS = 5_000;
 
 export interface Activity {
   runs: ActiveRun[];
@@ -55,13 +77,9 @@ export class ActivityService {
     this.done.add(key);
   }
 
-  async list(now = Date.now()): Promise<Activity> {
-    const errors: Activity['errors'] = [];
-    const fail = (instance: string, err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!errors.some((e) => e.instance === instance && e.message === message)) errors.push({ instance, message });
-    };
-    const known = new Set(this.store.list().map((i) => i.id));
+  /** The last run of each recent session, still going (one instance, or all); errors go to `fail`. */
+  private async running(now: number, instanceId: string | undefined, fail: (instance: string, err: unknown) => void): Promise<ActiveRun[]> {
+    const known = new Set(this.store.list().map((i) => i.id).filter((id) => instanceId === undefined || id === instanceId));
     // finished runs are skipped before the limit, so an older run still going is reached
     const candidates = this.workspaces.recentRuns(now - WINDOW_MS, MAX_CANDIDATES,
       (r) => known.has(r.instanceId) && !this.done.has(`${r.instanceId}:${r.runId}`));
@@ -88,9 +106,21 @@ export class ActivityService {
         return null;
       }
     });
+    return checked.filter((r): r is ActiveRun => r !== null);
+  }
+
+  /** Runs in progress and kanban workers of one instance. */
+  async list(instanceId: string, now = Date.now()): Promise<Activity> {
+    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    const errors: Activity['errors'] = [];
+    const fail = (instance: string, err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!errors.some((e) => e.instance === instance && e.message === message)) errors.push({ instance, message });
+    };
+    const runs = await this.running(now, instanceId, fail);
 
     const workers: PublicWorker[] = [];
-    for (const inst of this.store.list()) {
+    for (const inst of this.store.list().filter((i) => i.id === instanceId)) {
       if (!this.kanban.can(inst.id, 'workers') || !this.kanban.can(inst.id, 'boards')) continue;
       try {
         workers.push(...(await this.kanban.workers(inst.id)));
@@ -98,6 +128,38 @@ export class ActivityService {
         fail(inst.id, err);
       }
     }
-    return { runs: checked.filter((r): r is ActiveRun => r !== null), workers, errors };
+    return { runs, workers, errors };
+  }
+
+  private shared: { at: number; result: Promise<{ approvals: PendingApproval[] }> } | null = null;
+
+  /**
+   * Runs of every instance waiting for approval, with their question (read again each time: a run can ask twice).
+   * One computation at a time, its result shared for a few seconds.
+   */
+  approvals(now = Date.now()): Promise<{ approvals: PendingApproval[] }> {
+    if (this.shared && now - this.shared.at < APPROVALS_TTL_MS) return this.shared.result;
+    const result = this.computeApprovals(now).catch((err) => {
+      this.shared = null;
+      throw err;
+    });
+    this.shared = { at: now, result };
+    return result;
+  }
+
+  private async computeApprovals(now: number): Promise<{ approvals: PendingApproval[] }> {
+    const waiting = (await this.running(now, undefined, () => {})).filter((r) => r.status === 'waiting_for_approval');
+    const approvals = await inBatches(waiting, PARALLEL, async (r): Promise<PendingApproval> => {
+      const report = this.compat.get(r.instance);
+      const q = await readApproval(this.compat, r.instance, r.runId, r.profile);
+      const canAnswer = Boolean(report?.modules.find((m) => m.id === 'chat')?.ops.approval?.ok);
+      return {
+        key: q?.key ?? `${r.runId}:attente`, instanceId: r.instance, instanceLabel: this.store.get(r.instance)?.label ?? r.instance,
+        workspace: r.workspace, workspaceName: r.workspaceName, sessionId: r.sessionId, title: r.title, runId: r.runId,
+        requestId: q?.requestId ?? null, command: q?.command ?? null, description: q?.description ?? null,
+        choices: q?.choices ?? [], canAnswer,
+      };
+    });
+    return { approvals };
   }
 }

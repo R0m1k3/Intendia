@@ -1,6 +1,6 @@
 import { thinkingState } from './thinking';
 import { Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { rawUrl, type ApprovalChoice, type RunStat } from '../api';
@@ -248,9 +248,12 @@ const CHOICES: Record<string, { label: string; variant: 'primary' | 'secondary' 
   deny: { label: 'Refuser', variant: 'danger' },
 };
 
-export function ApprovalCard({ approval, onChoose, busy }: { approval: Approval; onChoose: (c: ApprovalChoice) => void; busy: boolean }) {
+/** `inline`: without the thread's indent (notifications); `footer`: shown under the choices. */
+export function ApprovalCard({ approval, onChoose, busy, inline, footer }: {
+  approval: Approval; onChoose: (c: ApprovalChoice) => void; busy: boolean; inline?: boolean; footer?: ReactNode;
+}) {
   return (
-    <div className={AGENT_INDENT}>
+    <div className={inline ? undefined : AGENT_INDENT}>
       <div className="rounded-xl border border-warn/40 bg-warn-soft/40 p-4">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Mark state="readonly" />
@@ -267,6 +270,7 @@ export function ApprovalCard({ approval, onChoose, busy }: { approval: Approval;
             </Button>
           ))}
         </div>
+        {footer}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { readSseFrames } from '../src/connectors/sse.js';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -35,11 +36,26 @@ export function tempDir(): string {
   return mkdtempSync(join(tmpdir(), 'intendia-test-'));
 }
 
+/** Routes each instance's hosts to its own fake (`<id>-api` / `<id>-dash`), the main one on fake-api / fake-dash. */
+export function combineFetch(routes: { hosts: { api: string; dash: string }; fetch: ReturnType<typeof fakeFetch> }[]) {
+  return async (input: string, init: RequestInit): Promise<Response> => {
+    const host = new URL(input).hostname;
+    const r = routes.find((x) => x.hosts.api === host || x.hosts.dash === host);
+    if (!r) throw new TypeError(`fetch failed: unknown host ${host}`);
+    return r.fetch(input, init);
+  };
+}
+
 /**
- * Full app against fake-hermes, logged in, with a temporary workspace mount.
- * `request` adds the session cookie and the X-Intendia header.
+ * Full app against fake-hermes, logged in. The fake's managed files root (a temporary folder, `root`) is the
+ * workspace root of the instance. `request` adds the session cookie and the X-Intendia header.
+ * `extra`: more instances (own id and label), served by the same fake, or by their own fake (own files root,
+ * hosts `<id>-api` / `<id>-dash`) with `ownFake: true`.
  */
-export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig>; env?: Record<string, string> } = {}) {
+export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
+  instance?: Partial<InstanceConfig>; extra?: (Partial<InstanceConfig> & { ownFake?: boolean })[]; env?: Record<string, string>;
+  uploadTimeoutMs?: number;
+} = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
   const { CompatService } = await import('../src/compat/service.js');
@@ -50,22 +66,37 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const { createMcpApp } = await import('../src/mcp/server.js');
 
   const dataDir = tempDir();
-  const mount = opts.mount ?? tempDir();
-  const inst = fakeInstance({ mount, profileKeys: opts.profileKeys ?? {}, ...opts.instance });
+  const inst = fakeInstance({ profileKeys: opts.profileKeys ?? {}, ...opts.instance });
+  const fake = createFakeHermes({ fixturesDir: FIXTURES, filesRoot: tempDir(), ...opts });
+  const routes = [{ hosts: { api: 'fake-api', dash: 'fake-dash' }, fetch: fakeFetch(fake) }];
+  const fakes: Record<string, ReturnType<typeof createFakeHermes>> = { [inst.id]: fake };
+  const extra = (opts.extra ?? []).map(({ ownFake, ...e }) => {
+    if (!ownFake) {
+      const x = fakeInstance({ profileKeys: opts.profileKeys ?? {}, ...e });
+      fakes[x.id] = fake;
+      return x;
+    }
+    const id = e.id ?? 'x';
+    const hosts = { api: `${id}-api`, dash: `${id}-dash` };
+    const own = createFakeHermes({ fixturesDir: FIXTURES, filesRoot: tempDir() });
+    routes.push({ hosts, fetch: fakeFetch(own, hosts) });
+    fakes[id] = own;
+    return fakeInstance({ profileKeys: opts.profileKeys ?? {}, api: `http://${hosts.api}`, dashboard: `http://${hosts.dash}`, ...e });
+  });
   const config = loadConfig({
     INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, INTENDIA_TRUST_PROXY: 'true',
-    INTENDIA_INSTANCES: JSON.stringify([inst]), ...opts.env,
+    INTENDIA_INSTANCES: JSON.stringify([inst, ...extra]), ...opts.env,
   });
   const db = openDb(dataDir);
   const store = new InstanceStore(db, config);
   const auth = new Auth(db, config);
-  const fake = createFakeHermes({ fixturesDir: FIXTURES, ...opts });
-  const fetchImpl = fakeFetch(fake);
+  const fetchImpl = combineFetch(routes);
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
-  const services = createServices({ config, db, store, compat });
+  for (const e of extra) await compat.check(e.id);
+  const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs });
   const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
-  const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
+  const mcp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: 'test' });
 
   let cookie = '';
   const raw = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
@@ -95,30 +126,13 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
       body: typeof o.body === "string" || o.body === undefined ? o.body : new Uint8Array(o.body),
     });
   await raw('POST', '/x/setup/password', { code: auth.setupCode, password: 'test-password-123' });
-  return { app, mcp, db, mount, fake, inst, store, compat, config, services, links: services.links, request, raw, rawRequest };
+  /** Workspace root of the main instance (the fake's managed files root, real path). */
+  const root = fake.files.root;
+  return { app, mcp, db, root, fake, fakes, inst, store, compat, config, services, links: services.links, request, raw, rawRequest };
 }
 
 /** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */
-export async function readSse(res: Response, ms = 2000): Promise<{ id: string | null; data: any }[]> {
-  const reader = res.body!.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), Math.max(1, deadline - Date.now()))),
-    ]);
-    if (chunk.done) break;
-    buf += dec.decode(chunk.value, { stream: true });
-  }
-  await reader.cancel().catch(() => {});
-  return buf.split('\n\n').filter((f) => f.includes('data:')).map((f) => {
-    const id = /^id: (.*)$/m.exec(f)?.[1] ?? null;
-    const data = JSON.parse(/^data: (.*)$/m.exec(f)![1]!);
-    return { id, data };
-  });
-}
+export const readSse = (res: Response, ms = 2000) => readSseFrames(res, { maxMs: ms });
 
 /** Polls the Intendia run status until it is terminal. */
 export async function waitRun(t: Awaited<ReturnType<typeof testApp>>, base: string, runId: string): Promise<string> {

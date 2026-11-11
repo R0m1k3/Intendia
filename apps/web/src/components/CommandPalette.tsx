@@ -4,14 +4,15 @@ import { Search } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
-import { flatItems, moveIndex, paletteGroups, SEARCH_MIN, type PaletteItem } from './palette';
+import { useCurrentInstance } from '../instance/current';
+import { flatItems, moveIndex, paletteGroups, SEARCH_MIN, type PaletteItem, type PaletteSources } from './palette';
 import { cx } from './ui';
 
 /** "⌘ K" on a Mac, else "Ctrl K". */
 export const shortcutLabel = (): string => (typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac') ? '⌘ K' : 'Ctrl K');
 
 /** Search box over every page: actions, pages, workspaces, crons, sessions (the server searches the history). */
-export function CommandPalette({ nav, onClose }: { nav: readonly { to: string; label: string }[]; onClose: () => void }) {
+export function CommandPalette({ nav, onClose }: { nav: PaletteSources['nav']; onClose: () => void }) {
   const navigate = useNavigate();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -24,19 +25,22 @@ export function CommandPalette({ nav, onClose }: { nav: readonly { to: string; l
     return () => clearTimeout(t);
   }, [text]);
 
+  const { id: inst } = useCurrentInstance();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-  const crons = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, staleTime: 60_000 });
-  const recent = useQuery({ queryKey: ['sessions-recent'], queryFn: () => api.recentSessions(20), staleTime: 60_000 });
+  const crons = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), staleTime: 60_000 });
+  const recent = useQuery({ queryKey: ['sessions-recent', inst], queryFn: () => api.recentSessions(inst!, 20), enabled: inst !== null, staleTime: 60_000 });
   const searching = q.length >= SEARCH_MIN && text.trim() === q;
-  const found = useQuery({ queryKey: ['sessions-search', 'all', q], queryFn: () => api.searchSessions(q, 'all'), enabled: q.length >= SEARCH_MIN });
+  const found = useQuery({
+    queryKey: ['sessions-search', inst, 'all', q], queryFn: () => api.searchSessions(inst!, q, 'all'), enabled: q.length >= SEARCH_MIN && inst !== null,
+  });
 
   const groups = useMemo(() => paletteGroups(text, {
     nav,
-    workspaces: workspaces.data?.workspaces ?? [],
-    crons: crons.data?.crons ?? [],
+    workspaces: (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst),
+    crons: (crons.data?.crons ?? []).filter((c) => c.instanceId === inst),
     recent: recent.data?.sessions ?? [],
     found: searching ? found.data?.sessions ?? null : null,
-  }), [text, nav, workspaces.data, crons.data, recent.data, searching, found.data]);
+  }), [text, nav, inst, workspaces.data, crons.data, recent.data, searching, found.data]);
   const items = flatItems(groups);
   useEffect(() => setIndex(0), [text]);
   const current = items[Math.min(index, items.length - 1)];

@@ -1,14 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { join } from 'node:path';
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, ne } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
 import type { FinishFields } from '../chat/run-stats.js';
 import type { InstanceStore } from '../instances/store.js';
-import {
-  createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd, readAgentsMd, removeWorkspaceDir, writeAgentsMd,
-} from './fs.js';
+import type { FileRoots } from '../files/hermes-fs.js';
+import { createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd, readAgentsMd, writeAgentsMd } from './fs.js';
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
@@ -83,7 +81,12 @@ export function titleFrom(input: string): string {
 }
 
 export class WorkspaceService {
-  constructor(private readonly db: Db, private readonly store: InstanceStore) {}
+  /** Last AGENTS.md read per workspace: the chat keeps its instructions while Hermes' dashboard is down. */
+  private readonly agentsMd = new Map<string, string>();
+  /** Slugs being created: a second request for the same slug gets "exists" instead of racing the first. */
+  private readonly creating = new Set<string>();
+
+  constructor(private readonly db: Db, private readonly store: InstanceStore, private readonly roots: FileRoots) {}
 
   private instance(id: string): InstanceConfig {
     const inst = this.store.get(id);
@@ -91,18 +94,15 @@ export class WorkspaceService {
     return inst;
   }
 
-  /** Instance serving a workspace (mount, agentMount). */
+  /** Instance serving a workspace. */
   instanceOf(ws: Workspace): InstanceConfig {
     return this.instance(ws.instanceId);
   }
 
-  dir(ws: Workspace): string {
-    return join(this.instance(ws.instanceId).mount, ws.slug);
-  }
-
+  /** `<workspace root>/<slug>`, the folder as the agent (and Hermes' dashboard) sees it; `no_root` without root. */
   agentPath(ws: Workspace): string {
-    const inst = this.instance(ws.instanceId);
-    return `${(inst.agentMount ?? inst.mount).replace(/\/$/, '')}/${ws.slug}`;
+    this.instance(ws.instanceId);
+    return `${this.roots.root(ws.instanceId)}/${ws.slug}`;
   }
 
   // ---- workspaces
@@ -117,21 +117,31 @@ export class WorkspaceService {
     return ws;
   }
 
-  createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null }): Workspace {
+  async createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null }): Promise<Workspace> {
     const inst = this.instance(input.instanceId);
     const profile = input.profile && input.profile !== 'default' ? input.profile : null;
     if (profile && !inst.profileKeys[profile]) throw new ValidationError(`Profil sans clé sur cette instance : ${profile}`);
-    if (this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
+    if (this.creating.has(input.slug) || this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
       throw new WorkspaceFsError('exists', `Le workspace ${input.slug} existe déjà`);
     }
-    const dir = createWorkspaceDir(inst.mount, input.slug);
+    this.creating.add(input.slug);
+    try {
+      return await this.createWorkspaceRow(inst, profile, input);
+    } finally {
+      this.creating.delete(input.slug);
+    }
+  }
+
+  private async createWorkspaceRow(inst: InstanceConfig, profile: string | null, input: { slug: string; name: string }): Promise<Workspace> {
+    const fs = this.roots.fs(inst.id);
+    await createWorkspaceDir(fs, input.slug);
     const row: Workspace = {
       slug: input.slug, name: input.name, instanceId: inst.id, profile, model: null, modelProvider: null, effort: null, createdAt: Date.now(),
     };
     try {
       this.db.insert(workspaces).values(row).run();
     } catch (err) {
-      removeWorkspaceDir(dir);
+      await fs.remove(input.slug, true).catch(() => undefined);
       throw err;
     }
     return row;
@@ -145,12 +155,17 @@ export class WorkspaceService {
     return this.getWorkspace(slug);
   }
 
-  readAgentsMd(slug: string): string {
-    return readAgentsMd(this.dir(this.getWorkspace(slug)));
+  async readAgentsMd(slug: string): Promise<string> {
+    const ws = this.getWorkspace(slug);
+    const text = await readAgentsMd(this.roots.fs(ws.instanceId), slug);
+    this.agentsMd.set(slug, text);
+    return text;
   }
 
-  writeAgentsMd(slug: string, text: string): void {
-    writeAgentsMd(this.dir(this.getWorkspace(slug)), text);
+  async writeAgentsMd(slug: string, text: string): Promise<void> {
+    const ws = this.getWorkspace(slug);
+    await writeAgentsMd(this.roots.fs(ws.instanceId), slug, text);
+    this.agentsMd.set(slug, text);
   }
 
   // ---- sessions
@@ -164,24 +179,24 @@ export class WorkspaceService {
       .sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt));
   }
 
-  /** Unarchived sessions of every workspace, most recently active first (home page). */
-  recentSessions(limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
+  /** Unarchived sessions of the instance's workspaces, most recently active first (home page). */
+  recentSessions(limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(eq(sessionWorkspace.archived, false))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
       // lastActiveAt is set from creation on
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(limit).all()
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
   }
 
   /** Non-archived Intendia sessions whose title contains `q`, case-insensitive with Unicode folding (SQLite's `lower()` only folds ASCII). */
-  searchSessions(q: string, limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
+  searchSessions(q: string, limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     const needle = q.toLocaleLowerCase();
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(eq(sessionWorkspace.archived, false))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).all()
       .filter((r) => r.s.title?.toLocaleLowerCase().includes(needle))
       .slice(0, limit)
@@ -220,10 +235,15 @@ export class WorkspaceService {
     return { session: toPublic(row), workspace, instance: this.instance(instanceId), profile: workspace.profile ?? 'default' };
   }
 
-  createSession(slug: string): PublicSession {
+  async createSession(slug: string): Promise<PublicSession> {
     const ws = this.getWorkspace(slug);
     const id = newSessionId(slug);
-    createSessionDir(this.dir(ws), id);
+    // one attempt; without it the agent creates the folder when it writes there
+    try {
+      await createSessionDir(this.roots.fs(ws.instanceId), slug, id);
+    } catch (err) {
+      console.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
+    }
     const now = Date.now();
     this.db.insert(sessionWorkspace).values({
       sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: null, archived: false, createdAt: now, lastActiveAt: now,
@@ -339,11 +359,25 @@ export class WorkspaceService {
     };
   }
 
-  /** The framing block sent in `instructions` with every run. */
-  instructionsFor(ctx: SessionContext): string {
+  /**
+   * The framing block sent in `instructions` with every run. Hermes' dashboard down: the last AGENTS.md read
+   * (kept in memory), else a line saying the instructions are unavailable; no workspace root: no folder lines.
+   */
+  async instructionsFor(ctx: SessionContext): Promise<string> {
     const ws = ctx.workspace;
-    const path = this.agentPath(ws);
-    const agents = framingAgentsMd(readAgentsMd(this.dir(ws)), path);
+    let path: string;
+    try {
+      path = this.agentPath(ws);
+    } catch (err) {
+      return [`[Intendia] Workspace : ${ws.name} (${ws.slug})`, `Fichiers du workspace indisponibles : ${(err as Error).message}`].join('\n');
+    }
+    let text: string;
+    try {
+      text = framingAgentsMd(await this.readAgentsMd(ws.slug), path) || '(aucune)';
+    } catch (err) {
+      const last = this.agentsMd.get(ws.slug);
+      text = last !== undefined ? framingAgentsMd(last, path) || '(aucune)' : `Consignes du projet indisponibles (${(err as Error).message})`;
+    }
     const lines = this.framingLines(ws, `sessions/${ctx.session.id}`);
     return [
       `[Intendia] Workspace : ${ws.name} (${ws.slug})`,
@@ -351,7 +385,7 @@ export class WorkspaceService {
       lines.store,
       lines.share,
       `Consignes du projet (${path}/AGENTS.md) :`,
-      agents || '(aucune)',
+      text,
     ].join('\n');
   }
 }

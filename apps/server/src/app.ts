@@ -7,9 +7,10 @@ import { InstanceConfigSchema, type AppConfig } from './config.js';
 import { Auth, AuthError, requireAuth } from './auth/auth.js';
 import type { CompatService } from './compat/service.js';
 import { checkInstance } from './compat/engine.js';
+import { withFilesRoot } from './compat/files-root.js';
 import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
-import { InstanceStore } from './instances/store.js';
+import { DeclarativeError, InstanceStore } from './instances/store.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
 import { forgetMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
@@ -76,6 +77,7 @@ export function createApp(deps: AppDeps) {
       return c.json({ error: err.message, code: err.code, message: err.prompt, ...(err.task ? { task: err.task } : {}) }, 409);
     }
     if (err instanceof PartialWriteError) return c.json({ error: err.message, code: err.code }, 502);
+    if (err instanceof DeclarativeError) return c.json({ error: err.message, code: 'declarative' }, 409);
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {
@@ -134,14 +136,15 @@ export function createApp(deps: AppDeps) {
 
   priv.get('/instances', (c) => c.json({
     declarative: store.declarative,
-    instances: store.list().map((i) => InstanceStore.toPublic(i, store.declarative ? 'env' : 'db')),
+    instances: store.list().map((i) => InstanceStore.toPublic(i, store.declarative ? 'env' : 'db', compat.get(i.id)?.files ?? null)),
   }));
 
   /** Tests a connection without saving: full compatibility check against the given settings. */
   priv.post('/instances/test', async (c) => {
     const inst = InstanceConfigSchema.parse(await c.req.json());
-    const { report } = await checkInstance(new HermesHttp(inst, deps.fetchImpl));
-    return c.json(report);
+    const http = new HermesHttp(inst, deps.fetchImpl);
+    const { report } = await checkInstance(http);
+    return c.json(await withFilesRoot(http, report));
   });
 
   priv.post('/instances', async (c) => {
@@ -157,7 +160,15 @@ export function createApp(deps: AppDeps) {
     } catch (err) {
       console.warn(`[intendia] MCP entry not written for ${inst.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return c.json({ instance: InstanceStore.toPublic(inst, 'db'), report: saved, mcp: { state: await link.state(inst.id) } });
+    return c.json({ instance: InstanceStore.toPublic(inst, 'db', saved.files ?? null), report: saved, mcp: { state: await link.state(inst.id) } });
+  });
+
+  /** Display name only: the id stays the key of every table, URL and MCP token. */
+  priv.patch('/instances/:id', async (c) => {
+    const { label } = z.object({ label: z.string().trim().min(1).max(80) }).parse(await c.req.json());
+    const saved = store.rename(c.req.param('id'), label);
+    if (!saved) return c.json({ error: `Instance inconnue : ${c.req.param('id')}` }, 404);
+    return c.json({ instance: InstanceStore.toPublic(saved, 'db', compat.get(saved.id)?.files ?? null) });
   });
 
   priv.delete('/instances/:id', (c) => {

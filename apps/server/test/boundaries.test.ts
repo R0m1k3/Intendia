@@ -30,8 +30,10 @@ describe('architecture rules', () => {
   });
 
   it('no module reads Hermes files or imports its code', () => {
+    // files/paths.ts only compares names with the ones Hermes hides (config.yaml among them), never reads them
+    const allowed = new Set(['files/paths.ts']);
     const offenders = files(SRC).filter((f) => /config\.yaml|state\.db|gateway_state\.json|hermes_cli/.test(readFileSync(f, 'utf8')));
-    expect(offenders.map((f) => relative(SRC, f))).toEqual([]);
+    expect(offenders.map((f) => relative(SRC, f)).filter((f) => !allowed.has(f))).toEqual([]);
   });
 
   it('probe and fake-hermes name fixtures the same way', () => {

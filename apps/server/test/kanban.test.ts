@@ -105,12 +105,12 @@ describe('kanban tasks', () => {
   });
 
   it('frames a task attached to a workspace and hides the block when reading it', async () => {
-    const t = await testApp({ instance: { agentMount: '/opt/data/workspace' } });
+    const t = await testApp({});
     expect((await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' })).status).toBe(201);
     const a = await task(t, { title: 'Rapport été', body: 'Fais le point.', workspace: 'dev' });
     const sent = last(t, 'POST', '/api/plugins/kanban/tasks')!.body as Record<string, string>;
     expect(sent.workspace_kind).toBe('dir');
-    expect(sent.workspace_path).toMatch(/^\/opt\/data\/workspace\/dev\/kanban\/rapport-ete-[0-9a-f]{4}$/);
+    expect(sent.workspace_path).toMatch(new RegExp(`^${t.root}/dev/kanban/rapport-ete-[0-9a-f]{4}$`));
     const key = sent.workspace_path!.split('/').at(-1);
     expect(sent.body).toMatch(new RegExp(`^\\[Intendia\\] Workspace : Dev \\(dev\\) ; dossier : kanban/${key}\\n`));
     expect(sent.body!.endsWith('[/Intendia]\n\nFais le point.')).toBe(true);
@@ -127,7 +127,7 @@ describe('kanban tasks', () => {
 
   it('refuses a workspace of another instance', async () => {
     const t = await testApp();
-    t.services.workspaces.createWorkspace({ slug: 'autre', name: 'Autre', instanceId: 'fake' });
+    await t.services.workspaces.createWorkspace({ slug: 'autre', name: 'Autre', instanceId: 'fake' });
     // simulate another instance by renaming the workspace's instance in the store
     const ws = t.services.workspaces.getWorkspace('autre');
     const orig = t.services.workspaces.getWorkspace.bind(t.services.workspaces);
@@ -249,12 +249,11 @@ describe('framing', () => {
     expect(unframe(frame('P', block('crons')))).toEqual({ prompt: 'P', slug: 'dev', folder: 'cle' });
   });
 
-  it('creates the task folder through the dispatcher (fake path map)', async () => {
-    const t = await testApp({ instance: { agentMount: '/opt/data/workspace' }, kanbanStepMs: 10_000 });
-    (t.fake.kanban as unknown as { pathMap: unknown }).pathMap = { from: '/opt/data/workspace', to: t.mount };
+  it('creates the task folder through the dispatcher (under the fake files root)', async () => {
+    const t = await testApp({ kanbanStepMs: 10_000 });
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
     const a = await task(t, { title: 'Dossier', workspace: 'dev', assignee: 'default', start: 'ready' });
     await t.request('POST', `${K}/dispatch?board=default`);
-    expect(existsSync(join(t.mount, 'dev', a.workspace.folder))).toBe(true);
+    expect(existsSync(join(t.root, 'dev', a.workspace.folder))).toBe(true);
   });
 });

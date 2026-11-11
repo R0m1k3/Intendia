@@ -21,9 +21,11 @@
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
- *   translated by `pathMap` (agent path → local folder), then cites its path
+ *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
+ * Managed files (`/api/files*`): see files.ts, rooted at `filesRoot`.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Hono } from 'hono';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,6 +33,7 @@ import { CronStore } from './crons.js';
 import { KanbanStore } from './kanban.js';
 import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
+import { FilesStore } from './files.js';
 export { OPENROUTER_MODELS } from './config.js';
 import { SkillStore } from './skills.js';
 
@@ -70,8 +73,14 @@ export interface FakeOptions {
   configStepMs?: number;
   /** Duration of a simulated kanban worker, in ms (default: stepMs). */
   kanbanStepMs?: number;
-  /** "fichier" scenario: the agent's view of the volume (`from`) is the local folder `to`. */
-  pathMap?: { from: string; to: string };
+  /** Managed files root of the dashboard (`locked_root`), also where the fake agent writes (default: a temporary folder). */
+  filesRoot?: string;
+  /** `hermes_home` announced by the dashboard's /api/status (default /opt/data). */
+  hermesHome?: string;
+  /** `terminal.backend` in GET /api/config (default: the recording's, `local`). */
+  terminalBackend?: string;
+  /** Delay before each managed files answer, in ms (slow Hermes). */
+  filesDelayMs?: number;
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -156,7 +165,7 @@ class Simulator {
   private counter = 0;
   private msgId = 1000;
 
-  constructor(private readonly stepMs: number, private readonly pathMap?: { from: string; to: string }) {}
+  constructor(private readonly stepMs: number, private readonly filesRoot: string) {}
 
   create(sessionId: string, input: string, instructions = '', model: string | null = null, modelOptions: unknown = null, provider: string | null = null): SimRun {
     this.counter += 1;
@@ -256,11 +265,9 @@ class Simulator {
   private async playFile(run: SimRun, step: number) {
     const dir = /dans (\S+\/sessions\/[^/\s]+)\/\./.exec(run.instructions)?.[1] ?? '/workspace/sessions/inconnue';
     const path = `${dir}/rapport.md`;
-    const map = this.pathMap;
-    if (map && path.startsWith(`${map.from}/`)) {
-      const local = `${map.to}${path.slice(map.from.length)}`;
-      mkdirSync(local.slice(0, local.lastIndexOf('/')), { recursive: true });
-      writeFileSync(local, '# Rapport\n\nFichier écrit par fake-hermes.\n\n| Magasin | Ventes |\n|---|---|\n| Frouard | 1 240 |\n| Houdemont | 980 |\n');
+    if (path.startsWith(`${this.filesRoot}/`)) {
+      mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+      writeFileSync(path, '# Rapport\n\nFichier écrit par fake-hermes.\n\n| Magasin | Ventes |\n|---|---|\n| Frouard | 1 240 |\n| Houdemont | 980 |\n');
     }
     await sleep(step);
     this.push(run, { event: 'tool.started', tool: 'write_file', preview: path, call_id: 'call_1' });
@@ -365,7 +372,7 @@ class Simulator {
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore }
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -380,6 +387,17 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (m) {
       profile = decodeURIComponent(m[1]!);
       path = m[2]!;
+    }
+    // managed files read their own body (multipart for upload-stream): handled before the JSON parse, logged without body
+    if (via === 'dash' && (path === '/api/files' || path.startsWith('/api/files/'))) {
+      log.push({ via, method, path, profile, authorization: c.req.header('authorization'), query: c.req.query(), headers: Object.fromEntries(c.req.raw.headers), body: undefined });
+      if (c.req.header('authorization') !== `Bearer ${FAKE_DASH_TOKEN}`) return c.json({ error: 'unauthorized' }, 401);
+      const brk = opts.breaks?.[`dash ${method} ${path}`];
+      if (brk?.status) return c.json(brk.body ?? { detail: 'broken by fake-hermes' }, brk.status as 404);
+      if (brk && 'body' in brk) return c.json(brk.body as object);
+      if (stores.files.delayMs) await sleep(stores.files.delayMs);
+      const res = await stores.files.handle(method, path, c.req.raw, c.req.query());
+      if (res) return res;
     }
     let body: unknown;
     if (method !== 'GET' && method !== 'HEAD') body = await c.req.json().catch(() => undefined);
@@ -446,6 +464,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const fx = load(opts.fixturesDir, via, method, path);
     if (fx) {
       let out = fx.body;
+      if (via === 'dash' && path === '/api/status') out = { ...(out as object), hermes_home: opts.hermesHome ?? '/opt/data' };
       if (via === 'api' && path === '/v1/capabilities' && opts.hide?.capabilities?.length) {
         const caps = structuredClone(out) as { endpoints?: Record<string, unknown> };
         for (const k of opts.hide.capabilities) delete caps.endpoints?.[k];
@@ -603,17 +622,19 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
 }
 
 export function createFakeHermes(opts: FakeOptions) {
-  const sim = new Simulator(opts.stepMs ?? 5, opts.pathMap);
+  const files = new FilesStore(opts.filesRoot ?? mkdtempSync(join(tmpdir(), 'fake-hermes-files-')));
+  files.delayMs = opts.filesDelayMs ?? 0;
+  const sim = new Simulator(opts.stepMs ?? 5, files.root);
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
-  const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
+  const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);
   const profiles = new ProfileStore(opts.fixturesDir);
-  const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), opts.pathMap);
-  const stores: Stores = { crons, skills, config, profiles, kanban };
+  const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
+  const stores: Stores = { crons, skills, config, profiles, kanban, files };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
-    requests, sim, crons, skills, config, profiles, kanban,
+    requests, sim, crons, skills, config, profiles, kanban, files,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
   };
@@ -683,11 +704,20 @@ export function fakeWebSocketFactory(fake: Fake) {
  * fetch implementation routing http://fake-api/... and http://fake-dash/... to the in-memory apps
  * (no sockets, for tests).
  */
-export function fakeFetch(fake: ReturnType<typeof createFakeHermes>) {
+export function fakeFetch(fake: ReturnType<typeof createFakeHermes>, hosts = { api: 'fake-api', dash: 'fake-dash' }) {
   return async (input: string, init: RequestInit): Promise<Response> => {
     const url = new URL(input);
-    const app = url.hostname === 'fake-api' ? fake.api : url.hostname === 'fake-dash' ? fake.dash : null;
+    const app = url.hostname === hosts.api ? fake.api : url.hostname === hosts.dash ? fake.dash : null;
     if (!app) throw new TypeError(`fetch failed: unknown host ${url.hostname}`);
-    return app.fetch(new Request(url, init));
+    const signal = init.signal;
+    if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError');
+    const answer = Promise.resolve(app.fetch(new Request(url, init)));
+    if (!signal) return answer;
+    // like fetch: an abort (timeout) before the answer rejects, the late answer is dropped
+    return new Promise<Response>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      answer.then((r) => { signal.removeEventListener('abort', onAbort); resolve(r); }, reject);
+    });
   };
 }

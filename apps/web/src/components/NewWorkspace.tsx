@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { Button, ErrorText, Field, Input } from './ui';
 
 export function slugify(name: string): string {
@@ -12,20 +13,18 @@ export function slugify(name: string): string {
 export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const list = instances.data?.instances ?? [];
+  // created on the current instance (the sidebar's choice)
+  const { id: currentId, instance: current, instances: list } = useCurrentInstance();
+  const inst = currentId ?? '';
+  const root = current?.files?.workspaceRoot ?? null;
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
-  const [inst, setInst] = useState('');
   const [profile, setProfile] = useState('default');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!inst && list[0]) setInst(list[0].id);
-  }, [inst, list]);
-  const current = list.find((i) => i.id === inst);
+  useEffect(() => setProfile('default'), [inst]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,16 +48,15 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
           <Input value={name} required autoFocus maxLength={80} placeholder="Magasins"
             onChange={(e) => { setName(e.target.value); if (!slugEdited) setSlug(slugify(e.target.value)); }} />
         </Field>
-        <Field label="Identifiant" hint={current ? `Dossier ${current.mount}/${slug || '…'} ; définitif` : 'Définitif'}>
+        <Field label="Identifiant" hint={root ? `Dossier ${root}/${slug || '…'} chez Hermes ; définitif` : 'Définitif'}>
           <Input value={slug} required pattern="[a-z0-9][a-z0-9\-]{0,39}" className="font-mono"
             onChange={(e) => { setSlug(e.target.value); setSlugEdited(true); }} />
         </Field>
-        <Field label="Instance">
-          <select value={inst} onChange={(e) => { setInst(e.target.value); setProfile('default'); }}
-            className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-accent focus:outline-none">
-            {list.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
-          </select>
-        </Field>
+        {list.length > 1 && current && (
+          <Field label="Instance" hint="Celle choisie en haut de la barre latérale">
+            <p className="flex h-9 items-center text-sm" data-new-workspace-instance="">{current.label}</p>
+          </Field>
+        )}
         <Field label="Agent" hint="Profil Hermes qui sert ce workspace">
           <select value={profile} onChange={(e) => setProfile(e.target.value)}
             className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-accent focus:outline-none">
@@ -67,9 +65,14 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
           </select>
         </Field>
       </div>
+      {current && !root && (
+        <p className="text-sm text-bad" data-no-files-root="">
+          {current.files?.reason ?? 'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.'}
+        </p>
+      )}
       <ErrorText error={error} />
       <div className="flex gap-2">
-        <Button variant="primary" disabled={busy || !inst}>{busy ? 'Création…' : 'Créer le workspace'}</Button>
+        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? 'Création…' : 'Créer le workspace'}</Button>
         {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}
       </div>
     </form>

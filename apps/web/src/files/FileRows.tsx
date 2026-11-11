@@ -67,7 +67,7 @@ export function FileRows({ slug, entries, selected, onOpen, actions = false, onE
               type="button"
               disabled={e.outside}
               onClick={() => onOpen(e)}
-              title={e.outside ? 'Lien vers un dossier hors du workspace' : e.path}
+              title={e.outside ? 'Lien symbolique : Intendia ne l’ouvre pas et ne le modifie pas' : e.path}
               className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm transition-colors hover:bg-raised/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Icon className={cx('size-4 shrink-0', isDirEntry(e) ? 'text-accent' : 'text-ink-faint')} strokeWidth={1.5} />
@@ -85,12 +85,16 @@ export function FileRows({ slug, entries, selected, onOpen, actions = false, onE
                     <ShareButton slug={slug} path={e.path} compact />
                   </>
                 )}
-                <button className={ICON_BTN} title="Renommer ou déplacer" aria-label={`Renommer ou déplacer ${e.name}`} onClick={() => void move(e)}>
-                  <MoveRight className="size-4" strokeWidth={1.5} />
-                </button>
-                <button className={cx(ICON_BTN, 'hover:text-bad')} title="Supprimer" aria-label={`Supprimer ${e.name}`} onClick={() => void remove(e)}>
-                  <Trash2 className="size-4" strokeWidth={1.5} />
-                </button>
+                {e.kind !== 'link' && (
+                  <>
+                    <button className={ICON_BTN} title="Renommer ou déplacer" aria-label={`Renommer ou déplacer ${e.name}`} onClick={() => void move(e)}>
+                      <MoveRight className="size-4" strokeWidth={1.5} />
+                    </button>
+                    <button className={cx(ICON_BTN, 'hover:text-bad')} title="Supprimer" aria-label={`Supprimer ${e.name}`} onClick={() => void remove(e)}>
+                      <Trash2 className="size-4" strokeWidth={1.5} />
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </li>

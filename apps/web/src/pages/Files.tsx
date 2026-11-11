@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronRight, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, type FileEntry } from '../api';
+import { ApiError, api, type FileEntry } from '../api';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
 import { DropZone } from '../files/DropZone';
@@ -24,6 +24,12 @@ export function FilesPage() {
   const qc = useQueryClient();
   const ws = useQuery({ queryKey: ['workspace', slug], queryFn: () => api.workspace(slug) });
   const tree = useQuery({ queryKey: ['tree', slug, dir], queryFn: () => api.tree(slug, dir) });
+  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const instLabel = instances.data?.instances.find((i) => i.id === ws.data?.workspace.instanceId)?.label ?? ws.data?.workspace.instanceId;
+  // the workspace folder itself is missing on its Hermes (made in another volume before 0.0.4, or deleted by the agent)
+  const treeError = !dir && tree.error instanceof ApiError && tree.error.status === 404
+    ? new Error(`Dossier introuvable chez ${instLabel ?? 'Hermes'} : copiez-le dans la racine des workspaces de cette instance, ou supprimez ce workspace.`)
+    : tree.error;
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
@@ -99,7 +105,7 @@ export function FilesPage() {
               </div>
             }
           >
-            <div className="px-5 pt-3 empty:hidden"><ErrorText error={error ?? tree.error} /></div>
+            <div className="px-5 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
             {debounced && <p className="px-5 pt-3 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
             {entries.length > 0 ? (
               <FileRows slug={slug} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} />

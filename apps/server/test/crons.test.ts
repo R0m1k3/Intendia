@@ -46,13 +46,13 @@ describe('crons', () => {
     expect(cron.workspace).toEqual({ slug: 'ventes', name: 'Ventes', folder: 'rapport-du-lundi', missing: false });
     const job = hermesJob(t, cron.id);
     expect(job.prompt).toMatch(/^\[Intendia\] Workspace : Ventes \(ventes\) ; dossier : crons\/rapport-du-lundi\n/);
-    expect(job.prompt).toContain(`Range chaque fichier que tu produis dans ${t.mount}/ventes/crons/rapport-du-lundi/.`);
-    expect(job.prompt).toContain(`Lis ${t.mount}/ventes/AGENTS.md avant de commencer.`);
+    expect(job.prompt).toContain(`Range chaque fichier que tu produis dans ${t.root}/ventes/crons/rapport-du-lundi/.`);
+    expect(job.prompt).toContain(`Lis ${t.root}/ventes/AGENTS.md avant de commencer.`);
     expect(job.prompt).toContain('share_file');
-    expect(job.workdir).toBe(`${t.mount}/ventes`);
+    expect(job.workdir).toBe(`${t.root}/ventes`);
 
     // same name: -2; a folder already on disk is skipped too
-    mkdirSync(join(t.mount, 'ventes', 'crons', 'rapport-du-lundi-3'), { recursive: true });
+    mkdirSync(join(t.root, 'ventes', 'crons', 'rapport-du-lundi-3'), { recursive: true });
     expect((await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron.workspace.folder).toBe('rapport-du-lundi-2');
     expect((await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron.workspace.folder).toBe('rapport-du-lundi-4');
   });
@@ -79,10 +79,10 @@ describe('crons', () => {
     for (const slug of ['ventes', 'achats', 'stock']) await t.request('POST', '/x/workspaces', { slug, name: slug, instanceId: 'fake' });
     const { id } = (await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron;
     // a folder left in achats by a deleted cron must not be reused
-    mkdirSync(join(t.mount, 'achats', 'crons', 'rapport-du-lundi'), { recursive: true });
+    mkdirSync(join(t.root, 'achats', 'crons', 'rapport-du-lundi'), { recursive: true });
     const moved = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'achats' }))).json.cron;
     expect(moved.workspace).toMatchObject({ slug: 'achats', folder: 'rapport-du-lundi-2' });
-    expect(hermesJob(t, id).prompt).toContain(`${t.mount}/achats/crons/rapport-du-lundi-2/`);
+    expect(hermesJob(t, id).prompt).toContain(`${t.root}/achats/crons/rapport-du-lundi-2/`);
     // free in stock: the key moves with the cron (its own former key is not counted as taken)
     const again = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'stock' }))).json.cron;
     expect(again.workspace).toMatchObject({ slug: 'stock', folder: 'rapport-du-lundi-2' });

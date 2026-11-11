@@ -1,21 +1,19 @@
 /**
- * Workspace folders on the volume shared with the agent. Paths built here come from the slug regex
- * (no "/" nor "..") and the administrator-set mount only; every path chosen by the browser or the
- * agent goes through files/paths.ts.
+ * Workspace folders, kept by the Hermes of their instance and reached through its managed files API
+ * (files/hermes-fs.ts). Paths built here come from the slug regex (no "/" nor "..") only; every path chosen
+ * by the browser or the agent goes through files/paths.ts.
  */
-import { accessSync, chmodSync, constants, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import type { HermesFs } from '../files/hermes-fs.js';
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const AGENTS_MD_MAX_BYTES = 65_536;
 export const FRAMING_MAX_BYTES = 4_096;
-export const DIR_MODE = 0o775;
-export const FILE_MODE = 0o664;
 
-export type WorkspaceFsCode = 'mount' | 'exists' | 'too_large' | 'invalid' | 'outside' | 'not_found' | 'not_file';
+export type WorkspaceFsCode =
+  | 'no_root' | 'unreachable' | 'unsupported' | 'exists' | 'too_large' | 'invalid' | 'outside' | 'not_found' | 'not_file';
 
-export const FS_ERROR_STATUS: Record<WorkspaceFsCode, 400 | 403 | 404 | 409 | 413 | 422> = {
-  mount: 422, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400,
+export const FS_ERROR_STATUS: Record<WorkspaceFsCode, 400 | 403 | 404 | 409 | 413 | 422 | 502> = {
+  no_root: 422, unreachable: 502, unsupported: 409, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400,
 };
 
 export class WorkspaceFsError extends Error {
@@ -37,68 +35,40 @@ ce qu'il peut faire seul et ce qu'il doit demander avant.
 - \`sessions/<session>/\` : fichiers produits pendant une session
 `;
 
-function mkdirShared(path: string): void {
-  mkdirSync(path);
-  chmodSync(path, DIR_MODE); // mkdir applies the umask; force group write for the agent
-}
+export const WORKSPACE_SUBDIRS = ['files', 'inbox', 'sessions'] as const;
 
-function writeShared(path: string, text: string): void {
-  writeFileSync(path, text);
-  chmodSync(path, FILE_MODE);
-}
-
-/** Creates {mount}/{slug}/ with files/, inbox/, sessions/ and AGENTS.md; leaves nothing behind on failure. */
-export function createWorkspaceDir(mount: string, slug: string): string {
+/** Creates <root>/<slug>/ with files/, inbox/, sessions/ and AGENTS.md; leaves nothing behind on failure. */
+export async function createWorkspaceDir(fs: HermesFs, slug: string): Promise<void> {
   if (!SLUG_RE.test(slug)) throw new Error(`invalid slug ${slug}`);
+  if (await fs.entry(slug)) throw new WorkspaceFsError('exists', `Le dossier ${slug} existe déjà chez Hermes`);
+  await fs.mkdir(slug);
   try {
-    if (!statSync(mount).isDirectory()) throw new Error('not a directory');
-    accessSync(mount, constants.W_OK);
-  } catch {
-    throw new WorkspaceFsError('mount', `Dossier ${mount} introuvable ou non inscriptible`);
-  }
-  const dir = join(mount, slug);
-  try {
-    mkdirShared(dir); // not recursive: fails if the name exists, symbolic links included
+    for (const sub of WORKSPACE_SUBDIRS) await fs.mkdir(`${slug}/${sub}`);
+    await fs.create(`${slug}/AGENTS.md`, AGENTS_MD_TEMPLATE, { overwrite: false });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new WorkspaceFsError('exists', `Le dossier ${dir} existe déjà`);
-    throw new WorkspaceFsError('mount', `Impossible de créer ${dir} : ${(err as Error).message}`);
-  }
-  try {
-    for (const sub of ['files', 'inbox', 'sessions']) mkdirShared(join(dir, sub));
-    writeShared(join(dir, 'AGENTS.md'), AGENTS_MD_TEMPLATE);
-  } catch (err) {
-    removeWorkspaceDir(dir);
-    throw new WorkspaceFsError('mount', `Impossible de préparer ${dir} : ${(err as Error).message}`);
-  }
-  return dir;
-}
-
-export function removeWorkspaceDir(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
-}
-
-export function createSessionDir(wsDir: string, sessionId: string): void {
-  try {
-    mkdirShared(join(wsDir, 'sessions', sessionId));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-  }
-}
-
-export function readAgentsMd(wsDir: string): string {
-  try {
-    return readFileSync(join(wsDir, 'AGENTS.md'), 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    await fs.remove(slug, true).catch(() => undefined);
     throw err;
   }
 }
 
-export function writeAgentsMd(wsDir: string, text: string): void {
+export async function createSessionDir(fs: HermesFs, slug: string, sessionId: string): Promise<void> {
+  await fs.mkdir(`${slug}/sessions/${sessionId}`);
+}
+
+export async function readAgentsMd(fs: HermesFs, slug: string): Promise<string> {
+  try {
+    return await fs.readText(`${slug}/AGENTS.md`, AGENTS_MD_MAX_BYTES * 4);
+  } catch (err) {
+    if (err instanceof WorkspaceFsError && err.code === 'not_found') return '';
+    throw err;
+  }
+}
+
+export async function writeAgentsMd(fs: HermesFs, slug: string, text: string): Promise<void> {
   if (Buffer.byteLength(text, 'utf8') > AGENTS_MD_MAX_BYTES) {
     throw new WorkspaceFsError('too_large', `AGENTS.md dépasse ${AGENTS_MD_MAX_BYTES / 1024} Kio`);
   }
-  writeShared(join(wsDir, 'AGENTS.md'), text);
+  await fs.create(`${slug}/AGENTS.md`, text, { overwrite: true });
 }
 
 /** AGENTS.md as copied into the run instructions: at most 4 KiB, cut on a UTF-8 character boundary. */

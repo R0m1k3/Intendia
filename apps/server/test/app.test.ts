@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db/index.js';
 import { InstanceStore } from '../src/instances/store.js';
 import { createServices } from '../src/services.js';
+import { FAKE_API_KEY } from 'fake-hermes';
 import { fakeHttp, fakeInstance, tempDir } from './helpers.js';
 
 function setup(env: Record<string, string> = {}) {
@@ -99,7 +100,7 @@ describe('instances', () => {
     await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
     const saved = await t.req('POST', '/x/instances', fakeInstance());
     expect(saved.status).toBe(200);
-    expect(saved.json.report.modules).toHaveLength(8);
+    expect(saved.json.report.modules).toHaveLength(9);
     expect(JSON.stringify(saved.json.instance)).not.toContain('fake-api-key');
     const list = await t.req('GET', '/x/instances');
     expect(list.json.instances[0]).toMatchObject({ id: 'fake', source: 'db' });
@@ -115,6 +116,35 @@ describe('instances', () => {
     expect(t.store.list()).toHaveLength(0);
   });
 
+  it('renames an instance: the label changes everywhere, the id and keys stay', async () => {
+    const t = setup();
+    await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
+    await t.req('POST', '/x/instances', fakeInstance());
+    const cron = await t.req('POST', '/x/i/fake/crons', {
+      name: 'Rapport', prompt: 'Fais le rapport.', schedule: '30 8 * * 1', deliver: 'local', skills: [], model: null, workspace: null,
+    });
+    expect(cron.status).toBe(201);
+    const res = await t.req('PATCH', '/x/instances/fake', { label: '  Hermes maison  ' });
+    expect(res.status).toBe(200);
+    expect(res.json.instance).toMatchObject({ id: 'fake', label: 'Hermes maison', source: 'db' });
+    expect(JSON.stringify(res.json)).not.toContain(FAKE_API_KEY);
+    expect((await t.req('GET', '/x/instances')).json.instances[0].label).toBe('Hermes maison');
+    const overview = await t.req('GET', '/x/crons/overview');
+    expect(overview.json.crons.length).toBeGreaterThan(0);
+    expect(overview.json.crons.every((c: { instanceLabel: string }) => c.instanceLabel === 'Hermes maison')).toBe(true);
+    expect(t.store.get('fake')!.apiKey).toBe(FAKE_API_KEY);
+  });
+
+  it('refuses an empty, too long or unknown rename', async () => {
+    const t = setup();
+    await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
+    await t.req('POST', '/x/instances', fakeInstance());
+    expect((await t.req('PATCH', '/x/instances/fake', { label: '   ' })).status).toBe(400);
+    expect((await t.req('PATCH', '/x/instances/fake', { label: 'x'.repeat(81) })).status).toBe(400);
+    expect((await t.req('PATCH', '/x/instances/nope', { label: 'Autre' })).status).toBe(404);
+    expect(t.store.get('fake')!.label).toBe(fakeInstance().label);
+  });
+
   it('declarative instances (INTENDIA_INSTANCES) cannot be edited from the UI', async () => {
     const t = setup({ INTENDIA_INSTANCES: JSON.stringify([fakeInstance()]) });
     await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
@@ -122,5 +152,9 @@ describe('instances', () => {
     const res = await t.req('DELETE', '/x/instances/fake');
     expect(res.status).toBe(500);
     expect(t.store.list()).toHaveLength(1);
+    const rename = await t.req('PATCH', '/x/instances/fake', { label: 'Autre' });
+    expect(rename.status).toBe(409);
+    expect(rename.json.code).toBe('declarative');
+    expect(t.store.get('fake')!.label).toBe(fakeInstance().label);
   });
 });

@@ -10,10 +10,18 @@ export interface PublicInstance {
   api: string;
   dashboard: string | null;
   dashboardLink: string | null;
-  mount: string;
-  agentMount: string;
+  /** Root of the workspaces read during the last check, or why there is none; null = not checked yet. */
+  files: { workspaceRoot: string | null; reason: string | null } | null;
   profiles: string[];
   source: 'env' | 'db';
+}
+
+/** Instances declared in INTENDIA_INSTANCES are read-only from the UI. */
+export class DeclarativeError extends Error {
+  constructor() {
+    super('Instances déclarées par INTENDIA_INSTANCES : changez le nom dans la configuration du conteneur');
+    this.name = 'DeclarativeError';
+  }
 }
 
 export class InstanceStore {
@@ -44,20 +52,27 @@ export class InstanceStore {
     return value;
   }
 
+  /** New display name; the id, URLs and keys stay. Null when the id is unknown. */
+  rename(id: string, label: string): InstanceConfig | null {
+    if (this.declarative) throw new DeclarativeError();
+    const inst = this.get(id);
+    if (!inst) return null;
+    return this.save({ ...inst, label });
+  }
+
   remove(id: string): void {
     if (this.declarative) throw new Error('Instances are declared in INTENDIA_INSTANCES and cannot be edited from the UI');
     this.db.delete(instances).where(eq(instances.id, id)).run();
   }
 
-  static toPublic(i: InstanceConfig, source: 'env' | 'db'): PublicInstance {
+  static toPublic(i: InstanceConfig, source: 'env' | 'db', files: PublicInstance['files'] = null): PublicInstance {
     return {
       id: i.id,
       label: i.label,
       api: i.api,
       dashboard: i.dashboard ?? null,
       dashboardLink: i.dashboardLink ?? null,
-      mount: i.mount,
-      agentMount: i.agentMount ?? i.mount,
+      files,
       profiles: Object.keys(i.profileKeys),
       source,
     };

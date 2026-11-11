@@ -23,6 +23,8 @@ export interface CompatReport {
   api: { reachable: boolean; error?: string };
   dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
   modules: ModuleReport[];
+  /** Root of the workspaces on this instance, or why the Files module cannot be used. */
+  files?: { workspaceRoot: string | null; reason: string | null };
 }
 export interface PublicInstance {
   id: string;
@@ -30,8 +32,8 @@ export interface PublicInstance {
   api: string;
   dashboard: string | null;
   dashboardLink: string | null;
-  mount: string;
-  agentMount: string;
+  /** Root of the workspaces (Hermes' managed files root) read at the last check, or why there is none; null = not checked. */
+  files: { workspaceRoot: string | null; reason: string | null } | null;
   profiles: string[];
   source: 'env' | 'db';
 }
@@ -50,7 +52,6 @@ export interface InstanceInput {
   dashboard?: string;
   dashboardToken?: string;
   dashboardLink?: string;
-  mount?: string;
 }
 
 export interface Workspace {
@@ -383,6 +384,22 @@ export interface AgentDetail extends Agent {
   soulTruncated: boolean;
   activeWorkers: KanbanWorker[];
 }
+export interface PendingApproval {
+  key: string;
+  instanceId: string;
+  instanceLabel: string;
+  workspace: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  requestId: string | null;
+  command: string | null;
+  description: string | null;
+  choices: string[];
+  canAnswer: boolean;
+}
+
 export interface ActiveRun {
   instance: string;
   workspace: string;
@@ -489,6 +506,7 @@ export const api = {
   testInstance: (i: InstanceInput) => call<CompatReport>('POST', '/instances/test', i),
   saveInstance: (i: InstanceInput) => call<{ instance: PublicInstance; report: CompatReport }>('POST', '/instances', i),
   removeInstance: (id: string) => call<{ ok: true }>('DELETE', `/instances/${encodeURIComponent(id)}`),
+  renameInstance: (id: string, label: string) => call<{ instance: PublicInstance }>('PATCH', `/instances/${encodeURIComponent(id)}`, { label }),
   compat: () => call<{ reports: CompatReport[] }>('GET', '/compat'),
   recheck: (id: string) => call<CompatReport>('POST', `/compat/${encodeURIComponent(id)}/check`),
 
@@ -544,11 +562,11 @@ export const api = {
     call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
-  recentSessions: (limit = 20, source: SessionSource = 'all') =>
-    call<{ sessions: RecentSession[] } & SessionErrors>('GET', `/sessions/recent?limit=${limit}${source === 'all' ? '' : `&source=${source}`}`),
+  recentSessions: (inst: string, limit = 20, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[] } & SessionErrors>('GET', instPath(inst, `sessions/recent?limit=${limit}${source === 'all' ? '' : `&source=${source}`}`)),
   /** Intendia titles + message content (dashboard); `partial` = instances where only titles were searched. */
-  searchSessions: (q: string, source: SessionSource = 'all') =>
-    call<{ sessions: RecentSession[]; partial: string[] } & SessionErrors>('GET', `/sessions/search?q=${encodeURIComponent(q)}${source === 'all' ? '' : `&source=${source}`}`),
+  searchSessions: (inst: string, q: string, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[]; partial: string[] } & SessionErrors>('GET', instPath(inst, `sessions/search?q=${encodeURIComponent(q)}${source === 'all' ? '' : `&source=${source}`}`)),
   cronsOverview: () => call<{ crons: OverviewCron[]; errors: { instance: string; message: string }[] }>('GET', '/crons/overview'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
@@ -557,7 +575,9 @@ export const api = {
     call<{ name: string; keySource: 'env' | 'db' }>('POST', instPath(inst, 'agents'), a),
   setAgentDescription: (inst: string, name: string, description: string) =>
     call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
-  activity: () => call<Activity>('GET', '/activity'),
+  activity: (inst: string) => call<Activity>('GET', instPath(inst, 'activity')),
+  /** Runs of every instance waiting for approval, with their question. */
+  approvals: () => call<{ approvals: PendingApproval[] }>('GET', '/approvals'),
   kanbanBoards: (inst: string) => call<{ boards: KanbanBoard[] }>('GET', kanbanPath(inst, 'boards')),
   createKanbanBoard: (inst: string, slug: string, name?: string) => call<{ board: KanbanBoard }>('POST', kanbanPath(inst, 'boards'), { slug, name }),
   kanbanBoard: (inst: string, board: string) => call<KanbanBoardView>('GET', kanbanPath(inst, 'board', board)),
