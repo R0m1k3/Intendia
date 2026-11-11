@@ -93,6 +93,8 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
   const busy = connect.isPending || rotate.isPending;
   const canConnect = auto && d.state !== 'plugin' && d.state !== 'unknown';
   const written = result !== null && !result.error;
+  /** Managed entry: the rotation also reaches Hermes; otherwise the manual section keeps its own rotation. */
+  const managed = auto && (d.state === 'connected' || d.state === 'stale');
   return (
     <div data-share={instanceId} data-mcp-state={d.state} className="space-y-4 card p-5">
       {many && <p className="text-sm font-semibold">{label}</p>}
@@ -134,7 +136,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
           <RestartInstance instanceId={instanceId} label={label} />
         </div>
       )}
-      {auto && (d.state === 'connected' || d.state === 'stale') && (
+      {managed && (
         <SmallBtn variant="ghost" disabled={busy}
           onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus. Hermes est mis à jour automatiquement ; redémarrez-le ensuite.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
           {rotate.isPending ? 'Régénération…' : 'Régénérer le jeton'}
@@ -154,7 +156,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
           </div>
           <div className="flex flex-wrap gap-2">
             <SmallBtn variant="ghost" onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
-            {!auto && (
+            {!managed && (
               <SmallBtn variant="ghost" disabled={busy}
                 onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
                 Régénérer le jeton
