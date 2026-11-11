@@ -89,6 +89,8 @@ export class ConfigStore {
   failRaw: number | null = null;
   /** Set by tests: PUT /api/config/raw answers this status without writing. */
   failPutRaw: number | null = null;
+  /** Name of the MCP server provided by a plugin (listed, refused by POST). */
+  pluginMcpName = 'plugin-srv';
 
   constructor(fixturesDir: string, private readonly stepMs: number, private readonly terminalBackend?: string) {
     const raw = fixture<{ yaml: string }>(fixturesDir, 'GET_api_config_raw.json').yaml;
@@ -136,7 +138,7 @@ export class ConfigStore {
       env: Object.fromEntries(Object.entries((s.env ?? {}) as Obj).map(([k, v]) => [k, `«redacted:${String(v).slice(0, 4)}...»`])),
       auth: s.headers ? 'header' : 'none', enabled: s.enabled !== false, tools: [], source: 'config', plugin: null,
     }));
-    return [...list, { name: 'plugin-srv', transport: 'http', url: 'https://plugin.example.test/mcp', command: null, args: [], env: {}, auth: 'none', enabled: true, tools: [], source: 'plugin', plugin: 'demo-plugin' }];
+    return [...list, { name: this.pluginMcpName, transport: 'http', url: 'https://plugin.example.test/mcp', command: null, args: [], env: {}, auth: 'none', enabled: true, tools: [], source: 'plugin', plugin: 'demo-plugin' }];
   }
 
   private envList(): Record<string, EnvEntry> {
@@ -226,7 +228,8 @@ export class ConfigStore {
       const name = String(b.name ?? '');
       const file = this.file();
       const servers = (isObj(file.mcp_servers) ? file.mcp_servers : {}) as Obj;
-      if (servers[name] || name === 'plugin-srv') return json({ detail: `MCP server '${name}' already exists` }, 409);
+      if (servers[name] || name === this.pluginMcpName) return json({ detail: `MCP server '${name}' already exists` }, 409);
+      if (String(b.url ?? '').includes('refuse')) return json({ detail: `Server '${name}' rejected: suspicious configuration` }, 400);
       const entry: Obj = b.url ? { url: b.url } : { command: b.command, args: b.args ?? [], env: b.env ?? {} };
       if (b.auth === 'header' && typeof b.bearer_token === 'string') {
         const envKey = `MCP_${name.toUpperCase().replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+|_+$/g, '')}_API_KEY`;
@@ -244,7 +247,8 @@ export class ConfigStore {
       if (!servers[name]) return json({ detail: `MCP server '${name}' not found` }, 404);
       if (mcp[2] === '/test' && method === 'POST') {
         if (String(servers[name]!.url ?? '').includes('echec')) return json({ ok: false, error: 'connect failed token=sk-test-err-0005', tools: [] });
-        return json({ ok: true, tools: [{ name: 'ping', description: 'Ping' }], prompts: [], resources: [] });
+        const tool = String(servers[name]!.url ?? '').includes('/mcp/') ? { name: 'share_file', description: 'Share a file' } : { name: 'ping', description: 'Ping' };
+        return json({ ok: true, tools: [tool], prompts: [], resources: [] });
       }
       if (mcp[2] === '/enabled' && method === 'PUT') {
         servers[name]!.enabled = Boolean(b.enabled);

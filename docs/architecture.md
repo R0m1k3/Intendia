@@ -149,6 +149,14 @@ demand from the State screen. State changes go to the webhook.
 - MCP (`src/mcp/server.ts`, port `INTENDIA_MCP_PORT`): hand-written JSON-RPC over Streamable HTTP, stateless, JSON
   answers only; `initialize`, `ping`, `tools/list`, `tools/call` with the single tool `share_file`. Checks: method (405),
   instance (404), bearer token (`settings` key `mcp_token:<instance>`, 401). The agent only ever gets a private link.
+- `src/mcp/connect.ts` (`McpLink`): puts the server into Hermes through `ConfigService` (dashboard API, `default`
+  profile, entry `intendia`). State read from the MCP list and the raw config (headers are not in the list):
+  `connected`/`stale` (managed entry: `Authorization: Bearer ${MCP_INTENDIA_API_KEY}`, token sent or not since the last
+  rotation, `settings` key `mcp_synced:<instance>`), `manual`, `other_url`, `plugin`, `missing`, `unknown`. Managed
+  entry → only `PUT /api/env`; otherwise `ConfigService.replaceMcp` (remove + add in one write, file put back by
+  `putRaw` when Hermes refuses the add). Connect and rotate queued per instance; Hermes' test runs after, outside the
+  queue. `POST /x/instances` connects a `missing` entry without test. URL: `INTENDIA_MCP_URL` or
+  `http://intendia:<INTENDIA_MCP_PORT>`.
 - `src/services.ts` builds `FileRoots`, `WorkspaceService`, `LinkService` and `FileService` once; the web app and the
   MCP app share them.
 
@@ -223,7 +231,7 @@ sequenceDiagram
   are a 409 `config_unavailable`; env and MCP writes go through without copy.
 - The browser (`apps/web/src/config/`, page `pages/Config.tsx`) shows the diff before saving, reloads after a 409
   keeping the draft, and offers the gateway restart after a write that needs it (polled every 1.5 s, 5 min at most; `config/restart.tsx`, shared
-  with Réglages, which offers the restart after adding the `share_file` block).
+  with Réglages, which offers the restart after connecting `share_file`).
 
 ## Agents and activity
 

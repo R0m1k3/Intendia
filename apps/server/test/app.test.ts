@@ -18,7 +18,7 @@ function setup(env: Record<string, string> = {}) {
   const auth = new Auth(db, config);
   const changes: unknown[] = [];
   const notifier: Notifier = { moduleStates: async (_r, c) => void changes.push(...c) };
-  const { fetchImpl } = fakeHttp();
+  const { fetchImpl, fake } = fakeHttp();
   const compat = new CompatService(db, store, notifier, fetchImpl);
   const app = createApp({ config, db, auth, store, compat, fetchImpl, services: createServices({ config, db, store, compat }), version: 'test' });
   let cookie = '';
@@ -32,7 +32,7 @@ function setup(env: Record<string, string> = {}) {
     if (set) cookie = set.split(';')[0]!;
     return { status: res.status, json: (await res.json().catch(() => null)) as any, setCookie: set };
   };
-  return { app, auth, req, store, changes, clearCookie: () => (cookie = '') };
+  return { app, auth, req, store, changes, fake, clearCookie: () => (cookie = '') };
 }
 
 const PASSWORD = 'correct horse battery';
@@ -78,6 +78,23 @@ describe('first start and login', () => {
 });
 
 describe('instances', () => {
+  it('puts the share_file entry into Hermes when an instance is added, never over another one', async () => {
+    const t = setup();
+    await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
+    const saved = await t.req('POST', '/x/instances', fakeInstance());
+    expect(saved.json.mcp).toEqual({ state: 'connected' });
+    expect(t.fake.config.raw).toContain('Authorization: Bearer ${MCP_INTENDIA_API_KEY}');
+    expect(t.fake.requests.some((r) => r.path.endsWith('/test'))).toBe(false);
+
+    const other = setup();
+    await other.req('POST', '/x/setup/password', { code: other.auth.setupCode, password: PASSWORD });
+    other.fake.config.setRaw(other.fake.config.raw.replace(/\nmcp_servers:\n/, '\nmcp_servers:\n  intendia:\n    url: https://elsewhere.example.test/mcp\n'));
+    const kept = await other.req('POST', '/x/instances', fakeInstance());
+    expect(kept.status).toBe(200);
+    expect(kept.json.mcp).toEqual({ state: 'other_url' });
+    expect(other.fake.config.raw).toContain('https://elsewhere.example.test/mcp');
+  });
+
   it('tests then saves an instance, keys encrypted at rest, and exposes its report', async () => {
     const t = setup();
     await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });

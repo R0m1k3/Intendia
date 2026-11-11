@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Pencil, Plus, RefreshCw } from 'lucide-react';
+import { Check, Copy, Pencil, Plug, Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { api } from '../api';
+import { api, type McpState, type McpTest, type ModuleId, type ModuleState } from '../api';
 import { InstanceForm } from '../components/InstanceForm';
 import { Narrow, PageHeader } from '../components/Layout';
 import { useModuleAvailability } from '../components/ModuleNotice';
@@ -38,62 +38,134 @@ function RestartInstance({ instanceId, label }: { instanceId: string; label: str
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-raised font-mono text-xs text-ink-soft">{n}</span>
-      <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm font-medium">{title}</p>
-        {children}
-      </div>
-    </div>
-  );
-}
+/** Operations Intendia needs to put share_file into Hermes itself (same list as MCP_AUTO_OPS, apps/server/src/mcp/connect.ts). */
+const MCP_AUTO_OPS: [ModuleId, string][] = [['config', 'raw'], ['config', 'mcpServers'], ['config', 'addMcp'], ['config', 'removeMcp'], ['config', 'putEnv'], ['config', 'putRaw'], ['config', 'testMcp']];
 
-/** The share_file tool of one instance: the mcp_servers block to add to Hermes, then the restart. */
+const MCP_STATE: Record<McpState, { mark: ModuleState | null; label: string; help: string }> = {
+  connected: { mark: 'full', label: 'Branché', help: 'Hermes connaît l’adresse et le jeton d’Intendia.' },
+  stale: { mark: 'readonly', label: 'Jeton à envoyer à Hermes', help: 'Le jeton a changé depuis le dernier envoi.' },
+  manual: { mark: 'readonly', label: 'Ancienne configuration manuelle', help: 'Hermes a un bloc collé à la main (jeton en clair) : Intendia le remplace.' },
+  other_url: { mark: 'readonly', label: 'Une autre entrée « intendia » existe', help: 'Hermes a déjà un serveur MCP nommé « intendia » qui pointe ailleurs.' },
+  plugin: { mark: 'unavailable', label: 'Entrée fournie par un plugin', help: 'Un plugin d’Hermes fournit déjà un serveur MCP « intendia » : Intendia ne peut pas le remplacer.' },
+  missing: { mark: null, label: 'Pas branché', help: 'L’agent ne peut pas encore partager de fichiers.' },
+  unknown: { mark: 'unavailable', label: 'État inconnu', help: 'Hermes ne répond pas, ou ne permet pas de brancher un serveur MCP depuis Intendia.' },
+};
+
+/** The share_file tool of one instance: Intendia writes it into Hermes, Hermes tests it, then the restart. */
 function ShareFileTool({ instanceId, label, many }: { instanceId: string; label: string; many: boolean }) {
   const qc = useQueryClient();
   const info = useQuery({ queryKey: ['mcp', instanceId], queryFn: () => api.mcp(instanceId) });
-  const rotate = useMutation({ mutationFn: () => api.rotateMcp(instanceId), onSuccess: (d) => qc.setQueryData(['mcp', instanceId], d) });
+  const ops = useModuleAvailability(instanceId, 'config', MCP_AUTO_OPS, []);
+  const [result, setResult] = useState<{ test?: McpTest; error?: string } | null>(null);
+  const done = (d: { state: McpState; test?: McpTest; error?: string }) => {
+    setResult({ test: d.test, error: d.error });
+    void qc.invalidateQueries({ queryKey: ['mcp', instanceId] });
+  };
+  const connect = useMutation({
+    mutationFn: (replaceOther: boolean) => api.connectMcp(instanceId, replaceOther),
+    onMutate: () => setResult(null),
+    onSuccess: done,
+  });
+  const rotate = useMutation({ mutationFn: () => api.rotateMcp(instanceId), onMutate: () => setResult(null), onSuccess: done });
   const [copied, setCopied] = useState(false);
   const [shown, setShown] = useState(false);
   const d = info.data;
   if (!d) return <ErrorText error={info.error} />;
+  const auto = ops.available;
+  const st = MCP_STATE[d.state];
   const block = mcpBlock(d.url, d.token);
   const copy = async () => {
     await copyText(block, 'Bloc mcp_servers');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  const start = async () => {
+    if (d.state === 'other_url') {
+      const yes = await ask({
+        title: 'Remplacer l’entrée « intendia » ?',
+        message: `Hermes a déjà un serveur MCP nommé « intendia » qui pointe vers une autre adresse. Il sera remplacé par celui d’Intendia (${d.url}).`,
+        confirmLabel: 'Remplacer', danger: true,
+      });
+      if (!yes) return;
+    }
+    connect.mutate(d.state === 'other_url');
+  };
+  const busy = connect.isPending || rotate.isPending;
+  const canConnect = auto && d.state !== 'plugin' && d.state !== 'unknown';
+  const written = result !== null && !result.error;
+  /** Managed entry: the rotation also reaches Hermes; otherwise the manual section keeps its own rotation. */
+  const managed = auto && (d.state === 'connected' || d.state === 'stale');
   return (
-    <div data-share={instanceId} className="space-y-4 card p-5">
+    <div data-share={instanceId} data-mcp-state={d.state} className="space-y-4 card p-5">
       {many && <p className="text-sm font-semibold">{label}</p>}
       {!d.publicUrlSet && (
         <p className="rounded-lg border border-warn/40 bg-warn-soft/40 p-3 text-[13px]">
           <code className="font-mono text-xs">INTENDIA_PUBLIC_URL</code> n’est pas configurée : les liens donnés par l’agent ne marcheront que dans Intendia, pas dans Telegram.
         </p>
       )}
-      <Step n={1} title="Ajoutez ce bloc à la configuration d’Hermes">
-        <div className="relative">
-          <pre className="overflow-x-auto rounded-lg border border-line bg-raised/60 p-3 pr-20 font-mono text-[11.5px] leading-relaxed">
-            {shown ? block : mcpBlock(d.url, '•'.repeat(12))}
-          </pre>
-          <Button variant="ghost" className="absolute right-1.5 top-1.5 h-7 px-2 text-xs" onClick={() => void copy()} aria-label="Copier le bloc mcp_servers">
-            <Copy className="size-3.5" strokeWidth={1.5} />{copied ? 'Copié' : 'Copier'}
-          </Button>
+      {auto && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium"><Mark state={st.mark} />{st.label}</p>
+            <p className="mt-0.5 text-[13px] text-ink-soft">{st.help}</p>
+          </div>
+          {canConnect && (
+            <SmallBtn variant={d.state === 'connected' ? 'ghost' : undefined} disabled={busy} onClick={() => void start()}>
+              <Plug className="size-3.5" strokeWidth={1.5} />
+              {connect.isPending ? 'Test par Hermes…' : d.state === 'connected' ? 'Rebrancher' : `Brancher Intendia à ${label}`}
+            </SmallBtn>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <SmallBtn variant="ghost" onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
-          <SmallBtn variant="ghost" disabled={rotate.isPending}
-            onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
-            Régénérer le jeton
-          </SmallBtn>
+      )}
+      <ErrorText error={connect.error ?? rotate.error} />
+      {result && (
+        <div className="space-y-1 rounded-lg border border-line bg-raised/60 p-3 text-[13px]" data-mcp-result={result.test?.ok ? 'ok' : 'error'}>
+          {result.error && <p className="text-bad">Jeton changé dans Intendia, mais Hermes n’a pas été mis à jour : {result.error}</p>}
+          {result.test?.ok && <p className="flex items-center gap-2"><Check className="size-3.5 text-ok" strokeWidth={2} />Hermes voit l’outil share_file.</p>}
+          {result.test && !result.test.ok && (
+            <p className="text-bad">
+              Entrée écrite, mais Hermes ne joint pas Intendia : {result.test.error ?? 'erreur inconnue'}. Vérifiez qu’Hermes et Intendia partagent un réseau Docker, ou réglez <code className="font-mono text-xs">INTENDIA_MCP_URL</code>.
+            </p>
+          )}
+          {written && <p className="text-ink-soft">Pris en compte au prochain redémarrage d’Hermes.</p>}
         </div>
-        <ErrorText error={rotate.error} />
-      </Step>
-      <Step n={2} title="Redémarrez Hermes">
-        <RestartInstance instanceId={instanceId} label={label} />
-      </Step>
+      )}
+      {auto && (written || d.state === 'stale' || d.state === 'connected') && (
+        <div className={cx('space-y-2', written && 'rounded-lg border border-accent/30 p-3')}>
+          {written && <p className="text-sm font-medium">Redémarrez Hermes pour que l’agent ait l’outil</p>}
+          <RestartInstance instanceId={instanceId} label={label} />
+        </div>
+      )}
+      {managed && (
+        <SmallBtn variant="ghost" disabled={busy}
+          onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus. Hermes est mis à jour automatiquement ; redémarrez-le ensuite.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
+          {rotate.isPending ? 'Régénération…' : 'Régénérer le jeton'}
+        </SmallBtn>
+      )}
+      <details open={!auto} className="group text-[13px]">
+        <summary className="cursor-pointer select-none text-ink-soft hover:text-ink">Configuration manuelle</summary>
+        <div className="mt-3 space-y-4">
+          {!auto && <p className="text-ink-soft">Cette instance ne permet pas à Intendia de brancher l’outil lui-même : ajoutez ce bloc à la configuration d’Hermes, puis redémarrez-le.</p>}
+          <div className="relative">
+            <pre className="overflow-x-auto rounded-lg border border-line bg-raised/60 p-3 pr-20 font-mono text-[11.5px] leading-relaxed">
+              {shown ? block : mcpBlock(d.url, '•'.repeat(12))}
+            </pre>
+            <Button variant="ghost" className="absolute right-1.5 top-1.5 h-7 px-2 text-xs" onClick={() => void copy()} aria-label="Copier le bloc mcp_servers">
+              <Copy className="size-3.5" strokeWidth={1.5} />{copied ? 'Copié' : 'Copier'}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <SmallBtn variant="ghost" onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
+            {!managed && (
+              <SmallBtn variant="ghost" disabled={busy}
+                onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
+                Régénérer le jeton
+              </SmallBtn>
+            )}
+          </div>
+          {!auto && <RestartInstance instanceId={instanceId} label={label} />}
+        </div>
+      </details>
       <p className="text-xs text-ink-faint">
         Ne publiez jamais le port {d.url.split(':')[2]?.split('/')[0] ?? '3001'} : Hermes doit le joindre par le réseau Docker.
       </p>
