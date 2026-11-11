@@ -42,9 +42,14 @@ export function switchTarget(pathname: string, id: string): NavTarget {
 // ---- this tab's value: a module store (every component of the tab follows), kept in sessionStorage (reload) and
 // localStorage (a new tab starts from the last one chosen). No `storage` listener: a tab never changes another.
 
+/** This tab's value; a new tab inherits the last choice and keeps it as its own (a reload must not follow another tab). */
 function readStored(): string | null {
   try {
-    return sessionStorage.getItem(KEY) ?? localStorage.getItem(KEY);
+    const own = sessionStorage.getItem(KEY);
+    if (own) return own;
+    const inherited = localStorage.getItem(KEY);
+    if (inherited) sessionStorage.setItem(KEY, inherited);
+    return inherited;
   } catch {
     return null; // storage blocked (private browsing)
   }

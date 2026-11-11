@@ -4,7 +4,7 @@ import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, Kanb
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
-import { navTarget, setTab, useCurrentInstance, useUrlInstance, type InstancePage } from '../instance/current';
+import { currentTab, navTarget, setTab, useCurrentInstance, useUrlInstance, type InstancePage } from '../instance/current';
 import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
 import { InstanceSwitcher } from './InstanceSwitcher';
@@ -51,6 +51,10 @@ export function Layout() {
   useEffect(() => {
     if (fromUrl && ids.split(',').includes(fromUrl)) setTab(fromUrl);
   }, [fromUrl, ids]);
+  // nothing chosen yet in this browser: the instance shown (the first) becomes this tab's, so a reload keeps it
+  useEffect(() => {
+    if (inst && currentTab() === null) setTab(inst);
+  }, [inst]);
   const paletteNav = NAV.filter((n) => n.group !== 'hidden').map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
   const openSlug = params.slug;

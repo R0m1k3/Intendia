@@ -69,7 +69,10 @@ function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; 
 export function Approvals() {
   const qc = useQueryClient();
   const { sessionId } = useParams({ strict: false }) as { sessionId?: string };
-  const list = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: 10_000, refetchOnWindowFocus: true });
+  const list = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: 10_000, refetchOnWindowFocus: true,
+    // keeps polling in a hidden tab: that is when the browser notification is useful
+    refetchIntervalInBackground: true,
+  });
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const notified = useRef(new Set<string>());
   const all = list.data?.approvals ?? [];
