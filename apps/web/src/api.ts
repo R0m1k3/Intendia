@@ -321,6 +321,23 @@ export interface ConfigModels {
   auxiliary: { task: string; label: string | null; provider: string; model: string }[];
   version: string | null;
 }
+/** Provider account (subscription) of an agent: connected by a device code, or by a command on the Hermes machine. */
+export interface ProviderAccount {
+  id: string; name: string; flow: 'device_code' | 'external';
+  cliCommand: string | null; docsUrl: string | null;
+  disconnectable: boolean; disconnectHint: string | null;
+  connected: boolean; expiresAt: string | null;
+}
+/** API key of the credential pool (never its value). `source`: `manual`, or `env:NAME` for a key variable. */
+export interface ProviderKey { provider: string; id: string; label: string; source: string; lastStatus: string | null }
+export interface ProvidersInfo {
+  accounts: ProviderAccount[] | null;
+  keys: ProviderKey[] | null;
+  keyProviders: { slug: string; name: string }[];
+}
+export interface ConnectStart { sessionId: string; userCode: string; verificationUrl: string; pollInterval: number | null; expiresIn: number | null }
+export interface ConnectPoll { status: string; error: string | null; model: string | null }
+
 export interface EnvVar {
   key: string; isSet: boolean; description: string | null; category: string | null; isPassword: boolean;
   advanced: boolean; channelManaged: boolean; provider: string | null; custom: boolean;
@@ -596,6 +613,19 @@ export const api = {
   setAuxiliary: (inst: string, profile: string, body: { version: string; changes: { task: string; provider: string; model: string }[]; confirm?: boolean }) =>
     call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/auxiliary', profile), body),
   setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
+  configProviders: (inst: string, profile: string) => call<ProvidersInfo>('GET', instPath(inst, 'config/providers', profile)),
+  connectProvider: (inst: string, profile: string, provider: string) =>
+    call<ConnectStart>('POST', instPath(inst, `config/providers/${enc(provider)}/connect`, profile), {}),
+  pollConnect: (inst: string, profile: string, provider: string, session: string) =>
+    call<ConnectPoll>('GET', instPath(inst, `config/providers/${enc(provider)}/connect/${enc(session)}`, profile)),
+  cancelConnect: (inst: string, profile: string, session: string) =>
+    call<{ ok: true }>('DELETE', instPath(inst, `config/connect/${enc(session)}`, profile)),
+  disconnectProvider: (inst: string, profile: string, provider: string) =>
+    call<{ ok: true }>('DELETE', instPath(inst, `config/providers/${enc(provider)}/account`, profile)),
+  addProviderKey: (inst: string, profile: string, k: { provider: string; apiKey: string; label?: string }) =>
+    call<{ count: number | null }>('POST', instPath(inst, 'config/provider-keys', profile), k),
+  removeProviderKey: (inst: string, profile: string, provider: string, id: string) =>
+    call<{ ok: true }>('DELETE', instPath(inst, `config/provider-keys/${enc(provider)}/${enc(id)}`, profile)),
   configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),
   setEnv: (inst: string, profile: string, key: string, value: string) => call<WriteResult>('PUT', instPath(inst, 'config/env', profile), { key, value }),
   deleteEnv: (inst: string, profile: string, key: string) => call<WriteResult>('DELETE', instPath(inst, `config/env/${enc(key)}`, profile)),

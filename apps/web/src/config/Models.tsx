@@ -10,7 +10,7 @@ import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalid
 import { ask } from '../components/Dialog';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
-export function ConfigModelsTab({ inst, profile, can, onSaved, onKey }: TabProps & { onKey: (key: string) => void }) {
+export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProviders }: TabProps & { onKey: (key: string) => void; onProviders?: () => void }) {
   const models = useQuery({ queryKey: configKey(inst, profile, 'models'), queryFn: () => api.configModels(inst, profile) });
   const invalidate = useInvalidateConfig(inst, profile);
   const [confirmFor, setConfirmFor] = useState<{ input: ModelInput; message: string } | null>(null);
@@ -56,7 +56,7 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey }: TabProps
       {otherError && <p className="text-sm text-bad">{errorCode(otherError) === 'config_changed' ? `${CHANGED_TEXT} Les valeurs ont été relues : recommencez.` : <ErrorText error={otherError} />}</p>}
       {notice && <p className="text-sm text-warn">{notice}</p>}
       <MainModel data={m} disabled={!writable || set.isPending} onSave={(provider, model) => submit({ scope: 'main', provider, model })} onKey={onKey} />
-      <ChatModels inst={inst} profile={profile} providers={m.providers} writable={m.version !== null} />
+      <ChatModels inst={inst} profile={profile} providers={m.providers} writable={m.version !== null} onProviders={onProviders} />
       <AuxModels inst={inst} profile={profile} data={m} writable={writable} busy={set.isPending}
         onReset={() => submit({ scope: 'auxiliary', task: '__reset__', provider: 'auto', model: 'auto' })}
         onSaved={async (n) => { setNotice(n); await invalidate(); onSaved(false); }} />
