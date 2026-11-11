@@ -55,14 +55,22 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
     else if (req.kind === 'text') req.resolve(confirmed && text.trim() ? text.trim() : null);
     else req.resolve();
     done();
-    (before.current as HTMLElement | null)?.focus?.();
+    // after the effect cleanup has lifted `inert` (an inert element cannot take focus)
+    setTimeout(() => (before.current as HTMLElement | null)?.focus?.(), 0);
   };
 
   useEffect(() => {
+    // the page behind is inert (no Tab, no click) while the dialog is open; the dialog is portalled outside #root
+    const root = document.getElementById('root');
+    root?.setAttribute('inert', '');
     if (input.current) { input.current.focus(); input.current.select(); } else ok.current?.focus();
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); finish(false); } };
-    document.addEventListener('keydown', key, true);
-    return () => document.removeEventListener('keydown', key, true);
+    // capture on window: runs before the page's own shortcuts (Ctrl/Cmd K), which are swallowed
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener('keydown', key, true);
+    return () => { window.removeEventListener('keydown', key, true); root?.removeAttribute('inert'); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
