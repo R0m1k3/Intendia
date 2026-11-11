@@ -67,6 +67,14 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
     expect(state(report, 'skills').ops.toggle!.ok).toBe(false);
   });
 
+  it('a missing optional operation leaves the module complete', async () => {
+    const { http } = fakeHttp({ hide: { openapi: ['POST /api/sessions/import', 'GET /api/sessions/{session_id}/export'] } });
+    const { report } = await checkInstance(http);
+    expect(state(report, 'sessions').state).toBe('full');
+    expect(state(report, 'sessions').ops.import!.ok).toBe(false);
+    expect(state(report, 'sessions').reasons.some((r) => r.startsWith('Option « import » indisponible'))).toBe(true);
+  });
+
   it('follows a path moved in /v1/capabilities', async () => {
     const { http } = fakeHttp({
       breaks: {

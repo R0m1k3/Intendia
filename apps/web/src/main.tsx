@@ -4,7 +4,7 @@ import {
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { api, ApiError } from './api';
+import { api, ApiError, SESSION_SOURCES, type SessionSource } from './api';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
 import { UndoHost } from './sessions/UndoBar';
@@ -68,7 +68,7 @@ const homeRoute = createRoute({
 const sessionsRoute = createRoute({
   getParentRoute: () => appRoute, path: '/sessions', component: SessionsPage,
   validateSearch: (s: Record<string, unknown>): SessionsSearch => (
-    s.source === 'intendia' || s.source === 'telegram' || s.source === 'cron' ? { source: s.source } : {}
+    typeof s.source === 'string' && s.source !== 'all' && (SESSION_SOURCES as string[]).includes(s.source) ? { source: s.source as SessionSource } : {}
   ),
 });
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });

@@ -499,6 +499,10 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (brk && 'body' in brk) return c.json(brk.body as object);
 
     if (via === 'dash' && method === 'GET' && path === '/api/sessions/search') return searchSessions(sim, c.req.query(), deleted);
+    if (via === 'dash') {
+      const copied = sessionCopies(method, path, body, sim, deleted);
+      if (copied) return copied;
+    }
 
     const prof = profiles.handle(via, method, path, body);
     if (prof) return prof;
@@ -581,11 +585,74 @@ function searchSessions(sim: Simulator, query: Record<string, string>, deleted: 
 const NOT_FOUND_SESSION = (id: string) => json({ error: { message: `Session not found: ${id}`, code: 'session_not_found' } }, 404);
 
 /** Simulated run and session routes of the API server; null = not handled here. */
+/**
+ * Dashboard export (`GET /api/sessions/{id}/export`: the row and every message, with their flags) and import
+ * (`POST /api/sessions/import`: the id given is kept, an existing one is skipped, a deleted one refused). Imported
+ * `api_server` sessions become simulated ones (runs continue them); other sources join the extra sessions.
+ */
+function sessionCopies(method: string, path: string, body: unknown, sim: Simulator, deleted: Set<string>): Response | null {
+  const ex = /^\/api\/sessions\/([^/]+)\/export$/.exec(path);
+  if (ex && method === 'GET') {
+    const id = decodeURIComponent(ex[1]!);
+    const simulated = sim.messages.get(id);
+    if (simulated && !deleted.has(id)) {
+      return json({
+        id, source: 'api_server', title: sim.titles.get(id) ?? null, model: 'fake/model-default', started_at: simulated[0]!.timestamp,
+        system_prompt: 'Tu es un agent de test.',
+        messages: simulated.map((m) => ({ ...m, message_uid: `uid-${id}-${m.id}`, active: 1, compacted: 0 })),
+      });
+    }
+    const extra = sim.extraSessions.get(id);
+    if (!extra || deleted.has(id)) return json({ detail: 'Session not found' }, 404);
+    return json({
+      id, source: extra.source, title: extra.title, model: null, started_at: extra.started_at,
+      messages: extra.messages.map((m, i) => ({ id: i + 1, session_id: id, role: m.role, content: m.content, timestamp: extra.started_at + i, active: 1, compacted: 0 })),
+    });
+  }
+  if (method === 'POST' && path === '/api/sessions/import') {
+    const b = (body ?? {}) as { sessions?: unknown; request_id?: unknown; expected_revision?: unknown };
+    if (typeof b.request_id !== 'string' || b.expected_revision !== 0 || !Array.isArray(b.sessions)) {
+      return json({ detail: 'Invalid session import payload' }, 400);
+    }
+    const out = { imported_ids: [] as string[], skipped_ids: [] as string[], errors: [] as unknown[] };
+    for (const raw of b.sessions as Record<string, unknown>[]) {
+      const id = String(raw.id ?? '');
+      if (!id) { out.errors.push({ error: 'missing id' }); continue; }
+      if (deleted.has(id)) { out.errors.push({ id, error: 'session id retired' }); continue; }
+      if (sim.messages.has(id) || sim.extraSessions.has(id)) { out.skipped_ids.push(id); continue; }
+      const started = typeof raw.started_at === 'number' ? raw.started_at : Date.now() / 1000;
+      const msgs = (Array.isArray(raw.messages) ? raw.messages : []) as Record<string, unknown>[];
+      const source = typeof raw.source === 'string' ? raw.source : 'import';
+      if (source === 'api_server' && msgs.length) {
+        sim.messages.set(id, msgs.map((m, i) => ({
+          id: i + 2, session_id: id, role: String(m.role), content: typeof m.content === 'string' ? m.content : null,
+          tool_calls: m.tool_calls ?? null, tool_name: typeof m.tool_name === 'string' ? m.tool_name : null,
+          timestamp: typeof m.timestamp === 'number' ? m.timestamp : started + i,
+        })));
+        if (typeof raw.title === 'string') sim.titles.set(id, raw.title);
+      } else {
+        sim.extraSessions.set(id, {
+          id, source, title: typeof raw.title === 'string' ? raw.title : null, started_at: started,
+          messages: msgs.map((m) => ({ role: String(m.role), content: typeof m.content === 'string' ? m.content : '' })),
+        });
+      }
+      out.imported_ids.push(id);
+    }
+    return json(out);
+  }
+  return null;
+}
+
 function handleRuns(req: Request, method: string, path: string, body: unknown, sim: Simulator, opts: FakeOptions, deleted: Set<string>): Response | null {
   const b = (body ?? {}) as Record<string, unknown>;
   if (method === 'POST' && path === '/v1/runs') {
     sim.runsPosted += 1;
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
+    // like Hermes: only api_server (and bot_room) sessions take runs
+    const extra = sim.extraSessions.get(sessionId);
+    if (extra && extra.source !== 'api_server' && extra.source !== 'bot_room') {
+      return json({ error: { message: 'Session belongs to another source', code: 'permission_denied' } }, 409);
+    }
     const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''),
       typeof b.model === 'string' ? b.model : null, b.model_options ?? null, typeof b.provider === 'string' ? b.provider : null);
     return json({ run_id: run.id, status: 'started', replayed: false });

@@ -7,8 +7,18 @@ const TIMEOUT_MS = 3_000;
 /** Lines of a search answer. */
 export const SEARCH_LIMIT = 30;
 
-export const SESSION_SOURCES = ['all', 'intendia', 'telegram', 'cron'] as const;
+export const SESSION_SOURCES = ['all', 'intendia', 'cli', 'telegram', 'discord', 'cron', 'kanban'] as const;
 export type SessionSource = (typeof SESSION_SOURCES)[number];
+
+/**
+ * Hermes `source` values read for a filter (undefined = no filter). Hermes 0.23 stores sessions of the CLI, TUI and
+ * desktop app as `local` (gateway/session_policy.py), older ones as `cli`: the CLI filter reads both.
+ */
+export function hermesSources(source: SessionSource): (string | undefined)[] {
+  if (source === 'all') return [undefined];
+  if (source === 'cli') return ['local', 'cli'];
+  return [source];
+}
 
 type Owned = PublicSession & { workspaceName: string; profile: string };
 type Err = { instance: string; message: string };
@@ -131,12 +141,16 @@ export class RecentService {
         try {
           // Intendia's own rows are dropped, so keep reading pages until `limit` others are found (bounded).
           const sessions: HermesSessionRaw[] = [];
-          for (let page = 0; page < MAX_PAGES && sessions.length < limit; page++) {
-            const res = await callOp<{ data: HermesSessionRaw[] }>(this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'list', {
-              profile, query: { limit, offset: page * limit, ...(source === 'all' ? {} : { source }) }, timeoutMs: TIMEOUT_MS,
-            });
-            sessions.push(...res.data.filter((s) => !owned.has(String(s.id))));
-            if (res.data.length < limit) break;
+          for (const src of hermesSources(source)) {
+            const found: HermesSessionRaw[] = [];
+            for (let page = 0; page < MAX_PAGES && found.length < limit; page++) {
+              const res = await callOp<{ data: HermesSessionRaw[] }>(this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'list', {
+                profile, query: { limit, offset: page * limit, ...(src ? { source: src } : {}) }, timeoutMs: TIMEOUT_MS,
+              });
+              found.push(...res.data.filter((s) => !owned.has(String(s.id))));
+              if (res.data.length < limit) break;
+            }
+            sessions.push(...found);
           }
           return { instanceId: inst.id, label: inst.label, profile, sessions: sessions.slice(0, limit) };
         } catch (err) {
@@ -162,12 +176,16 @@ export class RecentService {
       const hits: { id: string; snippet: string | null }[] = [];
       await Promise.all(this.profiles(inst.id).map(async (profile) => {
         try {
-          const res = await callOp<{ results: (HermesSessionRaw & { session_id?: unknown })[] }>(
-            this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'search', {
-              profile, query: { q, limit: SEARCH_LIMIT, ...(source === 'telegram' || source === 'cron' ? { source } : {}) }, timeoutMs: TIMEOUT_MS,
-            });
+          const results: (HermesSessionRaw & { session_id?: unknown })[] = [];
+          for (const src of source === 'intendia' ? [undefined] : hermesSources(source)) {
+            const res = await callOp<{ results: (HermesSessionRaw & { session_id?: unknown })[] }>(
+              this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'search', {
+                profile, query: { q, limit: SEARCH_LIMIT, ...(src ? { source: src } : {}) }, timeoutMs: TIMEOUT_MS,
+              });
+            results.push(...res.results);
+          }
           const rows: HermesSessionRaw[] = [];
-          for (const r of res.results) {
+          for (const r of results) {
             const id = text(r.session_id) ?? text(r.id);
             if (!id) continue;
             if (owned.has(id)) {

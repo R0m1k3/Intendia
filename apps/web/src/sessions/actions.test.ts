@@ -6,7 +6,7 @@ const now = new Date(2026, 10, 11, 15).getTime();
 const day = 24 * 3600 * 1000;
 const s = (id: string, extra: Partial<Session> = {}): Session => ({
   id, instanceId: 'i', workspace: 'w', title: id, archived: false, lastRunId: null, lastActiveAt: now, createdAt: now,
-  model: null, modelProvider: null, effort: null, pinned: false, ...extra,
+  model: null, modelProvider: null, effort: null, pinned: false, copiedFrom: null, ...extra,
 });
 
 describe('selectionActions', () => {

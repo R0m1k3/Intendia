@@ -27,6 +27,8 @@ export interface PublicSession {
   modelProvider: string | null;
   effort: string | null;
   pinned: boolean;
+  /** Copy of another Hermes session (its id) or "import:<key>": exists at Hermes even without a run from Intendia. */
+  copiedFrom: string | null;
 }
 
 /** Undo window of a deletion: the session stays at Hermes and can be restored until it is over. */
@@ -82,7 +84,7 @@ function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
     lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
-    pinned: r.pinned,
+    pinned: r.pinned, copiedFrom: r.copiedFrom,
   };
 }
 
@@ -271,6 +273,34 @@ export class WorkspaceService {
       model: ws.model, modelProvider: ws.modelProvider, effort: ws.effort,
     }).run();
     return this.getSession(ws.instanceId, id).session;
+  }
+
+  /**
+   * Row of a session made by a copy (or an empty duplicate) under a known id: same id again (a retried action)
+   * gives the existing session back. `copiedFrom` set = the session exists at Hermes without a run from Intendia.
+   */
+  async adoptSession(
+    slug: string, id: string,
+    o: { title: string | null; model: string | null; provider: string | null; effort: string | null; copiedFrom: string | null },
+  ): Promise<{ session: PublicSession; created: boolean }> {
+    const ws = this.getWorkspace(slug);
+    const existing = this.db.select().from(sessionWorkspace)
+      .where(and(eq(sessionWorkspace.instanceId, ws.instanceId), eq(sessionWorkspace.sessionId, id))).get();
+    if (existing) {
+      if (existing.deletedAt !== null || existing.workspaceSlug !== slug) throw new NotFoundError(`Session inconnue : ${id}`);
+      return { session: toPublic(existing), created: false };
+    }
+    try {
+      await createSessionDir(this.roots.fs(ws.instanceId), slug, id);
+    } catch (err) {
+      console.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
+    }
+    const now = Date.now();
+    this.db.insert(sessionWorkspace).values({
+      sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: o.title ? titleFrom(o.title) : null, archived: false,
+      createdAt: now, lastActiveAt: now, model: o.model, modelProvider: o.model ? o.provider : null, effort: o.effort, copiedFrom: o.copiedFrom,
+    }).onConflictDoNothing().run();
+    return { session: this.getSession(ws.instanceId, id).session, created: true };
   }
 
   updateSession(
