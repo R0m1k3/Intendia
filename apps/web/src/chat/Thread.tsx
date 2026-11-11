@@ -140,11 +140,11 @@ function CopyReply({ text }: { text: string }) {
 }
 
 /** The agent's header: avatar, name, time of the turn. */
-export function AgentHeader({ ts }: { ts: number | null }) {
+export function AgentHeader({ ts, name = 'Hermes' }: { ts: number | null; name?: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-on-accent">H</span>
-      <span className="text-sm font-semibold">Hermes</span>
+    <div className="flex min-w-0 items-center gap-3">
+      <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-semibold uppercase text-on-accent">{Array.from(name)[0] ?? 'H'}</span>
+      <span className="truncate text-sm font-semibold">{name}</span>
       {ts !== null && <span className="text-xs text-ink-faint">{clock(ts)}</span>}
     </div>
   );
@@ -192,7 +192,7 @@ function UserMessage({ text }: { text: string }) {
   );
 }
 
-function TurnView({ t }: { t: Turn }) {
+function TurnView({ t, agent }: { t: Turn; agent?: string }) {
   if (t.kind === 'user') {
     return (
       <div className="flex flex-col items-end" data-turn="user">
@@ -204,7 +204,7 @@ function TurnView({ t }: { t: Turn }) {
   }
   return (
     <div data-turn="agent" className="group">
-      <AgentHeader ts={t.ts} />
+      <AgentHeader ts={t.ts} name={agent} />
       <div className={cx('mt-2 space-y-3', AGENT_INDENT)}>
         {t.parts.map((p) => <PartView key={p.key} p={p} />)}
         {(t.footers.length > 0 || (t.text && !t.streaming)) && (
@@ -219,7 +219,7 @@ function TurnView({ t }: { t: Turn }) {
 }
 
 /** Shown at the end of the thread while a run is going on: what the agent is doing, with three moving dots. */
-export function ThinkingIndicator({ entries }: { entries: Entry[] }) {
+export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?: string }) {
   const t = thinkingState(entries);
   const line = (
     <div role="status" aria-live="polite" data-thinking className={cx('flex items-center gap-2.5 text-sm text-ink-soft', t.inTurn ? AGENT_INDENT : cx('mt-2', AGENT_INDENT))}>
@@ -228,15 +228,15 @@ export function ThinkingIndicator({ entries }: { entries: Entry[] }) {
     </div>
   );
   if (t.inTurn) return <div className="mt-3">{line}</div>;
-  return <div className="mt-6"><AgentHeader ts={null} />{line}</div>;
+  return <div className="mt-6"><AgentHeader ts={null} name={agent} />{line}</div>;
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers }: { entries: Entry[]; footers?: Map<string, RunStat[]> }) {
+export function Thread({ entries, footers, agent }: { entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string }) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   return (
     <div className="space-y-6">
-      {turns.map((t) => <TurnView key={t.key} t={t} />)}
+      {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} />)}
     </div>
   );
 }

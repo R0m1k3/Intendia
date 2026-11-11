@@ -1,5 +1,5 @@
-import { Check, ChevronDown } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from './ui';
 
@@ -103,8 +103,11 @@ export function Menu({ title, items, trigger, triggerClass, placement = 'below',
 export interface PickerChoice { value: string | null; label: string; hint?: string; mono?: boolean }
 /** An action shown after the choices (e.g. "Gérer les modèles…"): no value, never checked. */
 export interface PickerAction { action: () => void; label: string }
-/** A group title between choices (e.g. a provider's name): not focusable, not a choice. */
-export interface PickerHeading { heading: string }
+/**
+ * A group title between choices (e.g. a provider's name): not a choice. `collapsible`: a button folding the choices
+ * that follow it (up to the next heading or action); folded on opening unless it holds the checked choice.
+ */
+export interface PickerHeading { heading: string; collapsible?: boolean }
 export type PickerItem = PickerChoice | PickerAction | PickerHeading;
 
 const PICKER_BTN = 'flex h-7 max-w-[14rem] min-w-0 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50 aria-expanded:bg-raised';
@@ -119,10 +122,56 @@ export function Picker({ label, title, items, value, disabled, onPick, placement
       title={title} disabled={disabled} placement={placement} triggerClass={triggerClass ?? PICKER_BTN}
       trigger={<><span className="truncate">{label}</span><ChevronDown className="size-3 shrink-0" strokeWidth={1.75} /></>}
     >
-      {(close) => items.map((it, i) => 'heading' in it ? (
-        <p key={`heading:${it.heading}:${i}`} role="presentation" data-picker-heading className={cx('truncate px-2.5 pb-1 pt-2 text-xs font-medium text-ink-faint', i > 0 && 'mt-1 border-t border-line')}>
-          {it.heading}
-        </p>
+      {(close) => <PickerList items={items} value={value} close={close} onPick={onPick} />}
+    </Popover>
+  );
+}
+
+/** Index of the collapsible heading each item belongs to (-1 outside a collapsible group). */
+export function pickerGroups(items: PickerItem[]): number[] {
+  let group = -1;
+  return items.map((it, i) => {
+    if ('heading' in it) { group = it.collapsible ? i : -1; return -1; }
+    if ('action' in it) { group = -1; return -1; }
+    return group;
+  });
+}
+
+function PickerList({ items, value, close, onPick }: {
+  items: PickerItem[]; value: string | null; close: () => void; onPick: (v: string | null) => void;
+}) {
+  const groups = pickerGroups(items);
+  const [open, setOpen] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    items.forEach((it, i) => { if (!('heading' in it) && !('action' in it) && it.value === value && groups[i]! >= 0) s.add(groups[i]!); });
+    // a single collapsible group starts open: nothing to choose between
+    const heads = items.flatMap((it, i) => ('heading' in it && it.collapsible ? [i] : []));
+    if (heads.length === 1) s.add(heads[0]!);
+    return s;
+  });
+  const toggle = (i: number) => setOpen((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+  const count = (h: number) => groups.filter((g) => g === h).length;
+  return (
+    <>
+      {items.map((it, i) => 'heading' in it ? (
+        it.collapsible ? (
+          <Fragment key={`heading:${it.heading}:${i}`}>
+          {i > 0 && groups[i - 1]! < 0 && !(('heading' in items[i - 1]!) && (items[i - 1] as PickerHeading).collapsible) && <hr className="my-1 border-line" />}
+          <button
+            type="button" aria-expanded={open.has(i)} data-picker-heading onClick={() => toggle(i)}
+            className={cx('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-ink-soft hover:bg-raised hover:text-ink focus:bg-raised focus:outline-none',
+              'mt-0.5')}
+          >
+            {open.has(i) ? <ChevronDown className="size-3.5 shrink-0" strokeWidth={1.75} /> : <ChevronRight className="size-3.5 shrink-0" strokeWidth={1.75} />}
+            <span className="min-w-0 flex-1 truncate">{it.heading}</span>
+            <span className="shrink-0 tabular-nums text-ink-faint">{count(i)}</span>
+          </button>
+          </Fragment>
+        ) : (
+          <p key={`heading:${it.heading}:${i}`} role="presentation" data-picker-heading className={cx('truncate px-2.5 pb-1 pt-2 text-xs font-medium text-ink-faint', i > 0 && 'mt-1 border-t border-line')}>
+            {it.heading}
+          </p>
+        )
       ) : 'action' in it ? (
         <button
           key={`action:${it.label}`} type="button" role="menuitem" onClick={() => { close(); it.action(); }}
@@ -132,11 +181,11 @@ export function Picker({ label, title, items, value, disabled, onPick, placement
           <span className="size-3.5 shrink-0" />
           {it.label}
         </button>
-      ) : (
+      ) : groups[i]! >= 0 && !open.has(groups[i]!) ? null : (
         <button
           key={it.value ?? 'auto'} type="button" role="menuitemradio" aria-checked={it.value === value}
           onClick={() => { close(); if (it.value !== value) onPick(it.value); }}
-          className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-raised focus:bg-raised focus:outline-none"
+          className={cx('flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-raised focus:bg-raised focus:outline-none', groups[i]! >= 0 && 'pl-5')}
         >
           <Check className={cx('mt-0.5 size-3.5 shrink-0 text-accent', it.value !== value && 'invisible')} strokeWidth={2} />
           <span className="min-w-0">
@@ -145,6 +194,6 @@ export function Picker({ label, title, items, value, disabled, onPick, placement
           </span>
         </button>
       ))}
-    </Popover>
+    </>
   );
 }

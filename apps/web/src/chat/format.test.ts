@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunStat } from '../api';
 import type { Entry } from './events';
-import { cacheShare, costSettling, formatCost, formatDuration, formatShare, formatTokens, placeRunStats, shortModel } from './format';
+import { agentName, cacheShare, costSettling, formatCost, formatDuration, formatShare, formatTokens, placeRunStats, shortModel } from './format';
 
 describe('formats', () => {
   it('tokens', () => {
@@ -77,5 +77,15 @@ describe('costSettling', () => {
     expect(costSettling([{ ...settling, endedAt: now - 60_000 }], now)).toBe(false);
     expect(costSettling([{ ...settling, endedAt: null }], now)).toBe(false);
     expect(costSettling([{ ...settling, status: 'unknown' }], now)).toBe(false);
+  });
+});
+
+describe('agentName', () => {
+  it('names a non-default agent by its profile, else by the instance', () => {
+    expect(agentName('redacteur', 'Maison')).toBe('redacteur');
+    expect(agentName('default', 'Maison')).toBe('Maison');
+    expect(agentName(undefined, 'Maison')).toBe('Maison');
+    expect(agentName('default', '  ')).toBe('Hermes');
+    expect(agentName(null, undefined)).toBe('Hermes');
   });
 });

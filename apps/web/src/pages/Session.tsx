@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
-import { costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
+import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
@@ -71,6 +71,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const chat = useChatAvailability(inst);
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const mounts = instances.data?.instances.find((i) => i.id === inst);
+  const agent = agentName(sess.data?.profile, mounts?.label);
   const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -313,8 +314,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} />
-        {running && !live?.approval && <ThinkingIndicator entries={entries} />}
+        <Thread entries={entries} footers={footers} agent={agent} />
+        {running && !live?.approval && <ThinkingIndicator entries={entries} agent={agent} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
         )}
@@ -347,7 +348,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : entries.length ? 'Répondre à Hermes…' : 'Écrire à Hermes…'}
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
             hint="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
           />
         </div>
