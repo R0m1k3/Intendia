@@ -1,13 +1,13 @@
 import type { z } from 'zod';
 import type { CompatService } from '../compat/service.js';
 import {
-  ModelOptionsSchema, OAuthPollSchema, OAuthProvidersSchema, OAuthStartSchema, PoolAddSchema, PoolSchema,
+  EnvListSchema, ModelOptionsSchema, OAuthPollSchema, OAuthProvidersSchema, OAuthStartSchema, PoolAddSchema, PoolSchema,
 } from '../connectors/config/index.js';
 import { callOp, HermesError, type CallOptions } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { Masker } from './mask.js';
-import { ConfigInputError, toConfigError, type ConfigService } from './service.js';
+import { ANTHROPIC_KEY_VAR, ANTHROPIC_TOKEN_VARS, ConfigInputError, toConfigError, type ConfigService } from './service.js';
 
 /**
  * Provider accounts (subscriptions connected by a device code) and API keys of the credential pool, per instance
@@ -22,6 +22,22 @@ export interface PublicAccount {
   cliCommand: string | null; docsUrl: string | null;
   disconnectable: boolean; disconnectHint: string | null;
   connected: boolean; expiresAt: string | null;
+  /** Anthropic only: how Hermes is connected (`token` = setup-token variable, `hermes` = login on its machine). */
+  via?: AnthropicVia;
+}
+export type AnthropicVia = 'token' | 'api_key' | 'hermes' | null;
+
+/**
+ * How the Anthropic card is connected. Hermes reads `ANTHROPIC_API_KEY` first, then the token variables: the first
+ * one set decides. Unknown (env list unreadable, other source) → null.
+ */
+export function anthropicVia(status: { logged_in?: boolean | null; source?: string | null } | null | undefined, env: Record<string, { is_set: boolean }> | null): AnthropicVia {
+  if (status?.logged_in !== true) return null;
+  if (status.source === 'hermes_pkce') return 'hermes';
+  if (status.source !== 'env_var' || env === null) return null;
+  if (env[ANTHROPIC_KEY_VAR]?.is_set) return 'api_key';
+  if (ANTHROPIC_TOKEN_VARS.some((k) => env[k]?.is_set)) return 'token';
+  return null;
 }
 export interface PublicPoolKey { provider: string; id: string; label: string; source: string; lastStatus: string | null }
 export interface ProvidersInfo {
@@ -80,13 +96,16 @@ export class ProvidersService {
 
   async list(instanceId: string, profile: string): Promise<ProvidersInfo> {
     const ctx = this.ctx(instanceId, profile);
-    const [oauth, pool, options] = await Promise.all([
+    const [oauth, pool, options, env] = await Promise.all([
       this.part<z.infer<typeof OAuthProvidersSchema>>(ctx, 'oauthList'),
       this.part<z.infer<typeof PoolSchema>>(ctx, 'poolList'),
       this.part<z.infer<typeof ModelOptionsSchema>>(ctx, 'modelOptions', { query: { include_unconfigured: 'true' } }),
+      this.part<unknown>(ctx, 'env').then((e) => (e === null ? null : EnvListSchema.safeParse(e).data ?? null)),
     ]);
     return {
-      accounts: oauth === null ? null : oauth.providers.map((p) => ({
+      accounts: oauth === null ? null : oauth.providers.map((p) => {
+        const via = p.id === 'anthropic' ? anthropicVia(p.status, env) : undefined;
+        return {
         id: p.id,
         name: p.name || p.id,
         flow: p.flow === 'device_code' ? 'device_code' : 'external',
@@ -94,9 +113,12 @@ export class ProvidersService {
         docsUrl: p.docs_url && /^https?:\/\//.test(p.docs_url) ? p.docs_url : null,
         disconnectable: p.disconnectable === true,
         disconnectHint: p.disconnect_hint ? this.mask.text(p.disconnect_hint) : null,
-        connected: p.status?.logged_in === true,
+        // an API key (paid per token) is not a subscription: listed in Clés d'API
+        connected: p.status?.logged_in === true && via !== 'api_key',
         expiresAt: expiresText(p.status?.expires_at),
-      })),
+        ...(via !== undefined ? { via } : {}),
+        };
+      }),
       keys: pool === null ? null : pool.providers.flatMap((p) => p.entries
         .filter((e) => (e.auth_type ?? 'api_key') === 'api_key')
         .map((e) => ({ provider: p.provider, id: e.id, label: e.label || e.id, source: e.source || MANUAL, lastStatus: e.last_status ?? null }))),

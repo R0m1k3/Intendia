@@ -1,18 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, ExternalLink, KeyRound, Plus, Server, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, type ConnectPoll, type CustomProvider, type ProviderAccount, type ProviderKey, type ProvidersInfo } from '../api';
+import { api, ApiError, type ConnectPoll, type CustomProvider, type ProviderAccount, type ProviderKey, type ProvidersInfo } from '../api';
 import { ask } from '../components/Dialog';
 import { Button, copyText, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, SELECT, type TabProps } from './common';
 import { loadConnect, nextPollDelay, resumable, saveConnect, type PendingConnect } from './connect-state';
+import { displayName, visibleAccounts } from './provider-names';
 
 /**
  * "Fournisseurs": the subscriptions (accounts connected by a device code) and API keys of an agent, kept by Hermes in
  * the profile's auth.json. A provider connected here is offered by the chat's model picker (same rule as before: the
  * providers Hermes reports as authenticated).
  */
-export function ConfigProviders({ inst, profile, can, onVariable }: TabProps & { onVariable: (key: string) => void }) {
+export function ConfigProviders({ inst, profile, can, onVariable, onSaved }: TabProps & { onVariable: (key: string) => void }) {
   const info = useQuery({ queryKey: configKey(inst, profile, 'providers'), queryFn: () => api.configProviders(inst, profile) });
   const refresh = useRefreshProviders(inst, profile);
   const custom = useQuery({ queryKey: configKey(inst, profile, 'custom-providers'), queryFn: () => api.customProviders(inst, profile) });
@@ -23,7 +24,7 @@ export function ConfigProviders({ inst, profile, can, onVariable }: TabProps & {
       <p className="text-sm text-ink-soft">
         Un fournisseur connecté ici est proposé dans le chat de cet agent. Les clés et les jetons restent dans Hermes : Intendia ne les affiche jamais.
       </p>
-      <Accounts inst={inst} profile={profile} accounts={info.data.accounts} can={can} refresh={refresh} />
+      <Accounts inst={inst} profile={profile} accounts={info.data.accounts} can={can} refresh={refresh} onRestart={() => onSaved(true)} />
       <Keys inst={inst} profile={profile} info={info.data} can={can} refresh={refresh} onVariable={onVariable} endpoints={custom.data?.endpoints ?? []} />
       <CustomEndpoints inst={inst} profile={profile} data={custom.data} error={custom.error} refresh={refresh} />
     </div>
@@ -55,8 +56,8 @@ const ENDED_TEXT: Record<string, string> = {
   error: 'La connexion a échoué.',
 };
 
-function Accounts({ inst, profile, accounts, can, refresh }: {
-  inst: string; profile: string; accounts: ProviderAccount[] | null; can: (op: string) => boolean; refresh: Refresh;
+function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
+  inst: string; profile: string; accounts: ProviderAccount[] | null; can: (op: string) => boolean; refresh: Refresh; onRestart: () => void;
 }) {
   const [pending, setPending] = useState<PendingConnect | null>(() => {
     const saved = loadConnect(inst, profile);
@@ -87,14 +88,19 @@ function Accounts({ inst, profile, accounts, can, refresh }: {
   return (
     <Panel title="Abonnements" bodyClassName="divide-y divide-line">
       {accounts.length === 0 && <p className="px-5 py-4 text-sm text-ink-soft">Aucun fournisseur à abonnement.</p>}
-      {accounts.map((a) => (
+      {visibleAccounts(accounts).map((a) => {
+        const { name, hermes } = displayName(a.id, a.name);
+        const isAnthropic = a.id === 'anthropic';
+        return (
         <div key={a.id} className="px-5 py-3" data-account={a.id}>
           <div className="flex flex-wrap items-center gap-3">
             <Mark state={a.connected ? 'full' : 'unavailable'} />
             <div className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">{a.name}</span>
+              <span className="block text-sm font-medium">{name}</span>
+              {hermes && <span className="block text-[11.5px] text-ink-faint">Dans Hermes : {hermes}</span>}
               <span className="block text-xs text-ink-faint">
-                {a.connected ? 'Connecté' : a.flow === 'external' ? 'Non connecté — à faire sur la machine d’Hermes' : 'Non connecté'}
+                {isAnthropic ? anthropicState(a)
+                  : a.connected ? 'Connecté' : a.flow === 'external' ? 'Non connecté — à faire sur la machine d’Hermes' : 'Non connecté'}
                 {a.connected && a.expiresAt && <> · jeton valable jusqu’au {formatDate(a.expiresAt)}</>}
               </span>
             </div>
@@ -111,13 +117,17 @@ function Accounts({ inst, profile, accounts, can, refresh }: {
             {a.connected && a.disconnectable && can('oauthDisconnect') && (
               <Button variant="ghost" className="h-8" disabled={disconnect.isPending}
                 onClick={async () => {
-                  if (await ask({ title: `Déconnecter ${a.name} ?`, message: 'Le chat ne pourra plus utiliser ses modèles.', confirmLabel: 'Déconnecter', danger: true })) disconnect.mutate(a.id);
+                  if (await ask({ title: `Déconnecter ${name} ?`, message: 'Le chat ne pourra plus utiliser ses modèles.', confirmLabel: 'Déconnecter', danger: true })) disconnect.mutate(a.id);
                 }}>
                 Déconnecter
               </Button>
             )}
           </div>
-          {a.flow === 'external' && !a.connected && a.cliCommand && (
+          {isAnthropic && (
+            <AnthropicToken inst={inst} profile={profile} account={a} canWrite={can('putEnv') && can('env')} canRemove={can('deleteEnv') && can('env')}
+              refresh={refresh} onRestart={onRestart} />
+          )}
+          {!isAnthropic && a.flow === 'external' && !a.connected && a.cliCommand && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <code className="rounded-md bg-raised px-2 py-1 font-mono text-[12.5px]">{a.cliCommand}</code>
               <Button variant="ghost" className="h-7 px-2" aria-label="Copier la commande" onClick={() => void copyText(a.cliCommand!, 'Commande')}>
@@ -127,15 +137,125 @@ function Accounts({ inst, profile, accounts, can, refresh }: {
           )}
           {a.connected && a.disconnectHint && !a.disconnectable && <p className="mt-1 text-xs text-ink-faint">{a.disconnectHint}</p>}
           {pending?.provider === a.id && (
-            <Connecting key={pending.sessionId} inst={inst} profile={profile} pending={pending} name={a.name}
+            <Connecting key={pending.sessionId} inst={inst} profile={profile} pending={pending} name={name}
               onEnd={(r) => finish(a.id, r)} canCancel={can('oauthCancel')} />
           )}
-          {ended?.provider === a.id && <EndedLine ended={ended} name={a.name} onRetry={can('oauthStart') ? () => start.mutate(a.id) : undefined} />}
+          {ended?.provider === a.id && <EndedLine ended={ended} name={name} onRetry={can('oauthStart') ? () => start.mutate(a.id) : undefined} />}
           {start.isError && start.variables === a.id && <div className="mt-2"><ErrorText error={start.error} /></div>}
           {disconnect.isError && disconnect.variables === a.id && <div className="mt-2"><ErrorText error={disconnect.error} /></div>}
         </div>
-      ))}
+        );
+      })}
     </Panel>
+  );
+}
+
+function anthropicState(a: ProviderAccount): string {
+  if (a.via === 'token') return 'Jeton d’abonnement enregistré';
+  if (a.via === 'hermes') return 'Connecté (connexion faite sur la machine d’Hermes)';
+  if (a.via === 'api_key') return 'Pas d’abonnement : une clé d’API Anthropic est utilisée, payée à l’usage (voir Clés d’API)';
+  return a.connected ? 'Connecté' : 'Non connecté';
+}
+
+const SETUP_COMMAND = 'claude setup-token';
+
+/**
+ * Anthropic: Hermes offers no browser login (on purpose). Its documented way without a terminal on its machine: the
+ * user runs `claude setup-token` (Anthropic's own Claude Code client) on their computer and pastes the token, which
+ * Hermes keeps in ANTHROPIC_TOKEN. The token is never shown again.
+ */
+function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, onRestart }: {
+  inst: string; profile: string; account: ProviderAccount; canWrite: boolean; canRemove: boolean; refresh: Refresh; onRestart: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState('');
+  const [left, setLeft] = useState<string[]>([]);
+  const save = useMutation({
+    mutationFn: async () => {
+      try {
+        return await api.setAnthropicToken(inst, profile, token);
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 409 || (err.data as { code?: string } | undefined)?.code !== 'api_key_present') throw err;
+        const ok = await ask({
+          title: 'Supprimer la clé d’API Anthropic ?',
+          message: 'Une clé d’API Anthropic (ANTHROPIC_API_KEY) est définie et Hermes la préfère au jeton. Elle sera supprimée : ce n’est pas annulable.',
+          confirmLabel: 'Supprimer la clé et enregistrer', danger: true,
+        });
+        if (!ok) return null;
+        return api.setAnthropicToken(inst, profile, token, true);
+      }
+    },
+    onSuccess: (r) => {
+      if (r === null) return;
+      setToken(''); setOpen(false); setLeft([]);
+      if (r.restartNeeded) onRestart();
+      void refresh();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => api.removeAnthropicToken(inst, profile),
+    onSuccess: (r) => { setLeft(r.left); if (r.restartNeeded) onRestart(); void refresh(); },
+  });
+
+  if (account.via === 'token') {
+    return (
+      <div className="mt-2 space-y-2">
+        {canRemove && (
+          <Button variant="ghost" className="h-8" disabled={remove.isPending}
+            onClick={async () => {
+              if (await ask({ title: 'Retirer le jeton d’abonnement ?', message: 'Le chat ne pourra plus utiliser votre abonnement Claude. Redémarrez ensuite la passerelle : elle garde le jeton jusque-là.', confirmLabel: 'Retirer', danger: true })) remove.mutate();
+            }}>
+            Retirer le jeton
+          </Button>
+        )}
+        {remove.isError && <ErrorText error={remove.error} />}
+      </div>
+    );
+  }
+  if (account.connected && account.via !== 'api_key') {
+    return left.length > 0 ? <p className="mt-1 text-xs text-ink-faint">Encore défini hors d’Hermes : {left.join(', ')}</p> : null;
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      {left.length > 0 && <p className="text-xs text-ink-faint">Encore défini hors d’Hermes : {left.join(', ')}</p>}
+      {!open && canWrite && (
+        <Button className="h-8" onClick={() => setOpen(true)}>Connecter avec un jeton d’abonnement</Button>
+      )}
+      {open && (
+        <form className="space-y-3 rounded-xl border border-line bg-raised/50 p-4" data-anthropic-token
+          onSubmit={(e) => { e.preventDefault(); if (token.trim()) save.mutate(); }}>
+          <ol className="list-decimal space-y-2 pl-5 text-sm">
+            <li>
+              Sur votre ordinateur, avec Claude Code installé, lancez :
+              <span className="ml-2 inline-flex items-center gap-1">
+                <code className="rounded-md bg-sheet px-2 py-0.5 font-mono text-[12.5px]">{SETUP_COMMAND}</code>
+                <Button type="button" variant="ghost" className="h-7 px-2" aria-label="Copier la commande" onClick={() => void copyText(SETUP_COMMAND, 'Commande')}>
+                  <Copy className={ICON} strokeWidth={1.5} />
+                </Button>
+              </span>
+              <span className="block text-xs text-ink-faint">Une page de connexion à votre compte Claude s’ouvre dans le navigateur ; à la fin, la commande affiche un jeton qui commence par sk-ant-oat.</span>
+            </li>
+            <li>
+              Collez ce jeton ici :
+              <Input type="password" autoComplete="off" spellCheck={false} aria-label="Jeton d’abonnement Anthropic" placeholder="sk-ant-oat…"
+                className="mt-1 w-full font-mono" value={token} onChange={(e) => setToken(e.target.value)} />
+            </li>
+          </ol>
+          <p className="text-xs text-ink-soft">
+            Hermes indique qu’Anthropic décompte cet usage de l’abonnement en crédits d’usage supplémentaire (Extra Usage).
+            Le jeton de claude setup-token est un jeton longue durée ; Intendia le donne à Hermes et ne l’affiche plus jamais.
+          </p>
+          {save.isError && <ErrorText error={save.error} />}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={!token.trim() || save.isPending}>{save.isPending ? 'Enregistrement…' : 'Enregistrer le jeton'}</Button>
+            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setToken(''); save.reset(); }}>Annuler</Button>
+          </div>
+        </form>
+      )}
+      {account.cliCommand && (
+        <p className="text-xs text-ink-faint">Ou, sur la machine d’Hermes : <code className="font-mono">{account.cliCommand}</code></p>
+      )}
+    </div>
   );
 }
 

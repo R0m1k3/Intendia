@@ -26,7 +26,7 @@ describe('provider accounts and API keys', () => {
     const t = await testApp();
     t.fake.config.providers.seedSamples();
     const info = await providers(t);
-    expect(info.accounts.map((a: { id: string }) => a.id)).toEqual(['nous', 'openai-codex', 'xai-oauth', 'anthropic']);
+    expect(info.accounts.map((a: { id: string }) => a.id)).toEqual(['nous', 'openai-codex', 'xai-oauth', 'minimax-oauth', 'anthropic', 'claude-code']);
     expect(info.accounts.find((a: { id: string }) => a.id === 'openai-codex').connected).toBe(true);
     expect(info.accounts.find((a: { id: string }) => a.id === 'anthropic')).toMatchObject({ flow: 'external', cliCommand: 'hermes auth add anthropic' });
     // the OAuth entry of the pool is not an API key

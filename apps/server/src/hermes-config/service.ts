@@ -41,12 +41,26 @@ export class ConfigInputError extends Error {
 export class ConfigConflictError extends Error {
   constructor(
     readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable'
-      | 'exists' | 'in_use' | 'raw_unavailable',
+      | 'exists' | 'in_use' | 'raw_unavailable' | 'api_key_present',
     message: string,
   ) {
     super(message);
     this.name = 'ConfigConflictError';
   }
+}
+
+/** Variables Hermes reads for Anthropic, in its order: the API key first, then the subscription tokens. */
+export const ANTHROPIC_KEY_VAR = 'ANTHROPIC_API_KEY';
+export const ANTHROPIC_TOKEN_VARS = ['ANTHROPIC_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'] as const;
+
+/** A `claude setup-token` token (`sk-ant-oat…`), trimmed; refuses a console API key with its own message. */
+export function checkSetupToken(raw: string): string {
+  const t = raw.trim();
+  if (t.startsWith('sk-ant-api')) throw new ConfigInputError('api_key_given', 'C’est une clé d’API : ajoutez-la dans Clés d’API');
+  if (t.length < 20 || t.length > 4096 || /\s/.test(t) || !t.startsWith('sk-ant-oat')) {
+    throw new ConfigInputError('invalid_token', 'Ce n’est pas un jeton de claude setup-token (sk-ant-oat…)');
+  }
+  return t;
 }
 
 export class ConfirmRequiredError extends Error {
@@ -113,7 +127,7 @@ type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatS
 class NoChange extends Error {}
 
 /** Conflicts found by Intendia or Hermes before anything was written. */
-const REFUSALS: ReadonlySet<ConfigConflictError['code']> = new Set(['hermes_conflict', 'exists', 'in_use', 'raw_unavailable', 'config_unavailable']);
+const REFUSALS: ReadonlySet<ConfigConflictError['code']> = new Set(['hermes_conflict', 'exists', 'in_use', 'raw_unavailable', 'config_unavailable', 'api_key_present']);
 
 function refused(err: unknown): boolean {
   return err instanceof NoChange || err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
@@ -188,11 +202,11 @@ export class ConfigService {
   }
 
   /** Hermes call with error translation (texts masked). */
-  private async call<T = unknown>(ctx: Ctx, op: string, opts: CallOptions = {}, what = 'Introuvable'): Promise<T> {
+  private async call<T = unknown>(ctx: Ctx, op: string, opts: CallOptions = {}, what = 'Introuvable', scrub?: (s: string) => string): Promise<T> {
     try {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
-      throw toConfigError(this.mask, err, what);
+      throw toConfigError(this.mask, err, what, scrub);
     }
   }
 
@@ -695,6 +709,60 @@ export class ConfigService {
       }
     });
     return tokenLeft ? { ...res, tokenLeft } : res;
+  }
+
+  // ---------------------------------------------------------------- Anthropic subscription token
+
+  /**
+   * Saves a `claude setup-token` token where Hermes's own CLI puts it (`ANTHROPIC_TOKEN`). Hermes prefers
+   * `ANTHROPIC_API_KEY`: when it is set, refused (409 `api_key_present`) unless `replaceApiKey`, then deleted after the
+   * token is written (CLI order). The token never appears in an error (scrubbed before masking).
+   */
+  async setAnthropicToken(
+    instanceId: string, profile: string, raw: string, replaceApiKey: boolean,
+  ): Promise<{ version: string | null; restartNeeded: boolean }> {
+    const token = checkSetupToken(raw);
+    const ctx = this.ctx(instanceId, profile);
+    const scrub = (s: string) => s.split(token).join('•••');
+    let restartNeeded = false;
+    const res = await this.write(ctx, 'env', null, async () => {
+      const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env', {}, 'Introuvable', scrub));
+      const keySet = env[ANTHROPIC_KEY_VAR]?.is_set === true;
+      if (keySet && !replaceApiKey) {
+        throw new ConfigConflictError('api_key_present', `Une clé d'API Anthropic (${ANTHROPIC_KEY_VAR}) est définie et Hermes la préfère au jeton`);
+      }
+      await this.call(ctx, 'putEnv', { body: { key: ANTHROPIC_TOKEN_VARS[0], value: token } }, 'Introuvable', scrub);
+      if (!keySet) return;
+      try {
+        await this.call(ctx, 'deleteEnv', { body: { key: ANTHROPIC_KEY_VAR } }, 'Variable introuvable', scrub);
+      } catch (err) {
+        if (!(err instanceof NotFoundError)) {
+          throw new PartialWriteError(`Jeton enregistré, mais la clé ${ANTHROPIC_KEY_VAR} n'a pas pu être supprimée et passe encore avant lui : retirez-la dans Clés d'API`);
+        }
+      }
+      // the running gateway keeps a deleted variable until it restarts
+      restartNeeded = true;
+    });
+    return { ...res, restartNeeded };
+  }
+
+  /** Deletes the token variables (`ANTHROPIC_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`) that are set; never the API key. */
+  async removeAnthropicToken(instanceId: string, profile: string): Promise<{ version: string | null; left: string[]; restartNeeded: true }> {
+    const ctx = this.ctx(instanceId, profile);
+    const left: string[] = [];
+    const res = await this.write(ctx, 'env', null, async () => {
+      const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env'));
+      const set = ANTHROPIC_TOKEN_VARS.filter((k) => env[k]?.is_set === true);
+      if (set.length === 0) throw new NotFoundError('Aucun jeton d’abonnement Anthropic enregistré');
+      for (const key of set) {
+        try {
+          await this.call(ctx, 'deleteEnv', { body: { key } }, 'Variable introuvable');
+        } catch {
+          left.push(key);
+        }
+      }
+    });
+    return { ...res, left, restartNeeded: true };
   }
 
   // ---------------------------------------------------------------- custom endpoints

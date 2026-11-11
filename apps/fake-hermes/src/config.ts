@@ -96,7 +96,7 @@ export class ConfigStore {
   readonly providers = new ProviderStore((model) => {
     const file = this.file();
     this.write({ ...file, model: { ...(isObj(file.model) ? file.model : {}), default: model, provider: 'nous' } });
-  });
+  }, (key) => this.envList()[key]?.is_set === true);
 
   constructor(fixturesDir: string, private readonly stepMs: number, private readonly terminalBackend?: string) {
     const raw = fixture<{ yaml: string }>(fixturesDir, 'GET_api_config_raw.json').yaml;
