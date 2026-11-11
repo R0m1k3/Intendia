@@ -9,6 +9,7 @@ import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/fo
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
+import { ClarifyCard } from '../chat/ClarifyCard';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
 import { SessionFiles } from '../components/SessionFiles';
@@ -140,6 +141,18 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     }
   };
 
+  const answer = async (text: string) => {
+    if (!inst || !active || !live?.clarify) return;
+    setBusy(true);
+    try {
+      await api.clarify(inst, sessionId, active.id, text, live.clarify.requestId ?? undefined);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const stop = async () => {
     if (!inst || !active) return;
     await api.stop(inst, sessionId, active.id).catch(setError);
@@ -220,7 +233,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(followIfPinned, [tail, live?.approval]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(followIfPinned, [tail, live?.approval, live?.clarify]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = sess.data?.session.title || 'Nouvelle session';
 
@@ -315,9 +328,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
         <Thread entries={entries} footers={footers} agent={agent} />
-        {running && !live?.approval && <ThinkingIndicator entries={entries} agent={agent} />}
+        {running && !live?.approval && !live?.clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
+        )}
+        {live?.clarify && (
+          <div className="mt-5"><ClarifyCard key={live.clarify.requestId ?? ''} clarify={live.clarify} onAnswer={(t) => void answer(t)} busy={busy} /></div>
         )}
         {endNote && (
           <div className={cx('mt-5', AGENT_INDENT)}>
@@ -348,7 +364,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille…') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
             hint="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
           />
         </div>

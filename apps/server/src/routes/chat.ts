@@ -16,6 +16,7 @@ const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
 const OTHER_PAGE = 50;
 
 const SendBody = z.object({ input: z.string().min(1).max(100_000) });
+const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
 
 interface RawMessage {
@@ -337,6 +338,26 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const built = controlBody('approval', s.raw, requestId ?? null, choice);
     if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
     return c.json(await callOp(http(ctx), report(ctx), 'chat', 'approval', { params: { run_id: runId }, profile: ctx.profile, body: built.body }));
+  });
+
+  /** Answer to a question of the agent; Hermes allows it with its gateway session authority only. */
+  r.post('/sessions/:inst/:id/runs/:runId/clarify', async (c) => {
+    const ctx = ctxOf(c);
+    const runId = runOf(ctx, c.req.param('runId'));
+    const { answer, requestId } = ClarifyBody.parse(await c.req.json());
+    const unavailable = () => c.json({ error: 'Hermes ne permet pas de répondre à cette question depuis Intendia', code: 'clarify_unavailable' }, 409);
+    const s = await status(ctx, runId);
+    if (s.status === 'unknown') return c.json({ error: 'Ce run est terminé', code: 'run_gone' }, 409);
+    if (typeof RunStatusSchema.safeParse(s.raw).data?.execution_generation !== 'number') return unavailable();
+    const built = controlBody('clarify', s.raw, requestId ?? null, answer);
+    if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
+    try {
+      return c.json(await callOp(http(ctx), report(ctx), 'chat', 'clarify', { params: { run_id: runId }, profile: ctx.profile, body: built.body }));
+    } catch (err) {
+      // without the authority Hermes answers 409 not_found; an older Hermes has no such route (404)
+      if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 404 || (err.detail.status === 409 && /not_found/.test(err.detail.body ?? '')))) return unavailable();
+      throw err;
+    }
   });
 
   // ---- instance-level

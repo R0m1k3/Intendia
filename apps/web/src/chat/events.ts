@@ -37,10 +37,22 @@ export interface Approval {
   choices: string[];
 }
 
+/** A question of the agent (clarify tool) waiting for an answer. */
+export interface Clarify {
+  requestId: string | null;
+  question: string;
+  choices: string[];
+  multiSelect: boolean;
+}
+
 export interface RunState {
   entries: Entry[];
   approval: Approval | null;
-  /** queued | running | waiting_for_approval | stopping | completed | failed | cancelled | interrupted | error */
+  clarify: Clarify | null;
+  /**
+   * queued | running | waiting_for_approval | stopping | completed | failed | cancelled | interrupted | error, and
+   * waiting_for_clarify (Intendia's own: Hermes keeps a run waiting for a question `running`)
+   */
   status: string;
   error: string | null;
   /** Hermes no longer had the start of the run (replay.truncated): it shows up in the history at the end. */
@@ -53,7 +65,7 @@ export const isTerminal = (status: string) => TERMINAL.includes(status);
 export type RunEvent = { event: string; seq?: number; timestamp?: number } & Record<string, unknown>;
 
 export function initialRun(entries: Entry[] = []): RunState {
-  return { entries, approval: null, status: 'queued', error: null, truncated: false };
+  return { entries, approval: null, clarify: null, status: 'queued', error: null, truncated: false };
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v));
@@ -136,6 +148,19 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
           choices: Array.isArray(ev.choices) ? ev.choices.map(String) : ['once', 'deny'],
         },
       };
+    case 'clarify.request':
+      return {
+        ...s, status: 'waiting_for_clarify',
+        entries: closeStreaming(s.entries),
+        clarify: {
+          requestId: typeof ev.prompt_id === 'string' ? ev.prompt_id : null,
+          question: str(ev.question) || 'Hermes vous pose une question',
+          choices: Array.isArray(ev.choices) ? ev.choices.map(String) : [],
+          multiSelect: ev.multi_select === true,
+        },
+      };
+    case 'clarify.settled':
+      return { ...s, status: s.status === 'waiting_for_clarify' ? 'running' : s.status, clarify: null };
     case 'approval.responded':
     case 'approval.settled':
       return {
@@ -150,7 +175,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
       const hasAnswer = entries.some((e) => e.kind === 'assistant' && e.text.trim());
       const output = str(ev.output);
       return {
-        ...s, status: 'completed', approval: null,
+        ...s, status: 'completed', approval: null, clarify: null,
         entries: !hasAnswer && output ? [...entries, { kind: 'assistant', key: key('a', ev.seq), text: output, ts }] : entries,
       };
     }
@@ -158,12 +183,12 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     case 'run.cancelled':
     case 'run.interrupted': {
       const status = ev.event.slice(4);
-      return { ...s, status, approval: null, error: str(ev.error) || null, entries: closeStreaming(s.entries) };
+      return { ...s, status, approval: null, clarify: null, error: str(ev.error) || null, entries: closeStreaming(s.entries) };
     }
     case 'replay.truncated':
       return { ...s, truncated: true };
     case 'intendia.error':
-      return { ...s, status: 'error', approval: null, error: str(ev.message) || 'Flux interrompu', entries: closeStreaming(s.entries) };
+      return { ...s, status: 'error', approval: null, clarify: null, error: str(ev.message) || 'Flux interrompu', entries: closeStreaming(s.entries) };
     default:
       return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.event, tone: 'muted', ts }] };
   }

@@ -46,6 +46,22 @@ describe('reduceEvent', () => {
     expect(s.entries.at(-1)).toMatchObject({ kind: 'note', text: 'Approbation répondue' });
   });
 
+  it('keeps a question of the agent until it is settled or the run ends', () => {
+    let s = run([
+      { event: 'run.started' },
+      { event: 'clarify.request', prompt_id: 'clr_1', execution_generation: 1, question: 'Quel magasin ?', choices: ['Frouard', 'Houdemont'], multi_select: true },
+    ]);
+    expect(s.status).toBe('waiting_for_clarify');
+    expect(s.clarify).toEqual({ requestId: 'clr_1', question: 'Quel magasin ?', choices: ['Frouard', 'Houdemont'], multiSelect: true });
+    s = reduceEvent(s, { event: 'clarify.settled', prompt_id: 'clr_1', execution_generation: 1 });
+    expect(s.clarify).toBeNull();
+    expect(s.status).toBe('running');
+    s = reduceEvent(s, { event: 'clarify.request', prompt_id: 'clr_2', question: '', choices: null });
+    expect(s.clarify).toMatchObject({ question: 'Hermes vous pose une question', choices: [], multiSelect: false });
+    s = reduceEvent(s, { event: 'run.cancelled' });
+    expect(s.clarify).toBeNull();
+  });
+
   it('handles approvals, failures and unknown events', () => {
     let s = run([{ event: 'approval.request', request_id: 'apr_1', command: 'rm -rf build', choices: ['once', 'deny'] }]);
     expect(s.status).toBe('waiting_for_approval');

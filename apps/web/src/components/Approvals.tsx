@@ -4,6 +4,7 @@ import { BellRing } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type ApprovalChoice, type PendingApproval } from '../api';
+import { ClarifyCard } from '../chat/ClarifyCard';
 import { ApprovalCard } from '../chat/Thread';
 import { toNotify, visibleApprovals } from './approvals';
 import { ErrorText } from './ui';
@@ -15,11 +16,11 @@ function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [perm, setPerm] = useState(() => (canNotify() ? Notification.permission : 'denied'));
-  const choose = async (choice: ApprovalChoice) => {
+  const send = async (call: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
     try {
-      await api.approve(a.instanceId, a.sessionId, a.runId, choice, a.requestId ?? undefined);
+      await call();
       onDone();
     } catch (err) {
       setError(err);
@@ -27,36 +28,44 @@ function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; 
       setBusy(false);
     }
   };
+  const choose = (choice: ApprovalChoice) => send(() => api.approve(a.instanceId, a.sessionId, a.runId, choice, a.requestId ?? undefined));
+  const answer = (text: string) => send(() => api.clarify(a.instanceId, a.sessionId, a.runId, text, a.requestId ?? undefined));
   const link = 'text-[13px] font-medium text-accent hover:underline';
+  const footer = (
+    <>
+      <ErrorText error={error} />
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link to="/w/$slug/s/$sessionId" params={{ slug: a.workspace, sessionId: a.sessionId }} className={link}>Ouvrir la session</Link>
+        <button type="button" onClick={onLater} className={link}>{error ? 'Fermer' : 'Plus tard'}</button>
+        {perm === 'default' && (
+          <button type="button" className={link} onClick={() => void Notification.requestPermission().then(setPerm)}>
+            Prévenir aussi hors de l’onglet
+          </button>
+        )}
+      </div>
+    </>
+  );
+  const clarify = a.kind === 'clarify';
   return (
-    <section role="alertdialog" aria-label={`Approbation demandée sur ${a.instanceLabel}`} data-approval={a.key}
+    <section role="alertdialog" aria-label={`${clarify ? 'Question' : 'Approbation demandée'} sur ${a.instanceLabel}`} data-approval={a.key}
       className="enter overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]">
       <p className="truncate px-4 pb-1 pt-3 text-xs text-ink-soft">
         <span className="font-medium text-ink">{a.instanceLabel}</span> · {a.workspaceName}{a.title ? ` · ${a.title}` : ''}
       </p>
       <div className="px-2 pb-2">
-        <ApprovalCard
-          inline busy={busy} onChoose={(c) => void choose(c)}
-          approval={{
-            requestId: a.requestId,
-            description: a.description ?? (a.command ? null : 'Hermes attend votre accord : ouvrez la session pour voir la demande'),
-            command: a.command, choices: a.canAnswer ? a.choices : [],
-          }}
-          footer={(
-            <>
-              <ErrorText error={error} />
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <Link to="/w/$slug/s/$sessionId" params={{ slug: a.workspace, sessionId: a.sessionId }} className={link}>Ouvrir la session</Link>
-                <button type="button" onClick={onLater} className={link}>{error ? 'Fermer' : 'Plus tard'}</button>
-                {perm === 'default' && (
-                  <button type="button" className={link} onClick={() => void Notification.requestPermission().then(setPerm)}>
-                    Prévenir aussi hors de l’onglet
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        />
+        {clarify ? (
+          <ClarifyCard inline busy={busy} onAnswer={(t) => void answer(t)} disabled={!a.canAnswer} footer={footer}
+            clarify={{ requestId: a.requestId, question: a.question ?? 'Hermes vous pose une question : ouvrez la session pour la voir', choices: a.choices, multiSelect: a.multiSelect }} />
+        ) : (
+          <ApprovalCard
+            inline busy={busy} onChoose={(c) => void choose(c)} footer={footer}
+            approval={{
+              requestId: a.requestId,
+              description: a.description ?? (a.command ? null : 'Hermes attend votre accord : ouvrez la session pour voir la demande'),
+              command: a.command, choices: a.canAnswer ? a.choices : [],
+            }}
+          />
+        )}
       </div>
     </section>
   );
@@ -83,7 +92,7 @@ export function Approvals() {
     const fresh = toNotify(shown, notified.current);
     if (!document.hidden) return;
     for (const a of fresh) {
-      const n = new Notification(`${a.instanceLabel} : Hermes attend votre accord`, { body: a.workspaceName, tag: a.key });
+      const n = new Notification(`${a.instanceLabel} : ${a.kind === 'clarify' ? 'Hermes vous pose une question' : 'Hermes attend votre accord'}`, { body: a.workspaceName, tag: a.key });
       n.onclick = () => { window.focus(); n.close(); };
     }
   }, [shown]);

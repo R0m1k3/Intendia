@@ -84,6 +84,15 @@ export const chatModule: ModuleDef = {
       kind: 'write',
       routes: [{ via: 'api', method: 'POST', path: '/v1/runs/{run_id}/approval', capability: 'run_approval', feature: 'run_approval_response' }],
     },
+    /**
+     * Answer to a question of the agent (clarify tool). In the 0.23.0 source (gateway/platforms/api_server_runs.py) but not
+     * announced in /v1/capabilities: no capability, always tried. Gateway session authority only. No fixture (a question
+     * needs a provider key to happen); covered by the fake.
+     */
+    clarify: {
+      kind: 'write',
+      routes: [{ via: 'api', method: 'POST', path: '/v1/runs/{run_id}/clarify' }],
+    },
     steer: {
       kind: 'write',
       routes: [{ via: 'api', method: 'POST', path: '/v1/runs/{run_id}/steer', capability: 'run_steer', feature: 'run_steer' }],

@@ -10,6 +10,9 @@
  *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
  *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
  *   `approval.responded`, body `{choice}`)
+ * - "question": the agent asks a question (clarify.request, 3 choices; "multi": several may be picked) until
+ *   POST /v1/runs/{id}/clarify; the run stays `running`, the question is in `pending_controls`; the answer is quoted in
+ *   the final text. Gateway session authority only: with `controls: 'legacy'` the route answers 409 not_found
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * - "panne": the run ends in `failed` (run.failed, no usage)
@@ -138,6 +141,9 @@ interface SimRun {
   events: (Ev & { seq: number })[];
   listeners: Set<() => void>;
   approval: { resolve: (choice: string) => void; prompt: Record<string, unknown> } | null;
+  clarify: { resolve: (answer: string) => void; prompt: Record<string, unknown> } | null;
+  /** Answer given to the question of the run (quoted in the final text). */
+  answer?: string;
 }
 
 interface SimMessage {
@@ -180,7 +186,7 @@ class Simulator {
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
       sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, provider, status: 'queued', output: '', usage: null,
-      events: [], listeners: new Set(), approval: null,
+      events: [], listeners: new Set(), approval: null, clarify: null,
     };
     this.runs.set(run.id, run);
     this.lastRun = run;
@@ -244,6 +250,21 @@ class Simulator {
         await sleep(step);
         return this.finish(run, 'Commande refusée, je m’arrête là.');
       }
+    }
+    if (/question/i.test(run.input) && this.controls === 'authority') {
+      const prompt = {
+        kind: 'clarify', prompt_id: 'clr_1', execution_generation: 1, question: 'Quel magasin dois-je traiter ?',
+        choices: ['Frouard', 'Houdemont', 'Les deux'], multi_select: /multi/i.test(run.input),
+      };
+      run.answer = await new Promise<string>((resolve) => {
+        run.clarify = { resolve, prompt };
+        this.push(run, { event: 'clarify.request', ...prompt });
+      });
+      run.clarify = null;
+      if (TERMINAL.has(run.status)) return;
+      this.push(run, { event: 'clarify.settled', prompt_id: 'clr_1', execution_generation: 1 });
+      await sleep(step);
+      return this.finish(run, `Vous avez choisi : ${run.answer}.`);
     }
     if (/panne/i.test(run.input)) {
       await sleep(step);
@@ -338,6 +359,7 @@ class Simulator {
     if (TERMINAL.has(run.status)) return;
     run.status = 'cancelled';
     run.approval?.resolve('deny');
+    run.clarify?.resolve('');
     this.push(run, { event: 'run.cancelled' });
   }
 
@@ -556,7 +578,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
         ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
         // with the gateway authority: the run's generation and the questions waiting for an answer
         ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
-        pending_controls: sim.controls === 'authority' && run.approval ? [run.approval.prompt] : [],
+        pending_controls: sim.controls === 'authority' ? [run.approval?.prompt, run.clarify?.prompt].filter(Boolean) : [],
       });
     }
     if (sub === '/events' && method === 'GET') {
@@ -568,6 +590,16 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     if (sub === '/stop' && method === 'POST') {
       sim.stop(run);
       return json({ object: 'hermes.run.stop', run_id: run.id, status: 'stopping' });
+    }
+    if (sub === '/clarify' && method === 'POST') {
+      // Hermes 0.23: through the session authority only (else not_found, answered 409)
+      if (sim.controls !== 'authority') return json({ error: { message: 'not_found', code: 'not_found' } }, 409);
+      const keys = Object.keys(b).sort().join(',');
+      if (keys !== 'answer,execution_generation,request_id' || typeof b.answer !== 'string') return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+      if (b.execution_generation !== 1) return json({ error: { message: 'stale_generation', code: 'stale_generation' } }, 409);
+      if (!run.clarify || b.request_id !== 'clr_1') return json({ error: { message: 'approval_not_pending', code: 'approval_not_pending' } }, 409);
+      run.clarify.resolve(b.answer);
+      return json({ run_id: run.id, status: 'resolved', prompt_id: 'clr_1' });
     }
     if (sub === '/approval' && method === 'POST') {
       if (sim.controls === 'authority') {

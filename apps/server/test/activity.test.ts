@@ -215,6 +215,23 @@ describe('approvals of every instance', () => {
     expect(eventsCalls(t, runId)).toBe(1);
   });
 
+  it('lists a question of the agent (clarify) and drops it once answered', async () => {
+    const t = await testApp();
+    const { s, base } = await session(t);
+    const runId = (await t.request('POST', `${base}/runs`, { input: 'question' })).json.runId as string;
+    let list: Awaited<ReturnType<typeof t.services.activity.approvals>>['approvals'] = [];
+    for (let i = 0; i < 200 && list.length === 0; i++) {
+      list = (await t.services.activity.approvals(Date.now() + 10_000 * (i + 1))).approvals;
+      if (list.length === 0) await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(list).toMatchObject([{
+      key: `${runId}:clr_1`, kind: 'clarify', requestId: 'clr_1', question: 'Quel magasin dois-je traiter ?',
+      choices: ['Frouard', 'Houdemont', 'Les deux'], multiSelect: false, canAnswer: true,
+    }]);
+    expect((await t.request('POST', `${base}/runs/${runId}/clarify`, { answer: 'Frouard' })).status).toBe(200);
+    expect((await t.services.activity.approvals(Date.now() + 10_000_000)).approvals).toEqual([]);
+  });
+
   it('a waiting run whose question was lost from the replay comes without question nor choices', async () => {
     const t = await testApp({ retainFrom: 1_000_000, controls: 'legacy' });
     const { s, base } = await session(t);

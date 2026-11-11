@@ -406,7 +406,11 @@ export interface PendingApproval {
   sessionId: string;
   title: string | null;
   runId: string;
+  /** approval: allow a command; clarify: a question of the agent, answered with text. */
+  kind: 'approval' | 'clarify';
   requestId: string | null;
+  question: string | null;
+  multiSelect: boolean;
   command: string | null;
   description: string | null;
   choices: string[];
@@ -542,6 +546,9 @@ export const api = {
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/approval`, { choice, requestId }),
+  /** Answer to a question of the agent (several choices: a JSON array of their labels). */
+  clarify: (inst: string, id: string, runId: string, answer: string, requestId?: string) =>
+    call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/clarify`, { answer, requestId }),
   chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
