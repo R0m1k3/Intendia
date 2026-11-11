@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
+import { ContextGauge } from '../chat/ContextGauge';
+import { estimateTokens } from '../chat/estimate';
 import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { EMPTY_QUEUE, dropItem, enqueue, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
@@ -257,6 +259,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     return m;
   }, [messages, runs, lostInput]);
   const running = Boolean(active);
+  // context gauge: read on opening and after each run
+  const usage = useQuery({
+    queryKey: ['usage', inst, sessionId, runCount], queryFn: () => api.sessionUsage(inst!, sessionId),
+    enabled: Boolean(inst), staleTime: 60_000, refetchOnWindowFocus: false,
+  });
+  const estimate = estimateTokens(entries);
 
   // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
   // scrolled up. `measure` (chat/follow.ts) judges from the scroll position, measured on each scroll event and again
@@ -428,7 +436,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               />
             )}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
-            hint={running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne'}
+            hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
+              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne'}
           />
         </div>
       </div>

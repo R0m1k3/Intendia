@@ -71,4 +71,6 @@ export interface CompatReport {
    * Files module cannot be used. Absent in reports saved before Intendia 0.0.4 (= not checked yet).
    */
   files?: { workspaceRoot: string | null; reason: string | null };
+  /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
+  socket?: { sessionStats: boolean; note: string };
 }

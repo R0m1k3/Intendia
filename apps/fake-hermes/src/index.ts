@@ -12,6 +12,7 @@
  *   `approval.responded`, body `{choice}`)
  * - steer (POST /v1/runs/{id}/steer): taken while the run is `running` (else 409), `run.steered` + a user line
  *   `display_kind: "steer"`; with "perdu" in the run's message never delivered, back as `pending_steer` at the end
+ * - "secours": the run is served by another model than the one asked (`runtime.model = fake/model-fallback`)
  * - "question": the agent asks a question (clarify.request, 3 choices; "multi": several may be picked) until
  *   POST /v1/runs/{id}/clarify; the run stays `running`, the question is in `pending_controls`; the answer is quoted in
  *   the final text. Gateway session authority only: with `controls: 'legacy'` the route answers 409 not_found
@@ -91,6 +92,11 @@ export interface FakeOptions {
   terminalBackend?: string;
   /** Delay before each managed files answer, in ms (slow Hermes). */
   filesDelayMs?: number;
+  /**
+   * `session.stats` on the dashboard WebSocket `/api/ws` (dashboard inside the gateway); default false = standalone
+   * dashboard, the method answers -32601 like Hermes 0.23.
+   */
+  sessionStats?: boolean;
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -364,6 +370,8 @@ class Simulator {
   }
 
   runtime(run: SimRun) {
+    // "secours": the provider fell back to another model
+    if (/secours/i.test(run.input)) return { provider: 'fake', model: 'fake/model-fallback' };
     return { provider: 'fake', model: run.model ?? 'fake/model-default' };
   }
 
@@ -717,6 +725,8 @@ export function createFakeHermes(opts: FakeOptions) {
     requests, sim, crons, skills, config, profiles, kanban, files,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
+    /** Can be switched at run time by tests. */
+    sessionStats: opts.sessionStats ?? false,
   };
 }
 
@@ -751,6 +761,32 @@ export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: 
   });
 }
 
+/** Fixed figures of `session.stats` (a session of 12 345 tokens out of 200 000, plan used at 42 %). */
+export const FAKE_SESSION_STATS = {
+  context_tokens: 12_345, context_length: 200_000, tokens_per_s: 41.5,
+  plan_gauge: { label: 'Plan Pro', used_bp: 4200, resets_at_ms: Date.UTC(2026, 10, 12, 6) },
+};
+
+/**
+ * One connection to the dashboard JSON-RPC WebSocket `/api/ws?token=` (token already checked): answers
+ * `session.stats` (with `sessionStats`) and `commands.catalog`; any other method, or `session.stats` on a standalone
+ * dashboard, gets -32601. Pushes an `event` frame first, like the gateway. Returns the handler of incoming frames.
+ */
+export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
+  io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
+  return (text) => {
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown } };
+    try { msg = JSON.parse(text) as typeof msg; } catch { return; }
+    const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
+    if (msg.method === 'session.stats' && fake.sessionStats) {
+      if (msg.params?.session_id === 'intendia-probe') return reply({ error: { code: 4001, message: 'session not found' } });
+      return reply({ result: FAKE_SESSION_STATS });
+    }
+    if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
+    return reply({ error: { code: -32601, message: `unknown method: ${String(msg.method)}` } });
+  };
+}
+
 /** WebSocket-like factory for tests (same shape as the server's `WsFactory`), backed by `connectKanbanEvents`. */
 export function fakeWebSocketFactory(fake: Fake) {
   return (url: string) => {
@@ -758,6 +794,7 @@ export function fakeWebSocketFactory(fake: Fake) {
     const fire = (type: string, ev: { data?: unknown; code?: number } = {}) => { for (const l of listeners.get(type) ?? []) l(ev); };
     let open = true;
     let stop = () => {};
+    let onText: ((text: string) => void) | null = null;
     const end = (code: number) => {
       if (!open) return;
       open = false;
@@ -767,13 +804,16 @@ export function fakeWebSocketFactory(fake: Fake) {
     queueMicrotask(() => {
       if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
       fire('open');
-      stop = connectKanbanEvents(fake, url, { send: (data) => { if (open) fire('message', { data }); }, close: end });
+      const io = { send: (data: string) => { if (open) fire('message', { data }); }, close: end };
+      if (new URL(url, 'ws://fake-dash').pathname === '/api/ws') onText = connectGatewaySocket(fake, io);
+      else stop = connectKanbanEvents(fake, url, io);
     });
     return {
       addEventListener(type: string, l: (ev: { data?: unknown; code?: number }) => void) {
         listeners.set(type, [...(listeners.get(type) ?? []), l]);
       },
       close: (code = 1000) => end(code),
+      send: (text: string) => { if (open) queueMicrotask(() => onText?.(text)); },
       /** test helper: is the connection still open? */
       get isOpen() { return open; },
     };

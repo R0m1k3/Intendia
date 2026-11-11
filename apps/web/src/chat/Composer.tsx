@@ -55,7 +55,7 @@ export function Composer({
   onAttachmentsChange?: (count: number) => void;
   leading?: ReactNode;
   options?: ReactNode;
-  hint?: string;
+  hint?: ReactNode;
   ref?: Ref<ComposerHandle>;
 }) {
   const [text, setText] = useState('');

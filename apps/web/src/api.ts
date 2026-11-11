@@ -25,6 +25,14 @@ export interface CompatReport {
   modules: ModuleReport[];
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
   files?: { workspaceRoot: string | null; reason: string | null };
+  /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
+  socket?: { sessionStats: boolean; note: string };
+}
+/** Composer gauge: `max` = context size of the model; `exact`/`quota` from the dashboard WebSocket only. */
+export interface SessionUsage {
+  max: number | null;
+  exact: { used: number; max: number } | null;
+  quota: { label: string | null; usedPercent: number; resetsAt: number | null } | null;
 }
 export interface PublicInstance {
   id: string;
@@ -546,6 +554,7 @@ export const api = {
   deleteSession: (inst: string, id: string) => call<{ ok: true }>('DELETE', sessionPath(inst, id)),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
   send: (inst: string, id: string, input: string) => call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, { input }),
+  sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
   runStatus: (inst: string, id: string, runId: string) => call<RunStatus>('GET', `${sessionPath(inst, id)}/runs/${enc(runId)}`),
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>

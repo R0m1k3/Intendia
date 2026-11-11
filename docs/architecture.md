@@ -118,6 +118,22 @@ demand from the State screen. State changes go to the webhook.
   next message, consecutive tool calls folded into one "étapes" card. Floating menus (`components/Menu.tsx`) are
   portalled to `<body>`.
 
+### During a run
+
+- Approvals and questions of the agent (clarify) are answered from the thread or from the notifications
+  (`GET /x/approvals`, `kind: approval|clarify`); the server builds Hermes' exact body from the run status
+  (`controlBody`, `routes/chat.ts`).
+- Queue: messages written during a run wait in the tab (`web/src/chat/queue.ts`, `sessionStorage` per session) and
+  leave one per run when the previous run ends `completed`; a failed or stopped run, a reorientation Hermes did not
+  deliver (`pending_steer`, put back in front) or a refused send pauses the queue until « Reprendre ». Nothing leaves
+  when the page opens. « Réorienter » sends the text at once (`POST …/runs/:runId/steer`), shown in the thread as a
+  user message marked « Réorientation » (local event `intendia.steer` folded into the run, `chat/useRun.ts`).
+- Context gauge (`GET /x/sessions/:inst/:id/usage`, `src/chat/usage.ts`): the model's context size from
+  `/api/model/info` (Auto or the configured model only); exact figures and plan quota only from `session.stats` of the
+  dashboard WebSocket (`src/hermes/gateway-ws.ts`), used when the compatibility check found it (`report.socket`,
+  shown on the État page); otherwise the page estimates (`chat/estimate.ts`, « ≈ »). The reply footer shows an
+  approximate rate (output tokens over the whole run) and « (secours) » when the served model differs from the one asked.
+
 ## Files, share links and MCP
 
 - **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector

@@ -203,6 +203,24 @@ describe('run stream', () => {
     expect((await t.request('GET', `${base}/runs/${run}`)).json.pendingSteer).toBe('Plutôt Houdemont');
   });
 
+  it('gives the context size; exact figures and quota only when the dashboard WebSocket has session.stats', async () => {
+    const { t, base } = await session();
+    expect(t.compat.get('fake')?.socket).toMatchObject({ sessionStats: false });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, run);
+    expect((await t.request('GET', `${base}/usage`)).json).toEqual({ max: 1_000_000, exact: null, quota: null });
+
+    const on = await session({ sessionStats: true });
+    expect(on.t.compat.get('fake')?.socket).toMatchObject({ sessionStats: true });
+    // before the first message: no session at Hermes, no WebSocket call
+    expect((await on.t.request('GET', `${on.base}/usage`)).json.exact).toBeNull();
+    const r2 = (await on.t.request('POST', `${on.base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(on.t, on.base, r2);
+    expect((await on.t.request('GET', `${on.base}/usage`)).json).toMatchObject({
+      max: 1_000_000, exact: { used: 12_345, max: 200_000 }, quota: { label: 'Plan Pro', usedPercent: 42 },
+    });
+  });
+
   it('says a question cannot be answered without the session authority', async () => {
     const { t, base } = await session({ controls: 'legacy' });
     const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;

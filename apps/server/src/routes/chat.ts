@@ -11,6 +11,9 @@ import { autoModel, chatGroups, chatModelsManaged, type ChatModelList } from '..
 import type { ModelOptionsSchema } from '../connectors/chat/index.js';
 import { NotFoundError, ValidationError, type RunStatRow, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { SESSION_ID_RE, sessionParams } from './workspaces.js';
+import { ModelInfoSchema } from '../connectors/config/index.js';
+import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
+import { toUsage } from '../chat/usage.js';
 
 const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
 const OTHER_PAGE = 50;
@@ -367,6 +370,20 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 404 || (err.detail.status === 409 && /not_found/.test(err.detail.body ?? '')))) return unavailable();
       throw err;
     }
+  });
+
+  // Context gauge and plan quota: the model's context size by HTTP; exact figures and quota only from the dashboard
+  // WebSocket (`session.stats`), when the compat check found it. Every failure gives null figures, never an error.
+  r.get('/sessions/:inst/:id/usage', async (c) => {
+    const ctx = ctxOf(c);
+    const info = await callOp<z.infer<typeof ModelInfoSchema>>(http(ctx), report(ctx), 'config', 'modelInfo', { profile: ctx.profile })
+      .then((v) => ModelInfoSchema.parse(v)).catch(() => null);
+    let stats: SessionStats | null = null;
+    if (report(ctx)?.socket?.sessionStats) {
+      const live = await history(ctx.instance.id, ctx.session.id, ctx.profile, 1).catch(() => null);
+      if (live?.exists) stats = await sessionStats(ctx.instance, live.liveId, { factory: deps.wsFactory ?? compat.wsFactory }).catch(() => null);
+    }
+    return c.json(toUsage(stats, info, { model: ctx.session.model }));
   });
 
   // Reorientation: the text reaches the agent after its current batch of tools, without stopping the run. Hermes
