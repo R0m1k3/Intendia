@@ -108,12 +108,23 @@ from Telegram or a cron. The agent can never create a public link; you make a li
 365 days at most) or revoke it on the **Liens** screen.
 
 - Port 3001 must be reachable from the Hermes containers only (same Docker network, see `docker-compose.example.yml`).
-- Each instance has its own address `http://intendia:3001/mcp/<instance-id>` and its own bearer token. Settings →
-  Instances → "Outil share_file" shows both and copies a ready block; "Régénérer le jeton" replaces the token (then update
-  Hermes). Deleting the instance from Intendia deletes its token; changing `INTENDIA_SECRET` does not change it.
+- Each instance has its own address `http://intendia:3001/mcp/<instance-id>` and its own bearer token. Deleting
+  the instance from Intendia deletes its token; changing `INTENDIA_SECRET` does not change it.
+- If Hermes reaches Intendia under another name or port, set `INTENDIA_MCP_URL` (for example
+  `http://intendia-prod:3001`); Intendia appends `/mcp/<instance-id>`.
 - `INTENDIA_PUBLIC_URL` must be set, otherwise the tool returns `/f/<token>` alone, which only works inside Intendia.
 
-Declare the server in the Hermes configuration of that instance (`mcp_servers`), then restart Hermes:
+Intendia connects the tool itself, through the Hermes dashboard API (`default` profile):
+
+- when you add an instance, Intendia writes the `intendia` MCP server into Hermes if no server of that name exists;
+- Settings → "Partage de fichiers" shows the state for each instance and a **Brancher Intendia à …** button: Intendia
+  writes the entry, Hermes tests the connection (it must list `share_file`), then Intendia offers the restart. Hermes
+  only loads the tool after its gateway restarts;
+- the token is stored by Hermes in its env file (`MCP_INTENDIA_API_KEY`), never in clear in its config. An old block
+  pasted by hand is replaced; another server named `intendia` (other URL) is replaced only after you confirm;
+- "Régénérer le jeton" sends the new token to Hermes as well; restart Hermes afterwards.
+
+If the instance does not allow these writes, Settings shows the block to add by hand under "Configuration manuelle":
 
 ```yaml
 mcp_servers:
@@ -122,10 +133,6 @@ mcp_servers:
     headers:
       Authorization: "Bearer <token from Settings>"
 ```
-
-The dashboard can do it too: `POST /api/mcp/servers` with `{"name":"intendia","url":"…","auth":"header",
-"bearer_token":"<token>"}` (Hermes 0.23.0 then keeps the token in its `.env` as `MCP_INTENDIA_API_KEY`), and
-`POST /api/mcp/servers/intendia/test` checks the connection and lists `share_file`.
 
 In Intendia chats the framing block already asks the agent to call `share_file` for each delivered file. For Telegram
 and crons, give the same rule with a short Hermes skill, for example:

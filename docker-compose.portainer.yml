@@ -49,6 +49,7 @@ services:
       INTENDIA_PASSWORD_HASH: ${INTENDIA_PASSWORD_HASH:-}
       INTENDIA_WEBHOOK_URL: ${INTENDIA_WEBHOOK_URL:-}
       INTENDIA_UPLOAD_MAX_MB: ${INTENDIA_UPLOAD_MAX_MB:-200}
+      INTENDIA_MCP_URL: ${INTENDIA_MCP_URL:-}
     volumes:
       - intendia-data:/data
       - workspace:/workspace
