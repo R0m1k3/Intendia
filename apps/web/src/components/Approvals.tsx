@@ -89,7 +89,7 @@ export function Approvals() {
   const hide = (key: string) => setHidden((h) => new Set(h).add(key));
   return createPortal(
     <div aria-live="polite"
-      className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex flex-col gap-2 md:inset-x-auto md:bottom-4 md:right-4 md:w-[400px]">
+      className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 flex flex-col gap-2 md:inset-x-auto md:bottom-4 md:right-4 md:w-[400px]">
       {shown.slice(0, MAX_SHOWN).map((a) => (
         <Item key={a.key} a={a} onLater={() => hide(a.key)} onDone={() => {
           hide(a.key);
