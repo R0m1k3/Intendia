@@ -31,6 +31,12 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
   events Hermes no longer keeps first gets `replay.truncated {oldest_retained_seq}`, then the rest.
 - `approval.request` carries `choices` (`once`, `session`, `always`, `deny`) and sometimes `request_id`;
   answer with `POST /v1/runs/{id}/approval {choice, request_id}`.
+- `GET /api/sessions` is paged (`limit` up to 200, `offset`, `has_more`) and takes `source` (`telegram`, `cron`…); its
+  `title` filter is an exact match, useless for a search.
+- Search: dashboard `GET /api/sessions/search?q=&limit=(1..100)&profile=&source=` (not on the API server) looks for
+  the id, then FTS5 in the messages; each result has `session_id`/`id`, `source`, `title`, `snippet` (hit between
+  `>>>` and `<<<`, cut with `...`), `last_active`, `message_count`, `profile`. Empty `q` → `{results: []}`; a query
+  FTS5 refuses → 500 « Search failed ».
 - `GET /api/sessions` is paged (`limit`, `offset`, `has_more`). `GET /api/sessions/{id}` wraps the session in
   `{session}`. `GET /api/sessions/{id}/messages` → `{data: [{id, role, content, tool_calls, tool_name, timestamp}]}`,
   newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
@@ -85,6 +91,9 @@ Observed on a reference install (official installer, isolated `HERMES_HOME`), re
   `{"detail":"Invalid schedule 'x'. Use: ..."}`. Replies carry `schedule: { kind: interval|cron|once, minutes | expr | run_at, display }`
   and `schedule_display`.
 - A job also carries `hermes_home`, `script`, `monitor_*`, `origin`: never sent to the browser.
+- A job may carry its own `timezone` (IANA name); its `next_run_at` is then written with that zone's offset, else with
+  Hermes's. Cron expressions are read by croniter (day and month names, `7` = Sunday, day of month OR day of week
+  when both are restricted).
 - `last_run_at` / `last_status` (`ok`, `error`, `delivery_failed`, `cancelled`, `blocked_config`...) are written only
   when a run ends (`cron/jobs.py`, `_record_run_outcome`): a change of `last_run_at` means the run is over.
 - `GET .../runs?limit=` answers `{ runs }`; each run is a Hermes session (`id`, `started_at`/`ended_at` in seconds,

@@ -2,46 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api, type RecentSession } from '../api';
-import { cx, ErrorText, timeAgo } from '../components/ui';
-import { FILTERS, filterRecent, sourceLabel, type RecentFilter } from './labels';
-
-const TAG: Record<string, string> = {
-  intendia: 'bg-accent/10 text-accent',
-  telegram: 'bg-ok-soft text-ink',
-  cron: 'bg-warn-soft text-ink',
-};
-
-/** "il y a 6 h" within a day, else the date ("9 nov."). */
-function when(at: number, now = Date.now()): string {
-  if (!at) return '';
-  if (now - at < 24 * 3600_000) return timeAgo(at);
-  return new Date(at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-}
-
-function Row({ s }: { s: RecentSession }) {
-  const body = (
-    <>
-      <span className={cx('w-[4.5rem] shrink-0 truncate rounded-md px-1.5 py-0.5 text-center font-mono text-[11px]', TAG[s.source ?? ''] ?? 'bg-raised text-ink-soft')}>
-        {sourceLabel(s.source)}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{s.title}</span>
-        <span className="block truncate text-xs text-ink-faint">{s.sub}</span>
-      </span>
-      <span className="shrink-0 text-xs text-ink-faint">{when(s.at)}</span>
-    </>
-  );
-  const cls = 'flex min-w-0 items-center gap-3 px-5 py-3 transition-colors hover:bg-raised/50';
-  return (
-    <li data-recent={s.source ?? 'hermes'}>
-      {s.kind === 'intendia' && s.workspace ? (
-        <Link to="/w/$slug/s/$sessionId" params={{ slug: s.workspace, sessionId: s.id }} className={cls}>{body}</Link>
-      ) : (
-        <Link to="/i/$inst/p/$profile/s/$sessionId" params={{ inst: s.instanceId, profile: s.profile, sessionId: s.id }} className={cls}>{body}</Link>
-      )}
-    </li>
-  );
-}
+import { cx, ErrorText } from '../components/ui';
+import { SessionRow } from '../sessions/SessionRow';
+import { FILTERS, filterRecent, type RecentFilter } from './labels';
 
 /** The latest sessions of every source (Intendia, Telegram, crons…), filtered by source. */
 export function RecentSessions() {
@@ -65,7 +28,7 @@ export function RecentSessions() {
       </header>
       <ErrorText error={recent.error} />
       {list.length ? (
-        <ul className="divide-y divide-line border-t border-line">{list.map((s) => <Row key={`${s.instanceId}:${s.id}`} s={s} />)}</ul>
+        <ul className="divide-y divide-line border-t border-line">{list.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} />)}</ul>
       ) : recent.isSuccess ? (
         <p className="border-t border-line px-5 py-6 text-sm text-ink-soft">Aucune session {filter === 'all' ? 'pour l’instant' : 'de cette source'}</p>
       ) : null}
@@ -73,7 +36,7 @@ export function RecentSessions() {
         <p key={e.instance} className="border-t border-line px-5 py-2 text-xs text-bad" title={e.message}>{e.instance} : injoignable</p>
       ))}
       <footer className="border-t border-line px-5 py-3">
-        <Link to="/w" className="text-[13px] font-medium text-accent hover:underline">Voir toutes les sessions</Link>
+        <Link to="/sessions" className="text-[13px] font-medium text-accent hover:underline">Voir toutes les sessions</Link>
       </footer>
     </section>
   );

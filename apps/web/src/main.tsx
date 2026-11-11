@@ -22,6 +22,7 @@ import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { LinksPage } from './pages/Links';
 import { SessionPage } from './pages/Session';
+import { SessionsPage, type SessionsSearch } from './pages/Sessions';
 import { WorkspacePage } from './pages/Workspace';
 import { WorkspacesPage } from './pages/Workspaces';
 import '@fontsource-variable/inter';
@@ -60,6 +61,12 @@ export interface HomeSearch { nouvelle?: 1 }
 const homeRoute = createRoute({
   getParentRoute: () => appRoute, path: '/', component: HomePage,
   validateSearch: (s: Record<string, unknown>): HomeSearch => (s.nouvelle !== undefined ? { nouvelle: 1 } : {}),
+});
+const sessionsRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/sessions', component: SessionsPage,
+  validateSearch: (s: Record<string, unknown>): SessionsSearch => (
+    s.source === 'intendia' || s.source === 'telegram' || s.source === 'cron' ? { source: s.source } : {}
+  ),
 });
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
@@ -147,7 +154,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

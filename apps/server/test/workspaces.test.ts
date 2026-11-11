@@ -7,6 +7,18 @@ import { testApp } from './helpers.js';
 const mode = (p: string) => statSync(p).mode & 0o777;
 
 describe('workspaces', () => {
+  it('counts the non-archived sessions of each workspace', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    await t.request('POST', '/x/workspaces', { slug: 'vide', name: 'Vide', instanceId: 'fake' });
+    await t.request('POST', '/x/workspaces/dev/sessions');
+    const b = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    await t.request('PATCH', `/x/sessions/fake/${b.id}`, { archived: true });
+    const list = (await t.request('GET', '/x/workspaces')).json.workspaces;
+    expect(list.find((w: any) => w.slug === 'dev').sessionCount).toBe(1);
+    expect(list.find((w: any) => w.slug === 'vide').sessionCount).toBe(0);
+  });
+
   it('creates the folder tree, AGENTS.md and the row', async () => {
     const t = await testApp();
     const res = await t.request('POST', '/x/workspaces', { slug: 'magasins', name: 'Magasins', instanceId: 'fake', model: 'opus' });

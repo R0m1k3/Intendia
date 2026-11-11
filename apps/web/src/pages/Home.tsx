@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { RotateCw } from 'lucide-react';
+import { RotateCw, TriangleAlert } from 'lucide-react';
 import { useCallback } from 'react';
 import { describe, whenFr } from '../crons/schedule';
-import { api, type CompatReport, type PublicInstance } from '../api';
+import { api, type CompatReport, type OverviewCron, type PublicInstance } from '../api';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Mark, Panel, timeAgo, worst } from '../components/ui';
 import { Ask } from '../home/Ask';
 import { RecentSessions } from '../home/Recent';
+import { CronTimeline, FAILED } from '../home/Timeline';
 
 function today(): string {
   const d = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -63,11 +64,13 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
   );
 }
 
-/** Next active crons across instances; hidden when there are none. */
-function UpcomingCrons() {
-  const up = useQuery({ queryKey: ['upcoming-crons'], queryFn: api.upcomingCrons, refetchInterval: 60_000 });
-  const list = up.data?.upcoming ?? [];
-  if (list.length === 0) return null;
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** The 3 next active crons, then a red line per cron whose last run failed; hidden when there is neither. */
+function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
+  const list = crons.filter((c): c is OverviewCron & { nextRunAt: string } => c.nextRunAt !== null).slice(0, 3);
+  const failed = crons.filter((c) => FAILED.has(c.lastStatus ?? ''));
+  if (list.length === 0 && failed.length === 0) return null;
   return (
     <section className="overflow-hidden card" aria-labelledby="crons-title">
       <header className="flex items-center justify-between px-5 py-4">
@@ -86,6 +89,18 @@ function UpcomingCrons() {
             </Link>
           </li>
         ))}
+        {failed.map((c) => (
+          <li key={`f:${c.instanceId}/${c.id}`} data-cron-failure>
+            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-start gap-2.5 bg-bad-soft/60 px-5 py-3 text-bad transition-colors hover:bg-bad-soft">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+              <span className="min-w-0 flex-1 text-[13px]">
+                <span className="font-medium">Échec · {c.name}</span>
+                {c.lastError && <span className="text-bad/90"> ({cut(c.lastError.replace(/\s+/g, ' '), 80)})</span>}
+                <span className="block text-xs text-bad/80">{whenFr(c.lastRunAt)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -95,6 +110,8 @@ export function HomePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
+  const crons = overview.data?.crons ?? [];
   const search = useSearch({ from: '/app/' });
   const navigate = useNavigate();
   const list = instances.data?.instances ?? [];
@@ -128,11 +145,12 @@ export function HomePage() {
             </Link>
           </Panel>
         ))}
+        {list.length > 0 && <CronTimeline crons={crons} />}
         {list.length > 0 && (
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <RecentSessions />
             <div className="space-y-6">
-              <UpcomingCrons />
+              <UpcomingCrons crons={crons} />
               {list.map((i) => <InstanceCard key={i.id} instance={i} report={reports.find((r) => r.instanceId === i.id)} />)}
             </div>
           </div>

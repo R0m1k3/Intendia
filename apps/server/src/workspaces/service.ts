@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { and, asc, desc, eq, gte, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, ne } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
@@ -173,6 +173,37 @@ export class WorkspaceService {
       // lastActiveAt is set from creation on
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(limit).all()
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
+  }
+
+  /** Non-archived Intendia sessions whose title contains `q`, case-insensitive with Unicode folding (SQLite's `lower()` only folds ASCII). */
+  searchSessions(q: string, limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
+    const needle = q.toLocaleLowerCase();
+    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
+      .from(sessionWorkspace)
+      .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+      .where(eq(sessionWorkspace.archived, false))
+      .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).all()
+      .filter((r) => r.s.title?.toLocaleLowerCase().includes(needle))
+      .slice(0, limit)
+      .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
+  }
+
+  /** Non-archived Intendia sessions of an instance among `ids` (same fields as `recentSessions`). */
+  sessionsByIds(instanceId: string, ids: string[]): (PublicSession & { workspaceName: string; profile: string })[] {
+    if (ids.length === 0) return [];
+    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
+      .from(sessionWorkspace)
+      .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.archived, false), inArray(sessionWorkspace.sessionId, ids)))
+      .all()
+      .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
+  }
+
+  /** Non-archived sessions per workspace slug. */
+  sessionCounts(): Map<string, number> {
+    const rows = this.db.select({ slug: sessionWorkspace.workspaceSlug, n: count() }).from(sessionWorkspace)
+      .where(eq(sessionWorkspace.archived, false)).groupBy(sessionWorkspace.workspaceSlug).all();
+    return new Map(rows.map((r) => [r.slug, r.n]));
   }
 
   /** Every session id Intendia owns on an instance (to filter "other sessions"). */

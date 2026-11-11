@@ -29,7 +29,7 @@ function ids(c: Context): { inst: string; id: string; profile: string } {
 export function cronRoutes(crons: CronService): Hono {
   const r = new Hono();
 
-  r.get('/crons/upcoming', async (c) => c.json({ upcoming: await crons.upcoming() }));
+  r.get('/crons/overview', async (c) => c.json(await crons.overview()));
 
   r.get('/i/:inst/crons', async (c) => c.json({ crons: await crons.list(c.req.param('inst')) }));
   r.post('/i/:inst/crons', async (c) => {

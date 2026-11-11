@@ -4,6 +4,7 @@
  * - default: ends after 4 steps, last_status "ok"
  * - "bloque": ends at once in "blocked_config" with last_error, no message
  * - "long": lasts 100 steps; POST .../cancel ends it as "cancelled"
+ * - "rate": ends after 4 steps with last_status "error" and last_error "RuntimeError: rate"
  */
 
 export const CRON_PROFILES = ['default', 'recherche'];
@@ -129,6 +130,10 @@ export class CronStore {
     run.message_count = 1;
     run.timer = setTimeout(() => {
       run.timer = undefined;
+      if (/\brate\b/i.test(prompt)) {
+        finish('error', 'RuntimeError: rate');
+        return;
+      }
       this.sessions.addMessage(run.id, 'assistant', 'Cron exécuté.');
       run.message_count = 2;
       finish('ok', null);
