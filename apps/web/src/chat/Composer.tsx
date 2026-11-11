@@ -102,6 +102,7 @@ export function Composer({
   };
 
   const waiting = files.some((a) => a.state !== 'done');
+  const failed = files.filter((a) => a.state === 'failed');
   const canSend = (text.trim() !== '' || files.length > 0) && !waiting && !sending && !disabled;
   const send = async () => {
     if (!canSend || running) return;
@@ -125,6 +126,12 @@ export function Composer({
         <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label="Pièces jointes">
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
         </ul>
+      )}
+      {failed.length > 0 && (
+        <p role="alert" className="px-1.5 pb-1 text-[12px] text-bad">
+          {failed.length === 1 ? 'Pièce jointe non envoyée' : `${failed.length} pièces jointes non envoyées`}
+          {' '}({failed.map((a) => a.error ?? a.name).join(' ; ')}). {failed.length === 1 ? 'Retirez-la' : 'Retirez-les'} pour envoyer le message.
+        </p>
       )}
       <textarea
         ref={ref}
