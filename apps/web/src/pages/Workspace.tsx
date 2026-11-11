@@ -53,7 +53,7 @@ export function WorkspacePage() {
     <>
       <PageHeader
         title={w?.name ?? ''}
-        subtitle={w && <span className="font-mono text-xs">{inst?.mount ?? ''}/{w.slug} · {inst?.label ?? w.instanceId} · {w.profile ?? 'default'}</span>}
+        subtitle={w && <span className="font-mono text-xs">{inst?.files?.workspaceRoot ? `${inst.files.workspaceRoot}/` : ''}{w.slug} · {inst?.label ?? w.instanceId} · {w.profile ?? 'default'}</span>}
         action={
           <div className="flex items-center gap-2">
             <Button onClick={() => void rename()} disabled={!w || saveName.isPending}><Pencil className="size-4" strokeWidth={1.5} />Renommer</Button>

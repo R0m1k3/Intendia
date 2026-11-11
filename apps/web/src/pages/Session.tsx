@@ -226,7 +226,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const candidates = useMemo(() => {
     if (!mounts) return [];
     const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : e.kind === 'subagents' ? e.nodes.map((n) => n.summary ?? '').join('\n') : '')).join('\n');
-    const m = { agentMount: mounts.agentMount, mount: mounts.mount };
+    const m = { root: mounts.files?.workspaceRoot ?? null };
     const cited = findPathCandidates(text, m).sort();
     // files joined to the user's messages come after, so they never push the agent's out of the 200 checked
     const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : [])).filter((f) => !cited.includes(f));
@@ -243,7 +243,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
     return {
       found, open: (path) => { setPreviewPath(path); setPanel(true); }, slug,
-      mounts: mounts ? { agentMount: mounts.agentMount, mount: mounts.mount } : null,
+      mounts: mounts ? { root: mounts.files?.workspaceRoot ?? null } : null,
     };
   }, [exists.data, slug, mounts]);
   const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);

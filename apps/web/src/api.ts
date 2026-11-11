@@ -23,6 +23,8 @@ export interface CompatReport {
   api: { reachable: boolean; error?: string };
   dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
   modules: ModuleReport[];
+  /** Root of the workspaces on this instance, or why the Files module cannot be used. */
+  files?: { workspaceRoot: string | null; reason: string | null };
 }
 export interface PublicInstance {
   id: string;
@@ -30,8 +32,8 @@ export interface PublicInstance {
   api: string;
   dashboard: string | null;
   dashboardLink: string | null;
-  mount: string;
-  agentMount: string;
+  /** Root of the workspaces (Hermes' managed files root) read at the last check, or why there is none; null = not checked. */
+  files: { workspaceRoot: string | null; reason: string | null } | null;
   profiles: string[];
   source: 'env' | 'db';
 }
@@ -50,7 +52,6 @@ export interface InstanceInput {
   dashboard?: string;
   dashboardToken?: string;
   dashboardLink?: string;
-  mount?: string;
 }
 
 export interface Workspace {

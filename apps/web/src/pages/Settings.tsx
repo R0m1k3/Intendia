@@ -156,7 +156,10 @@ export function SettingsPage() {
                       <span className="font-mono text-xs text-ink-faint">{i.id}</span>
                       {r?.hermesVersion && <span className="font-mono text-xs text-ink-faint">· Hermes {r.hermesVersion}</span>}
                     </div>
-                    <div className="mt-1.5 truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'} · {i.mount}</div>
+                    <div className="mt-1.5 truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'}{i.files?.workspaceRoot ? ` · ${i.files.workspaceRoot}` : ''}</div>
+                    {i.files && !i.files.workspaceRoot && (
+                      <div className="mt-1.5 max-w-prose text-xs text-bad" data-files-reason="">{i.files.reason}</div>
+                    )}
                   </div>
                   {!declarative && (
                     <div className="flex items-center gap-2">
