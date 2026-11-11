@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Plus, RefreshCw } from 'lucide-react';
+import { Copy, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api';
 import { InstanceForm } from '../components/InstanceForm';
@@ -7,7 +7,7 @@ import { Narrow, PageHeader } from '../components/Layout';
 import { useModuleAvailability } from '../components/ModuleNotice';
 import { Button, copyText, cx, ErrorText, Mark, Section, worst } from '../components/ui';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
-import { ask } from '../components/Dialog';
+import { ask, askText } from '../components/Dialog';
 
 type Theme = 'system' | 'light' | 'dark';
 
@@ -117,6 +117,17 @@ export function SettingsPage() {
     mutationFn: api.removeInstance,
     onSuccess: () => qc.invalidateQueries(),
   });
+  const rename = useMutation({
+    mutationFn: ({ id, label }: { id: string; label: string }) => api.renameInstance(id, label),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  const askRename = async (i: { id: string; label: string }) => {
+    const label = await askText({
+      title: 'Renommer l’instance', label: 'Nom affiché', value: i.label, maxLength: 80,
+      message: `L’identifiant ${i.id} ne change pas.`, confirmLabel: 'Renommer',
+    });
+    if (label && label.trim() && label.trim() !== i.label) rename.mutate({ id: i.id, label: label.trim() });
+  };
   const declarative = instances.data?.declarative;
 
   const list = instances.data?.instances ?? [];
@@ -133,7 +144,7 @@ export function SettingsPage() {
             : 'Les instances Hermes que pilote Intendia. Retirer une instance ne modifie pas Hermes.'}
         >
           <div className="space-y-3">
-            <ErrorText error={remove.error} />
+            <ErrorText error={remove.error ?? rename.error} />
             {list.map((i) => {
               const r = reports.find((x) => x.instanceId === i.id);
               return (
@@ -148,12 +159,17 @@ export function SettingsPage() {
                     <div className="mt-1.5 truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'} · {i.mount}</div>
                   </div>
                   {!declarative && (
-                    <SmallBtn
-                      variant="danger"
-                      onClick={async () => { if (await ask({ title: `Retirer l’instance « ${i.label} » d’Intendia ?`, message: 'Hermes n’est pas modifié.', confirmLabel: 'Retirer', danger: true })) remove.mutate(i.id); }}
-                    >
-                      Retirer
-                    </SmallBtn>
+                    <div className="flex items-center gap-2">
+                      <SmallBtn onClick={() => void askRename(i)} disabled={rename.isPending}>
+                        <Pencil className="size-3.5" strokeWidth={1.5} />Renommer
+                      </SmallBtn>
+                      <SmallBtn
+                        variant="danger"
+                        onClick={async () => { if (await ask({ title: `Retirer l’instance « ${i.label} » d’Intendia ?`, message: 'Hermes n’est pas modifié.', confirmLabel: 'Retirer', danger: true })) remove.mutate(i.id); }}
+                      >
+                        Retirer
+                      </SmallBtn>
+                    </div>
                   )}
                 </div>
               );

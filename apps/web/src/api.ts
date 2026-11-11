@@ -468,6 +468,7 @@ export const api = {
   testInstance: (i: InstanceInput) => call<CompatReport>('POST', '/instances/test', i),
   saveInstance: (i: InstanceInput) => call<{ instance: PublicInstance; report: CompatReport }>('POST', '/instances', i),
   removeInstance: (id: string) => call<{ ok: true }>('DELETE', `/instances/${encodeURIComponent(id)}`),
+  renameInstance: (id: string, label: string) => call<{ instance: PublicInstance }>('PATCH', `/instances/${encodeURIComponent(id)}`, { label }),
   compat: () => call<{ reports: CompatReport[] }>('GET', '/compat'),
   recheck: (id: string) => call<CompatReport>('POST', `/compat/${encodeURIComponent(id)}/check`),
 
