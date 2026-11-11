@@ -330,6 +330,8 @@ export interface ProviderAccount {
   cliCommand: string | null; docsUrl: string | null;
   disconnectable: boolean; disconnectHint: string | null;
   connected: boolean; expiresAt: string | null;
+  /** Anthropic only: `token` = setup-token variable, `api_key` = a paid API key is used, `hermes` = login on its machine. */
+  via?: 'token' | 'api_key' | 'hermes' | null;
 }
 /** API key of the credential pool (never its value). `source`: `manual`, or `env:NAME` for a key variable. */
 /** Custom endpoint of the config file: `providers.<slug>` (v12) or an old `custom_providers` entry (slug null). */
@@ -665,6 +667,10 @@ export const api = {
     call<{ ok: true }>('DELETE', instPath(inst, `config/providers/${enc(provider)}/account`, profile)),
   addProviderKey: (inst: string, profile: string, k: { provider: string; apiKey: string; label?: string }) =>
     call<{ count: number | null }>('POST', instPath(inst, 'config/provider-keys', profile), k),
+  setAnthropicToken: (inst: string, profile: string, token: string, replaceApiKey = false) =>
+    call<{ version: string | null; restartNeeded: boolean }>('POST', instPath(inst, 'config/providers/anthropic/token', profile), { token, replaceApiKey }),
+  removeAnthropicToken: (inst: string, profile: string) =>
+    call<{ version: string | null; left: string[]; restartNeeded: boolean }>('DELETE', instPath(inst, 'config/providers/anthropic/token', profile)),
   removeProviderKey: (inst: string, profile: string, provider: string, id: string) =>
     call<{ ok: true }>('DELETE', instPath(inst, `config/provider-keys/${enc(provider)}/${enc(id)}`, profile)),
   configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),

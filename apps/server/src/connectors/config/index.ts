@@ -106,7 +106,10 @@ export function mcpTokenEnv(name: string): string {
   return `MCP_${name.toUpperCase().replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+|_+$/g, '')}_API_KEY`;
 }
 
-/** GET /api/providers/oauth: providers with an account (subscription). `token_preview` and `source_label` never leave the server. */
+/**
+ * GET /api/providers/oauth: providers with an account (subscription). `token_preview` and `source_label` never leave
+ * the server; `source` is read to tell how Anthropic is connected, not sent either.
+ */
 export const OAuthProvidersSchema = z.looseObject({
   providers: z.array(z.looseObject({
     id: z.string(),
@@ -116,7 +119,7 @@ export const OAuthProvidersSchema = z.looseObject({
     docs_url: z.string().nullish(),
     disconnectable: z.boolean().nullish(),
     disconnect_hint: z.string().nullish(),
-    status: z.looseObject({ logged_in: z.boolean().nullish(), expires_at: z.unknown().optional() }).nullish(),
+    status: z.looseObject({ logged_in: z.boolean().nullish(), expires_at: z.unknown().optional(), source: z.string().nullish() }).nullish(),
   })),
 });
 export const OAuthStartSchema = z.looseObject({

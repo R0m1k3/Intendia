@@ -70,6 +70,12 @@ const ProviderKeyBody = z.object({
   label: z.string().max(80).optional(),
 });
 
+// a `claude setup-token` token: same rule, never logged nor sent back; format checked after trim by the service
+const AnthropicTokenBody = z.object({
+  token: z.string().max(8192),
+  replaceApiKey: z.boolean().optional(),
+});
+
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 // same rule for the key as ProviderKeyBody: never logged nor sent back
 const CustomProviderBody = z.object({
@@ -128,6 +134,11 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.delete('/i/:inst/config/provider-keys/:provider/:id', async (c) =>
     c.json(await providers.removeKey(inst(c), profileOf(c), { provider: param(c, 'provider', PROVIDER_RE), id: param(c, 'id', KEY_ID_RE) })));
 
+  r.post('/i/:inst/config/providers/anthropic/token', async (c) => {
+    const body = AnthropicTokenBody.parse(await c.req.json());
+    return c.json(await config.setAnthropicToken(inst(c), profileOf(c), body.token, body.replaceApiKey === true));
+  });
+  r.delete('/i/:inst/config/providers/anthropic/token', async (c) => c.json(await config.removeAnthropicToken(inst(c), profileOf(c))));
   r.get('/i/:inst/config/custom-providers', async (c) => c.json(await config.customProviders(inst(c), profileOf(c))));
   r.post('/i/:inst/config/custom-providers', async (c) => {
     const body = CustomProviderBody.parse(await c.req.json());

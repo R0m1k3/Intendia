@@ -7,6 +7,9 @@
  * - cancelling removes the session (a later poll → 404), like `cancel_oauth_session`.
  * - a key containing `refuse` → 400 whose detail repeats the key (Hermes answers `str(exc)`).
  * - starts with no account connected and an empty pool (`seedSamples` adds an env entry and an OAuth login).
+ * - `anthropic` (« Anthropic Account », external, not disconnectable: 400 like Hermes): connected by its variables,
+ *   read at each call in Hermes's order (`ANTHROPIC_API_KEY`, `ANTHROPIC_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`,
+ *   `source: env_var`), unless a test set `logged_in` with `setAccount`.
  */
 
 type Obj = Record<string, unknown>;
@@ -17,7 +20,7 @@ function json(body: unknown, status = 200): Response {
 
 export interface FakeAccount {
   id: string; name: string; flow: 'device_code' | 'external'; cli_command: string; docs_url: string;
-  disconnectable: boolean; logged_in: boolean; source_label: string;
+  disconnectable: boolean; logged_in: boolean; source_label: string; source?: string;
 }
 export interface FakePoolEntry {
   provider: string; id: string; label: string; auth_type: string; source: string; access_token: string; last_status: string | null;
@@ -35,7 +38,9 @@ function startAccounts(): FakeAccount[] {
     a('nous', 'Nous Portal', 'device_code'),
     a('openai-codex', 'OpenAI Codex', 'device_code'),
     a('xai-oauth', 'xAI', 'device_code', { source_label: '/opt/data/auth.json' }),
-    a('anthropic', 'Anthropic (Claude)', 'external'),
+    a('minimax-oauth', 'MiniMax (OAuth)', 'device_code'),
+    a('anthropic', 'Anthropic Account', 'external', { disconnectable: false }),
+    a('claude-code', 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription', 'external', { cli_command: 'claude setup-token', disconnectable: false }),
   ];
 }
 
@@ -44,6 +49,9 @@ export const SAMPLE_POOL: FakePoolEntry[] = [
     { provider: 'mistral', id: 'env001', label: 'MISTRAL_API_KEY', auth_type: 'api_key', source: 'env:MISTRAL_API_KEY', access_token: 'sk-test-mistral-env-0001', last_status: 'ok' },
     { provider: 'openai-codex', id: 'oau001', label: 'device_code', auth_type: 'oauth', source: 'device_code', access_token: 'sk-test-codex-oauth-0001', last_status: null },
 ];
+
+/** Variables Hermes reads for Anthropic, in its order. */
+export const ANTHROPIC_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'] as const;
 
 const preview = (t: string) => (t.length > 8 ? `${t.slice(0, 4)}...${t.slice(-4)}` : '');
 
@@ -54,7 +62,14 @@ export class ProviderStore {
   private seq = 0;
 
   /** `onModel(model)`: called when an approved login also chooses the main model (Nous). */
-  constructor(private readonly onModel: (model: string) => void) {}
+  constructor(private readonly onModel: (model: string) => void, private readonly envIsSet: (key: string) => boolean = () => false) {}
+
+  /** The card as read now: Anthropic follows its variables unless a test connected it by `setAccount`. */
+  private view(a: FakeAccount): FakeAccount {
+    if (a.id !== 'anthropic' || a.logged_in) return a;
+    const v = ANTHROPIC_VARS.find((k) => this.envIsSet(k));
+    return v ? { ...a, logged_in: true, source: 'env_var', source_label: `${v} (.env)` } : a;
+  }
 
   accountsOf(profile: string): FakeAccount[] {
     let list = this.accounts.get(profile);
@@ -83,7 +98,7 @@ export class ProviderStore {
 
   /** Providers with a credential for this profile: a connected account or an API key of the pool. */
   authenticated(profile: string): Set<string> {
-    const out = new Set(this.accountsOf(profile).filter((a) => a.logged_in).map((a) => a.id));
+    const out = new Set(this.accountsOf(profile).map((a) => this.view(a)).filter((a) => a.logged_in).map((a) => a.id));
     for (const e of this.poolOf(profile)) if (e.auth_type === 'api_key') out.add(e.provider);
     return out;
   }
@@ -92,11 +107,11 @@ export class ProviderStore {
     const b = (body ?? {}) as Obj;
     if (path === '/api/providers/oauth' && method === 'GET') {
       return json({
-        providers: this.accountsOf(profile).map((a) => ({
+        providers: this.accountsOf(profile).map((x) => this.view(x)).map((a) => ({
           id: a.id, name: a.name, flow: a.flow, cli_command: a.cli_command, docs_url: a.docs_url,
           disconnect_hint: a.disconnectable ? null : 'Managed by that provider\'s CLI; remove it there.',
           disconnect_command: null, disconnectable: a.disconnectable,
-          status: { logged_in: a.logged_in, source: a.id, source_label: a.source_label, token_preview: a.logged_in ? 'sk-t...0001' : '', expires_at: a.logged_in ? '2026-12-31T00:00:00Z' : null, has_refresh_token: a.logged_in },
+          status: { logged_in: a.logged_in, source: a.source ?? a.id, source_label: a.source_label, token_preview: a.logged_in ? 'sk-t...0001' : '', expires_at: a.logged_in ? '2026-12-31T00:00:00Z' : null, has_refresh_token: a.logged_in },
         })),
       });
     }
