@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { Method, Via } from '../hermes/http.js';
 
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'files';
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
 
 /**
@@ -66,4 +66,9 @@ export interface CompatReport {
   api: { reachable: boolean; error?: string };
   dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
   modules: ModuleReport[];
+  /**
+   * Root of the workspaces on this instance (the dashboard's managed files root, `locked_root`), or why the
+   * Files module cannot be used. Absent in reports saved before Intendia 0.0.4 (= not checked yet).
+   */
+  files?: { workspaceRoot: string | null; reason: string | null };
 }

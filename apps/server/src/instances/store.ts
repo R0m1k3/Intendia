@@ -10,8 +10,8 @@ export interface PublicInstance {
   api: string;
   dashboard: string | null;
   dashboardLink: string | null;
-  mount: string;
-  agentMount: string;
+  /** Root of the workspaces read during the last check, or why there is none; null = not checked yet. */
+  files: { workspaceRoot: string | null; reason: string | null } | null;
   profiles: string[];
   source: 'env' | 'db';
 }
@@ -65,15 +65,14 @@ export class InstanceStore {
     this.db.delete(instances).where(eq(instances.id, id)).run();
   }
 
-  static toPublic(i: InstanceConfig, source: 'env' | 'db'): PublicInstance {
+  static toPublic(i: InstanceConfig, source: 'env' | 'db', files: PublicInstance['files'] = null): PublicInstance {
     return {
       id: i.id,
       label: i.label,
       api: i.api,
       dashboard: i.dashboard ?? null,
       dashboardLink: i.dashboardLink ?? null,
-      mount: i.mount,
-      agentMount: i.agentMount ?? i.mount,
+      files,
       profiles: Object.keys(i.profileKeys),
       source,
     };

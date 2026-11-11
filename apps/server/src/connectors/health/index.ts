@@ -13,6 +13,7 @@ export const DashStatusSchema = z.looseObject({
   release_date: z.string().optional(),
   gateway_running: z.boolean().optional(),
   gateway_state: z.string().optional(),
+  hermes_home: z.string().nullish(),
 });
 
 export const healthModule: ModuleDef = {

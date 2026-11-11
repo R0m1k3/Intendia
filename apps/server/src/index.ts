@@ -28,19 +28,13 @@ function main() {
   checkWritable(config.dataDir, 'Data directory');
 
   const store = new InstanceStore(db, config);
-  for (const inst of store.list()) {
-    try {
-      checkWritable(inst.mount, `Workspace mount of instance "${inst.id}"`);
-    } catch (err) {
-      console.warn(`[startup] ${(err as Error).message}`);
-    }
-  }
+  store.list(); // warns once about legacy mount/agentMount keys
 
   const auth = new Auth(db, config);
   const compat = new CompatService(db, store, new WebhookNotifier(config.webhookUrl, config.publicUrl));
   const services = createServices({ config, db, store, compat });
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
-  const mcpApp = createMcpApp({ db, store, links: services.links, config, version: VERSION });
+  const mcpApp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: VERSION });
 
   if (auth.setupCode) {
     console.log('');

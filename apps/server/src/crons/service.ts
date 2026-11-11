@@ -1,11 +1,11 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import type { CompatService } from '../compat/service.js';
 import {
   JobGetSchema, JobListSchema, normaliseJobs, RunListSchema, TargetListSchema, updateBody, type HermesJob,
 } from '../connectors/crons/index.js';
 import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
+import type { FileRoots } from '../files/hermes-fs.js';
 import type { InstanceStore } from '../instances/store.js';
+import { WorkspaceFsError } from '../workspaces/fs.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 
@@ -157,6 +157,7 @@ export class CronService {
     private readonly compat: CompatService,
     private readonly workspaces: WorkspaceService,
     private readonly store: InstanceStore,
+    private readonly roots: FileRoots,
   ) {}
 
   private ctx(instanceId: string) {
@@ -199,8 +200,12 @@ export class CronService {
   private async takenKeys(instanceId: string, ws: Workspace, exceptJobId?: string): Promise<string[]> {
     const keys = (await this.rawList(instanceId)).filter((j) => j.id !== exceptJobId)
       .map((j) => unframe(j.prompt ?? '').folder).filter((k): k is string => Boolean(k));
-    const dir = join(this.workspaces.dir(ws), 'crons');
-    if (existsSync(dir)) keys.push(...readdirSync(dir));
+    try {
+      const { entries } = await this.roots.fs(ws.instanceId).list(`${ws.slug}/crons`);
+      keys.push(...entries.map((e) => e.name));
+    } catch (err) {
+      if (!(err instanceof WorkspaceFsError && err.code === 'not_found')) throw err;
+    }
     return keys;
   }
 

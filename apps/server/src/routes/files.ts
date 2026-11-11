@@ -22,43 +22,43 @@ export function fileRoutes(files: FileService): Hono {
   const r = new Hono();
   const base = '/workspaces/:slug/files';
 
-  r.get(`${base}/tree`, (c) => c.json(files.list(slugOf(c), c.req.query('path') ?? '')));
+  r.get(`${base}/tree`, async (c) => c.json(await files.list(slugOf(c), c.req.query('path') ?? '')));
 
-  r.get(`${base}/search`, (c) => c.json(files.search(slugOf(c), (c.req.query('q') ?? '').slice(0, 200))));
+  r.get(`${base}/search`, async (c) => c.json(await files.search(slugOf(c), (c.req.query('q') ?? '').slice(0, 200))));
 
-  r.get(`${base}/raw`, (c) => {
-    const { abs, name } = files.resolveForRead(slugOf(c), c.req.query('path') ?? '');
-    return sendFile(c, abs, name, { download: c.req.query('download') === '1' });
+  r.get(`${base}/raw`, async (c) => {
+    const file = await files.read(slugOf(c), c.req.query('path') ?? '', c.req.raw.signal);
+    return sendFile(c, file, file.name, { download: c.req.query('download') === '1' });
   });
 
   r.put(`${base}/upload`, async (c) => {
-    const res = await files.upload(slugOf(c), c.req.query('dir') ?? 'inbox', c.req.query('name') ?? '', c.req.raw.body);
+    const res = await files.upload(slugOf(c), c.req.query('dir') ?? 'inbox', c.req.query('name') ?? '', c.req.raw.body, c.req.raw.signal);
     return c.json(res, 201);
   });
 
   r.patch(`${base}/move`, async (c) => {
     const { from, to } = Move.parse(await c.req.json());
-    return c.json(files.move(slugOf(c), from, to));
+    return c.json(await files.move(slugOf(c), from, to));
   });
 
-  r.delete(base, (c) => {
-    files.remove(slugOf(c), c.req.query('path') ?? '');
+  r.delete(base, async (c) => {
+    await files.remove(slugOf(c), c.req.query('path') ?? '');
     return c.json({ ok: true });
   });
 
   r.put(`${base}/text`, async (c) => {
     const { path, text, mtime } = Text.parse(await c.req.json());
-    return c.json(files.writeText(slugOf(c), path, text, mtime));
+    return c.json(await files.writeText(slugOf(c), path, text, mtime));
   });
 
   r.post(`${base}/exists`, async (c) => {
     const { paths } = Exists.parse(await c.req.json());
-    return c.json({ results: files.exists(slugOf(c), paths) });
+    return c.json({ results: await files.exists(slugOf(c), paths) });
   });
 
   r.post(`${base}/share`, async (c) => {
     const { path } = Share.parse(await c.req.json());
-    return c.json(files.share(slugOf(c), path), 201);
+    return c.json(await files.share(slugOf(c), path), 201);
   });
 
   return r;

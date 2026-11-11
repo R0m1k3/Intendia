@@ -1,10 +1,8 @@
-import { lstatSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { framingAgentsMd } from '../src/workspaces/fs.js';
 import { testApp } from './helpers.js';
-
-const mode = (p: string) => statSync(p).mode & 0o777;
 
 describe('workspaces', () => {
   it('counts the non-archived sessions of each workspace', async () => {
@@ -23,11 +21,10 @@ describe('workspaces', () => {
     const t = await testApp();
     const res = await t.request('POST', '/x/workspaces', { slug: 'magasins', name: 'Magasins', instanceId: 'fake', model: 'opus' });
     expect(res.status).toBe(201);
-    const dir = join(t.mount, 'magasins');
+    const dir = join(t.root, 'magasins');
     expect(readdirSync(dir).sort()).toEqual(['AGENTS.md', 'files', 'inbox', 'sessions']);
-    expect(mode(dir)).toBe(0o775);
-    expect(mode(join(dir, 'sessions'))).toBe(0o775);
-    expect(mode(join(dir, 'AGENTS.md'))).toBe(0o664);
+    // AGENTS.md is written after the mkdirs: the cached listing of the new folder was dropped
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Consignes du projet');
     expect((await t.request('GET', '/x/workspaces')).json.workspaces).toMatchObject([{ slug: 'magasins', model: null, effort: null, profile: null }]);
     expect((await t.request('GET', '/x/workspaces/magasins/agents-md')).json.text).toContain('Consignes du projet');
   });
@@ -37,24 +34,65 @@ describe('workspaces', () => {
     for (const slug of ['../x', 'A', 'a'.repeat(41), '']) {
       expect((await t.request('POST', '/x/workspaces', { slug, name: 'x', instanceId: 'fake' })).status).toBe(400);
     }
-    expect(readdirSync(t.mount)).toEqual([]);
+    expect(readdirSync(t.root)).toEqual([]);
   });
 
   it('never overwrites an existing folder or link', async () => {
     const t = await testApp();
-    mkdirSync(join(t.mount, 'pris'));
+    mkdirSync(join(t.root, 'pris'));
     expect((await t.request('POST', '/x/workspaces', { slug: 'pris', name: 'x', instanceId: 'fake' })).status).toBe(409);
-    symlinkSync('/tmp', join(t.mount, 'lien'));
+    symlinkSync(join(t.root, 'pris'), join(t.root, 'lien'));
     expect((await t.request('POST', '/x/workspaces', { slug: 'lien', name: 'x', instanceId: 'fake' })).status).toBe(409);
-    expect(lstatSync(join(t.mount, 'lien')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(t.root, 'lien')).isSymbolicLink()).toBe(true);
+    // a link leaving the root makes the root unreadable: refused, nothing created
+    symlinkSync('/tmp', join(t.root, 'dehors'));
+    expect((await t.request('POST', '/x/workspaces', { slug: 'neuf', name: 'x', instanceId: 'fake' })).status).toBe(403);
+    expect(readdirSync(t.root).sort()).toEqual(['dehors', 'lien', 'pris']);
     expect((await t.request('GET', '/x/workspaces')).json.workspaces).toEqual([]);
   });
 
-  it('fails cleanly when the mount is missing', async () => {
-    const t = await testApp({ mount: '/nonexistent-intendia-mount' });
-    const res = await t.request('POST', '/x/workspaces', { slug: 'x', name: 'x', instanceId: 'fake' });
-    expect(res.status).toBe(422);
-    expect((await t.request('GET', '/x/workspaces')).json.workspaces).toEqual([]);
+  it('without a usable files root: Files module unavailable with the reason, no new workspace (422)', async () => {
+    const cases: { name: string; opts: Parameters<typeof testApp>[0]; reason: RegExp }[] = [
+      { name: 'no locked root', opts: { breaks: { 'dash GET /api/files': { body: { path: '/root', locked_root: null, entries: [] } } } }, reason: /HERMES_DASHBOARD_FILES_ROOT=\/opt\/data\/workspace/ },
+      { name: 'root /', opts: { breaks: { 'dash GET /api/files': { body: { path: '/', locked_root: '/', entries: [] } } } }, reason: /contient sa configuration/ },
+      { name: 'root holds hermes_home', opts: { hermesHome: '/opt/data/.hermes', breaks: { 'dash GET /api/files': { body: { path: '/opt/data', locked_root: '/opt/data', entries: [] } } } }, reason: /contient sa configuration/ },
+      { name: 'root = hermes_home', opts: { hermesHome: '/opt/data/' , breaks: { 'dash GET /api/files': { body: { path: '/opt/data', locked_root: '/opt/data', entries: [] } } } }, reason: /contient sa configuration/ },
+      { name: 'docker terminal', opts: { terminalBackend: 'docker' }, reason: /« docker »/ },
+    ];
+    for (const c of cases) {
+      const t = await testApp(c.opts);
+      const report = (await t.request('GET', '/x/compat')).json.reports[0];
+      const mod = report.modules.find((m: any) => m.id === 'files');
+      expect(mod?.state, c.name).toBe('unavailable');
+      expect(mod?.reasons[0], c.name).toMatch(c.reason);
+      const inst = (await t.request('GET', '/x/instances')).json.instances[0];
+      expect(inst.files, c.name).toMatchObject({ workspaceRoot: null, reason: expect.stringMatching(c.reason) });
+      const res = await t.request('POST', '/x/workspaces', { slug: 'x', name: 'x', instanceId: 'fake' });
+      expect(res.status, c.name).toBe(422);
+      expect((await t.request('GET', '/x/workspaces')).json.workspaces).toEqual([]);
+    }
+  });
+
+  it('the root of the dashboard is the workspace root; a hermes_home elsewhere is fine', async () => {
+    const t = await testApp({ hermesHome: '/opt/data' });
+    const inst = (await t.request('GET', '/x/instances')).json.instances[0];
+    expect(inst.files).toEqual({ workspaceRoot: t.root, reason: null });
+    expect(inst).not.toHaveProperty('mount');
+    expect(dirname(t.root)).not.toBe(t.root);
+  });
+
+  it('a report saved without files is checked again at the next tick', async () => {
+    const t = await testApp();
+    const report = t.compat.get('fake')!;
+    delete report.files;
+    await t.compat.tick();
+    expect(t.compat.get('fake')!.files?.workspaceRoot).toBe(t.root);
+  });
+
+  it('POST /x/instances/test shows the files root or the reason', async () => {
+    const t = await testApp({ terminalBackend: 'ssh' });
+    const res = await t.request('POST', '/x/instances/test', { ...t.inst });
+    expect(res.json.files).toMatchObject({ workspaceRoot: null, reason: expect.stringContaining('« ssh »') });
   });
 
   it('removes the folder when the database insert fails', async () => {
@@ -62,7 +100,7 @@ describe('workspaces', () => {
     t.db.$client.exec('CREATE TRIGGER no_ws BEFORE INSERT ON workspaces BEGIN SELECT RAISE(ABORT, \'boom\'); END;');
     expect((await t.request('POST', '/x/workspaces', { slug: 'raté', name: 'x', instanceId: 'fake' })).status).toBe(400);
     expect((await t.request('POST', '/x/workspaces', { slug: 'rate', name: 'x', instanceId: 'fake' })).status).toBe(500);
-    expect(readdirSync(t.mount)).toEqual([]);
+    expect(readdirSync(t.root)).toEqual([]);
   });
 
   it('only accepts profiles that have a key', async () => {
@@ -75,7 +113,7 @@ describe('workspaces', () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'w', name: 'W', instanceId: 'fake' });
     expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'Réponds en français.' })).status).toBe(200);
-    expect(readFileSync(join(t.mount, 'w', 'AGENTS.md'), 'utf8')).toBe('Réponds en français.');
+    expect(readFileSync(join(t.root, 'w', 'AGENTS.md'), 'utf8')).toBe('Réponds en français.');
     expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'é'.repeat(40_000) })).status).toBe(413);
   });
 

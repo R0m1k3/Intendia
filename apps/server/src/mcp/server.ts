@@ -10,6 +10,7 @@ import type { AppConfig } from '../config.js';
 import { randomToken, safeEqual } from '../crypto.js';
 import type { Db } from '../db/index.js';
 import { settings } from '../db/schema.js';
+import type { FileRoots } from '../files/hermes-fs.js';
 import { toVolumePath } from '../files/paths.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NO_PUBLIC_URL_NOTE, type LinkService } from '../links/service.js';
@@ -62,35 +63,42 @@ export interface McpDeps {
   db: Db;
   store: InstanceStore;
   links: LinkService;
+  roots: FileRoots;
   config: Pick<AppConfig, 'publicUrl' | 'mcpPort'>;
   version: string;
 }
 
 export function createMcpApp(deps: McpDeps): Hono {
-  const { db, store, links, config } = deps;
+  const { db, store, links, roots, config } = deps;
   const app = new Hono();
 
-  const shareFile = (instanceId: string, args: unknown) => {
+  const shareFile = async (instanceId: string, args: unknown) => {
     const path = (args as { path?: unknown } | null)?.path;
     const refuse = (text: string) => ({ content: [{ type: 'text', text }], isError: true });
     if (typeof path !== 'string' || !path) return refuse('`path` is required (absolute path of a file).');
-    const inst = store.get(instanceId)!;
-    const vol = toVolumePath(path, inst);
-    if (vol === null) return refuse(`Refused: ${path} is outside the shared workspace volume.`);
+    let root: string;
     try {
-      const row = links.share(instanceId, vol, { forAgent: true });
+      root = roots.root(instanceId);
+    } catch {
+      return refuse('Refused: workspace files are unavailable on this instance (no managed files root).');
+    }
+    const vol = toVolumePath(path, root);
+    if (vol === null) return refuse(`Refused: ${path} is outside the workspaces folder (${root}).`);
+    try {
+      const row = await links.share(instanceId, vol, { forAgent: true });
       const url = links.url(row.token);
       return { content: [{ type: 'text', text: config.publicUrl ? url : `${url}\n(${NO_PUBLIC_URL_NOTE})` }] };
     } catch (err) {
       if (err instanceof WorkspaceFsError) {
-        const why = err.code === 'outside' ? 'outside the shared volume' : err.code === 'not_file' ? 'not a regular file' : 'not found';
+        if (err.code === 'unreachable' || err.code === 'no_root') return refuse(`Refused: ${err.message}.`);
+        const why = err.code === 'outside' ? 'a symbolic link or outside the workspaces folder' : err.code === 'not_file' ? 'not a regular file' : 'not found';
         return refuse(`Refused: ${path} is ${why}.`);
       }
       throw err;
     }
   };
 
-  const handle = (instanceId: string, msg: unknown): object | null => {
+  const handle = async (instanceId: string, msg: unknown): Promise<object | null> => {
     if (!msg || typeof msg !== 'object' || (msg as { jsonrpc?: unknown }).jsonrpc !== '2.0') return fail(null, -32600, 'Invalid Request');
     const { id, method, params } = msg as { id?: Id; method?: unknown; params?: Record<string, unknown> };
     if (id === undefined) return null; // notification
@@ -112,7 +120,7 @@ export function createMcpApp(deps: McpDeps): Hono {
         return ok(id, { tools: [SHARE_FILE_TOOL] });
       case 'tools/call': {
         if (params?.name !== 'share_file') return fail(id, -32602, `Unknown tool: ${String(params?.name)}`);
-        return ok(id, shareFile(instanceId, params.arguments));
+        return ok(id, await shareFile(instanceId, params.arguments));
       }
       default:
         return fail(id, -32601, `Method not found: ${method}`);
@@ -140,7 +148,7 @@ export function createMcpApp(deps: McpDeps): Hono {
     if (Array.isArray(msg)) return c.json(fail(null, -32600, 'Batches are not supported'));
     let reply: object | null;
     try {
-      reply = handle(instanceId, msg);
+      reply = await handle(instanceId, msg);
     } catch (err) {
       console.error('[mcp]', err);
       reply = fail((msg as { id?: Id }).id ?? null, -32603, 'Internal error');

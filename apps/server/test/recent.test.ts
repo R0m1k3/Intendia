@@ -1,3 +1,4 @@
+import { workspaces as workspacesTable } from '../src/db/schema.js';
 import { describe, expect, it } from 'vitest';
 import { lineTitle, mergeRecent } from '../src/sessions/recent.js';
 import { testApp, waitRun } from './helpers.js';
@@ -111,7 +112,11 @@ describe('GET /x/i/fake/sessions/recent?source', () => {
 describe('GET /x/i/fake/sessions/search', () => {
   async function setup(opts: Parameters<typeof testApp>[0] = {}) {
     const t = await testApp(opts);
-    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    const res = await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    // without dashboard there are no workspace files: the row alone (a workspace made before the dashboard went away)
+    if (res.status !== 201) {
+      t.db.insert(workspacesTable).values({ slug: 'dev', name: 'Dev', instanceId: 'fake', profile: null, model: null, modelProvider: null, effort: null, createdAt: Date.now() }).run();
+    }
     return t;
   }
 

@@ -18,8 +18,8 @@ const runsPosted = (t: Awaited<ReturnType<typeof testApp>>) => t.fake.requests.f
 
 describe('sending a message', () => {
   it('sends session_id and the framing block, no model nor model_options while on Auto', async () => {
-    const { t, s, base } = await session({ instance: { agentMount: '/opt/data/workspace' } });
-    writeFileSync(join(t.mount, 'dev', 'AGENTS.md'), `Réponds en français.\n${'é'.repeat(3000)}`);
+    const { t, s, base } = await session({});
+    writeFileSync(join(t.root, 'dev', 'AGENTS.md'), `Réponds en français.\n${'é'.repeat(3000)}`);
     const res = await t.request('POST', `${base}/runs`, { input: 'Bonjour' });
     expect(res.status).toBe(200);
     expect(res.json.runId).toMatch(/^run_/);
@@ -28,11 +28,11 @@ describe('sending a message', () => {
     expect(body).not.toHaveProperty('model');
     expect(body).not.toHaveProperty('model_options');
     expect(body.instructions).toContain('[Intendia] Workspace : Dev (dev)');
-    expect(body.instructions).toContain('Dossier de travail : /opt/data/workspace/dev/');
-    expect(body.instructions).toContain(`Range chaque fichier que tu produis dans /opt/data/workspace/dev/sessions/${s.id}/.`);
+    expect(body.instructions).toContain(`Dossier de travail : ${t.root}/dev/`);
+    expect(body.instructions).toContain(`Range chaque fichier que tu produis dans ${t.root}/dev/sessions/${s.id}/.`);
     expect(body.instructions).toContain('Réponds en français.');
     expect(body.instructions).toContain("Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.\nConsignes du projet (");
-    expect(body.instructions).toContain('(suite tronquée : lis /opt/data/workspace/dev/AGENTS.md en entier avant de commencer)');
+    expect(body.instructions).toContain(`(suite tronquée : lis ${t.root}/dev/AGENTS.md en entier avant de commencer)`);
     expect(body.instructions).not.toContain('�');
     const after = (await t.request('GET', base)).json.session;
     expect(after.lastRunId).toBe(res.json.runId);
