@@ -102,6 +102,20 @@ export class FileService {
     return { body, size, name: nameOf(rel) };
   }
 
+  /**
+   * Entries of an upload folder, created (with its parents) when missing: a workspace made before the files moved
+   * into Hermes (0.0.4) has no folder there yet, and pasting into the chat must still work.
+   */
+  private async listOrCreate(c: WsCtx, dir: string): Promise<FsEntry[]> {
+    try {
+      return (await c.fs.list(this.vol(c, dir))).entries;
+    } catch (err) {
+      if (!(err instanceof WorkspaceFsError && err.code === 'not_found')) throw err;
+      await c.fs.mkdir(this.vol(c, dir));
+      return [];
+    }
+  }
+
   /** Streams a body into dir/name (name (2).ext… when the name is taken), at most uploadMaxBytes. */
   async upload(
     slug: string, dirIn: string, nameIn: string, body: ReadableStream<Uint8Array> | null, signal?: AbortSignal,
@@ -109,7 +123,7 @@ export class FileService {
     const c = this.ctx(slug);
     const dir = normalizeRel(dirIn, { allowRoot: true });
     const name = checkName(nameIn);
-    const taken = new Set((await c.fs.list(this.vol(c, dir))).entries.map((e) => e.name));
+    const taken = new Set((await this.listOrCreate(c, dir)).map((e) => e.name));
     const dot = name.lastIndexOf('.');
     const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
     let rel = '';
