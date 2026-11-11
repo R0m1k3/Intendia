@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { api, type PublicInstance, type Workspace } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
 import { NewWorkspace } from '../components/NewWorkspace';
@@ -56,11 +57,10 @@ function OtherSessions({ inst }: { inst: PublicInstance }) {
 
 export function WorkspacesPage() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const { id: inst, instance, instances } = useCurrentInstance();
   const [adding, setAdding] = useState(false);
-  const list = workspaces.data?.workspaces ?? [];
-  const label = (id: string) => instances.data?.instances.find((i) => i.id === id)?.label ?? id;
-  const empty = workspaces.isSuccess && list.length === 0;
+  const list = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
+  const empty = workspaces.isSuccess && inst !== null && list.length === 0;
   const qc = useQueryClient();
   const [error, setError] = useState<unknown>(null);
   const rename = async (w: Workspace) => {
@@ -77,7 +77,7 @@ export function WorkspacesPage() {
     <>
       <PageHeader
         title="Workspaces"
-        subtitle="Un workspace = un dossier partagé avec l’agent, ses consignes et ses sessions"
+        subtitle={`Un workspace = un dossier partagé avec l’agent, ses consignes et ses sessions${instance && instances.length > 1 ? `. Ceux de ${instance.label}` : ''}`}
         action={!adding && !empty && <Button variant="primary" onClick={() => setAdding(true)}><Plus className="size-4" strokeWidth={1.75} />Nouveau workspace</Button>}
       />
       <div className="space-y-6 px-5 pb-12 md:px-8">
@@ -95,7 +95,7 @@ export function WorkspacesPage() {
                   <Link to="/w/$slug" params={{ slug: w.slug }} className="flex min-h-14 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
                     <span className="text-sm font-medium">{w.name}</span>
                     <span className="font-mono text-xs text-ink-faint">{w.slug}</span>
-                    <span className="ml-auto text-xs text-ink-soft">{label(w.instanceId)} · {w.profile ?? 'default'}</span>
+                    <span className="ml-auto text-xs text-ink-soft">agent {w.profile ?? 'default'}</span>
                   </Link>
                   <button type="button" title="Renommer" aria-label={`Renommer ${w.name}`} onClick={() => void rename(w)}
                     className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink">
@@ -106,7 +106,7 @@ export function WorkspacesPage() {
             </ul>
           </Panel>
         )}
-        {instances.data?.instances.map((i) => <OtherSessions key={i.id} inst={i} />)}
+        {instance && <OtherSessions key={instance.id} inst={instance} />}
       </div>
     </>
   );

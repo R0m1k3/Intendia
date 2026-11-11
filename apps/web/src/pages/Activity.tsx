@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { MessageSquareReply, Square, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, type ActiveRun, type KanbanWorker } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
 import { ask } from '../components/Dialog';
@@ -80,16 +81,16 @@ function WorkerRow({ worker, instanceLabel, onStopped }: { worker: KanbanWorker;
 }
 
 export function ActivityPage() {
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const activity = useQuery({ queryKey: ['activity'], queryFn: api.activity, refetchInterval: POLL_MS, staleTime: 0 });
-  const list = instances.data?.instances ?? [];
-  const label = (id: string) => (list.length > 1 ? list.find((i) => i.id === id)?.label ?? id : null);
+  const { id: inst, instance, instances } = useCurrentInstance();
+  const activity = useQuery({ queryKey: ['activity', inst], queryFn: () => api.activity(inst!), enabled: inst !== null, refetchInterval: POLL_MS, staleTime: 0 });
+  // one instance per page: its name is in the subtitle, not on each line
+  const label = (_id: string): string | null => null;
   const data = activity.data;
   const [stopped, setStopped] = useState<string[]>([]);
 
   return (
     <div>
-      <PageHeader title="Activité" subtitle="Runs lancés depuis Intendia ces dernières 24 h, et tâches du kanban en cours." />
+      <PageHeader title="Activité" subtitle={`Runs lancés depuis Intendia ces dernières 24 h, et tâches du kanban en cours${instance && instances.length > 1 ? `, sur ${instance.label}` : ''}.`} />
       <div className="space-y-6 px-5 pb-10 md:px-8">
         <ErrorText error={activity.error} />
         {stopped.length > 0 && (

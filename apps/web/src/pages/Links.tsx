@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { Copy, Globe, Lock, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, type ShareLink } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { PageHeader } from '../components/Layout';
 import { Button, copyText, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
 import { absoluteUrl } from '../files/Preview';
@@ -118,7 +119,8 @@ function LinkRow({ l }: { l: ShareLink }) {
 
 export function LinksPage() {
   const links = useQuery({ queryKey: ['links'], queryFn: api.links });
-  const list = links.data?.links ?? [];
+  const { id: inst } = useCurrentInstance();
+  const list = (links.data?.links ?? []).filter((l) => l.instanceId === inst);
   const live = list.filter((l) => !l.revoked);
   const revoked = list.filter((l) => l.revoked);
   return (

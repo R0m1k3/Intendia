@@ -160,16 +160,6 @@ export function CronsPage() {
         ) : undefined}
       />
       <div className="space-y-6 px-5 pb-10 md:px-8">
-        {list.length > 1 && (
-          <nav className="flex flex-wrap gap-1.5" aria-label="Instance">
-            {list.map((i) => (
-              <Link key={i.id} to="/i/$inst/crons" params={{ inst: i.id }}
-                className={cx('h-8 rounded-lg border px-3 text-[13px] leading-8 transition-colors', i.id === inst ? 'border-accent text-ink' : 'border-line text-ink-soft hover:text-ink')}>
-                {i.label}
-              </Link>
-            ))}
-          </nav>
-        )}
         <div className="empty:hidden">
           <ModuleNotice instanceId={inst} module="crons" title="La console des crons" required={REQUIRED} optional={OPTIONAL} explainMissing />
         </div>

@@ -164,24 +164,24 @@ export class WorkspaceService {
       .sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt));
   }
 
-  /** Unarchived sessions of every workspace, most recently active first (home page). */
-  recentSessions(limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
+  /** Unarchived sessions of the instance's workspaces, most recently active first (home page). */
+  recentSessions(limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(eq(sessionWorkspace.archived, false))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
       // lastActiveAt is set from creation on
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(limit).all()
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
   }
 
   /** Non-archived Intendia sessions whose title contains `q`, case-insensitive with Unicode folding (SQLite's `lower()` only folds ASCII). */
-  searchSessions(q: string, limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
+  searchSessions(q: string, limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     const needle = q.toLocaleLowerCase();
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(eq(sessionWorkspace.archived, false))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).all()
       .filter((r) => r.s.title?.toLocaleLowerCase().includes(needle))
       .slice(0, limit)

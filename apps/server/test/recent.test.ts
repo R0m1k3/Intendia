@@ -36,7 +36,7 @@ describe('mergeRecent', () => {
   });
 });
 
-describe('GET /x/sessions/recent', () => {
+describe('GET /x/i/fake/sessions/recent', () => {
   it('lists Intendia sessions and sessions born elsewhere, without archived ones nor duplicates', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
@@ -46,7 +46,7 @@ describe('GET /x/sessions/recent', () => {
     await waitRun(t, `/x/sessions/fake/${a.id}`, run);
     await t.request('PATCH', `/x/sessions/fake/${b.id}`, { archived: true });
     t.fake.sim.extraSessions.set('tg-1', { id: 'tg-1', source: 'telegram', title: 'Depuis Telegram', started_at: 1, messages: [] });
-    const res = await t.request('GET', '/x/sessions/recent');
+    const res = await t.request('GET', '/x/i/fake/sessions/recent');
     expect(res.status).toBe(200);
     const ids = res.json.sessions.map((s: any) => s.id);
     expect(ids).toContain(a.id);
@@ -66,7 +66,7 @@ describe('GET /x/sessions/recent', () => {
       await t.request('PATCH', `/x/sessions/fake/${s.id}`, { archived: true });
     }
     t.fake.sim.extraSessions.set('tg-1', { id: 'tg-1', source: 'telegram', title: 'Plus ancienne', started_at: 1, messages: [] });
-    const res = (await t.request('GET', '/x/sessions/recent?limit=2')).json;
+    const res = (await t.request('GET', '/x/i/fake/sessions/recent?limit=2')).json;
     expect(res.sessions.map((s: any) => s.id)).toContain('tg-1');
     const offsets = t.fake.requests.filter((r) => r.via === 'api' && r.path === '/api/sessions').map((r) => r.query?.offset);
     expect(offsets.filter((o) => o !== undefined)).toEqual(['0', '2']);
@@ -74,12 +74,12 @@ describe('GET /x/sessions/recent', () => {
 
   it('bounds the limit and reports an instance that fails with its label', async () => {
     const t = await testApp({ breaks: { 'api GET /api/sessions': { status: 500 } } });
-    expect((await t.request('GET', '/x/sessions/recent?limit=0')).status).toBe(400);
-    expect((await t.request('GET', '/x/sessions/recent?limit=201')).status).toBe(400);
-    expect((await t.request('GET', '/x/sessions/recent?source=web')).status).toBe(400);
+    expect((await t.request('GET', '/x/i/fake/sessions/recent?limit=0')).status).toBe(400);
+    expect((await t.request('GET', '/x/i/fake/sessions/recent?limit=201')).status).toBe(400);
+    expect((await t.request('GET', '/x/i/fake/sessions/recent?source=web')).status).toBe(400);
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
     await t.request('POST', '/x/workspaces/dev/sessions');
-    const res = (await t.request('GET', '/x/sessions/recent?limit=5')).json;
+    const res = (await t.request('GET', '/x/i/fake/sessions/recent?limit=5')).json;
     expect(res.sessions).toHaveLength(1);
     expect(res.errors).toHaveLength(1);
     expect(res.errors[0].instance).toBe(t.inst.label);
@@ -89,26 +89,26 @@ describe('GET /x/sessions/recent', () => {
 const extra = (t: Awaited<ReturnType<typeof testApp>>, id: string, source: string, title: string | null, messages: string[] = []) =>
   t.fake.sim.extraSessions.set(id, { id, source, title, started_at: 1_000, messages: messages.map((content) => ({ role: 'user', content })) });
 
-describe('GET /x/sessions/recent?source', () => {
+describe('GET /x/i/fake/sessions/recent?source', () => {
   it('telegram: Hermes only, the source sent to Hermes; intendia: no Hermes call; 200 accepted', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
     await t.request('POST', '/x/workspaces/dev/sessions');
     extra(t, 'tg-1', 'telegram', 'Télégramme');
     extra(t, 'cr-1', 'cron', 'Basket');
-    const tg = (await t.request('GET', '/x/sessions/recent?source=telegram&limit=200')).json;
+    const tg = (await t.request('GET', '/x/i/fake/sessions/recent?source=telegram&limit=200')).json;
     expect(tg.sessions.map((s: any) => s.id)).toEqual(['tg-1']);
     const call = t.fake.requests.filter((r) => r.via === 'api' && r.path === '/api/sessions').at(-1);
     expect(call?.query).toMatchObject({ source: 'telegram', limit: '200' });
     const before = t.fake.requests.filter((r) => r.path === '/api/sessions').length;
-    const own = (await t.request('GET', '/x/sessions/recent?source=intendia')).json;
+    const own = (await t.request('GET', '/x/i/fake/sessions/recent?source=intendia')).json;
     expect(own.sessions.every((s: any) => s.kind === 'intendia')).toBe(true);
     expect(own.sessions).toHaveLength(1);
     expect(t.fake.requests.filter((r) => r.path === '/api/sessions').length).toBe(before);
   });
 });
 
-describe('GET /x/sessions/search', () => {
+describe('GET /x/i/fake/sessions/search', () => {
   async function setup(opts: Parameters<typeof testApp>[0] = {}) {
     const t = await testApp(opts);
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
@@ -123,7 +123,7 @@ describe('GET /x/sessions/search', () => {
     const run = (await t.request('POST', `/x/sessions/fake/${b.id}/runs`, { input: 'Parlons du budget annuel' })).json.runId;
     await waitRun(t, `/x/sessions/fake/${b.id}`, run);
     extra(t, 'tg-1', 'telegram', null, ['Rappel : le budget du club']);
-    const res = await t.request('GET', '/x/sessions/search?q=budget');
+    const res = await t.request('GET', '/x/i/fake/sessions/search?q=budget');
     expect(res.status).toBe(200);
     expect(res.json.partial).toEqual([]);
     const byId = new Map(res.json.sessions.map((s: any) => [s.id, s]));
@@ -140,9 +140,9 @@ describe('GET /x/sessions/search', () => {
     const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
     await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'Budget' });
     extra(t, 'tg-1', 'telegram', 'Budget Telegram');
-    const own = (await t.request('GET', '/x/sessions/search?q=budget&source=intendia')).json;
+    const own = (await t.request('GET', '/x/i/fake/sessions/search?q=budget&source=intendia')).json;
     expect(own.sessions.map((s: any) => s.id)).toEqual([a.id]);
-    const tg = (await t.request('GET', '/x/sessions/search?q=budget&source=telegram')).json;
+    const tg = (await t.request('GET', '/x/i/fake/sessions/search?q=budget&source=telegram')).json;
     expect(tg.sessions.map((s: any) => s.id)).toEqual(['tg-1']);
     const call = t.fake.requests.filter((r) => r.via === 'dash' && r.path === '/api/sessions/search').at(-1);
     expect(call?.query).toMatchObject({ q: 'budget', source: 'telegram', limit: '30' });
@@ -153,7 +153,7 @@ describe('GET /x/sessions/search', () => {
       const t = await setup(opts);
       const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
       await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'panne-recherche du jour' });
-      const res = (await t.request('GET', '/x/sessions/search?q=panne-recherche')).json;
+      const res = (await t.request('GET', '/x/i/fake/sessions/search?q=panne-recherche')).json;
       expect(res.partial).toEqual([t.inst.label]);
       expect(res.errors).toEqual([]);
       expect(res.sessions.map((s: any) => s.id)).toEqual([a.id]);
@@ -164,20 +164,44 @@ describe('GET /x/sessions/search', () => {
     const t = await setup();
     const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
     await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'Électricité du chalet' });
-    const res = (await t.request('GET', `/x/sessions/search?q=${encodeURIComponent('électricité')}&source=intendia`)).json;
+    const res = (await t.request('GET', `/x/i/fake/sessions/search?q=${encodeURIComponent('électricité')}&source=intendia`)).json;
     expect(res.sessions.map((s: any) => s.id)).toEqual([a.id]);
   });
 
   it('a network-level failure is an error line; q is bounded; % is searched literally', async () => {
     const t = await setup({ breaks: { 'dash GET /api/sessions/search': { status: 401 } } });
-    expect((await t.request('GET', '/x/sessions/search?q=a')).status).toBe(400);
-    expect((await t.request('GET', `/x/sessions/search?q=${'x'.repeat(101)}`)).status).toBe(400);
+    expect((await t.request('GET', '/x/i/fake/sessions/search?q=a')).status).toBe(400);
+    expect((await t.request('GET', `/x/i/fake/sessions/search?q=${'x'.repeat(101)}`)).status).toBe(400);
     const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
     await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'Hausse de 10%' });
     const b = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
     await t.request('PATCH', `/x/sessions/fake/${b.id}`, { title: 'Hausse de 105' });
-    const res = (await t.request('GET', `/x/sessions/search?q=${encodeURIComponent('10%')}`)).json;
+    const res = (await t.request('GET', `/x/i/fake/sessions/search?q=${encodeURIComponent('10%')}`)).json;
     expect(res.sessions.map((s: any) => s.id)).toEqual([a.id]);
     expect(res.errors).toHaveLength(1);
+  });
+});
+
+describe('sessions per instance', () => {
+  it('keeps only the instance\'s Intendia sessions, filtered before the limit; unknown instance → 404', async () => {
+    const t = await testApp({ extra: [{ id: 'b', label: 'Bureau' }] });
+    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    await t.request('POST', '/x/workspaces', { slug: 'bur', name: 'Bur', instanceId: 'b' });
+    const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'Budget maison' });
+    await new Promise((r) => setTimeout(r, 5));
+    const b = (await t.request('POST', '/x/workspaces/bur/sessions')).json.session;
+    await t.request('PATCH', `/x/sessions/b/${b.id}`, { title: 'Budget bureau' });
+
+    const onA = (await t.request('GET', '/x/i/fake/sessions/recent?limit=1&source=intendia')).json.sessions;
+    expect(onA.map((s: { id: string }) => s.id)).toEqual([a.id]);
+    const onB = (await t.request('GET', '/x/i/b/sessions/recent?limit=1&source=intendia')).json.sessions;
+    expect(onB.map((s: { id: string }) => s.id)).toEqual([b.id]);
+    const found = (await t.request('GET', '/x/i/fake/sessions/search?q=budget&source=intendia')).json.sessions;
+    expect(found.map((s: { id: string }) => s.id)).toEqual([a.id]);
+
+    expect((await t.request('GET', '/x/i/inconnue/sessions/recent')).status).toBe(404);
+    expect((await t.request('GET', '/x/i/inconnue/sessions/search?q=budget')).status).toBe(404);
+    expect((await t.request('GET', '/x/sessions/recent')).status).toBe(404);
   });
 });

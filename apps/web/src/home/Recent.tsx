@@ -6,10 +6,10 @@ import { cx, ErrorText } from '../components/ui';
 import { SessionRow } from '../sessions/SessionRow';
 import { FILTERS, filterRecent, type RecentFilter } from './labels';
 
-/** The latest sessions of every source (Intendia, Telegram, crons…), filtered by source. */
-export function RecentSessions() {
+/** The latest sessions of the instance, of every source (Intendia, Telegram, crons…), filtered by source. */
+export function RecentSessions({ inst }: { inst: string }) {
   const [filter, setFilter] = useState<RecentFilter>('all');
-  const recent = useQuery({ queryKey: ['sessions-recent'], queryFn: () => api.recentSessions(20), refetchInterval: 60_000, refetchOnWindowFocus: false });
+  const recent = useQuery({ queryKey: ['sessions-recent', inst], queryFn: () => api.recentSessions(inst, 20), refetchInterval: 60_000, refetchOnWindowFocus: false });
   const list = filterRecent(recent.data?.sessions ?? [], filter);
   return (
     <section className="overflow-hidden card" aria-labelledby="recent-title">

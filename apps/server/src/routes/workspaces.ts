@@ -52,19 +52,19 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ workspaces: workspaces.listWorkspaces().map((w) => ({ ...w, sessionCount: counts.get(w.slug) ?? 0 })) });
   });
 
-  // sessions of every source (Intendia, Telegram, crons…) across instances, for the home and Sessions pages
-  r.get('/sessions/recent', async (c) => {
+  // sessions of every source (Intendia, Telegram, crons…) of one instance, for the home and Sessions pages
+  r.get('/i/:inst/sessions/recent', async (c) => {
     const raw = c.req.query('limit');
     const limit = raw === undefined ? 20 : Number(raw);
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ValidationError('limit : entier de 1 à 200');
-    return c.json(await deps.services.recent.list(limit, sourceOf(c.req.query('source'))));
+    return c.json(await deps.services.recent.list(c.req.param('inst'), limit, sourceOf(c.req.query('source'))));
   });
 
-  // search: Intendia titles, plus message content through each instance's dashboard
-  r.get('/sessions/search', async (c) => {
+  // search: Intendia titles, plus message content through the instance's dashboard
+  r.get('/i/:inst/sessions/search', async (c) => {
     const q = (c.req.query('q') ?? '').trim();
     if (q.length < 2 || q.length > 100) throw new ValidationError('q : de 2 à 100 caractères');
-    return c.json(await deps.services.recent.search(q, sourceOf(c.req.query('source'))));
+    return c.json(await deps.services.recent.search(c.req.param('inst'), q, sourceOf(c.req.query('source'))));
   });
 
   r.post('/workspaces', async (c) => {

@@ -27,7 +27,8 @@ export function sessionTarget(s: RecentSession): Target {
 }
 
 export interface PaletteSources {
-  nav: readonly { to: string; label: string }[];
+  /** Pages, their target already resolved for the current instance. */
+  nav: readonly { key: string; label: string; target: Target }[];
   workspaces: readonly { slug: string; name: string }[];
   crons: readonly OverviewCron[];
   /** The home page's recent sessions (shown without text). */
@@ -40,7 +41,7 @@ export interface PaletteSources {
 export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
   const words = wordsOf(q);
   const keep = (items: PaletteItem[]) => (words.length ? items.filter((i) => matchesAll(words, `${i.label} ${i.hint ?? ''}`)) : items);
-  const pages: PaletteItem[] = src.nav.map((n) => ({ id: `p:${n.to}`, label: n.label, target: { to: n.to } }));
+  const pages: PaletteItem[] = src.nav.map((n) => ({ id: `p:${n.key}`, label: n.label, target: n.target }));
   const toSession = (s: RecentSession): PaletteItem => ({ id: `s:${s.instanceId}:${s.id}`, label: s.title, hint: s.sub, target: sessionTarget(s) });
   let sessions: PaletteItem[];
   if (!words.length) sessions = src.recent.map(toSession);
@@ -51,7 +52,7 @@ export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
         ['actions', keep(ACTIONS)],
         ['pages', keep(pages)],
         ['workspaces', keep(src.workspaces.map((w) => ({ id: `w:${w.slug}`, label: w.name, hint: w.slug, target: { to: '/w/$slug', params: { slug: w.slug } } })))],
-        ['crons', keep(src.crons.map((c) => ({ id: `c:${c.instanceId}:${c.id}`, label: c.name, hint: c.instanceLabel, target: { to: '/i/$inst/crons', params: { inst: c.instanceId } } })))],
+        ['crons', keep(src.crons.map((c) => ({ id: `c:${c.instanceId}:${c.id}`, label: c.name, target: { to: '/i/$inst/crons', params: { inst: c.instanceId } } })))],
         ['sessions', sessions],
       ]
     : [['actions', ACTIONS], ['pages', pages], ['sessions', sessions]];

@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type SessionSource } from '../api';
+import { useCurrentInstance } from '../instance/current';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText } from '../components/ui';
 import { FILTERS } from '../home/labels';
@@ -35,13 +36,14 @@ export function SessionsPage() {
   const searching = q.length >= 2;
   useEffect(() => setLimit(PAGE), [source]);
 
+  const { id: inst, instance, instances } = useCurrentInstance();
   const list = useQuery({
-    queryKey: ['sessions-list', source, limit], queryFn: () => api.recentSessions(limit, source),
-    enabled: !searching, placeholderData: keepPreviousData, refetchOnWindowFocus: false,
+    queryKey: ['sessions-list', inst, source, limit], queryFn: () => api.recentSessions(inst!, limit, source),
+    enabled: !searching && inst !== null, placeholderData: keepPreviousData, refetchOnWindowFocus: false,
   });
   const found = useQuery({
-    queryKey: ['sessions-search', source, q], queryFn: () => api.searchSessions(q, source),
-    enabled: searching, refetchOnWindowFocus: false,
+    queryKey: ['sessions-search', inst, source, q], queryFn: () => api.searchSessions(inst!, q, source),
+    enabled: searching && inst !== null, refetchOnWindowFocus: false,
   });
   const active = searching ? found : list;
   const rows = active.data?.sessions ?? [];
@@ -51,7 +53,7 @@ export function SessionsPage() {
 
   return (
     <>
-      <PageHeader title="Sessions" subtitle="Les sessions d’Intendia, de Telegram et des crons, sur toutes les instances" />
+      <PageHeader title="Sessions" subtitle={`Les sessions d’Intendia, de Telegram et des crons${instance && instances.length > 1 ? ` sur ${instance.label}` : ''}`} />
       <div className="px-5 pb-12 md:px-8">
         <section className="overflow-hidden card" aria-label="Sessions">
           <header className="flex flex-wrap items-center gap-3 px-5 py-4">
