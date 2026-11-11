@@ -1,12 +1,14 @@
 import { Link } from '@tanstack/react-router';
 import type { OverviewCron } from '../api';
 import { useNow } from '../components/useNow';
+import { useStoredFlag } from '../components/useStoredFlag';
 import { cx } from '../components/ui';
 import { describe } from '../crons/schedule';
 import { DAY_MIN, dayStart, hhmm, occurrences, offsetMinutes } from '../crons/timeline';
+import { FAILED } from './summary';
+import { Toggle } from './Toggle';
 
 const MOBILE_ROWS = 10;
-export const FAILED = new Set(['error', 'delivery_failed']);
 
 const pct = (m: number) => `${(m / DAY_MIN) * 100}%`;
 const fmtOffset = (off: number) => {
@@ -53,7 +55,7 @@ function Track({ runs, nowMin, last }: { runs: number[]; nowMin: number; last: {
   );
 }
 
-function InstanceTimeline({ label, crons, now, many }: { label: string | null; crons: OverviewCron[]; now: number; many: boolean }) {
+function InstanceTimeline({ label, crons, now, many, open }: { label: string | null; crons: OverviewCron[]; now: number; many: boolean; open: boolean }) {
   const axis = axisOf(crons);
   const start = dayStart(now, axis);
   const nowMin = Math.floor((now - start) / 60_000);
@@ -73,37 +75,39 @@ function InstanceTimeline({ label, crons, now, many }: { label: string | null; c
         <span data-timeline-count>{plural(crons.length, 'cron', 'crons')} · {plural(total, 'exécution', 'exécutions')} par jour</span>
         {axis !== browser && <span className="text-xs text-ink-faint">heure d’Hermes, {fmtOffset(axis)}</span>}
       </p>
-      <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2.5 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
-        <div className="hidden md:block" />
-        <div className="relative hidden h-4 font-mono text-[10px] text-ink-faint md:block" aria-hidden>
-          {[0, 6, 12, 18, 24].map((h) => (
-            <span key={h} className="absolute -translate-x-1/2" style={{ left: pct(h * 60) }}>{String(h).padStart(2, '0')}</span>
-          ))}
+      {open && (<>
+        <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2.5 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+          <div className="hidden md:block" />
+          <div className="relative hidden h-4 font-mono text-[10px] text-ink-faint md:block" aria-hidden>
+            {[0, 6, 12, 18, 24].map((h) => (
+              <span key={h} className="absolute -translate-x-1/2" style={{ left: pct(h * 60) }}>{String(h).padStart(2, '0')}</span>
+            ))}
+          </div>
+          {rows.map(({ c, runs, last }, i) => {
+            const next = runs?.find((m) => m > nowMin);
+            const title = runs === null
+              ? 'Horaire non lisible'
+              : `${plural(runs.length, 'exécution', 'exécutions')} aujourd’hui${next !== undefined ? `, prochaine à ${hhmm(next)}` : ''}${last ? `, dernier run à ${hhmm(last.min)}${last.failed ? ' (échec)' : ''}` : ''}`;
+            return (
+              <div key={`${c.instanceId}/${c.id}`} data-timeline-row className="contents">
+                <div className={cx('min-w-0', i >= MOBILE_ROWS && 'max-md:hidden')}>
+                  <p className="truncate text-[13px] font-medium">{c.name}</p>
+                  <p className="truncate text-xs text-ink-faint">{describe(c.schedule)}</p>
+                </div>
+                <div className={cx('flex min-w-0 items-center', i >= MOBILE_ROWS && 'max-md:hidden')} title={title}>
+                  {runs === null ? <span className="text-xs text-ink-faint">horaire non lisible</span> : <Track runs={runs} nowMin={nowMin} last={last} />}
+                  <span className="sr-only">{title}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        {rows.map(({ c, runs, last }, i) => {
-          const next = runs?.find((m) => m > nowMin);
-          const title = runs === null
-            ? 'Horaire non lisible'
-            : `${plural(runs.length, 'exécution', 'exécutions')} aujourd’hui${next !== undefined ? `, prochaine à ${hhmm(next)}` : ''}${last ? `, dernier run à ${hhmm(last.min)}${last.failed ? ' (échec)' : ''}` : ''}`;
-          return (
-            <div key={`${c.instanceId}/${c.id}`} data-timeline-row className="contents">
-              <div className={cx('min-w-0', i >= MOBILE_ROWS && 'max-md:hidden')}>
-                <p className="truncate text-[13px] font-medium">{c.name}</p>
-                <p className="truncate text-xs text-ink-faint">{describe(c.schedule)}</p>
-              </div>
-              <div className={cx('flex min-w-0 items-center', i >= MOBILE_ROWS && 'max-md:hidden')} title={title}>
-                {runs === null ? <span className="text-xs text-ink-faint">horaire non lisible</span> : <Track runs={runs} nowMin={nowMin} last={last} />}
-                <span className="sr-only">{title}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {rows.length > MOBILE_ROWS && (
-        <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent hover:underline md:hidden">
-          et {rows.length - MOBILE_ROWS} autres
-        </Link>
-      )}
+        {rows.length > MOBILE_ROWS && (
+          <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent hover:underline md:hidden">
+            et {rows.length - MOBILE_ROWS} autres
+          </Link>
+        )}
+      </>)}
     </div>
   );
 }
@@ -111,24 +115,28 @@ function InstanceTimeline({ label, crons, now, many }: { label: string | null; c
 /** "Aujourd'hui": the runs of the day of every active cron, past dark, to come light, in Hermes's time. */
 export function CronTimeline({ crons }: { crons: OverviewCron[] }) {
   const now = useNow(60_000);
+  const [open, setOpen] = useStoredFlag('intendia-home-timeline-open');
   if (crons.length === 0) return null;
   const byInstance = new Map<string, OverviewCron[]>();
   for (const c of crons) byInstance.set(c.instanceId, [...(byInstance.get(c.instanceId) ?? []), c]);
   const many = byInstance.size > 1;
   return (
-    <section className="card px-5 py-4" aria-labelledby="timeline-title">
+    <section className="card px-5 py-4" aria-labelledby="timeline-title" data-collapsed={open ? undefined : ''}>
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h2 id="timeline-title" className="text-[15px] font-semibold">Aujourd’hui</h2>
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-faint" aria-label="Légende">
-          <li className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-ink-soft" />Passé</li>
-          <li className="flex items-center gap-1.5"><span className="size-2 rounded-full border border-ink-faint" />À venir</li>
-          <li className="flex items-center gap-1.5"><span className="h-3 w-0.5 bg-accent" />Maintenant</li>
-          <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-accent" />Dernier run</li>
-        </ul>
+        <div className="flex items-center gap-2">
+          <h2 id="timeline-title" className="text-[15px] font-semibold">Aujourd’hui</h2>
+          <Toggle open={open} onToggle={() => setOpen(!open)} controls="timeline-body" />
+        </div>
+        {open && <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-faint" aria-label="Légende">
+            <li className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-ink-soft" />Passé</li>
+            <li className="flex items-center gap-1.5"><span className="size-2 rounded-full border border-ink-faint" />À venir</li>
+            <li className="flex items-center gap-1.5"><span className="h-3 w-0.5 bg-accent" />Maintenant</li>
+            <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-accent" />Dernier run</li>
+        </ul>}
       </header>
-      <div className="mt-3 space-y-4">
+      <div id="timeline-body" className={cx(open ? 'mt-3 space-y-4' : 'mt-2 space-y-2')}>
         {[...byInstance.values()].map((list) => (
-          <InstanceTimeline key={list[0]!.instanceId} label={many ? list[0]!.instanceLabel : null} crons={list} now={now} many={many} />
+          <InstanceTimeline key={list[0]!.instanceId} label={many ? list[0]!.instanceLabel : null} crons={list} now={now} many={many && open} open={open} />
         ))}
       </div>
     </section>

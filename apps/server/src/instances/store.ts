@@ -16,6 +16,14 @@ export interface PublicInstance {
   source: 'env' | 'db';
 }
 
+/** Instances declared in INTENDIA_INSTANCES are read-only from the UI. */
+export class DeclarativeError extends Error {
+  constructor() {
+    super('Instances déclarées par INTENDIA_INSTANCES : changez le nom dans la configuration du conteneur');
+    this.name = 'DeclarativeError';
+  }
+}
+
 export class InstanceStore {
   constructor(private readonly db: Db, private readonly config: AppConfig) {}
 
@@ -42,6 +50,14 @@ export class InstanceStore {
     this.db.insert(instances).values({ id: value.id, configEnc, createdAt: Date.now() })
       .onConflictDoUpdate({ target: instances.id, set: { configEnc } }).run();
     return value;
+  }
+
+  /** New display name; the id, URLs and keys stay. Null when the id is unknown. */
+  rename(id: string, label: string): InstanceConfig | null {
+    if (this.declarative) throw new DeclarativeError();
+    const inst = this.get(id);
+    if (!inst) return null;
+    return this.save({ ...inst, label });
   }
 
   remove(id: string): void {
