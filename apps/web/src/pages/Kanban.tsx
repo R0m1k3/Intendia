@@ -330,16 +330,6 @@ export function KanbanPage() {
       />
       <div className="space-y-5 pb-10">
         <div className="space-y-4 px-5 md:px-8">
-          {list.length > 1 && (
-            <nav className="flex flex-wrap gap-1.5" aria-label="Instance">
-              {list.map((i) => (
-                <Link key={i.id} to="/i/$inst/kanban" params={{ inst: i.id }}
-                  className={cx('h-8 rounded-lg border px-3 text-[13px] leading-8 transition-colors', i.id === inst ? 'border-accent text-ink' : 'border-line text-ink-soft hover:text-ink')}>
-                  {i.label}
-                </Link>
-              ))}
-            </nav>
-          )}
           <div className="empty:hidden">
             <ModuleNotice instanceId={inst} module="kanban" title="Le kanban" required={REQUIRED} optional={OPTIONAL} />
           </div>

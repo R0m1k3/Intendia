@@ -12,6 +12,7 @@ import { CronTimeline } from '../home/Timeline';
 import { FAILED, failureLabel } from '../home/summary';
 import { Toggle } from '../home/Toggle';
 import { useStoredFlag } from '../components/useStoredFlag';
+import { useCurrentInstance } from '../instance/current';
 
 function today(): string {
   const d = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -126,15 +127,16 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
 
 export function HomePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const { id, instance } = useCurrentInstance();
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
-  const crons = overview.data?.crons ?? [];
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
+  const crons = (overview.data?.crons ?? []).filter((c) => c.instanceId === id);
   const search = useSearch({ from: '/app/' });
   const navigate = useNavigate();
   const list = instances.data?.instances ?? [];
   const reports = compat.data?.reports ?? [];
-  const ws = workspaces.data?.workspaces ?? [];
+  const ws = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === id);
   const focused = useCallback(() => { void navigate({ to: '/', search: {}, replace: true }); }, [navigate]);
 
   return (
@@ -153,10 +155,10 @@ export function HomePage() {
           </Panel>
         )}
         {list.length > 0 && workspaces.isSuccess && (ws.length > 0 ? (
-          <Ask workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} />
+          <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} />
         ) : (
           <Panel>
-            <p className="text-[15px]">Commencez par un workspace</p>
+            <p className="text-[15px]">Commencez par un workspace{instance && list.length > 1 ? ` sur ${instance.label}` : ''}</p>
             <p className="mt-1 text-sm text-ink-soft">Un dossier partagé avec l’agent, ses consignes et ses sessions de travail</p>
             <Link to="/w" className="mt-4 inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong">
               Créer un workspace
@@ -166,10 +168,10 @@ export function HomePage() {
         {list.length > 0 && <CronTimeline crons={crons} />}
         {list.length > 0 && (
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <RecentSessions />
+            {id && <RecentSessions inst={id} />}
             <div className="space-y-6">
               <UpcomingCrons crons={crons} />
-              {list.map((i) => <InstanceCard key={i.id} instance={i} report={reports.find((r) => r.instanceId === i.id)} />)}
+              {instance && <InstanceCard instance={instance} report={reports.find((r) => r.instanceId === instance.id)} />}
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import {
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError } from './api';
+import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
@@ -82,40 +83,25 @@ const filesRoute = createRoute({
 });
 const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', component: LinksPage });
 const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
-/** /crons: the first instance (creation order) */
-const cronsIndexRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/crons',
-  beforeLoad: async () => {
-    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
-    const first = instances[0];
-    throw first ? redirect({ to: '/i/$inst/crons', params: { inst: first.id } }) : redirect({ to: '/' });
-  },
-});
+/** Entry of an instance page (bookmarks, old links): the current instance of this tab, else the first. */
+async function toCurrent(page: InstancePage): Promise<never> {
+  const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const id = resolveCurrent({ ids: instances.map((i) => i.id), tab: currentTab() });
+  throw id ? redirect({ to: `/i/$inst/${page}`, params: { inst: id } } as never) : redirect({ to: '/' });
+}
+/** /crons: the current instance */
+const cronsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/crons', beforeLoad: () => toCurrent('crons') });
 const cronsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage });
-/** /skills: the first instance (creation order) */
-const skillsIndexRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/skills',
-  beforeLoad: async () => {
-    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
-    const first = instances[0];
-    throw first ? redirect({ to: '/i/$inst/skills', params: { inst: first.id } }) : redirect({ to: '/' });
-  },
-});
+/** /skills: the current instance */
+const skillsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/skills', beforeLoad: () => toCurrent('skills') });
 const skillsRoute = createRoute({
   getParentRoute: () => appRoute, path: '/i/$inst/skills', component: SkillsPage,
   validateSearch: (s: Record<string, unknown>): SkillsSearch => ({
     profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
   }),
 });
-/** /config: the first instance (creation order) */
-const configIndexRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/config',
-  beforeLoad: async () => {
-    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
-    const first = instances[0];
-    throw first ? redirect({ to: '/i/$inst/config', params: { inst: first.id } }) : redirect({ to: '/' });
-  },
-});
+/** /config: the current instance */
+const configIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/config', beforeLoad: () => toCurrent('config') });
 const configRoute = createRoute({
   getParentRoute: () => appRoute, path: '/i/$inst/config', component: ConfigPage,
   validateSearch: (s: Record<string, unknown>): ConfigSearch => ({
@@ -124,26 +110,12 @@ const configRoute = createRoute({
     key: typeof s.key === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(s.key) ? s.key : undefined,
   }),
 });
-/** /agents: the first instance (creation order) */
-const agentsIndexRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/agents',
-  beforeLoad: async () => {
-    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
-    const first = instances[0];
-    throw first ? redirect({ to: '/i/$inst/agents', params: { inst: first.id } }) : redirect({ to: '/' });
-  },
-});
+/** /agents: the current instance */
+const agentsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/agents', beforeLoad: () => toCurrent('agents') });
 const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents', component: AgentsPage });
 const agentRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents/$name', component: AgentPage });
-/** /kanban: the first instance (creation order) */
-const kanbanIndexRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/kanban',
-  beforeLoad: async () => {
-    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
-    const first = instances[0];
-    throw first ? redirect({ to: '/i/$inst/kanban', params: { inst: first.id } }) : redirect({ to: '/' });
-  },
-});
+/** /kanban: the current instance */
+const kanbanIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/kanban', beforeLoad: () => toCurrent('kanban') });
 const kanbanRoute = createRoute({
   getParentRoute: () => appRoute, path: '/i/$inst/kanban', component: KanbanPage,
   validateSearch: (s: Record<string, unknown>): KanbanSearch => ({

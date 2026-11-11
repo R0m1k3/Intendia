@@ -4,44 +4,54 @@ import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, Kanb
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
+import { navTarget, setTab, useCurrentInstance, useUrlInstance, type InstancePage } from '../instance/current';
+import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
-import { cx, Mark, Wordmark, worst } from './ui';
+import { InstanceSwitcher } from './InstanceSwitcher';
+import { cx, Wordmark } from './ui';
 
-type NavGroup = 'top' | 'auto' | 'system' | 'hidden';
+type NavGroup = 'top' | 'auto' | 'instance' | 'foot' | 'hidden';
 
-/** In display order; `group` places each entry in the sidebar (`hidden`: bottom bar only). */
-const NAV = [
-  { to: '/', label: 'Accueil', icon: House, group: 'top' },
-  { to: '/sessions', label: 'Sessions', icon: MessagesSquare, group: 'top' },
-  { to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'top' },
-  { to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto' },
-  { to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto' },
-  { to: '/agents', label: 'Agents', icon: Bot, group: 'auto' },
-  { to: '/w', label: 'Workspaces', icon: FolderOpen, group: 'hidden' },
-  { to: '/activite', label: 'Activité', icon: Activity, group: 'system' },
-  { to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'system' },
-  { to: '/liens', label: 'Liens', icon: Link2, group: 'system' },
-  { to: '/etat', label: 'État', icon: ListChecks, group: 'system' },
-  { to: '/reglages', label: 'Réglages', icon: Settings2, group: 'system' },
-] as const satisfies readonly { to: string; label: string; icon: unknown; group: NavGroup }[];
+interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage }
+
+/** In display order; `group` places each entry in the sidebar (`hidden`: bottom bar only); `page`: per instance. */
+const NAV: readonly NavEntry[] = [
+  { key: 'home', to: '/', label: 'Accueil', icon: House, group: 'top' },
+  { key: 'sessions', to: '/sessions', label: 'Sessions', icon: MessagesSquare, group: 'top' },
+  { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
+  { key: 'skills', to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto', page: 'skills' },
+  { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'auto', page: 'agents' },
+  { key: 'kanban', to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'auto', page: 'kanban' },
+  { key: 'workspaces', to: '/w', label: 'Workspaces', icon: FolderOpen, group: 'hidden' },
+  { key: 'activity', to: '/activite', label: 'Activité', icon: Activity, group: 'instance' },
+  { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'instance', page: 'config' },
+  { key: 'links', to: '/liens', label: 'Liens', icon: Link2, group: 'instance' },
+  { key: 'status', to: '/etat', label: 'État', icon: ListChecks, group: 'instance' },
+  { key: 'settings', to: '/reglages', label: 'Réglages', icon: Settings2, group: 'foot' },
+];
 
 const ROW = 'flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
 /** Selected entry: a white tab lifted off the grey frame (the ! classes win over ROW's hover). */
 const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(22_24_27/0.05)]';
-/** Entries offered by the search palette (every page but the bottom-bar-only ones). */
-const PALETTE_NAV = NAV.filter((n) => n.group !== 'hidden');
 
 const GROUP = 'flex items-center justify-between px-3 pb-2 pt-6 text-xs font-medium text-ink-faint';
 
 export function Layout() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 60_000 });
+  const { id: inst, instances } = useCurrentInstance();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const version = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: Infinity }).data?.version;
-  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
-  const counts: Record<string, number | undefined> = { '/crons': overview.data?.crons.length };
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
+  const counts: Record<string, number | undefined> = { crons: inst ? overview.data?.crons.filter((c) => c.instanceId === inst).length : undefined };
+  const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
+  // the address names an instance (/i/<inst>/…, a workspace, /etat#<inst>): it becomes this tab's
+  const { fromUrl } = useUrlInstance();
+  const ids = instances.map((i) => i.id).join(',');
+  useEffect(() => {
+    if (fromUrl && ids.split(',').includes(fromUrl)) setTab(fromUrl);
+  }, [fromUrl, ids]);
+  const paletteNav = NAV.filter((n) => n.group !== 'hidden').map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
   const openSlug = params.slug;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -82,8 +92,8 @@ export function Layout() {
 
   const entries = (group: NavGroup) => NAV.filter((n) => n.group === group).map((n) => (
     <Link
-      key={n.to}
-      to={n.to}
+      key={n.key}
+      {...(navTarget(n, inst) as { to: string })}
       activeOptions={{ exact: n.to === '/' }}
       className={cx(ROW, alsoActive(n.to) && ACTIVE)}
       activeProps={{ className: ACTIVE }}
@@ -92,7 +102,7 @@ export function Layout() {
     >
       <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
       <span className="flex-1 truncate">{n.label}</span>
-      <Count n={counts[n.to]} />
+      <Count n={counts[n.key]} />
     </Link>
   ));
 
@@ -102,6 +112,7 @@ export function Layout() {
         <div className="px-2 pb-4 pt-1">
           <Wordmark />
         </div>
+        <InstanceSwitcher className="mb-2" />
         <button type="button" onClick={openPalette} aria-haspopup="dialog"
           className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-3 text-sm text-ink-soft transition-colors hover:text-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} />
@@ -113,9 +124,6 @@ export function Layout() {
         <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
           {entries('top')}
 
-          <p className={GROUP}>Automatisation</p>
-          {entries('auto')}
-
           <p className={GROUP}>
             Workspaces
             <Link to="/w" aria-label="Nouveau workspace" title="Nouveau workspace"
@@ -123,7 +131,7 @@ export function Layout() {
               <Plus className="size-3.5" strokeWidth={1.5} />
             </Link>
           </p>
-          {workspaces.data?.workspaces.map((w) => (
+          {mine.map((w) => (
             <div key={w.slug} className="flex flex-col gap-0.5">
               <Link
                 to="/w/$slug"
@@ -158,23 +166,15 @@ export function Layout() {
             </div>
           ))}
 
-          <p className={GROUP}>Système</p>
-          {entries('system')}
+          <p className={GROUP}>Automatisation</p>
+          {entries('auto')}
+
+          <p className={GROUP}>Instance</p>
+          {entries('instance')}
         </nav>
 
         <div className="flex flex-col gap-0.5 border-t border-line pt-3">
-          {instances.data?.instances.map((i) => {
-            const r = compat.data?.reports.find((x) => x.instanceId === i.id);
-            return (
-              <Link key={i.id} to="/etat" hash={i.id} className={ROW}>
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  <Mark state={r ? worst(r.modules.map((m) => m.state)) : null} />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{i.label}</span>
-                {r?.hermesVersion && <span className="shrink-0 font-mono text-xs text-ink-faint">v{r.hermesVersion.replace(/^v/, '')}</span>}
-              </Link>
-            );
-          })}
+          {entries('foot')}
           <button onClick={logout} className={ROW + ' w-full'}>
             <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
             Se déconnecter
@@ -189,8 +189,9 @@ export function Layout() {
         </div>
       </main>
 
-      {palette && <CommandPalette nav={PALETTE_NAV} onClose={closePalette} />}
-      <MobileNav version={version} onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
+      {palette && <CommandPalette nav={paletteNav} onClose={closePalette} />}
+      <Approvals />
+      <MobileNav version={version} inst={inst} onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
     </div>
   );
 }
@@ -202,14 +203,14 @@ function Count({ n }: { n: number | undefined }) {
 }
 
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
-const MOBILE_MAIN: string[] = ['/', '/w', '/activite', '/agents'];
+const MOBILE_MAIN: string[] = ['home', 'workspaces', 'activity', 'agents'];
 
-function MobileNav({ isActive, onSearch, version }: { isActive: (to: string) => boolean; onSearch: () => void; version?: string }) {
+function MobileNav({ isActive, onSearch, version, inst }: { isActive: (to: string) => boolean; onSearch: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
-  const main = MOBILE_MAIN.map((to) => NAV.find((n) => n.to === to)!);
-  const rest = NAV.filter((n) => !MOBILE_MAIN.includes(n.to));
+  const main = MOBILE_MAIN.map((key) => NAV.find((n) => n.key === key)!);
+  const rest = NAV.filter((n) => !MOBILE_MAIN.includes(n.key));
   const item = 'flex h-15 flex-1 flex-col items-center justify-center gap-1 text-[11px]';
   return (
     <>
@@ -217,6 +218,7 @@ function MobileNav({ isActive, onSearch, version }: { isActive: (to: string) => 
         <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
           <nav aria-label="Plus" onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
+            <InstanceSwitcher className="col-span-3" onPicked={() => setMore(false)} />
             <button type="button" onClick={() => { setMore(false); onSearch(); }}
               className="col-span-3 flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft">
               <Search className="size-4" strokeWidth={1.5} />
@@ -224,7 +226,7 @@ function MobileNav({ isActive, onSearch, version }: { isActive: (to: string) => 
             </button>
             <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
             {rest.map((n) => (
-              <Link key={n.to} to={n.to} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>
+              <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>
                 <n.icon className="size-5" strokeWidth={1.5} />
                 {n.label}
               </Link>
@@ -236,7 +238,7 @@ function MobileNav({ isActive, onSearch, version }: { isActive: (to: string) => 
       )}
       <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-line bg-sheet pb-[env(safe-area-inset-bottom)] md:hidden">
         {main.map((n) => (
-          <Link key={n.to} to={n.to} className={`${item} ${isActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}>
+          <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} ${isActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}>
             <n.icon className="size-5" strokeWidth={1.5} />
             {n.label}
           </Link>

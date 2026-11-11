@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { OverviewCron, RecentSession } from '../api';
 import { flatItems, moveIndex, paletteGroups, type PaletteSources } from './palette';
 
-const nav = [{ to: '/', label: 'Accueil' }, { to: '/sessions', label: 'Sessions' }, { to: '/crons', label: 'Crons' }, { to: '/config', label: 'Configuration' }];
+const nav = [
+  { key: 'home', label: 'Accueil', target: { to: '/' } },
+  { key: 'sessions', label: 'Sessions', target: { to: '/sessions' } },
+  { key: 'crons', label: 'Crons', target: { to: '/i/$inst/crons', params: { inst: 'a' } } },
+  { key: 'config', label: 'Configuration', target: { to: '/i/$inst/config', params: { inst: 'a' } } },
+];
 const session = (id: string, title: string): RecentSession => ({
   kind: 'hermes', instanceId: 'a', profile: 'default', id, source: 'telegram', title, sub: 'Hermes', workspace: null, at: 0, snippet: null,
 });
@@ -30,6 +35,8 @@ describe('paletteGroups', () => {
     expect(g.find((x) => x.id === 'pages')!.items.map((i) => i.label)).toEqual(['Crons']);
     expect(g.find((x) => x.id === 'crons')!.items.map((i) => i.label)).toEqual(['Rapport croissance']);
     expect(g.find((x) => x.id === 'crons')!.items[0]!.target).toEqual({ to: '/i/$inst/crons', params: { inst: 'a' } });
+    expect(g.find((x) => x.id === 'crons')!.items[0]!.hint).toBeUndefined();
+    expect(g.find((x) => x.id === 'pages')!.items[0]!).toMatchObject({ id: 'p:crons', target: { to: '/i/$inst/crons', params: { inst: 'a' } } });
   });
   it('folds case and accents', () => {
     expect(paletteGroups('electricite', src()).find((x) => x.id === 'workspaces')!.items[0]!.label).toBe('Électricité maison');
