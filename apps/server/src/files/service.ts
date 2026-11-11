@@ -186,6 +186,12 @@ export class FileService {
     if (await c.fs.entry(this.vol(c, to))) throw new WorkspaceFsError('exists', `Existe déjà : ${to}`);
     const { body } = await c.fs.read(this.vol(c, from));
     await c.fs.create(this.vol(c, to), body, { overwrite: false });
+    c.fs.forget(this.vol(c, parentOf(from)));
+    const now = await c.fs.entry(this.vol(c, from));
+    if (!now || now.isLink || now.size !== src.size || now.mtimeMs !== src.mtimeMs) {
+      await c.fs.remove(this.vol(c, to), false).catch(() => undefined);
+      throw new WorkspaceFsError('exists', `${from} a changé pendant le déplacement : rien n'a été déplacé, réessayer`);
+    }
     this.links.rewritePaths(c.inst.id, this.vol(c, from), this.vol(c, to));
     try {
       await c.fs.remove(this.vol(c, from), false);

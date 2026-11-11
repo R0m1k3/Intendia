@@ -11,7 +11,7 @@ import type { HermesFilesList } from '../connectors/files/index.js';
 import { callOp, hermesDetail, HermesError, ModuleUnavailableError, streamOp, type HermesHttp } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
 import { SLUG_RE, WorkspaceFsError } from '../workspaces/fs.js';
-import { normalizeRel } from './paths.js';
+import { hiddenByHermes, normalizeRel } from './paths.js';
 
 export interface FsEntry {
   name: string;
@@ -168,6 +168,12 @@ export class HermesFs {
     }
   }
 
+  private refuseHidden(vol: string): void {
+    if (hiddenByHermes(normalizeRel(vol))) {
+      throw new WorkspaceFsError('invalid', `${nameOf(normalizeRel(vol))} : Hermes cache ce nom (fichier d'identifiants), Intendia ne l'écrit pas`);
+    }
+  }
+
   private async refuseLink(vol: string): Promise<FsEntry | null> {
     const e = await this.entry(vol);
     if (e?.isLink) throw new WorkspaceFsError('outside', `${vol} : ${LINK_REFUSED}`);
@@ -221,6 +227,7 @@ export class HermesFs {
     opts: { overwrite: boolean; maxBytes?: number; signal?: AbortSignal },
   ): Promise<FsEntry> {
     const path = this.abs(vol);
+    this.refuseHidden(vol);
     await this.refuseLink(vol);
     const boundary = `----intendia${randomBytes(12).toString('hex')}`;
     const enc = new TextEncoder();
@@ -287,6 +294,7 @@ export class HermesFs {
   /** Creates a folder and its parents (idempotent). */
   async mkdir(vol: string): Promise<void> {
     const path = this.abs(vol);
+    this.refuseHidden(vol);
     try {
       await callOp(this.http, this.report, 'files', 'mkdir', { body: { path } });
     } catch (err) {

@@ -112,10 +112,15 @@ describe('files', () => {
     writeFileSync(join(t.ws, 'files', '.env'), 'SECRET=1');
     const tree = (await t.request('GET', `${t.F}/tree?path=files`)).json;
     expect(tree.entries.map((e: any) => e.name)).not.toContain('.env');
-    // the upload cannot see it: Hermes' 409 becomes "exists", the file is not overwritten
-    const res = await t.rawRequest('PUT', `${t.F}/upload?dir=files&name=.env`, { body: 'x' });
-    expect(res.status).toBe(409);
+    // never written: an existing one stays as it is, a new one is not created (it could not be seen again)
+    for (const name of ['.env', 'config.yaml', '.env.local']) {
+      const res = await t.rawRequest('PUT', `${t.F}/upload?dir=files&name=${name}`, { body: 'x' });
+      expect(res.status, name).toBe(400);
+    }
     expect(readFileSync(join(t.ws, 'files', '.env'), 'utf8')).toBe('SECRET=1');
+    expect(existsSync(join(t.ws, 'files', 'config.yaml'))).toBe(false);
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'files/auth.json' })).status).toBe(400);
+    expect(existsSync(join(t.ws, 'files', 'doc.pdf'))).toBe(true);
   });
 
   it('tree is cut at 2000 entries', async () => {
@@ -168,6 +173,22 @@ describe('files', () => {
     expect(dir.status).toBe(409);
     expect(dir.json.error).toBe('Hermes ne permet pas de déplacer un dossier');
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/sub/a.txt', to: 'nowhere/a.txt' })).status).toBe(404);
+  });
+
+  it('move: a source changed during the copy is kept, the copy removed, links untouched', async () => {
+    const t = await setup();
+    const link = (await t.request('POST', `${t.F}/share`, { path: 'files/doc.pdf' })).json;
+    const handle = t.fake.files.handle.bind(t.fake.files);
+    t.fake.files.handle = async (method, path, req, query) => {
+      if (path === '/api/files/upload-stream') writeFileSync(join(t.ws, 'files', 'doc.pdf'), '%PDF-1.7 plus récent');
+      return handle(method, path, req, query);
+    };
+    const res = await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'files/sub/doc.pdf' });
+    expect(res.status).toBe(409);
+    expect(res.json.error).toContain('a changé pendant le déplacement');
+    expect(readFileSync(join(t.ws, 'files', 'doc.pdf'), 'utf8')).toBe('%PDF-1.7 plus récent');
+    expect(existsSync(join(t.ws, 'files', 'sub', 'doc.pdf'))).toBe(false);
+    expect((await t.request('GET', '/x/links')).json.links.find((l: any) => l.id === link.id)?.path).toContain('files/doc.pdf');
   });
 
   it('move: share links follow the file; a failed delete keeps the copy and the links on it', async () => {

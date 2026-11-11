@@ -25,6 +25,16 @@ export function normalizeRel(rel: string, opts: { allowRoot?: boolean } = {}): s
 }
 
 /** A single file or folder name (upload, rename target segment). */
+const HIDDEN_FILES = new Set(['auth.json', 'auth.lock', 'credentials', 'config.yaml', '.git-credentials']);
+const HIDDEN_DIRS = new Set(['mcp-tokens', 'pairing']);
+
+/** Names Hermes never lists nor downloads (credentials): a file written there could not be seen again. */
+export function hiddenByHermes(vol: string): boolean {
+  const parts = vol.split('/').map((p) => p.toLowerCase());
+  const n = parts.at(-1) ?? '';
+  return n === '.env' || n.startsWith('.env.') || n === '.envrc' || HIDDEN_FILES.has(n) || parts.some((p) => HIDDEN_DIRS.has(p));
+}
+
 export function checkName(name: string): string {
   if (!name || name === '.' || name === '..' || /[/\\\0]/.test(name) || Buffer.byteLength(name, 'utf8') > NAME_MAX_BYTES) {
     throw new WorkspaceFsError('invalid', `Nom invalide : ${name.slice(0, 80)}`);

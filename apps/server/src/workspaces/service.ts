@@ -83,6 +83,8 @@ export function titleFrom(input: string): string {
 export class WorkspaceService {
   /** Last AGENTS.md read per workspace: the chat keeps its instructions while Hermes' dashboard is down. */
   private readonly agentsMd = new Map<string, string>();
+  /** Slugs being created: a second request for the same slug gets "exists" instead of racing the first. */
+  private readonly creating = new Set<string>();
 
   constructor(private readonly db: Db, private readonly store: InstanceStore, private readonly roots: FileRoots) {}
 
@@ -119,9 +121,18 @@ export class WorkspaceService {
     const inst = this.instance(input.instanceId);
     const profile = input.profile && input.profile !== 'default' ? input.profile : null;
     if (profile && !inst.profileKeys[profile]) throw new ValidationError(`Profil sans clé sur cette instance : ${profile}`);
-    if (this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
+    if (this.creating.has(input.slug) || this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
       throw new WorkspaceFsError('exists', `Le workspace ${input.slug} existe déjà`);
     }
+    this.creating.add(input.slug);
+    try {
+      return await this.createWorkspaceRow(inst, profile, input);
+    } finally {
+      this.creating.delete(input.slug);
+    }
+  }
+
+  private async createWorkspaceRow(inst: InstanceConfig, profile: string | null, input: { slug: string; name: string }): Promise<Workspace> {
     const fs = this.roots.fs(inst.id);
     await createWorkspaceDir(fs, input.slug);
     const row: Workspace = {

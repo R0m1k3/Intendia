@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { framingAgentsMd } from '../src/workspaces/fs.js';
@@ -134,5 +134,18 @@ describe('framingAgentsMd', () => {
     expect(Buffer.byteLength(body!, 'utf8')).toBeLessThanOrEqual(4096);
     expect(body).toMatch(/^é+$/);
     expect(tail).toBe('(suite tronquée : lis /w/x/AGENTS.md en entier avant de commencer)');
+  });
+});
+
+describe('workspace creation races', () => {
+  it('two creations of the same slug at once: one wins, the folder stays whole', async () => {
+    const t = await testApp();
+    const [a, b] = await Promise.all([
+      t.request('POST', '/x/workspaces', { slug: 'dup', name: 'A', instanceId: 'fake' }),
+      t.request('POST', '/x/workspaces', { slug: 'dup', name: 'B', instanceId: 'fake' }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect(existsSync(join(t.root, 'dup', 'AGENTS.md'))).toBe(true);
+    expect(existsSync(join(t.root, 'dup', 'files'))).toBe(true);
   });
 });
