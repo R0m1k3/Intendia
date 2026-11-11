@@ -6,8 +6,8 @@
 #   INTENDIA_PUBLIC_URL      optional, e.g. https://intendia.example.com
 #   INTENDIA_PASSWORD_HASH   optional, $argon2id$... (empty: installation code in the logs)
 #   INTENDIA_HOST_PORT       optional, host port of the web UI (default 3012)
-#   HERMES_WORKSPACE_VOLUME  optional, workspace volume of the Hermes stack (default hermes_hermes-workspace)
-#   PUID / PGID              optional, owner of that volume (default 1000:1000)
+#   PUID / PGID              optional, owner of the data volume (default 1000:1000)
+# No shared volume: workspace files go through each Hermes dashboard (HERMES_DASHBOARD_FILES_ROOT, docs/install.md).
 services:
   # One-shot: the image creates /data for uid 10000; give the named volume to PUID:PGID.
   intendia-perms:
@@ -48,10 +48,9 @@ services:
       INTENDIA_PUBLIC_URL: ${INTENDIA_PUBLIC_URL:-}
       INTENDIA_PASSWORD_HASH: ${INTENDIA_PASSWORD_HASH:-}
       INTENDIA_WEBHOOK_URL: ${INTENDIA_WEBHOOK_URL:-}
-      INTENDIA_UPLOAD_MAX_MB: ${INTENDIA_UPLOAD_MAX_MB:-200}
+      INTENDIA_UPLOAD_MAX_MB: ${INTENDIA_UPLOAD_MAX_MB:-100}
     volumes:
       - intendia-data:/data
-      - workspace:/workspace
     networks:
       - nginx_default
     # Web UI only. Port 3001 (MCP share_file) stays on the Docker network: Hermes calls
@@ -64,9 +63,6 @@ services:
 
 volumes:
   intendia-data:
-  workspace:
-    name: ${HERMES_WORKSPACE_VOLUME:-hermes_hermes-workspace}
-    external: true
 
 networks:
   nginx_default:

@@ -36,9 +36,13 @@ demand from the State screen. State changes go to the webhook.
 
 ## Workspaces, sessions and runs
 
-- A workspace (`workspaces` table) = a folder `<mount>/<slug>/` on the volume shared with one instance, served by one
-  Hermes profile. `src/workspaces/fs.ts` creates it (`mkdir` without `recursive`, removed if anything
-  fails); `src/workspaces/service.ts` owns the rows.
+- A workspace (`workspaces` table) = a folder `<root>/<slug>/` kept by the Hermes of its instance, served by one Hermes
+  profile. `<root>` (the instance's **workspace root**) is the dashboard's managed files root (`locked_root`, set by
+  `HERMES_DASHBOARD_FILES_ROOT`), read at each compatibility check by `src/compat/files-root.ts` (`report.files`); it is
+  refused when it is `/`, contains `hermes_home`, or when the agent's terminal is not `local`, and the Files module then
+  becomes unavailable with the reason. `src/workspaces/fs.ts` creates the folder through Hermes (refused if the name
+  exists, removed if anything fails); `src/workspaces/service.ts` owns the rows. The chat keeps working when the
+  dashboard is down: the last AGENTS.md read (kept in memory) is sent, else a line saying it is unavailable.
 - Model and reasoning effort are chosen per session, in the chat (`session_workspace.model` / `effort`, NULL =
   Hermes default) and sent as `model` / `model_options.reasoning_effort`. The workspace keeps the last choice
   (`workspaces.model` / `effort`) as the start of its next sessions; it is not a setting of its own.
@@ -77,7 +81,7 @@ demand from the State screen. State changes go to the webhook.
   `placeRunStats`). fake-hermes: the word `tard` writes the run's cost 8 s after its end.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
-- Every run sends `instructions`: workspace name, working folder as the agent sees it (`agentMount`), the session
+- Every run sends `instructions`: workspace name, working folder as the agent sees it (`<workspace root>/<slug>`), the session
   folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`.
 - Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
   calls Hermes through `/p/<profile>/` with that profile's key.
@@ -116,28 +120,37 @@ demand from the State screen. State changes go to the webhook.
 
 ## Files, share links and MCP
 
-- **Every path chosen by the browser or the agent goes through `src/files/paths.ts`** before any disk access:
-  `normalizeRel` (no `..`, NUL, backslash, absolute path), `resolveInside` (realpath must stay under the workspace, or
-  under the mount for `share_file`; `create` mode refuses an existing name, dangling links included, then writes with
-  `wx`), `resolveEntry` (delete and move act on a symbolic link itself, never on its target), `toVolumePath` (agent or
-  Intendia absolute path → path relative to the mount). Known limit: a race between the realpath check and the open
-  (no `openat`/`O_NOFOLLOW` in Node).
-- The disk is the only source: `src/files/service.ts` reads it on each request (tree, search, raw, upload in a stream,
-  move, delete, text save with an mtime check, batch `exists` for chat chips). No file list in the database, no watcher.
-- Everything served from the volume (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
+- **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector
+  `files` (`GET /api/files`, `/api/files/download`, `POST /api/files/upload-stream` multipart, `/api/files/mkdir`,
+  `DELETE /api/files` with a JSON body). `src/files/hermes-fs.ts`: `FileRoots` gives the workspace root of an instance,
+  `HermesFs` (one per service call, with a cache of folder listings dropped by each write) takes volume paths
+  (`<slug>/files/a.txt`). Hermes confines everything to its root and follows symbolic links, writing and deleting their
+  **target**: an entry whose listed `path` is not `<folder>/<name>` (or `broken_link`) is a link, never written, moved
+  nor deleted (403 `outside`); a link leaving the root makes Hermes refuse the whole listing of its folder (403).
+- Paths chosen by the browser or the agent go through `src/files/paths.ts` first: `normalizeRel` (no `..`, NUL,
+  backslash, absolute path), `checkName`, `toVolumePath` (agent absolute path under the root → volume path).
+- Hermes is the only source: `src/files/service.ts` asks it on each request (tree, search breadth first 4 folders at a
+  time and bounded in entries, results and 5 s, raw, upload in a stream with `overwrite=false`, move of a file = copy,
+  links rewritten, then delete of the source; folders cannot be moved, text save with an mtime check, batch `exists`
+  with one listing per folder). No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
+  422 `no_root`.
+- Everything served from a workspace (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
   (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
   (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,
   not for PDFs (Chrome refuses PDFs in sandboxed frames).
-- Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, path relative to the instance mount,
-  private by default, public until a date (365 days max), revoked rows kept so `/f/<token>` can say so. A move from the
-  explorer rewrites link paths by exact prefix in the same SQLite transaction as the rename (the rename is last).
+- Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, volume path (relative to the
+  workspace root of the instance), private by default, public until a date (365 days max), revoked rows kept so
+  `/f/<token>` can say so. A move from the explorer rewrites link paths by exact prefix after the copy and before the
+  source is deleted (a failed delete leaves a duplicate, links on the copy). `exists` of the Liens page: one listing per
+  instance and folder. Hermes down on `/f/<token>` → a 502 page.
   `GET /f/<token>` order: unknown/revoked → 404; logged in → file; private → `/connexion?suite=/f/<token>` (the login
   page sends a logged-in user straight back with a full page load, since the `SameSite=Strict` cookie is not sent on a
   navigation from another site); public expired → 410; public → file; missing file → 404 (old path shown to the owner).
 - MCP (`src/mcp/server.ts`, port `INTENDIA_MCP_PORT`): hand-written JSON-RPC over Streamable HTTP, stateless, JSON
   answers only; `initialize`, `ping`, `tools/list`, `tools/call` with the single tool `share_file`. Checks: method (405),
   instance (404), bearer token (`settings` key `mcp_token:<instance>`, 401). The agent only ever gets a private link.
-- `src/services.ts` builds `WorkspaceService`, `LinkService` and `FileService` once; the web app and the MCP app share them.
+- `src/services.ts` builds `FileRoots`, `WorkspaceService`, `LinkService` and `FileService` once; the web app and the
+  MCP app share them.
 
 ```mermaid
 sequenceDiagram
