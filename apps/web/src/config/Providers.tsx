@@ -197,9 +197,16 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
     onSuccess: (r) => { setLeft(r.left); if (r.restartNeeded) onRestart(); void refresh(); },
   });
 
+  const leftLine = left.length > 0 && (
+    <p className="text-xs text-bad" data-token-left>
+      Pas supprimé : {left.join(', ')}. Cette variable est sans doute définie hors du fichier .env d’Hermes (environnement du
+      conteneur, gestionnaire de secrets) : retirez-la là-bas, puis redémarrez la passerelle.
+    </p>
+  );
   if (account.via === 'token') {
     return (
       <div className="mt-2 space-y-2">
+        {leftLine}
         {canRemove && (
           <Button variant="ghost" className="h-8" disabled={remove.isPending}
             onClick={async () => {
@@ -213,11 +220,11 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
     );
   }
   if (account.connected && account.via !== 'api_key') {
-    return left.length > 0 ? <p className="mt-1 text-xs text-ink-faint">Encore défini hors d’Hermes : {left.join(', ')}</p> : null;
+    return left.length > 0 ? <div className="mt-2">{leftLine}</div> : null;
   }
   return (
     <div className="mt-2 space-y-2">
-      {left.length > 0 && <p className="text-xs text-ink-faint">Encore défini hors d’Hermes : {left.join(', ')}</p>}
+      {leftLine}
       {!open && canWrite && (
         <Button className="h-8" onClick={() => setOpen(true)}>Connecter avec un jeton d’abonnement</Button>
       )}
