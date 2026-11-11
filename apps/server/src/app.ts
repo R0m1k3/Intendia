@@ -210,7 +210,7 @@ export function createApp(deps: AppDeps) {
   const { workspaces, files, links } = deps.services;
   priv.route('/', workspaceRoutes({ ...deps, workspaces }));
   priv.route('/', chatRoutes({ ...deps, workspaces }));
-  priv.route('/', fileRoutes(files));
+  priv.route('/', fileRoutes(files, deps.services.instanceFiles));
   priv.route('/', linkRoutes(links));
   priv.route('/', cronRoutes(deps.services.crons));
   priv.route('/', skillRoutes(deps.services.skills));

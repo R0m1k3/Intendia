@@ -9,6 +9,7 @@ import { DropZone } from '../files/DropZone';
 import { FileRows, isDirEntry } from '../files/FileRows';
 import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
+import { workspaceScope } from '../files/scope';
 
 export interface FilesSearch {
   path?: string;
@@ -108,7 +109,7 @@ export function FilesPage() {
             <div className="px-5 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
             {debounced && <p className="px-5 pt-3 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
             {entries.length > 0 ? (
-              <FileRows slug={slug} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} />
+              <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} />
             ) : (tree.isSuccess && !debounced) ? (
               <div className="px-5 py-12 text-center">
                 <p className="text-sm">Aucun fichier ici</p>
@@ -120,7 +121,7 @@ export function FilesPage() {
         </DropZone>
         {open && (
           <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:rounded-xl lg:border lg:border-line">
-            <Preview slug={slug} path={open} onClose={() => void go({ path: dir || undefined })} />
+            <Preview scope={workspaceScope(slug)} path={open} onClose={() => void go({ path: dir || undefined })} />
           </section>
         )}
       </div>

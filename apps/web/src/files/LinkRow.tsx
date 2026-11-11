@@ -1,14 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Copy, Globe, Lock, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, type ShareLink } from '../api';
-import { useCurrentInstance } from '../instance/current';
-import { PageHeader } from '../components/Layout';
-import { Button, copyText, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
-import { absoluteUrl } from '../files/Preview';
 import { ask } from '../components/Dialog';
+import { Button, copyText, cx, ErrorText, Mark, timeAgo } from '../components/ui';
+import { absoluteUrl } from './Preview';
 
+/** One share link with its actions (copy, public until a date, private, revoke): tab « Liens partagés ». */
 const DAY = 86_400_000;
 
 function state(l: ShareLink): { label: string; mark: 'full' | 'unavailable' | null; note?: string } {
@@ -45,7 +44,7 @@ function PublicChoice({ onPick, busy }: { onPick: (until: number) => void; busy:
   );
 }
 
-function LinkRow({ l }: { l: ShareLink }) {
+export function LinkRow({ l }: { l: ShareLink }) {
   const qc = useQueryClient();
   const [choosing, setChoosing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -114,36 +113,5 @@ function LinkRow({ l }: { l: ShareLink }) {
       )}
       <div className="pl-5 empty:hidden"><ErrorText error={setPublic.error ?? revoke.error} /></div>
     </li>
-  );
-}
-
-export function LinksPage() {
-  const links = useQuery({ queryKey: ['links'], queryFn: api.links });
-  const { id: inst } = useCurrentInstance();
-  const list = (links.data?.links ?? []).filter((l) => l.instanceId === inst);
-  const live = list.filter((l) => !l.revoked);
-  const revoked = list.filter((l) => l.revoked);
-  return (
-    <div>
-      <PageHeader
-        title="Liens"
-        subtitle="Les liens de partage vers des fichiers des workspaces. Privés par défaut : il faut être connecté pour les ouvrir. L’agent ne peut créer que des liens privés."
-      />
-      <div className="space-y-6 px-5 pb-10 md:px-8">
-        <ErrorText error={links.error} />
-        <Panel bodyClassName="p-0" title="Liens actifs" action={<span className="font-mono text-[11px] text-ink-faint">{live.length}</span>}>
-          {live.length ? (
-            <ul className="divide-y divide-line">{live.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
-          ) : links.isSuccess ? (
-            <p className="px-5 py-10 text-center text-sm text-ink-soft">Aucun lien. Partagez un fichier depuis l’explorateur, ou demandez-le à l’agent.</p>
-          ) : null}
-        </Panel>
-        {revoked.length > 0 && (
-          <Panel bodyClassName="p-0" title="Révoqués" action={<span className="font-mono text-[11px] text-ink-faint">{revoked.length}</span>}>
-            <ul className="divide-y divide-line">{revoked.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
-          </Panel>
-        )}
-      </div>
-    </div>
   );
 }

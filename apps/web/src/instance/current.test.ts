@@ -17,6 +17,7 @@ describe('switchTarget', () => {
     expect(switchTarget('/i/maison/crons', 'bureau')).toEqual({ to: '/i/$inst/crons', params: { inst: 'bureau' } });
     expect(switchTarget('/i/maison/agents/x', 'bureau')).toEqual({ to: '/i/$inst/agents', params: { inst: 'bureau' } });
     expect(switchTarget('/i/maison/config', 'bureau')).toEqual({ to: '/i/$inst/config', params: { inst: 'bureau' } });
+    expect(switchTarget('/i/maison/files', 'bureau')).toEqual({ to: '/i/$inst/files', params: { inst: 'bureau' } });
   });
   it('a session or a workspace of the other instance → home', () => {
     expect(switchTarget('/i/maison/p/default/s/1', 'bureau')).toEqual({ to: '/' });

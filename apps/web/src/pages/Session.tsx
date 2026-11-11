@@ -22,6 +22,7 @@ import { takeHandoff } from '../home/handoff';
 import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
+import { workspaceScope } from '../files/scope';
 
 interface ActiveRun {
   id: string;
@@ -256,7 +257,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const addFiles = (f: File[]) => composer.current?.addFiles(f);
 
   const side = previewPath ? (
-    <Preview slug={slug} path={previewPath} onClose={() => setPreviewPath(null)} />
+    <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} />
   ) : (
     <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
   );

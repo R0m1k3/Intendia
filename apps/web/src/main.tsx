@@ -22,7 +22,7 @@ import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
-import { LinksPage } from './pages/Links';
+import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
 import { SessionPage } from './pages/Session';
 import { SessionsPage, type SessionsSearch } from './pages/Sessions';
 import { WorkspacePage } from './pages/Workspace';
@@ -81,14 +81,28 @@ const filesRoute = createRoute({
     f: typeof s.f === 'string' && s.f ? s.f : undefined,
   }),
 });
-const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', component: LinksPage });
+/** /liens (page removed): the share links are a tab of « Fichiers ». */
+const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', beforeLoad: () => { throw redirect({ to: '/files', search: { tab: 'liens' } } as never); } });
 const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
 /** Entry of an instance page (bookmarks, old links): the current instance of this tab, else the first. */
-async function toCurrent(page: InstancePage): Promise<never> {
+async function toCurrent(page: InstancePage, search?: object): Promise<never> {
   const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
   const id = resolveCurrent({ ids: instances.map((i) => i.id), tab: currentTab() });
-  throw id ? redirect({ to: `/i/$inst/${page}`, params: { inst: id } } as never) : redirect({ to: '/' });
+  throw id ? redirect({ to: `/i/$inst/${page}`, params: { inst: id }, ...(search ? { search } : {}) } as never) : redirect({ to: '/' });
 }
+const instanceFilesSearch = (s: Record<string, unknown>): InstanceFilesSearch => ({
+  tab: s.tab === 'liens' ? 'liens' : undefined,
+  path: typeof s.path === 'string' && s.path ? s.path : undefined,
+  f: typeof s.f === 'string' && s.f ? s.f : undefined,
+});
+/** /files: the current instance */
+const instanceFilesIndexRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/files', validateSearch: instanceFilesSearch,
+  beforeLoad: ({ search }) => toCurrent('files', search),
+});
+const instanceFilesRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/files', component: InstanceFilesPage, validateSearch: instanceFilesSearch,
+});
 /** /crons: the current instance */
 const cronsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/crons', beforeLoad: () => toCurrent('crons') });
 const cronsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage });
@@ -127,7 +141,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 
