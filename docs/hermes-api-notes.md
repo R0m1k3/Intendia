@@ -19,7 +19,7 @@ of the diff are empty lists (no session, no cron in that container).
   The session id given is kept (`GET /v1/runs/{id}` shows it).
 - `GET /v1/runs/{id}/events`: SSE, each event has `id:` and a `seq`; resume with `Last-Event-ID` or `?last_seq=`.
   Event types: `run.queued|started|completed|failed|cancelled|interrupted|stopping|steered`, `message.started|delta|interim`,
-  `reasoning.available`, `tool.started|progress|completed|failed`, `approval.request|responded`,
+  `reasoning.available`, `tool.started|progress|completed|failed`, `approval.request|responded|settled`,
   `subagent.start|complete`.
 - `GET /api/jobs` works although `features.jobs_admin` is `false` and it is absent from `endpoints`.
 - **Bug in 0.23.0**: `GET /v1/skills` answers HTTP 500 (`find_all_skills() got an unexpected keyword argument
@@ -37,8 +37,17 @@ of the diff are empty lists (no session, no cron in that container).
   `completed`, `failed`, `cancelled`, `interrupted`. Unknown run → 404 (also on `/events`, as JSON).
 - SSE frames have no `event:` line: the type is the `event` field of the JSON; `id:` is the `seq`. A resume asking for
   events Hermes no longer keeps first gets `replay.truncated {oldest_retained_seq}`, then the rest.
-- `approval.request` carries `choices` (`once`, `session`, `always`, `deny`) and sometimes `request_id`;
-  answer with `POST /v1/runs/{id}/approval {choice, request_id}`.
+- Approvals come in two formats (read in the 0.23.0 source, not seen live: no provider key on the reference instance):
+  - **gateway session authority** (the normal case of 0.23: the gateway always creates it, `gateway/run_bootstrap.py`):
+    `approval.request {prompt_id, execution_generation, command, description, choices}`, end `approval.settled
+    {prompt_id, execution_generation}`; `GET /v1/runs/{id}` gives `execution_generation` and `pending_controls` (the
+    same prompts); the answer must be exactly `{request_id: <prompt_id>, execution_generation, choice}`, any other key →
+    `invalid_params`, another generation → `stale_generation`, `choice` must be one of the prompt's `choices`
+    (`gateway/platforms/api_server_authority_runs.py` `respond_run`). The run status says `waiting_for_approval`.
+  - **without authority** (branch `else` of `_handle_run_approval`): `approval.request` with `choices` and sometimes
+    `request_id`, end `approval.responded`, answer `{choice, request_id?}`.
+  Intendia builds the body on the server from the run status (`controlBody` in `routes/chat.ts`); the fake uses the
+  authority format, `FAKE_CONTROLS=legacy` the other.
 - `GET /api/sessions` is paged (`limit` up to 200, `offset`, `has_more`) and takes `source` (`telegram`, `cron`…); its
   `title` filter is an exact match, useless for a search.
 - Search: dashboard `GET /api/sessions/search?q=&limit=(1..100)&profile=&source=` (not on the API server) looks for

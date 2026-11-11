@@ -21,6 +21,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   kanbanStepMs: Number(process.env.FAKE_KANBAN_STEP_MS ?? 5000),
   // FAKE_KANBAN_WS=off: the events WebSocket refuses every connection (Intendia falls back to polling)
   kanbanWs: process.env.FAKE_KANBAN_WS !== 'off',
+  // FAKE_CONTROLS=legacy: approvals of an API server without the gateway session authority (request_id, {choice})
+  controls: process.env.FAKE_CONTROLS === 'legacy' ? 'legacy' : 'authority',
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);

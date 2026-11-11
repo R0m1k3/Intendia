@@ -196,14 +196,27 @@ describe('approvals of every instance', () => {
       requestId: 'apr_1', command: 'rm -rf build/', choices: ['once', 'session', 'always', 'deny'], canAnswer: true,
     }]);
     await t.request('GET', '/x/approvals');
-    expect(eventsCalls(t, runId)).toBe(1);
+    // Hermes 0.23 (gateway session authority) lists the question in the run status: its events are not read
+    expect(eventsCalls(t, runId)).toBe(0);
 
     expect((await t.request('POST', `/x/sessions/b/${s.id}/runs/${runId}/approval`, { choice: 'once', requestId: 'apr_1' })).status).toBe(200);
     expect((await t.services.activity.approvals(Date.now() + 10_000)).approvals).toEqual([]);
   });
 
+  it('without the session authority, reads the question in the run events once per shared result', async () => {
+    const t = await testApp({ controls: 'legacy' });
+    const { s, base } = await session(t);
+    const runId = (await t.request('POST', `${base}/runs`, { input: 'approval svp' })).json.runId as string;
+    await waiting(t, 'fake', s.id, runId);
+    expect((await t.request('GET', '/x/approvals')).json.approvals).toMatchObject([
+      { key: `${runId}:apr_1`, requestId: 'apr_1', command: 'rm -rf build/', choices: ['once', 'session', 'always', 'deny'] },
+    ]);
+    await t.request('GET', '/x/approvals');
+    expect(eventsCalls(t, runId)).toBe(1);
+  });
+
   it('a waiting run whose question was lost from the replay comes without question nor choices', async () => {
-    const t = await testApp({ retainFrom: 1_000_000 });
+    const t = await testApp({ retainFrom: 1_000_000, controls: 'legacy' });
     const { s, base } = await session(t);
     const runId = (await t.request('POST', `${base}/runs`, { input: 'approval svp' })).json.runId as string;
     await waiting(t, 'fake', s.id, runId);
