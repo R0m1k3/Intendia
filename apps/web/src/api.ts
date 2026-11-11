@@ -179,10 +179,14 @@ export interface ShareLink {
   createdAt: number;
   exists: boolean;
 }
+/** share_file in Hermes (apps/server/src/mcp/connect.ts). */
+export type McpState = 'connected' | 'stale' | 'manual' | 'other_url' | 'plugin' | 'missing' | 'unknown';
+export interface McpTest { ok: boolean; tools: string[]; error?: string }
 export interface McpInfo {
   url: string;
   token: string;
   publicUrlSet: boolean;
+  state: McpState;
 }
 
 const enc = encodeURIComponent;
@@ -508,7 +512,9 @@ export const api = {
   setLinkPublic: (token: string, publicUntil: number | null) => call<{ link: ShareLink }>('PATCH', `/links/${enc(token)}`, { publicUntil }),
   revokeLink: (token: string) => call<{ ok: true }>('DELETE', `/links/${enc(token)}`),
   mcp: (inst: string) => call<McpInfo>('GET', `/instances/${enc(inst)}/mcp`),
-  rotateMcp: (inst: string) => call<McpInfo>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
+  rotateMcp: (inst: string) => call<McpInfo & { test?: McpTest; error?: string }>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
+  connectMcp: (inst: string, replaceOther = false) =>
+    call<{ state: McpState; test?: McpTest }>('POST', `/instances/${enc(inst)}/mcp/connect`, { replaceOther }),
 
   crons: (inst: string) => call<{ crons: Cron[] }>('GET', cronsPath(inst)),
   cron: (inst: string, id: string, profile: string) => call<{ cron: Cron }>('GET', cronPath(inst, id, profile)),
