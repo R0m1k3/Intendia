@@ -5,6 +5,7 @@ import type { AppConfig } from './config.js';
 import { CronService } from './crons/service.js';
 import type { Db } from './db/index.js';
 import { FileService } from './files/service.js';
+import { ProvidersService } from './hermes-config/providers.js';
 import { ConfigService } from './hermes-config/service.js';
 import { McpLink } from './mcp/connect.js';
 import type { InstanceStore } from './instances/store.js';
@@ -25,6 +26,7 @@ export interface Services {
   activity: ActivityService;
   recent: RecentService;
   config: ConfigService;
+  providers: ProvidersService;
   mcpLink: McpLink;
 }
 
@@ -40,6 +42,7 @@ export function createServices(deps: { config: AppConfig; db: Db; store: Instanc
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban);
   const recent = new RecentService(deps.compat, deps.store, workspaces);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
+  const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
-  return { workspaces, links, files, crons, skills, agents, kanban, activity, recent, config, mcpLink };
+  return { workspaces, links, files, crons, skills, agents, kanban, activity, recent, config, providers, mcpLink };
 }

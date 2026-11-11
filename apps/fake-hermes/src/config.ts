@@ -162,7 +162,7 @@ export class ConfigStore {
    * GET /api/model/options per profile (dashboard `?profile=`, API server `/p/<profile>`): `default` has OpenRouter
    * with a key and 6 models (the recorded entry, made authenticated), any other profile only Anthropic with 2.
    * Both also list DeepSeek and Mistral without a key; a provider with a connected account or a pool API key is
-   * authenticated (a row `<slug>-small`/`<slug>-large` is added when the profile has none for it).
+   * authenticated (models `<slug>-small`/`<slug>-large` when its row has none, a row added when there is none).
    */
   modelOptionsFor(profile: string): { providers: Obj[] } {
     const base: Obj[] = profile !== 'default'
@@ -172,7 +172,11 @@ export class ConfigStore {
       if (!base.some((p) => p.slug === slug)) base.push({ slug, name, authenticated: false, key_env: `${slug.toUpperCase()}_API_KEY`, models: [`${slug}-chat`, `${slug}-reasoner`] });
     }
     const authed = this.providers.authenticated(profile);
-    const rows = base.map((p) => (authed.has(String(p.slug)) ? { ...p, authenticated: true } : p));
+    const rows = base.map((p) => {
+      if (!authed.has(String(p.slug))) return p;
+      const models = Array.isArray(p.models) && p.models.length ? p.models : [`${String(p.slug)}-small`, `${String(p.slug)}-large`];
+      return { ...p, authenticated: true, models };
+    });
     for (const slug of authed) {
       if (!rows.some((p) => p.slug === slug)) rows.push({ slug, name: slug, authenticated: true, models: [`${slug}-small`, `${slug}-large`] });
     }
