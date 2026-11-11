@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { tempDir, testApp } from './helpers.js';
@@ -145,6 +145,14 @@ describe('files', () => {
     const big = await up('big.bin', Buffer.alloc(1024 * 1024 + 10));
     expect(big.status).toBe(413);
     expect(existsSync(join(t.ws, 'inbox', 'big.bin'))).toBe(false);
+  });
+
+  it('upload: a missing folder (workspace made before 0.0.4) is created, the whole workspace folder too', async () => {
+    const t = await setup();
+    rmSync(t.ws, { recursive: true, force: true });
+    const res = await t.rawRequest('PUT', `${t.F}/upload?dir=inbox&name=collage.png`, { body: 'png' });
+    expect(res.status).toBe(201);
+    expect(readFileSync(join(t.ws, 'inbox', 'collage.png'), 'utf8')).toBe('png');
   });
 
   it('INTENDIA_UPLOAD_MAX_MB is capped at 100 (Hermes refuses more)', async () => {
