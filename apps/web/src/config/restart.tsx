@@ -5,7 +5,7 @@ import { Button, cx, ErrorText } from '../components/ui';
 
 const POLL_MS = 1500;
 const POLL_MAX_MS = 5 * 60_000;
-export const RESTART_CONFIRM = 'Redémarrer la passerelle ? Les runs en cours seront interrompus. Si la passerelle sert plusieurs agents, tous sont concernés.';
+export const RESTART_CONFIRM = { title: 'Redémarrer la passerelle ?', message: 'Les runs en cours seront interrompus. Si la passerelle sert plusieurs agents, tous sont concernés.', confirmLabel: 'Redémarrer', danger: true };
 
 export interface RestartState { running: boolean; done: boolean; status: RestartStatus | null; error: unknown; timedOut: boolean; start: () => void; dismiss: () => void }
 

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { api, type ActiveRun, type KanbanWorker } from '../api';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
+import { ask } from '../components/Dialog';
 
 const ICON = 'size-4';
 const POLL_MS = 5_000;
@@ -39,7 +40,7 @@ function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: string 
         </Link>
       ) : (
         <Button className="h-8" disabled={stop.isPending || run.status === 'stopping'}
-          onClick={() => { if (confirm('Arrêter ce run ? La réponse en cours sera interrompue.')) stop.mutate(); }}>
+          onClick={async () => { if (await ask({ title: 'Arrêter ce run ?', message: 'La réponse en cours sera interrompue.', confirmLabel: 'Arrêter', danger: true })) stop.mutate(); }}>
           <Square className="size-3.5" strokeWidth={1.5} />Arrêter
         </Button>
       )}
@@ -70,7 +71,7 @@ function WorkerRow({ worker, instanceLabel, onStopped }: { worker: KanbanWorker;
         </p>
       </div>
       <Button className="h-8" disabled={stop.isPending || stop.isSuccess}
-        onClick={() => { if (confirm('Arrêter ce worker ? La tâche passera en Bloquée, ou restera en Revue ; Débloquer la relancera.')) stop.mutate(); }}>
+        onClick={async () => { if (await ask({ title: 'Arrêter ce worker ?', message: 'La tâche passera en Bloquée, ou restera en Revue ; Débloquer la relancera.', confirmLabel: 'Arrêter', danger: true })) stop.mutate(); }}>
         <Square className="size-3.5" strokeWidth={1.5} />Arrêter
       </Button>
       {stop.error && <div className="w-full"><ErrorText error={stop.error} /></div>}

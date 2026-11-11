@@ -5,6 +5,7 @@ import {
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, ApiError } from './api';
+import { DialogHost } from './components/Dialog';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
 import { LoginPage } from './pages/Login';
@@ -166,6 +167,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <DialogHost />
     </QueryClientProvider>
   </StrictMode>,
 );

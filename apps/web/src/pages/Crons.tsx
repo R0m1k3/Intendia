@@ -10,6 +10,7 @@ import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from
 import { Button, cx, ErrorText, Mark, Panel } from '../components/ui';
 import { snapshot, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { describe, offsetOf, whenFr } from '../crons/schedule';
+import { ask } from '../components/Dialog';
 
 const REQUIRED: OpRef[] = [['crons', 'list']];
 const OPTIONAL: OptionalOp[] = [
@@ -112,7 +113,7 @@ function CronRow({ cron, can, open, follow, onOpen, onEdit, onFollow, onFollowEn
           )}
           {can('remove') && (
             <Button variant="ghost" className="size-8 px-0 hover:text-bad" title="Supprimer" aria-label="Supprimer" disabled={remove.isPending}
-              onClick={() => { if (confirm(`Supprimer le cron « ${cron.name} » ? Hermes l’oublie définitivement ; les fichiers déjà produits restent.`)) remove.mutate(); }}>
+              onClick={async () => { if (await ask({ title: `Supprimer le cron « ${cron.name} » ?`, message: 'Hermes l’oublie définitivement ; les fichiers déjà produits restent.', confirmLabel: 'Supprimer', danger: true })) remove.mutate(); }}>
               <Trash2 className={ICON} strokeWidth={1.5} />
             </Button>
           )}

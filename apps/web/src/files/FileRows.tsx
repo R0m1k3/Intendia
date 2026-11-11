@@ -6,6 +6,7 @@ import { api, rawUrl, type FileEntry } from '../api';
 import { cx, timeAgo } from '../components/ui';
 import { fileKind, formatSize } from './paths';
 import { ShareButton } from './Preview';
+import { ask, askText } from '../components/Dialog';
 
 export const isDirEntry = (e: FileEntry) => e.kind === 'dir' || e.target === 'dir';
 
@@ -35,7 +36,7 @@ export function FileRows({ slug, entries, selected, onOpen, actions = false, onE
   const refresh = () => qc.invalidateQueries({ queryKey: ['tree', slug] });
 
   const move = async (e: FileEntry) => {
-    const to = prompt('Nouveau chemin (relatif au workspace)', e.path)?.trim();
+    const to = await askText({ title: `Renommer ou déplacer ${e.name}`, label: 'Nouveau chemin (relatif au workspace)', value: e.path, confirmLabel: 'Renommer' });
     if (!to || to === e.path) return;
     try {
       await api.moveFile(slug, e.path, to);
@@ -47,7 +48,7 @@ export function FileRows({ slug, entries, selected, onOpen, actions = false, onE
   };
   const remove = async (e: FileEntry) => {
     const what = isDirEntry(e) && e.kind === 'dir' ? `le dossier ${e.path} et tout son contenu` : e.path;
-    if (!confirm(`Supprimer ${what} ?`)) return;
+    if (!(await ask({ title: `Supprimer ${what} ?`, message: 'Cette suppression est définitive.', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       await api.deleteFile(slug, e.path);
       await refresh();

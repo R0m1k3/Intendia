@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { api, type McpInput, type McpServer } from '../api';
 import { Button, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
+import { ask } from '../components/Dialog';
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -55,7 +56,7 @@ function McpRow({ s, inst, profile, can, onSaved, onTokenLeft }: {
         {!managed && can('enableMcp') && <Button className="h-8" disabled={toggle.isPending} onClick={() => toggle.mutate()}>{s.enabled ? 'Désactiver' : 'Activer'}</Button>}
         {!managed && can('removeMcp') && (
           <Button variant="ghost" className="h-8 px-2" aria-label={`Supprimer ${s.name}`} disabled={remove.isPending}
-            onClick={() => { if (confirm(`Supprimer le serveur MCP ${s.name} ?`)) remove.mutate(); }}>
+            onClick={async () => { if (await ask({ title: `Supprimer le serveur MCP ${s.name} ?`, confirmLabel: 'Supprimer', danger: true })) remove.mutate(); }}>
             <Trash2 className={ICON} strokeWidth={1.5} />
           </Button>
         )}

@@ -7,6 +7,7 @@ import { Narrow, PageHeader } from '../components/Layout';
 import { useModuleAvailability } from '../components/ModuleNotice';
 import { Button, copyText, cx, ErrorText, Mark, Section, worst } from '../components/ui';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
+import { ask } from '../components/Dialog';
 
 type Theme = 'system' | 'light' | 'dark';
 
@@ -28,7 +29,7 @@ function RestartInstance({ instanceId, label }: { instanceId: string; label: str
   }
   return (
     <div className="space-y-2">
-      <SmallBtn disabled={restart.running} onClick={() => { if (confirm(RESTART_CONFIRM)) restart.start(); }}>
+      <SmallBtn disabled={restart.running} onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}>
         <RefreshCw className={cx('size-3.5', restart.running && 'animate-spin')} strokeWidth={1.5} />
         {restart.running ? 'Redémarrage…' : `Redémarrer ${label}`}
       </SmallBtn>
@@ -84,7 +85,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
         <div className="flex flex-wrap gap-2">
           <SmallBtn variant="ghost" onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
           <SmallBtn variant="ghost" disabled={rotate.isPending}
-            onClick={() => { if (confirm('Régénérer le jeton ? L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.')) rotate.mutate(); }}>
+            onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
             Régénérer le jeton
           </SmallBtn>
         </div>
@@ -149,7 +150,7 @@ export function SettingsPage() {
                   {!declarative && (
                     <SmallBtn
                       variant="danger"
-                      onClick={() => { if (confirm(`Retirer l’instance « ${i.label} » d’Intendia ? Hermes n’est pas modifié.`)) remove.mutate(i.id); }}
+                      onClick={async () => { if (await ask({ title: `Retirer l’instance « ${i.label} » d’Intendia ?`, message: 'Hermes n’est pas modifié.', confirmLabel: 'Retirer', danger: true })) remove.mutate(i.id); }}
                     >
                       Retirer
                     </SmallBtn>

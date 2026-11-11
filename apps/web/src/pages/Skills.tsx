@@ -10,6 +10,7 @@ import {
   ACTION_POLL_MS, actionState, failureLine, loadActions, saveActions, STATE_TEXT, type ActionState, type PendingAction,
 } from '../skills/action';
 import { categories, filterSkills, groupByCategory, provenanceLabel, type SkillFilter, type StateFilter } from '../skills/filter';
+import { ask } from '../components/Dialog';
 
 const REQUIRED: OpRef[] = [['skills', 'list']];
 const OPTIONAL: OptionalOp[] = [
@@ -139,7 +140,7 @@ function SkillRow({ skill, inst, profile, can, actions }: {
         <div className="flex shrink-0 items-center gap-1.5">
           {skill.provenance === 'hub' && can('uninstall') && can('actionStatus') && (
             <Button variant="ghost" className="px-2.5" disabled={busy || uninstall.isPending} aria-label={`Désinstaller ${skill.name}`} title="Désinstaller"
-              onClick={() => { if (confirm(`Désinstaller ${skill.name} de cet agent ?`)) uninstall.mutate(); }}>
+              onClick={async () => { if (await ask({ title: `Désinstaller ${skill.name} de cet agent ?`, confirmLabel: 'Désinstaller', danger: true })) uninstall.mutate(); }}>
               <Trash2 className={ICON} strokeWidth={1.5} />
             </Button>
           )}

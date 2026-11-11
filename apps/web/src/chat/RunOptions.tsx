@@ -4,6 +4,7 @@ import { api, type Effort } from '../api';
 import { Picker, type PickerItem as Item } from '../components/Menu';
 import { EFFORTS, effortLabel, shortModel } from './format';
 import { currentValue, decodeChoice, modelItems as pickerModels } from './model-items';
+import { ask } from '../components/Dialog';
 
 /**
  * Model and reasoning effort of the session's next messages. "Auto" = what the Hermes agent is set to.
@@ -25,8 +26,8 @@ export function RunOptions({ inst, profile, model, provider, effort, hasRuns, di
     { value: null, label: 'Auto', hint: 'Le réglage de l’agent Hermes' },
     ...EFFORTS.map((e) => ({ value: e.value, label: e.label, hint: e.hint })),
   ];
-  const pickModel = (v: string | null) => {
-    if (hasRuns && !confirm('Changer le modèle de cette session ? Le nouveau modèle relira toute la conversation sans cache au prochain message, une fois : ce message coûtera plus cher.')) return;
+  const pickModel = async (v: string | null) => {
+    if (hasRuns && !(await ask({ title: 'Changer le modèle de cette session ?', message: 'Le nouveau modèle relira toute la conversation sans cache au prochain message, une fois : ce message coûtera plus cher.', confirmLabel: 'Changer de modèle' }))) return;
     onChange(decodeChoice(v));
   };
   return (
