@@ -90,7 +90,7 @@ export class ConfigStore {
   /** Set by tests: PUT /api/config/raw answers this status without writing. */
   failPutRaw: number | null = null;
 
-  constructor(fixturesDir: string, private readonly stepMs: number) {
+  constructor(fixturesDir: string, private readonly stepMs: number, private readonly terminalBackend?: string) {
     const raw = fixture<{ yaml: string }>(fixturesDir, 'GET_api_config_raw.json').yaml;
     // model api_key written in clear, like POST /api/model/set with api_key does
     this.raw = raw.replace(/^model:\n/m, `model:\n  api_key: ${FAKE_SECRETS.model}\n`) + EXTRA_YAML;
@@ -181,7 +181,9 @@ export class ConfigStore {
     if (via !== 'dash') return null;
     const b = (body ?? {}) as Obj;
     if (path === '/api/config' && method === 'GET') {
-      return json(query.include_defaults === 'false' ? this.file() : this.effective());
+      const out = query.include_defaults === 'false' ? this.file() : this.effective();
+      if (!this.terminalBackend) return json(out);
+      return json({ ...out, terminal: { ...(isObj(out.terminal) ? out.terminal : {}), backend: this.terminalBackend } });
     }
     if (path === '/api/config' && method === 'PUT') {
       if (!isObj(b.config)) return json({ detail: 'config must be an object' }, 400);

@@ -8,9 +8,9 @@ import { connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, F
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
 const fixturesDir = process.env.FAKE_FIXTURES ?? join(root, REFERENCE_FIXTURES);
-const map = process.env.FAKE_PATH_MAP?.split('=');
-const pathMap = map?.length === 2 ? { from: map[0]!.replace(/\/$/, ''), to: map[1]!.replace(/\/$/, '') } : undefined;
-const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? JSON.parse(process.env.FAKE_BREAKS) : undefined, pathMap,
+const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? JSON.parse(process.env.FAKE_BREAKS) : undefined,
+  // managed files root (default: a temporary folder) and the hermes_home announced by /api/status
+  filesRoot: process.env.FAKE_FILES_ROOT, hermesHome: process.env.FAKE_HERMES_HOME,
   // cron runs last 4 steps ("long": 100): 500 ms makes the live follow-up visible by hand
   cronStepMs: Number(process.env.FAKE_CRON_STEP_MS ?? 500),
   // skills actions (install, uninstall, update): long enough to see the follow-up
@@ -38,3 +38,4 @@ dash.on('upgrade', (req, socket, head) => {
 console.log(`fake-hermes replaying ${fixturesDir}`);
 console.log(`  API server http://127.0.0.1:${apiPort}  key ${FAKE_API_KEY}`);
 console.log(`  dashboard  http://127.0.0.1:${dashPort} token ${FAKE_DASH_TOKEN}`);
+console.log(`  files root ${fake.files.root}`);
