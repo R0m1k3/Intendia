@@ -178,6 +178,31 @@ describe('run stream', () => {
     expect(again.json.code).toBe('no_pending');
   });
 
+  it('reorients a running run; refused once finished; marked in the history', async () => {
+    const { t, base } = await session({ stepMs: 60 });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    while ((await t.request('GET', `${base}/runs/${run}`)).json.status !== 'running') await new Promise((r) => setTimeout(r, 5));
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: '  ' })).status).toBe(400);
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Plutôt Houdemont' })).status).toBe(200);
+    expect(t.fake.requests.find((r) => r.path.endsWith('/steer'))?.body).toEqual({ input: 'Plutôt Houdemont' });
+    expect(await waitRun(t, base, run)).toBe('completed');
+    const late = await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Encore' });
+    expect(late.status).toBe(409);
+    expect(late.json.code).toBe('steer_refused');
+    const messages = (await t.request('GET', `${base}/messages`)).json.messages;
+    expect(messages.find((m: { steer?: boolean }) => m.steer)).toMatchObject({ role: 'user', content: 'Plutôt Houdemont' });
+    expect(messages.filter((m: { steer?: boolean }) => m.steer)).toHaveLength(1);
+  });
+
+  it('gives back a reorientation Hermes did not deliver (pendingSteer)', async () => {
+    const { t, base } = await session({ stepMs: 60 });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'perdu' })).json.runId;
+    while ((await t.request('GET', `${base}/runs/${run}`)).json.status !== 'running') await new Promise((r) => setTimeout(r, 5));
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Plutôt Houdemont' })).status).toBe(200);
+    expect(await waitRun(t, base, run)).toBe('completed');
+    expect((await t.request('GET', `${base}/runs/${run}`)).json.pendingSteer).toBe('Plutôt Houdemont');
+  });
+
   it('says a question cannot be answered without the session authority', async () => {
     const { t, base } = await session({ controls: 'legacy' });
     const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;

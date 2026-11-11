@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { runEventsUrl } from '../api';
 import { initialRun, isTerminal, reduceEvent, type Entry, type RunEvent, type RunState } from './events';
 
@@ -7,16 +7,20 @@ import { initialRun, isTerminal, reduceEvent, type Entry, type RunEvent, type Ru
  * and sends Last-Event-ID, so Hermes only replays what was missed. The stream is closed here on a
  * terminal event or intendia.error (otherwise EventSource would reconnect forever once Hermes closes it);
  * replay.truncated only sets a flag.
+ * `local(ev)` folds an event made by the page into the run (a reorientation: Hermes' `run.steered` has no text), so
+ * what the agent streams next comes after it.
  */
 export function useRun(
   inst: string,
   sessionId: string,
   run: { id: string; seed: Entry[] } | null,
   onEnd: (state: RunState) => void,
-): RunState | null {
+): [RunState | null, (ev: RunEvent) => void] {
   const [state, setState] = useState<RunState | null>(null);
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
+  const fold = useRef<((ev: RunEvent) => void) | null>(null);
+  const local = useCallback((ev: RunEvent) => fold.current?.(ev), []);
 
   useEffect(() => {
     if (!run) {
@@ -25,6 +29,11 @@ export function useRun(
     }
     let current = initialRun(run.seed);
     setState(current);
+    fold.current = (ev) => {
+      if (isTerminal(current.status)) return;
+      current = reduceEvent(current, ev);
+      setState(current);
+    };
     const es = new EventSource(runEventsUrl(inst, sessionId, run.id), { withCredentials: true });
     let ended = false;
     es.onmessage = (msg) => {
@@ -43,8 +52,8 @@ export function useRun(
         onEndRef.current(current);
       }
     };
-    return () => es.close();
+    return () => { es.close(); fold.current = null; };
   }, [inst, sessionId, run]);
 
-  return state;
+  return [state, local];
 }

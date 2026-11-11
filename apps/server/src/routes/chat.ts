@@ -17,6 +17,7 @@ const OTHER_PAGE = 50;
 
 const SendBody = z.object({ input: z.string().min(1).max(100_000) });
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
+const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
 
 interface RawMessage {
@@ -26,6 +27,8 @@ interface RawMessage {
   tool_calls?: unknown;
   tool_name?: string | null;
   timestamp?: number | null;
+  /** "steer": a text given to the agent during a run (POST /v1/runs/{id}/steer) */
+  display_kind?: string | null;
 }
 
 export interface ChatMessage {
@@ -35,6 +38,8 @@ export interface ChatMessage {
   toolName: string | null;
   toolCalls: { name: string; arguments: string }[];
   timestamp: number | null;
+  /** given to the agent during a run (reorientation); only when true */
+  steer?: true;
 }
 
 function text(content: unknown): string {
@@ -61,6 +66,7 @@ export function toChatMessages(data: RawMessage[]): ChatMessage[] {
     .map((m) => ({
       id: m.id, role: m.role, content: text(m.content), toolName: m.tool_name ?? null,
       toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
+      ...(m.display_kind === 'steer' ? { steer: true as const } : {}),
     }));
 }
 
@@ -118,15 +124,17 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   interface RawStatus {
     status: string; session_id?: string | null; created_at?: number; updated_at?: number | null; output?: string | null; error?: string | null;
-    usage?: unknown; runtime?: unknown;
+    usage?: unknown; runtime?: unknown; pending_steer?: unknown;
   }
   /** Run status; a run Hermes forgot (404) is "unknown", treated as finished. `raw` feeds run_stats. */
   const status = async (ctx: SessionContext, runId: string) => {
     try {
       const s = await callOp<RawStatus>(http(ctx), report(ctx), 'chat', 'runStatus', { params: { run_id: runId }, profile: ctx.profile });
-      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null, raw: s as RawStatus | null };
+      // a reorientation Hermes could not give the agent before the run ended
+      const pendingSteer = typeof s.pending_steer === 'string' && s.pending_steer.trim() ? s.pending_steer : null;
+      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null, pendingSteer, raw: s as RawStatus | null };
     } catch (err) {
-      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null, raw: null };
+      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null, pendingSteer: null, raw: null };
       throw err;
     }
   };
@@ -356,6 +364,22 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     } catch (err) {
       // without the authority Hermes answers 409 not_found; an older Hermes has no such route (404)
       if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 404 || (err.detail.status === 409 && /not_found/.test(err.detail.body ?? '')))) return unavailable();
+      throw err;
+    }
+  });
+
+  // Reorientation: the text reaches the agent after its current batch of tools, without stopping the run. Hermes
+  // only takes it while the run is exactly `running` (not during an approval): otherwise 409.
+  r.post('/sessions/:inst/:id/runs/:runId/steer', async (c) => {
+    const ctx = ctxOf(c);
+    const runId = runOf(ctx, c.req.param('runId'));
+    const { input } = SteerBody.parse(await c.req.json());
+    try {
+      return c.json(await callOp(http(ctx), report(ctx), 'chat', 'steer', { params: { run_id: runId }, profile: ctx.profile, body: { input } }));
+    } catch (err) {
+      if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 409 || err.detail.status === 404)) {
+        return c.json({ error: 'L’agent n’accepte pas de réorientation maintenant', code: 'steer_refused' }, 409);
+      }
       throw err;
     }
   });

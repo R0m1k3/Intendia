@@ -1,6 +1,7 @@
-import { ArrowUp, FileText, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, CornerDownRight, FileText, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import { cx } from '../components/ui';
+import type { QueueItem } from './queue';
 
 export interface ComposerHandle {
   /** Adds files as attachments (uploaded at once, one tile each); used by paste, the paperclip and the drop zones. */
@@ -25,7 +26,8 @@ interface Attachment {
 let nextId = 1;
 
 /**
- * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it.
+ * Enter sends, Shift+Enter goes to the next line; while a run goes, the button stops it, Enter puts the message in the
+ * queue (`onQueue`, shown above the text) and « Réorienter » (`onSteer`) gives the text to the agent at once.
  * Files (paperclip, paste of a screenshot, drop zones of the page) become tiles above the text: uploaded to inbox/
  * one by one (`upload`), image thumbnails, a state while uploading or after a failure. Their paths are added to the
  * message only when it is sent, one per line after the text: that is how the agent reads them. Sending waits for
@@ -35,8 +37,16 @@ let nextId = 1;
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
+  queue, onQueue, onSteer, steerDisabled,
 }: {
   onSend: (text: string) => Promise<boolean>;
+  /** messages waiting for the end of the run; `paused`: why they wait for « Reprendre » */
+  queue?: { items: QueueItem[]; paused: string | null; onRemove: (id: string) => void; onResume: () => void };
+  onQueue?: (text: string) => void;
+  /** true when the agent took the text */
+  onSteer?: (text: string) => Promise<boolean>;
+  /** why « Réorienter » cannot be used now (shown as its title) */
+  steerDisabled?: string;
   onStop: () => void;
   running: boolean;
   disabled?: boolean;
@@ -103,14 +113,13 @@ export function Composer({
 
   const waiting = files.some((a) => a.state !== 'done');
   const canSend = (text.trim() !== '' || files.length > 0) && !waiting && !sending && !disabled;
-  const send = async () => {
-    if (!canSend || running) return;
+  // what was sent: a file added or text typed while the send is pending stays in the draft
+  const submit = async (how: (message: string) => Promise<boolean>) => {
     const message = [text.trim(), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
-    // what was sent: a file added or text typed while the send is pending stays in the draft
     const sentText = text;
     const sent = new Set(files.map((a) => a.id));
     setSending(true);
-    const ok = await onSend(message);
+    const ok = await how(message);
     setSending(false);
     if (ok) {
       setText((t) => (t === sentText ? '' : t));
@@ -118,9 +127,51 @@ export function Composer({
       setFiles((all) => all.filter((a) => !sent.has(a.id)));
     }
   };
+  const send = async () => {
+    if (!canSend || running) return;
+    await submit(onSend);
+  };
+  const toQueue = async () => {
+    if (!canSend || !running || !onQueue) return;
+    await submit(async (m) => { onQueue(m); return true; });
+  };
+  // a reorientation is text only: files would be cited before they are seen
+  const steerBlock = files.length > 0 ? 'Réorienter n’accepte pas de pièces jointes' : steerDisabled;
+  const canSteer = Boolean(onSteer) && text.trim() !== '' && !sending && !disabled && !steerBlock;
+  const steer = async () => {
+    if (!canSteer || !running || !onSteer) return;
+    await submit(onSteer);
+  };
+  const iconButton = 'flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-40';
 
   return (
     <div className={cx('card p-2 transition-colors focus-within:border-ink-faint/60', disabled && 'opacity-60')}>
+      {queue && queue.items.length > 0 && (
+        <div className="px-1 pb-1.5 pt-1" data-queue>
+          <ul className="flex flex-wrap gap-1.5" aria-label="Messages en attente">
+            {queue.items.map((q, i) => (
+              <li key={q.id} data-queued className="flex max-w-full items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
+                <span className="text-ink-faint">{i + 1}.</span>
+                <span className="max-w-[16rem] truncate" title={q.text}>{q.text}</span>
+                <button type="button" onClick={() => queue.onRemove(q.id)} aria-label={`Retirer « ${q.text.slice(0, 40)} » de la file`}
+                  className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
+                  <X className="size-3" strokeWidth={2} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-[11px] text-ink-faint">
+            {queue.paused ? (
+              <>
+                En pause : {queue.paused} ·{' '}
+                <button type="button" onClick={queue.onResume} className="font-medium text-accent hover:underline">Reprendre</button>
+              </>
+            ) : running ? 'Envoyé à la fin du travail en cours, un message à la fois' : (
+              <button type="button" onClick={queue.onResume} className="font-medium text-accent hover:underline">Envoyer le suivant</button>
+            )}
+          </p>
+        </div>
+      )}
       {files.length > 0 && (
         <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label="Pièces jointes">
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
@@ -136,7 +187,7 @@ export function Composer({
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            void send();
+            void (running ? toQueue() : send());
           }
         }}
         placeholder={placeholder ?? 'Écrire à l’agent'}
@@ -162,6 +213,20 @@ export function Composer({
         )}
         <div className="hidden min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint md:block">{hint}</div>
         <div className="flex min-w-0 flex-1 justify-end md:flex-none">{options}</div>
+        {running && onSteer && (
+          <button type="button" onClick={() => void steer()} disabled={!canSteer} aria-label="Réorienter"
+            title={steerBlock ?? 'Réorienter : donner ce texte à l’agent tout de suite, après ses outils en cours'}
+            className={cx(iconButton, 'text-ink-soft hover:bg-raised hover:text-ink')}>
+            <CornerDownRight className="size-4" strokeWidth={1.5} />
+          </button>
+        )}
+        {running && onQueue && (
+          <button type="button" onClick={() => void toQueue()} disabled={!canSend} aria-label="Mettre en file"
+            title="Mettre en file (Entrée) : envoyé à la fin du travail en cours"
+            className={cx(iconButton, 'text-ink-soft hover:bg-raised hover:text-ink')}>
+            <ListPlus className="size-4" strokeWidth={1.5} />
+          </button>
+        )}
         {running ? (
           <button
             type="button"

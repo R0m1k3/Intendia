@@ -14,6 +14,8 @@ export const PendingControlSchema = z.looseObject({
   kind: z.string().nullish().catch(null),
   prompt_id: z.string().nullish().catch(null),
   execution_generation: z.number().int().nullish().catch(null),
+  /** Reorientation not given to the agent before the end of the run. */
+  pending_steer: z.string().nullish().catch(null),
   command: z.string().nullish().catch(null),
   description: z.string().nullish().catch(null),
   question: z.string().nullish().catch(null),

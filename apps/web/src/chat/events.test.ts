@@ -46,6 +46,24 @@ describe('reduceEvent', () => {
     expect(s.entries.at(-1)).toMatchObject({ kind: 'note', text: 'Approbation répondue' });
   });
 
+  it('shows a reorientation where it was given, and reads the one Hermes did not deliver', () => {
+    let s = run([{ event: 'run.started' }, { event: 'message.delta', delta: 'Je regarde' }]);
+    s = reduceEvent(s, { event: 'intendia.steer', text: 'Plutôt Houdemont', timestamp: 10 });
+    s = reduceEvent(s, { event: 'run.steered', accepted: true });
+    s = reduceEvent(s, { event: 'message.delta', delta: 'Houdemont, donc.' });
+    expect(s.entries.map((e) => e.kind)).toEqual(['assistant', 'user', 'assistant']);
+    expect(s.entries[1]).toMatchObject({ kind: 'user', text: 'Plutôt Houdemont', steer: true, ts: 10 });
+    expect(s.pendingSteer).toBeNull();
+    expect(reduceEvent(s, { event: 'run.completed', output: 'x', pending_steer: 'Et Frouard' }).pendingSteer).toBe('Et Frouard');
+    expect(reduceEvent(s, { event: 'run.cancelled', pending_steer: '  ' }).pendingSteer).toBeNull();
+  });
+
+  it('marks the reorientations of the history', () => {
+    const entries = historyEntries([msg(1, 'user', 'Bonjour', 1), msg(2, 'user', 'Plutôt Houdemont', 2, { steer: true })]);
+    expect(entries.map((e) => Boolean(e.kind === 'user' && e.steer))).toEqual([false, true]);
+    expect(entries[0]).not.toHaveProperty('steer');
+  });
+
   it('keeps a question of the agent until it is settled or the run ends', () => {
     let s = run([
       { event: 'run.started' },

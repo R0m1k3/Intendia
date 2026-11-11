@@ -111,6 +111,8 @@ export interface ChatMessage {
   toolCalls: { name: string; arguments: string }[];
   /** seconds */
   timestamp: number | null;
+  /** given to the agent during a run (reorientation) */
+  steer?: true;
 }
 export interface RunStatus {
   status: string;
@@ -118,6 +120,8 @@ export interface RunStatus {
   createdAt: number | null;
   output: string | null;
   error: string | null;
+  /** reorientation Hermes did not give the agent before the end */
+  pendingSteer?: string | null;
 }
 export interface OtherSession {
   id: string;
@@ -546,6 +550,9 @@ export const api = {
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/approval`, { choice, requestId }),
+  /** Text given to the agent during its run, after its current tools (409 steer_refused when it does not take it). */
+  steer: (inst: string, id: string, runId: string, input: string) =>
+    call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/steer`, { input }),
   /** Answer to a question of the agent (several choices: a JSON array of their labels). */
   clarify: (inst: string, id: string, runId: string, answer: string, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/clarify`, { answer, requestId }),

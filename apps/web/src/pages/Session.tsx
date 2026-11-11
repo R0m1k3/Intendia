@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
+import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
 import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
+import { EMPTY_QUEUE, dropItem, enqueue, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
 import { ClarifyCard } from '../chat/ClarifyCard';
@@ -80,6 +81,23 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
   const [trees, setTrees] = useState<Extract<Entry, { kind: 'subagents' }>[]>([]);
   const composer = useRef<ComposerHandle>(null);
+  // Messages written during a run (chat/queue.ts): one leaves when a run ends well (`drain`), never on opening the page
+  const [queue, setQueue] = useState<Queue>(EMPTY_QUEUE);
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [drain, setDrain] = useState<string | null>(null);
+  useEffect(() => {
+    if (!inst) return;
+    setQueue(loadQueue(inst, sessionId));
+    setQueueLoaded(true);
+  }, [inst, sessionId]);
+  useEffect(() => { if (inst && queueLoaded) saveQueue(inst, sessionId, queue); }, [inst, sessionId, queue, queueLoaded]);
+  const queued = queue.items.length;
+  useEffect(() => {
+    if (!queued) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [queued]);
 
   // Reopened during a run (reload, other tab, network cut, sent from the home page): plug back into its stream.
   // A message sent from the home page is shown at once (handoff), and kept on screen if its run failed.
@@ -95,6 +113,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
 
   const onEnd = useCallback(async (state: RunState) => {
+    // once per run: a reorientation not delivered goes back in front and waits; a run that did not end well stops the queue
+    if (state.pendingSteer) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), 'réorientation non livrée'));
+    else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
+    else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
     if (tree) setTrees((t) => [...t, tree]);
     const input = state.entries.find((e) => e.kind === 'user')?.text ?? null;
@@ -110,10 +132,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [qc, inst, sessionId]);
 
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
-  const live = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  const [live, localEvent] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
 
-  const send = async (text: string): Promise<boolean> => {
-    if (!inst) return false;
+  const send = async (text: string): Promise<boolean> => (await launch(text)) === null;
+  /** Starts a run; the error, or null once started. */
+  const launch = async (text: string): Promise<unknown> => {
+    if (!inst) return new Error('Instance inconnue');
     setError(null);
     setOutcome(null);
     try {
@@ -122,12 +146,43 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
       setActive({ id: res.runId, createdAt: status?.createdAt ?? null, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
       void qc.invalidateQueries({ queryKey: ['sessions'] });
+      return null;
+    } catch (err) {
+      setError(err);
+      return err;
+    }
+  };
+
+  // the head of the queue leaves once the run is over (and not paused); a refused send puts it back and pauses
+  useEffect(() => {
+    if (active || drain === null || !inst) return;
+    setDrain(null);
+    if (queue.paused) return;
+    const [head, rest] = takeHead(queue);
+    if (!head) return;
+    setQueue(rest);
+    void launch(head.text).then((err) => {
+      if (err === null) return;
+      const reason = err instanceof ApiError && err.status === 409 ? 'un autre onglet a lancé un travail' : 'l’envoi a échoué';
+      setQueue((q) => pauseQueue(pushHead(q, head.text), reason));
+    });
+  }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const steer = async (text: string): Promise<boolean> => {
+    if (!inst || !active) return false;
+    setError(null);
+    try {
+      await api.steer(inst, sessionId, active.id, text);
+      localEvent({ event: 'intendia.steer', text, timestamp: Date.now() / 1000 });
       return true;
     } catch (err) {
       setError(err);
       return false;
     }
   };
+  const steerDisabled = live?.approval || live?.clarify ? 'Un accord ou une réponse est attendu'
+    : !chat.has('chat', 'steer') ? 'Réorientation indisponible sur cette instance'
+    : live?.status !== 'running' ? 'L’agent n’a pas encore commencé' : undefined;
 
   const approve = async (choice: ApprovalChoice) => {
     if (!inst || !active || !live?.approval) return;
@@ -356,6 +411,14 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             onStop={stop}
             running={running}
             disabled={!chat.available || !inst}
+            onQueue={(text) => setQueue((q) => enqueue(q, text))}
+            onSteer={steer}
+            steerDisabled={steerDisabled}
+            queue={{
+              items: queue.items, paused: queue.paused,
+              onRemove: (id) => setQueue((q) => dropItem(q, id)),
+              onResume: () => { setQueue(resumeQueue); if (!active) setDrain(`resume-${Date.now()}`); },
+            }}
             options={inst && sess.data && (
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
@@ -364,8 +427,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille…') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
-            hint="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
+            hint={running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne'}
           />
         </div>
       </div>

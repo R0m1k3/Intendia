@@ -4,7 +4,8 @@ import type { ChatMessage } from '../api';
 export type ToolState = 'running' | 'ok' | 'failed';
 
 export type Entry =
-  | { kind: 'user'; key: string; text: string; ts: number | null }
+  /** steer: given to the agent during its run (reorientation) */
+  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean }
   | { kind: 'assistant'; key: string; text: string; ts: number | null; streaming?: boolean }
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
@@ -49,6 +50,8 @@ export interface RunState {
   entries: Entry[];
   approval: Approval | null;
   clarify: Clarify | null;
+  /** Reorientation Hermes could not give the agent before the end (read on the final event). */
+  pendingSteer: string | null;
   /**
    * queued | running | waiting_for_approval | stopping | completed | failed | cancelled | interrupted | error, and
    * waiting_for_clarify (Intendia's own: Hermes keeps a run waiting for a question `running`)
@@ -65,7 +68,7 @@ export const isTerminal = (status: string) => TERMINAL.includes(status);
 export type RunEvent = { event: string; seq?: number; timestamp?: number } & Record<string, unknown>;
 
 export function initialRun(entries: Entry[] = []): RunState {
-  return { entries, approval: null, clarify: null, status: 'queued', error: null, truncated: false };
+  return { entries, approval: null, clarify: null, pendingSteer: null, status: 'queued', error: null, truncated: false };
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v));
@@ -148,6 +151,13 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
           choices: Array.isArray(ev.choices) ? ev.choices.map(String) : ['once', 'deny'],
         },
       };
+    // Hermes says only that it took a reorientation: the page shows its text (intendia.steer, see useRun)
+    case 'run.steered':
+      return s;
+    case 'intendia.steer':
+      return {
+        ...s, entries: [...closeStreaming(s.entries), { kind: 'user', key: key('steer', ev.seq), text: str(ev.text), ts, steer: true }],
+      };
     case 'clarify.request':
       return {
         ...s, status: 'waiting_for_clarify',
@@ -175,7 +185,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
       const hasAnswer = entries.some((e) => e.kind === 'assistant' && e.text.trim());
       const output = str(ev.output);
       return {
-        ...s, status: 'completed', approval: null, clarify: null,
+        ...s, status: 'completed', approval: null, clarify: null, pendingSteer: pendingSteerOf(ev),
         entries: !hasAnswer && output ? [...entries, { kind: 'assistant', key: key('a', ev.seq), text: output, ts }] : entries,
       };
     }
@@ -183,7 +193,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     case 'run.cancelled':
     case 'run.interrupted': {
       const status = ev.event.slice(4);
-      return { ...s, status, approval: null, clarify: null, error: str(ev.error) || null, entries: closeStreaming(s.entries) };
+      return { ...s, status, approval: null, clarify: null, pendingSteer: pendingSteerOf(ev), error: str(ev.error) || null, entries: closeStreaming(s.entries) };
     }
     case 'replay.truncated':
       return { ...s, truncated: true };
@@ -193,6 +203,8 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
       return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.event, tone: 'muted', ts }] };
   }
 }
+
+const pendingSteerOf = (ev: RunEvent): string | null => (typeof ev.pending_steer === 'string' && ev.pending_steer.trim() ? ev.pending_steer : null);
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -293,7 +305,7 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
   const out: Entry[] = [];
   for (const m of messages) {
     const k = `h${m.id}`;
-    if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp });
+    if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}) });
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
       m.toolCalls.forEach((t, i) => out.push({

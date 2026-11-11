@@ -10,6 +10,8 @@
  *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
  *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
  *   `approval.responded`, body `{choice}`)
+ * - steer (POST /v1/runs/{id}/steer): taken while the run is `running` (else 409), `run.steered` + a user line
+ *   `display_kind: "steer"`; with "perdu" in the run's message never delivered, back as `pending_steer` at the end
  * - "question": the agent asks a question (clarify.request, 3 choices; "multi": several may be picked) until
  *   POST /v1/runs/{id}/clarify; the run stays `running`, the question is in `pending_controls`; the answer is quoted in
  *   the final text. Gateway session authority only: with `controls: 'legacy'` the route answers 409 not_found
@@ -144,6 +146,8 @@ interface SimRun {
   clarify: { resolve: (answer: string) => void; prompt: Record<string, unknown> } | null;
   /** Answer given to the question of the run (quoted in the final text). */
   answer?: string;
+  /** "perdu": a reorientation not given to the agent, sent back as `pending_steer` at the end. */
+  pendingSteer?: string;
 }
 
 interface SimMessage {
@@ -154,6 +158,7 @@ interface SimMessage {
   tool_calls: unknown;
   tool_name: string | null;
   timestamp: number;
+  display_kind?: string;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
@@ -343,7 +348,19 @@ class Simulator {
     if (/tard/i.test(run.input)) setTimeout(addCost, 8_000).unref?.();
     else addCost();
     this.addMessage(run.sessionId, 'assistant', output);
-    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run) });
+    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run), ...(run.pendingSteer ? { pending_steer: run.pendingSteer } : {}) });
+  }
+
+  /** Like Hermes: taken only while the run is exactly `running`; "perdu" in the run's message: never delivered. */
+  steer(run: SimRun, text: string): boolean {
+    if (run.status !== 'running') return false;
+    if (/perdu/i.test(run.input)) {
+      run.pendingSteer = run.pendingSteer ? `${run.pendingSteer}\n${text}` : text;
+      return true;
+    }
+    this.addMessage(run.sessionId, 'user', text, { display_kind: 'steer' });
+    this.push(run, { event: 'run.steered', accepted: true });
+    return true;
   }
 
   runtime(run: SimRun) {
@@ -578,6 +595,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
         ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
         // with the gateway authority: the run's generation and the questions waiting for an answer
         ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
+        ...(run.pendingSteer && TERMINAL.has(run.status) ? { pending_steer: run.pendingSteer } : {}),
         pending_controls: sim.controls === 'authority' ? [run.approval?.prompt, run.clarify?.prompt].filter(Boolean) : [],
       });
     }
@@ -590,6 +608,12 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     if (sub === '/stop' && method === 'POST') {
       sim.stop(run);
       return json({ object: 'hermes.run.stop', run_id: run.id, status: 'stopping' });
+    }
+    if (sub === '/steer' && method === 'POST') {
+      const text = typeof b.input === 'string' ? b.input.trim() : '';
+      if (!text) return json({ error: { message: 'input is required', code: 'invalid_request' } }, 400);
+      if (!sim.steer(run, text)) return json({ error: { message: `Run is ${run.status}`, code: 'run_not_accepting_steer' } }, 409);
+      return json({ object: 'hermes.run.steer', run_id: run.id, accepted: true });
     }
     if (sub === '/clarify' && method === 'POST') {
       // Hermes 0.23: through the session authority only (else not_found, answered 409)
