@@ -4,3 +4,5 @@
 ALTER TABLE session_workspace ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE session_workspace ADD COLUMN deleted_at INTEGER;
 ALTER TABLE session_workspace ADD COLUMN copied_from TEXT;
+-- Next purge attempt of a row taken by the purger (lease, then retry once a minute after a failure).
+ALTER TABLE session_workspace ADD COLUMN purge_after INTEGER;

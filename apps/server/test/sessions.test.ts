@@ -143,7 +143,26 @@ describe('sessions', () => {
     // taken by the purger: no longer restorable, still hidden
     expect((await t.request('POST', '/x/i/fake/sessions/restore', { ids: [s.id] })).status).toBe(409);
     expect((await t.request('GET', base)).status).toBe(404);
-    expect((await t.services.purger.sweep(Date.now() + UNDO_MS)).purged).toEqual([s.id]);
+    // tried again a minute later
+    expect((await t.services.purger.sweep(Date.now() + UNDO_MS + 30_000)).purged).toEqual([]);
+    expect((await t.services.purger.sweep(Date.now() + UNDO_MS + 61_000)).purged).toEqual([s.id]);
+  });
+
+  it('does not let failing purges hold every slot of the sweep', async () => {
+    const { t } = await withWorkspace();
+    const ws = t.services.workspaces;
+    const ids: string[] = [];
+    for (let i = 0; i < 21; i++) ids.push((await t.request('POST', '/x/workspaces/dev/sessions')).json.session.id);
+    const t0 = Date.now();
+    ws.markDeleted('fake', ids.slice(0, 20), t0);
+    const { SessionPurger } = await import('../src/sessions/purge.js');
+    const failing = new SessionPurger(ws, {
+      http: () => ({ request: async () => { throw new Error('boom'); } }), get: t.compat.get.bind(t.compat),
+    } as any, () => {});
+    expect((await failing.sweep(t0 + UNDO_MS)).failed).toHaveLength(20);
+    ws.markDeleted('fake', [ids[20]!], t0 + 1000);
+    // the 20 failed rows are not due yet: the new one goes first
+    expect((await t.services.purger.sweep(t0 + UNDO_MS + 2000)).purged).toEqual([ids[20]]);
   });
 
   it('refuses to delete or move a session while a run goes on', async () => {
@@ -235,6 +254,16 @@ describe('sessions', () => {
       .toEqual([used.id, pinned.id, copy.id, fresh.id].sort());
     expect((await t.request('POST', '/x/i/fake/sessions/restore', { ids: [old.id] })).json.restored).toEqual([old.id]);
     expect(t.fake.requests.some((r) => r.method === 'DELETE')).toBe(false);
+
+    // a first message being sent keeps its session out of the clean-up
+    await t.request('POST', '/x/i/fake/sessions/bulk', { ids: [old.id], action: 'unpin' });
+    const { startingRuns, runKey } = await import('../src/chat/history.js');
+    startingRuns.add(runKey('fake', old.id));
+    try {
+      expect((await t.request('POST', '/x/i/fake/sessions/cleanup')).json.ids).toEqual([]);
+    } finally {
+      startingRuns.delete(runKey('fake', old.id));
+    }
   });
 
   it('lists other sessions without Intendia ones, with paging', async () => {

@@ -100,6 +100,28 @@ export const runKey = (instanceId: string, sessionId: string): string => `${inst
  */
 export async function isRunActive(compat: CompatService, ctx: SessionContext): Promise<boolean> {
   if (startingRuns.has(runKey(ctx.instance.id, ctx.session.id))) return true;
+  return isLastRunActive(compat, ctx);
+}
+
+/**
+ * Runs `change` only when no run of the session goes on, with the session reserved meanwhile (in `startingRuns`:
+ * a send started during the check is refused). Returns false when a run goes on.
+ */
+export async function whenIdle(compat: CompatService, ctx: SessionContext, change: () => void | Promise<void>): Promise<boolean> {
+  const key = runKey(ctx.instance.id, ctx.session.id);
+  if (startingRuns.has(key)) return false;
+  startingRuns.add(key);
+  try {
+    if (await isLastRunActive(compat, ctx)) return false;
+    await change();
+    return true;
+  } finally {
+    startingRuns.delete(key);
+  }
+}
+
+/** The session's last run is not reported as finished by Hermes (forgotten = finished). */
+async function isLastRunActive(compat: CompatService, ctx: SessionContext): Promise<boolean> {
   const runId = ctx.session.lastRunId;
   if (!runId) return false;
   const s = await readRunStatus(compat, ctx.instance.id, ctx.profile, runId);

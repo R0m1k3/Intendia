@@ -6,17 +6,15 @@ export { UNDO_MS };
 
 const EVERY_MS = 5000;
 const PER_SWEEP = 20;
-const LOG_EVERY_MS = 60_000;
 
 /**
  * Deletes at Hermes the sessions whose undo window is over, then their rows. Hermes has no undo, so the deletion
- * waits on the server (a closed tab loses nothing). A failure keeps the row hidden and is retried at each sweep.
+ * waits on the server (a closed tab loses nothing). A failure keeps the row hidden; it is tried again a minute later
+ * (`PURGE_RETRY_MS`), one log line per attempt.
  */
 export class SessionPurger {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
-  /** Last failure logged per session: one line a minute at most. */
-  private readonly logged = new Map<string, number>();
 
   constructor(
     private readonly workspaces: WorkspaceService,
@@ -40,16 +38,11 @@ export class SessionPurger {
           // never sent to Hermes (no message yet): nothing to delete there
           if (!(err instanceof HermesError && err.detail.status === 404)) {
             failed.push(item.sessionId);
-            const last = this.logged.get(key);
-            if (last === undefined || now - last >= LOG_EVERY_MS) {
-              this.logged.set(key, now);
-              this.log(`[intendia] purge ${key}: ${(err as Error).message}`);
-            }
+            this.log(`[intendia] purge ${key}: ${(err as Error).message}`);
             continue;
           }
         }
         this.workspaces.dropRow(item.instanceId, item.sessionId);
-        this.logged.delete(key);
         purged.push(item.sessionId);
       }
     } finally {

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
@@ -33,6 +33,8 @@ export interface PublicSession {
 export const UNDO_MS = 10_000;
 /** A never used Intendia session (no run, not a copy) older than this is offered to the clean-up. */
 export const UNUSED_AFTER_MS = 60 * 60 * 1000;
+/** A row taken by the purger is tried again after this delay (failure, or a stop during the attempt). */
+export const PURGE_RETRY_MS = 60_000;
 
 /** A deleted session the purger took: delete it at Hermes, then drop its row. */
 export interface PurgeItem {
@@ -321,16 +323,24 @@ export class WorkspaceService {
     });
   }
 
-  /** Deleted sessions whose undo window is over, marked as taken (0: no longer restorable) in the same transaction. */
+  /**
+   * Deleted sessions due for a purge attempt: undo window over, or taken before and due again. Marked as taken
+   * (deleted_at 0: no longer restorable) with their next attempt in the same transaction; the oldest due first, so
+   * rows that keep failing do not hold every slot.
+   */
   claimPurgeable(now: number, limit: number): PurgeItem[] {
+    const due = sql`coalesce(${sessionWorkspace.purgeAfter}, ${sessionWorkspace.deletedAt} + ${UNDO_MS})`;
     return this.db.transaction((tx) => {
       const rows = tx.select({ instanceId: sessionWorkspace.instanceId, sessionId: sessionWorkspace.sessionId, profile: workspaces.profile })
         .from(sessionWorkspace)
         .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-        .where(and(isNotNull(sessionWorkspace.deletedAt), lte(sessionWorkspace.deletedAt, now - UNDO_MS)))
-        .orderBy(asc(sessionWorkspace.deletedAt)).limit(limit).all();
+        .where(or(
+          and(gt(sessionWorkspace.deletedAt, 0), lte(sessionWorkspace.deletedAt, now - UNDO_MS)),
+          and(eq(sessionWorkspace.deletedAt, 0), lte(sessionWorkspace.purgeAfter, now)),
+        ))
+        .orderBy(asc(due)).limit(limit).all();
       for (const r of rows) {
-        tx.update(sessionWorkspace).set({ deletedAt: 0 })
+        tx.update(sessionWorkspace).set({ deletedAt: 0, purgeAfter: now + PURGE_RETRY_MS })
           .where(and(eq(sessionWorkspace.instanceId, r.instanceId), eq(sessionWorkspace.sessionId, r.sessionId))).run();
       }
       return rows.map((r) => ({ ...r, profile: r.profile ?? 'default' }));

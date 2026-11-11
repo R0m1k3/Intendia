@@ -7,7 +7,7 @@ import { pushTitle } from '../workspaces/title.js';
 import { SESSION_SOURCES, type SessionSource } from '../sessions/recent.js';
 import { NotFoundError, ValidationError, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { createSessionDir, WorkspaceFsError } from '../workspaces/fs.js';
-import { isRunActive } from '../chat/history.js';
+import { runKey, startingRuns, whenIdle } from '../chat/history.js';
 import type { HermesFs } from '../files/hermes-fs.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
@@ -115,7 +115,6 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ session: ctx.session, workspace: ctx.workspace, profile: ctx.profile });
   });
 
-  const runActive = (ctx: SessionContext) => isRunActive(deps.compat, ctx);
 
   /**
    * Moves a session to another workspace of the same instance and profile. Its folder cannot move (Hermes does not
@@ -125,7 +124,13 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     const target = workspaces.getWorkspace(slug);
     if (target.instanceId !== ctx.instance.id || (target.profile ?? 'default') !== ctx.profile) return 'Autre agent';
     if (target.slug === ctx.workspace.slug) return null;
-    if (await runActive(ctx)) return RUN_ACTIVE;
+    let refused: string | null = null;
+    const idle = await whenIdle(deps.compat, ctx, async () => { refused = await moveFolder(ctx, slug); });
+    return idle ? refused : RUN_ACTIVE;
+  };
+
+  /** Moves the row, and the session's folder when it is empty; null when done, else why not. */
+  const moveFolder = async (ctx: SessionContext, slug: string): Promise<string | null> => {
     const from = `${ctx.workspace.slug}/sessions/${ctx.session.id}`;
     let fs: HermesFs;
     try {
@@ -162,8 +167,11 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   r.delete('/sessions/:inst/:id', async (c) => {
     const { inst, id } = sessionParams(c);
     const ctx = workspaces.getSession(inst, id);
-    if (await runActive(ctx)) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
-    return c.json({ ok: true, undoUntil: workspaces.markDeleted(inst, [id]) });
+    let undoUntil = 0;
+    if (!await whenIdle(deps.compat, ctx, () => { undoUntil = workspaces.markDeleted(inst, [id]); })) {
+      return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
+    }
+    return c.json({ ok: true, undoUntil });
   });
 
   r.post('/i/:inst/sessions/restore', async (c) => {
@@ -178,7 +186,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     const inst = c.req.param('inst');
     const { ids, action, workspace } = BulkBody.parse(await c.req.json());
     const results: { id: string; ok: boolean; error?: string }[] = [];
-    const toDelete: string[] = [];
+    let undoUntil: number | undefined;
     for (const id of ids) {
       let ctx: SessionContext;
       try {
@@ -192,15 +200,14 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
         if (action === 'archive' || action === 'unarchive') workspaces.updateSession(inst, id, { archived: action === 'archive' });
         else if (action === 'pin' || action === 'unpin') workspaces.updateSession(inst, id, { pinned: action === 'pin' });
         else if (action === 'delete') {
-          if (await runActive(ctx)) error = RUN_ACTIVE;
-          else toDelete.push(id);
+          // checked and hidden one by one, each under the session's reservation (no send can start in between)
+          if (!await whenIdle(deps.compat, ctx, () => { undoUntil = workspaces.markDeleted(inst, [id]); })) error = RUN_ACTIVE;
         } else error = await moveOne(ctx, workspace!);
         results.push(error ? { id, ok: false, error } : { id, ok: true });
       } catch (err) {
         results.push({ id, ok: false, error: (err as Error).message });
       }
     }
-    const undoUntil = toDelete.length ? workspaces.markDeleted(inst, toDelete) : undefined;
     return c.json({ results, ...(undoUntil ? { undoUntil } : {}) });
   });
 
@@ -208,7 +215,9 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   r.get('/i/:inst/sessions/cleanup', (c) => c.json({ unused: workspaces.unusedSessions(c.req.param('inst')).length }));
   r.post('/i/:inst/sessions/cleanup', (c) => {
     const inst = c.req.param('inst');
-    const ids = workspaces.unusedSessions(inst);
+    // synchronous from the read to the mark: no send can start in between; a first send being started is skipped.
+    // At most 200 at a time, the size the undo accepts.
+    const ids = workspaces.unusedSessions(inst).filter((id) => !startingRuns.has(runKey(inst, id))).slice(0, 200);
     return c.json({ ids, undoUntil: workspaces.markDeleted(inst, ids) });
   });
 
