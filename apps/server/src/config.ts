@@ -31,6 +31,8 @@ const EnvSchema = z.object({
   INTENDIA_DATA_DIR: z.string().default('/data'),
   INTENDIA_PORT: z.coerce.number().int().default(3000),
   INTENDIA_MCP_PORT: z.coerce.number().int().default(3001),
+  /** Base URL Hermes uses to reach the MCP port (default http://intendia:<INTENDIA_MCP_PORT>). */
+  INTENDIA_MCP_URL: z.url().optional(),
   INTENDIA_WEB_DIR: z.string().optional(),
   INTENDIA_TRUST_PROXY: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   /** Optional webhook called when a module changes state (JSON POST). */
@@ -49,6 +51,7 @@ export interface AppConfig {
   dataDir: string;
   port: number;
   mcpPort: number;
+  mcpUrlBase: string | undefined;
   webDir: string | undefined;
   trustProxy: boolean;
   webhookUrl: string | undefined;
@@ -89,6 +92,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dataDir: e.INTENDIA_DATA_DIR,
     port: e.INTENDIA_PORT,
     mcpPort: e.INTENDIA_MCP_PORT,
+    mcpUrlBase: e.INTENDIA_MCP_URL?.replace(/\/+$/, ''),
     webDir: e.INTENDIA_WEB_DIR,
     trustProxy: e.INTENDIA_TRUST_PROXY,
     webhookUrl: e.INTENDIA_WEBHOOK_URL,

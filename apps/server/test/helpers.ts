@@ -27,8 +27,9 @@ export function fakeInstance(overrides: Partial<InstanceConfig> = {}): InstanceC
 }
 
 export function fakeHttp(opts: Partial<FakeOptions> = {}, inst = fakeInstance()) {
-  const fetchImpl = fakeFetch(createFakeHermes({ fixturesDir: FIXTURES, ...opts }));
-  return { http: new HermesHttp(inst, fetchImpl), fetchImpl };
+  const fake = createFakeHermes({ fixturesDir: FIXTURES, ...opts });
+  const fetchImpl = fakeFetch(fake);
+  return { http: new HermesHttp(inst, fetchImpl), fetchImpl, fake };
 }
 
 export function tempDir(): string {
