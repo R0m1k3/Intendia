@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { FolderOpen, Plus } from 'lucide-react';
+import { FolderOpen, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
+import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
-import { Button, ErrorText, Field, Input, Panel, timeAgo } from '../components/ui';
+import { Button, ErrorText, Panel, timeAgo } from '../components/ui';
 
 export function WorkspacePage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -17,11 +18,10 @@ export function WorkspacePage() {
   const agents = useQuery({ queryKey: ['agents-md', slug], queryFn: () => api.agentsMd(slug) });
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const [text, setText] = useState<string | null>(null);
-  const [name, setName] = useState<string | null>(null);
   const w = ws.data?.workspace;
   const inst = instances.data?.instances.find((i) => i.id === w?.instanceId);
 
-  useEffect(() => { setText(null); setName(null); }, [slug]);
+  useEffect(() => { setText(null); }, [slug]);
 
   const create = useMutation({
     mutationFn: () => api.createSession(slug),
@@ -37,13 +37,17 @@ export function WorkspacePage() {
   });
 
   const saveName = useMutation({
-    mutationFn: (n: string) => api.updateWorkspace(slug, { name: n.trim() }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace', slug] }).then(() => { setName(null); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }),
+    mutationFn: (n: string) => api.updateWorkspace(slug, { name: n }),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['workspace', slug] }), qc.invalidateQueries({ queryKey: ['workspaces'] })]),
   });
+  const rename = async () => {
+    if (!w) return;
+    const n = await askText({ title: 'Renommer le workspace', label: 'Nom affiché', value: w.name, maxLength: 80, message: `Le dossier reste ${w.slug}/ : seul le nom change.`, confirmLabel: 'Renommer' });
+    if (n && n !== w.name) saveName.mutate(n);
+  };
 
   if (ws.isError) return <div className="p-8"><ErrorText error={ws.error} /></div>;
   const agentsValue = text ?? agents.data?.text ?? '';
-  const nameValue = name ?? w?.name ?? '';
 
   return (
     <>
@@ -52,6 +56,7 @@ export function WorkspacePage() {
         subtitle={w && <span className="font-mono text-xs">{inst?.mount ?? ''}/{w.slug} · {inst?.label ?? w.instanceId} · {w.profile ?? 'default'}</span>}
         action={
           <div className="flex items-center gap-2">
+            <Button onClick={() => void rename()} disabled={!w || saveName.isPending}><Pencil className="size-4" strokeWidth={1.5} />Renommer</Button>
             <Link to="/w/$slug/fichiers" params={{ slug }} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-4 text-sm font-medium transition-colors hover:border-ink-faint/60 hover:bg-raised/60">
               <FolderOpen className="size-4" strokeWidth={1.5} />Fichiers
             </Link>
@@ -63,6 +68,7 @@ export function WorkspacePage() {
         <div className="space-y-6">
           <div className="empty:hidden"><ChatNotice instanceId={w?.instanceId} /></div>
           <ErrorText error={create.error} />
+          <ErrorText error={saveName.error} />
           <Panel
             bodyClassName=""
             title={archived ? 'Sessions archivées' : 'Sessions'}
@@ -85,15 +91,6 @@ export function WorkspacePage() {
         </div>
 
         <div className="space-y-6">
-          <Panel title="Nom">
-            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (nameValue.trim()) saveName.mutate(nameValue); }}>
-              <Field label="Nom affiché" hint={w ? `Le dossier reste ${w.slug}/` : undefined}>
-                <Input id="ws-name" value={nameValue} maxLength={80} onChange={(e) => setName(e.target.value)} disabled={!w} />
-              </Field>
-              <ErrorText error={saveName.error} />
-              {name !== null && name.trim() !== '' && name.trim() !== w?.name && <Button variant="secondary" disabled={saveName.isPending}>Renommer</Button>}
-            </form>
-          </Panel>
           <Panel title="Consignes" action={<span className="font-mono text-[11px] text-ink-faint">AGENTS.md</span>}>
             <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); saveAgents.mutate(agentsValue); }}>
               <textarea

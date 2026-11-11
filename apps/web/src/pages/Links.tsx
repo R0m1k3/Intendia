@@ -6,6 +6,7 @@ import { api, type ShareLink } from '../api';
 import { PageHeader } from '../components/Layout';
 import { Button, copyText, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
 import { absoluteUrl } from '../files/Preview';
+import { ask } from '../components/Dialog';
 
 const DAY = 86_400_000;
 
@@ -97,7 +98,7 @@ function LinkRow({ l }: { l: ShareLink }) {
                 </Button>
               )}
               <Button variant="ghost" className="size-8 px-0 hover:text-bad" title="Révoquer" aria-label="Révoquer"
-                onClick={() => { if (confirm(`Révoquer le lien vers ${name} ? Il ne s’ouvrira plus, pour personne.`)) revoke.mutate(); }}>
+                onClick={async () => { if (await ask({ title: `Révoquer le lien vers ${name} ?`, message: 'Il ne s’ouvrira plus, pour personne.', confirmLabel: 'Révoquer', danger: true })) revoke.mutate(); }}>
                 <Trash2 className="size-4" strokeWidth={1.5} />
               </Button>
             </>

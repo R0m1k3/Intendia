@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { api, type EnvVar } from '../api';
 import { Button, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, useInvalidateConfig, type TabProps } from './common';
+import { ask } from '../components/Dialog';
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -87,7 +88,7 @@ function EnvRow({ v, inst, profile, writable, open, onOpen, onSaved }: {
         {writable && !open && <Button className="h-8" onClick={() => onOpen(true)}>{v.isSet ? 'Remplacer' : 'Définir'}</Button>}
         {writable && v.isSet && (
           <Button variant="ghost" className="h-8 px-2" aria-label={`Supprimer ${v.key}`} disabled={del.isPending}
-            onClick={() => { if (confirm(`Supprimer ${v.key} ?`)) del.mutate(); }}>
+            onClick={async () => { if (await ask({ title: `Supprimer ${v.key} ?`, confirmLabel: 'Supprimer', danger: true })) del.mutate(); }}>
             <Trash2 className={ICON} strokeWidth={1.5} />
           </Button>
         )}

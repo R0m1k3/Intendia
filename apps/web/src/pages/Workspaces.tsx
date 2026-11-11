@@ -1,11 +1,12 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { api, type PublicInstance } from '../api';
+import { api, type PublicInstance, type Workspace } from '../api';
+import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
 import { NewWorkspace } from '../components/NewWorkspace';
-import { Button, Panel, timeAgo } from '../components/ui';
+import { Button, ErrorText, Panel, timeAgo } from '../components/ui';
 
 const SOURCE: Record<string, string> = { telegram: 'Telegram', cli: 'CLI', cron: 'Cron', api_server: 'API', discord: 'Discord', slack: 'Slack' };
 
@@ -60,6 +61,17 @@ export function WorkspacesPage() {
   const list = workspaces.data?.workspaces ?? [];
   const label = (id: string) => instances.data?.instances.find((i) => i.id === id)?.label ?? id;
   const empty = workspaces.isSuccess && list.length === 0;
+  const qc = useQueryClient();
+  const [error, setError] = useState<unknown>(null);
+  const rename = async (w: Workspace) => {
+    const n = await askText({ title: 'Renommer le workspace', label: 'Nom affiché', value: w.name, maxLength: 80, message: `Le dossier reste ${w.slug}/ : seul le nom change.`, confirmLabel: 'Renommer' });
+    if (!n || n === w.name) return;
+    try {
+      setError(null);
+      await api.updateWorkspace(w.slug, { name: n });
+      await Promise.all([qc.invalidateQueries({ queryKey: ['workspaces'] }), qc.invalidateQueries({ queryKey: ['workspace', w.slug] })]);
+    } catch (e) { setError(e); }
+  };
 
   return (
     <>
@@ -74,16 +86,21 @@ export function WorkspacesPage() {
             <NewWorkspace onCancel={empty ? undefined : () => setAdding(false)} />
           </Panel>
         )}
+        <ErrorText error={error} />
         {list.length > 0 && (
           <Panel bodyClassName="">
             <ul className="divide-y divide-line">
               {list.map((w) => (
-                <li key={w.slug}>
-                  <Link to="/w/$slug" params={{ slug: w.slug }} className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 transition-colors hover:bg-raised/50">
+                <li key={w.slug} className="flex items-center pr-3 transition-colors hover:bg-raised/50">
+                  <Link to="/w/$slug" params={{ slug: w.slug }} className="flex min-h-14 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
                     <span className="text-sm font-medium">{w.name}</span>
                     <span className="font-mono text-xs text-ink-faint">{w.slug}</span>
                     <span className="ml-auto text-xs text-ink-soft">{label(w.instanceId)} · {w.profile ?? 'default'}</span>
                   </Link>
+                  <button type="button" title="Renommer" aria-label={`Renommer ${w.name}`} onClick={() => void rename(w)}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink">
+                    <Pencil className="size-4" strokeWidth={1.5} />
+                  </button>
                 </li>
               ))}
             </ul>

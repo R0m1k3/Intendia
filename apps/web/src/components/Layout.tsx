@@ -39,6 +39,7 @@ export function Layout() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 60_000 });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+  const version = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: Infinity }).data?.version;
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: api.cronsOverview, refetchInterval: 60_000 });
   const counts: Record<string, number | undefined> = { '/crons': overview.data?.crons.length };
   const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
@@ -178,6 +179,7 @@ export function Layout() {
             <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
             Se déconnecter
           </button>
+          {version && <p className="px-3 pt-1 font-mono text-[11px] text-ink-faint" title="Version d’Intendia">Intendia v{version}</p>}
         </div>
       </aside>
 
@@ -188,7 +190,7 @@ export function Layout() {
       </main>
 
       {palette && <CommandPalette nav={PALETTE_NAV} onClose={closePalette} />}
-      <MobileNav onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
+      <MobileNav version={version} onSearch={openPalette} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
     </div>
   );
 }
@@ -202,7 +204,7 @@ function Count({ n }: { n: number | undefined }) {
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
 const MOBILE_MAIN: string[] = ['/', '/w', '/activite', '/agents'];
 
-function MobileNav({ isActive, onSearch }: { isActive: (to: string) => boolean; onSearch: () => void }) {
+function MobileNav({ isActive, onSearch, version }: { isActive: (to: string) => boolean; onSearch: () => void; version?: string }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
@@ -227,6 +229,7 @@ function MobileNav({ isActive, onSearch }: { isActive: (to: string) => boolean; 
                 {n.label}
               </Link>
             ))}
+            {version && <p className="col-span-3 pt-2 text-center font-mono text-[11px] text-ink-faint">Intendia v{version}</p>}
           </nav>
         </div>,
         document.body,

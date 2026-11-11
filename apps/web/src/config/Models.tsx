@@ -7,6 +7,7 @@ import { auxLabel } from './aux-labels';
 import { AUTO, changesOf, extraLabel, optionGroups, optionValue, OTHER, parseOption, valueOf } from './aux-draft';
 import { ChatModels } from './ChatModels';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
+import { ask } from '../components/Dialog';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
 export function ConfigModelsTab({ inst, profile, can, onSaved, onKey }: TabProps & { onKey: (key: string) => void }) {
@@ -160,7 +161,7 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
   return (
     <Panel title="Modèles auxiliaires"
       action={<Button variant="ghost" disabled={disabled || n > 0} title={n > 0 ? 'Enregistrez ou annulez d’abord les modifications' : undefined}
-        onClick={() => { if (confirm('Remettre toutes les tâches sur auto ?')) onReset(); }}>
+        onClick={async () => { if (await ask({ title: 'Remettre toutes les tâches sur auto ?', confirmLabel: 'Remettre sur auto' })) onReset(); }}>
         <RotateCcw className={ICON} strokeWidth={1.5} />Tout remettre sur auto</Button>}
       bodyClassName="divide-y divide-line">
       {data.auxiliary.map((t) => (

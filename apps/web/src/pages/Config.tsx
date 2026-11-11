@@ -15,6 +15,7 @@ import { ConfigModelsTab } from '../config/Models';
 import { ConfigPlatforms } from '../config/Platforms';
 import { ConfigYaml } from '../config/Yaml';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
+import { ask } from '../components/Dialog';
 
 const REQUIRED: OpRef[] = [['config', 'get']];
 const OPTIONAL: OptionalOp[] = [
@@ -87,7 +88,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
               </select>
             </label>
             {a.available && can('restartGateway') && (
-              <Button disabled={restart.running} onClick={() => { if (confirm(RESTART_CONFIRM)) restart.start(); }}>
+              <Button disabled={restart.running} onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}>
                 <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? 'Redémarrage…' : 'Redémarrer la passerelle'}
               </Button>
             )}
@@ -111,7 +112,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         {(needRestart || pendingPlatform) && !restart.running && !restart.done && can('restartGateway') && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
             <span>{pendingPlatform && !needRestart ? 'Une plateforme attend un redémarrage de la passerelle.' : 'Certains changements ne comptent qu’après un redémarrage de la passerelle.'}</span>
-            <Button onClick={() => { if (confirm(RESTART_CONFIRM)) restart.start(); }}><RefreshCw className={ICON} strokeWidth={1.5} />Redémarrer</Button>
+            <Button onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}><RefreshCw className={ICON} strokeWidth={1.5} />Redémarrer</Button>
           </div>
         )}
         <RestartStrip state={restart} />

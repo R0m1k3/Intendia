@@ -5,6 +5,7 @@ import { api } from '../api';
 import { Button, cx, ErrorText, Panel, timeAgo } from '../components/ui';
 import { CHANGED_TEXT, configKey, errorCode, ICON, useInvalidateConfig, type TabProps } from './common';
 import { DiffView } from './DiffView';
+import { ask } from '../components/Dialog';
 
 const SOURCE: Record<string, string> = {
   form: 'Formulaire', yaml: 'Éditeur YAML', restore: 'Restauration', model: 'Modèle', env: 'Variable', mcp: 'Serveur MCP', orchestration: 'Orchestration du kanban',
@@ -54,7 +55,7 @@ export function ConfigHistory({ inst, profile, can, onSaved }: TabProps) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-soft">Lignes retirées (−) et remises (+) par la restauration :</p>
               <Button variant="primary" disabled={!can('putRaw') || restore.isPending}
-                onClick={() => { if (confirm('Restaurer cette copie ? Le fichier actuel sera copié dans l’historique avant.')) restore.mutate(); }}>
+                onClick={async () => { if (await ask({ title: 'Restaurer cette copie ?', message: 'Le fichier actuel sera copié dans l’historique avant.', confirmLabel: 'Restaurer' })) restore.mutate(); }}>
                 <RotateCcw className={ICON} strokeWidth={1.5} />{restore.isPending ? 'Restauration…' : 'Restaurer'}
               </Button>
             </div>

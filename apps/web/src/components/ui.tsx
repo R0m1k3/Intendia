@@ -1,16 +1,17 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import {
   Bot, CalendarClock, HeartPulse, KanbanSquare, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
+import { showCopy } from './Dialog';
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
 }
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
-export function Button({ variant = 'secondary', className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+export function Button({ variant = 'secondary', className, ...p }: ComponentProps<'button'> & { variant?: Variant }) {
   // a px-* given by the caller replaces the default padding (both would be in the class list otherwise)
   const pad = /(^|\s)px-/.test(className ?? '') ? '' : 'px-4';
   return (
@@ -29,7 +30,7 @@ export function Button({ variant = 'secondary', className, ...p }: ButtonHTMLAtt
   );
 }
 
-export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className, ...p }: ComponentProps<'input'>) {
   return (
     <input
       {...p}
@@ -152,7 +153,7 @@ export async function copyText(text: string, label: string): Promise<void> {
     if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
     await navigator.clipboard.writeText(text);
   } catch {
-    prompt(label, text);
+    await showCopy(label, text);
   }
 }
 

@@ -21,6 +21,7 @@ import { uploadFiles } from '../files/upload';
 import { takeHandoff } from '../home/handoff';
 import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
+import { ask, askText } from '../components/Dialog';
 
 interface ActiveRun {
   id: string;
@@ -289,10 +290,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               triggerClass="flex size-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink aria-expanded:bg-raised"
               items={[
                 { label: 'Renommer', icon: <Pencil className="size-4" strokeWidth={1.5} />,
-                  onSelect: () => { const t = prompt('Nouveau titre', sess.data?.session.title ?? ''); if (t?.trim()) rename.mutate(t.trim()); } },
+                  onSelect: async () => { const t = await askText({ title: 'Renommer la session', label: 'Nouveau titre', value: sess.data?.session.title ?? '', confirmLabel: 'Renommer' }); if (t) rename.mutate(t); } },
                 { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate() },
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true,
-                  onSelect: () => { if (confirm('Supprimer cette session chez Hermes ? Les fichiers de son dossier restent sur le disque.')) remove.mutate(); } },
+                  onSelect: async () => { if (await ask({ title: 'Supprimer cette session chez Hermes ?', message: 'Les fichiers de son dossier restent sur le disque.', confirmLabel: 'Supprimer', danger: true })) remove.mutate(); } },
               ]}
             />
           </div>
