@@ -52,6 +52,8 @@ describe('Hermes 0.23 format (gateway session authority)', () => {
     expect(controlBody('approval', status([prompt, { ...prompt, prompt_id: 'p2' }]), 'p2', 'deny')).toEqual({ body: { request_id: 'p2', execution_generation: 3, choice: 'deny' } });
     expect(controlBody('approval', status([prompt, { ...prompt, prompt_id: 'p2' }]), null, 'once')).toEqual({ code: 'ambiguous' });
     expect(controlBody('approval', status([]), 'p1', 'once')).toEqual({ code: 'no_pending' });
+    // p1 answered elsewhere, p2 asked since: the old id must not answer p2
+    expect(controlBody('approval', status([{ ...prompt, prompt_id: 'p2' }]), 'p1', 'once')).toEqual({ code: 'no_pending' });
     // without the authority: the former body
     expect(controlBody('approval', { run_id: 'run_1', status: 'waiting_for_approval' }, 'apr_1', 'once')).toEqual({ body: { choice: 'once', request_id: 'apr_1' } });
     expect(controlBody('approval', null, null, 'deny')).toEqual({ body: { choice: 'deny' } });

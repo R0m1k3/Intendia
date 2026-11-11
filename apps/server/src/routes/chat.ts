@@ -99,8 +99,9 @@ export function controlBody(
   const generation = parsed.success ? parsed.data.execution_generation : null;
   if (typeof generation !== 'number') return { body: { [field]: value, ...(requestId ? { request_id: requestId } : {}) } };
   const pending = (parsed.success ? parsed.data.pending_controls : []).filter((p) => p.kind === kind && p.prompt_id);
-  const chosen = pending.find((p) => p.prompt_id === requestId) ?? (pending.length === 1 ? pending[0] : undefined);
-  if (!chosen) return { code: pending.length ? 'ambiguous' : 'no_pending' };
+  // an id that is no longer pending is refused: never answer another prompt than the one the page showed
+  const chosen = requestId ? pending.find((p) => p.prompt_id === requestId) : pending.length === 1 ? pending[0] : undefined;
+  if (!chosen) return { code: pending.length && !requestId ? 'ambiguous' : 'no_pending' };
   return { body: { request_id: chosen.prompt_id, execution_generation: chosen.execution_generation ?? generation, [field]: value } };
 }
 
