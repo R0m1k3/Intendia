@@ -6,6 +6,7 @@ import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunSt
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
 import { costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
+import { measure, startFollow, type FollowState } from '../chat/follow';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
 import { useRun } from '../chat/useRun';
@@ -187,27 +188,36 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const running = Boolean(active);
 
   // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
-  // scrolled up. Whether the reader is at the bottom is noted on each scroll, before the content grows: a turn can be
-  // taller than any threshold measured afterwards. The page opens at the bottom.
+  // scrolled up. `measure` (chat/follow.ts) judges from the scroll position, measured on each scroll event and again
+  // just before each automatic scroll: a scroll event comes one frame late, after a burst of text may have landed, and
+  // must not be read as the reader leaving the bottom. The page opens at the bottom.
   const bottom = useRef<HTMLDivElement>(null);
-  const pinned = useRef(true);
+  const follow = useRef<FollowState>({ pinned: true, lastTop: 0, lastHeight: 0 });
+  const box = () => bottom.current?.closest('main') ?? null;
   // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
-  const toEnd = () => { const main = bottom.current?.closest('main'); if (main) main.scrollTop = main.scrollHeight; };
+  const toEnd = (main: HTMLElement) => {
+    main.scrollTop = main.scrollHeight;
+    follow.current = { pinned: true, lastTop: main.scrollTop, lastHeight: main.scrollHeight };
+  };
+  const followIfPinned = () => {
+    const main = box();
+    if (!main) return;
+    follow.current = measure(follow.current, main);
+    if (follow.current.pinned) toEnd(main);
+  };
   const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
   useEffect(() => {
-    const main = bottom.current?.closest('main');
+    const main = box();
     const thread = bottom.current?.parentElement;
     if (!main || !thread) return;
-    const onScroll = () => { pinned.current = main.scrollHeight - main.scrollTop - main.clientHeight < 120; };
-    const follow = () => { if (pinned.current) toEnd(); };
-    const grow = new ResizeObserver(follow);
+    follow.current = startFollow(main);
+    const onScroll = () => { follow.current = measure(follow.current, main); };
+    const grow = new ResizeObserver(followIfPinned);
     grow.observe(thread);
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
-  }, []);
-  useEffect(() => {
-    if (pinned.current) toEnd();
-  }, [tail, live?.approval]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(followIfPinned, [tail, live?.approval]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = sess.data?.session.title || 'Nouvelle session';
 

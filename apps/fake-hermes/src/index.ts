@@ -10,6 +10,8 @@
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * - "panne": the run ends in `failed` (run.failed, no usage)
+ * - "roman": a long answer, 40 paragraphs streamed one every 120 ms (300 ms with "lent"); with "rapide",
+ *   240 paragraphs, 6 at once every 30 ms; the final answer is the streamed text
  * - "cher": large token counts in `usage` (k / M formats)
  * Completed runs carry `usage`, `runtime` and `updated_at`; each one adds 0.0123 $ to its session's
  * `estimated_cost_usd` (null before). `GET /_fake/runs/last` (no token) = model options and input of the last run.
@@ -102,6 +104,8 @@ interface SimRun {
   id: string;
   sessionId: string;
   input: string;
+  /** "roman" scenario: the streamed text, also the final answer. */
+  romanText?: string;
   instructions: string;
   createdAt: number;
   updatedAt: number;
@@ -183,7 +187,18 @@ class Simulator {
     await sleep(step);
     run.status = 'running';
     this.push(run, { event: 'run.started' });
-    if (slow) {
+    if (/roman/i.test(run.input)) {
+      // long answer streamed paragraph by paragraph (thread following tests)
+      // "rapide": 240 paragraphs, 6 at once every 30 ms (bursts taller than the follow threshold between two frames)
+      const burst = /rapide/i.test(run.input) ? 6 : 1;
+      const total = burst > 1 ? 240 : 40;
+      for (let i = 0; i < total; i += burst) {
+        await sleep(burst > 1 ? 30 : slow ? 300 : 120);
+        const text = Array.from({ length: burst }, (_, k) => `Paragraphe ${i + k + 1} : une ligne de texte assez longue pour occuper la largeur du fil et le faire grandir.\n\n`).join('');
+        this.push(run, { event: 'message.delta', delta: text });
+        run.romanText = (run.romanText ?? '') + text;
+      }
+    } else if (slow) {
       for (let i = 0; i < 18; i++) {
         await sleep(step);
         this.push(run, { event: 'message.delta', delta: `${i + 1}… ` });
@@ -212,6 +227,7 @@ class Simulator {
       await sleep(step);
       return this.fail(run, 'Provider error: model unavailable');
     }
+    if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     await sleep(step);
