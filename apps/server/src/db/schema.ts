@@ -47,6 +47,13 @@ export const sessionWorkspace = sqliteTable(
     /** Provider of `model` (group of the picker), sent with it; NULL = model sent alone. */
     modelProvider: text('model_provider'),
     effort: text('effort'),
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+    /** Deleted, waiting for the undo window to pass (ms); 0 = taken by the purger. */
+    deletedAt: integer('deleted_at'),
+    /** Copy of another Hermes session (its id) or "import:<key>": exists at Hermes without a run from Intendia. */
+    copiedFrom: text('copied_from'),
+    /** Taken by the purger: next attempt (lease, then retry after a failure). */
+    purgeAfter: integer('purge_after'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );

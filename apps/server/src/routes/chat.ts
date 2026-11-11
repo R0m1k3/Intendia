@@ -14,6 +14,9 @@ import { SESSION_ID_RE, sessionParams } from './workspaces.js';
 import { ModelInfoSchema } from '../connectors/config/index.js';
 import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
 import { toUsage } from '../chat/usage.js';
+import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from '../chat/history.js';
+
+export { toChatMessages, type ChatMessage } from '../chat/history.js';
 
 const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
 const OTHER_PAGE = 50;
@@ -22,56 +25,6 @@ const SendBody = z.object({ input: z.string().min(1).max(100_000) });
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
 const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
-
-interface RawMessage {
-  id: number;
-  role: string;
-  content?: unknown;
-  tool_calls?: unknown;
-  tool_name?: string | null;
-  timestamp?: number | null;
-  /** "steer": a text given to the agent during a run (POST /v1/runs/{id}/steer) */
-  display_kind?: string | null;
-}
-
-export interface ChatMessage {
-  id: number;
-  role: string;
-  content: string;
-  toolName: string | null;
-  toolCalls: { name: string; arguments: string }[];
-  timestamp: number | null;
-  /** given to the agent during a run (reorientation); only when true */
-  steer?: true;
-}
-
-function text(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((p) => (p && typeof p === 'object' && 'text' in p ? String((p as { text: unknown }).text) : '')).join('');
-  }
-  return content == null ? '' : JSON.stringify(content);
-}
-
-function toolCalls(raw: unknown): ChatMessage['toolCalls'] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((t) => {
-    const fn = (t as { function?: { name?: unknown; arguments?: unknown } }).function ?? (t as { name?: unknown; arguments?: unknown });
-    return { name: String(fn.name ?? '?'), arguments: typeof fn.arguments === 'string' ? fn.arguments : JSON.stringify(fn.arguments ?? {}) };
-  });
-}
-
-/** Hermes messages → oldest first, without session_meta. */
-export function toChatMessages(data: RawMessage[]): ChatMessage[] {
-  return data
-    .filter((m) => m.role !== 'session_meta')
-    .sort((a, b) => a.id - b.id)
-    .map((m) => ({
-      id: m.id, role: m.role, content: text(m.content), toolName: m.tool_name ?? null,
-      toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
-      ...(m.display_kind === 'steer' ? { steer: true as const } : {}),
-    }));
-}
 
 function sseFrame(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}\n\n`;
@@ -126,37 +79,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return runId;
   };
 
-  interface RawStatus {
-    status: string; session_id?: string | null; created_at?: number; updated_at?: number | null; output?: string | null; error?: string | null;
-    usage?: unknown; runtime?: unknown; pending_steer?: unknown;
-  }
-  /** Run status; a run Hermes forgot (404) is "unknown", treated as finished. `raw` feeds run_stats. */
-  const status = async (ctx: SessionContext, runId: string) => {
-    try {
-      const s = await callOp<RawStatus>(http(ctx), report(ctx), 'chat', 'runStatus', { params: { run_id: runId }, profile: ctx.profile });
-      // a reorientation Hermes could not give the agent before the run ended
-      const pendingSteer = typeof s.pending_steer === 'string' && s.pending_steer.trim() ? s.pending_steer : null;
-      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null, pendingSteer, raw: s as RawStatus | null };
-    } catch (err) {
-      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null, pendingSteer: null, raw: null };
-      throw err;
-    }
-  };
+  const status = (ctx: SessionContext, runId: string) => readRunStatus(compat, ctx.instance.id, ctx.profile, runId);
   const publicStatus = ({ raw: _raw, ...s }: Awaited<ReturnType<typeof status>>) => s;
 
-  /** Messages and the live session id (after a compression, the continuation); 404 = no message yet. */
-  const history = async (instanceId: string, sessionId: string, profile: string, limit?: number) => {
-    try {
-      const res = await callOp<{ data: RawMessage[]; session_id?: string | null }>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'messages', {
-        params: { session_id: sessionId }, profile, ...(limit ? { query: { limit, order: 'latest' } } : {}),
-      });
-      return { messages: toChatMessages(res.data), liveId: res.session_id || sessionId, exists: true };
-    } catch (err) {
-      // an Intendia session before its first message does not exist at Hermes yet
-      if (err instanceof HermesError && err.detail.status === 404) return { messages: [] as ChatMessage[], liveId: sessionId, exists: false };
-      throw err;
-    }
-  };
+  const history = (instanceId: string, sessionId: string, profile: string, limit?: number) =>
+    readHistory(compat, instanceId, sessionId, profile, limit);
   const messages = async (instanceId: string, sessionId: string, profile: string): Promise<ChatMessage[]> =>
     (await history(instanceId, sessionId, profile)).messages;
 
@@ -260,11 +187,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   // one run creation at a time per session: two tabs could otherwise both pass the "no run in progress"
   // check and start two runs, the second overwriting the first in lastRunId
-  const starting = new Set<string>();
+  const starting = startingRuns;
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
     const { input } = SendBody.parse(await c.req.json());
-    const key = `${ctx.instance.id}:${ctx.session.id}`;
+    const key = runKey(ctx.instance.id, ctx.session.id);
     if (starting.has(key)) return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
     starting.add(key);
     try {

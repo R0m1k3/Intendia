@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, FolderOpen, House, KanbanSquare, ListChecks, LogOut, MessagesSquare, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, FolderOpen, House, KanbanSquare, ListChecks, LogOut, MessagesSquare, Pin, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -158,6 +158,7 @@ export function Layout() {
                         className="flex h-7 items-center rounded-md px-2 text-[13px] text-ink-soft transition-colors hover:bg-raised hover:text-ink"
                         activeProps={{ className: ACTIVE }}
                       >
+                        {s.pinned && <Pin className="mr-1.5 size-3 shrink-0 text-ink-faint" strokeWidth={1.75} aria-label="Épinglée" />}
                         <span className="truncate">{s.title || 'Nouvelle session'}</span>
                       </Link>
                     </li>

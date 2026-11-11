@@ -34,6 +34,8 @@ function main() {
   const auth = new Auth(db, config);
   const compat = new CompatService(db, store, new WebhookNotifier(config.webhookUrl, config.publicUrl));
   const services = createServices({ config, db, store, compat });
+  // deletions whose undo window passed while the server was stopped go first
+  services.purger.start();
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
   const mcpApp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: VERSION });
 
@@ -55,6 +57,7 @@ function main() {
 
   const shutdown = () => {
     compat.stop();
+    services.purger.stop();
     const closed = (s: { close: (cb: () => void) => unknown }) => new Promise<void>((r) => { s.close(() => r()); });
     void Promise.all([closed(server), closed(mcpServer)]).then(() => {
       db.$client.close();

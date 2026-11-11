@@ -14,6 +14,7 @@ import type { InstanceStore } from './instances/store.js';
 import { KanbanService } from './kanban/service.js';
 import { LinkService } from './links/service.js';
 import { RecentService } from './sessions/recent.js';
+import { SessionPurger } from './sessions/purge.js';
 import { SkillService } from './skills/service.js';
 import { WorkspaceService } from './workspaces/service.js';
 
@@ -32,6 +33,7 @@ export interface Services {
   config: ConfigService;
   providers: ProvidersService;
   mcpLink: McpLink;
+  purger: SessionPurger;
 }
 
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
@@ -52,5 +54,5 @@ export function createServices(deps: {
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
   const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
-  return { roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, activity, recent, config, providers, mcpLink };
+  return { roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat) };
 }

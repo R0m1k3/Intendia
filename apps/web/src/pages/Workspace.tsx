@@ -6,7 +6,8 @@ import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
-import { Button, ErrorText, Panel, timeAgo } from '../components/ui';
+import { Button, ErrorText, Panel } from '../components/ui';
+import { SessionSelectList } from '../sessions/Selection';
 
 export function WorkspacePage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -77,16 +78,7 @@ export function WorkspacePage() {
             {sessions.isSuccess && sessions.data.sessions.length === 0 && (
               <p className="px-5 py-8 text-sm text-ink-soft">{archived ? 'Aucune session archivée' : 'Aucune session : ouvrez-en une pour écrire à l’agent'}</p>
             )}
-            <ul className="divide-y divide-line">
-              {sessions.data?.sessions.map((s) => (
-                <li key={s.id}>
-                  <Link to="/w/$slug/s/$sessionId" params={{ slug, sessionId: s.id }} className="flex h-12 items-center gap-3 px-5 text-sm transition-colors hover:bg-raised/50">
-                    <span className="min-w-0 flex-1 truncate">{s.title || <span className="text-ink-faint">Nouvelle session</span>}</span>
-                    <span className="shrink-0 text-xs text-ink-faint">{timeAgo(s.lastActiveAt ?? s.createdAt)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {w && sessions.data && <SessionSelectList workspace={w} sessions={sessions.data.sessions} />}
           </Panel>
         </div>
 
