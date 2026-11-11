@@ -11,7 +11,7 @@ import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
 import { InstanceStore } from './instances/store.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
-import { forgetMcpToken, mcpToken, mcpUrl, rotateMcpToken } from './mcp/server.js';
+import { forgetMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
 import { fileRoutes } from './routes/files.js';
 import { linkRoutes, publicLinkRoute } from './routes/links.js';
@@ -150,7 +150,14 @@ export function createApp(deps: AppDeps) {
     if (!report.api.reachable) return c.json({ error: `API server injoignable : ${report.api.error ?? '?'}`, report }, 422);
     store.save(inst);
     const saved = await compat.check(inst.id);
-    return c.json({ instance: InstanceStore.toPublic(inst, 'db'), report: saved });
+    // share_file: put into Hermes right away when nothing named `intendia` is there (no test, no restart)
+    const link = deps.services.mcpLink;
+    try {
+      if (await link.state(inst.id) === 'missing') await link.connect(inst.id, { test: false });
+    } catch (err) {
+      console.warn(`[intendia] MCP entry not written for ${inst.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return c.json({ instance: InstanceStore.toPublic(inst, 'db'), report: saved, mcp: { state: await link.state(inst.id) } });
   });
 
   priv.delete('/instances/:id', (c) => {
@@ -168,17 +175,25 @@ export function createApp(deps: AppDeps) {
     return c.json(await compat.check(id));
   });
 
-  /** share_file connection details for one instance (URL, bearer token). */
+  /** share_file connection details for one instance (URL, bearer token for the manual setup). */
   const mcpInfo = (id: string) => ({ url: mcpUrl(config, id), token: mcpToken(deps.db, id), publicUrlSet: Boolean(config.publicUrl) });
-  priv.get('/instances/:id/mcp', (c) => {
-    if (!store.get(c.req.param('id'))) return c.json({ error: 'instance inconnue' }, 404);
-    return c.json(mcpInfo(c.req.param('id')));
-  });
-  priv.post('/instances/:id/mcp/rotate', (c) => {
+  priv.get('/instances/:id/mcp', async (c) => {
     const id = c.req.param('id');
     if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
-    rotateMcpToken(deps.db, id);
-    return c.json(mcpInfo(id));
+    return c.json({ ...mcpInfo(id), state: await deps.services.mcpLink.state(id) });
+  });
+  /** Writes the share_file entry into Hermes, then Hermes tests it. */
+  priv.post('/instances/:id/mcp/connect', async (c) => {
+    const id = c.req.param('id');
+    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    const body = z.object({ replaceOther: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
+    return c.json(await deps.services.mcpLink.connect(id, { replaceOther: body.replaceOther, test: true }));
+  });
+  priv.post('/instances/:id/mcp/rotate', async (c) => {
+    const id = c.req.param('id');
+    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    const res = await deps.services.mcpLink.rotate(id);
+    return c.json({ ...mcpInfo(id), ...res });
   });
 
   const { workspaces, files, links } = deps.services;

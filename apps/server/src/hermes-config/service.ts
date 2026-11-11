@@ -38,7 +38,10 @@ export class ConfigInputError extends Error {
 }
 
 export class ConfigConflictError extends Error {
-  constructor(readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict', message: string) {
+  constructor(
+    readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable',
+    message: string,
+  ) {
     super(message);
     this.name = 'ConfigConflictError';
   }
@@ -96,6 +99,9 @@ export interface PublicRestart { running: boolean; exitCode: number | null; line
 
 export interface ModelChange { scope: 'main' | 'auxiliary'; provider: string; model: string; task?: string; confirm?: boolean; version: string }
 export interface AuxChange { task: string; provider: string; model: string }
+export type McpRawEntry =
+  | { status: 'unreadable' } | { status: 'absent' }
+  | { status: 'present'; source: 'config' | 'plugin'; url: string | null; enabled: boolean; authorization: string | null };
 export interface McpCreate { name: string; url?: string; token?: string; command?: string; args?: string[]; env?: Record<string, string> }
 
 type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatService['get']>; instanceId: string; profile: string };
@@ -153,6 +159,12 @@ export class ConfigService {
 
   private can(ctx: Ctx, op: string): boolean {
     return Boolean(ctx.report?.modules.find((m) => m.id === 'config')?.ops[op]?.ok);
+  }
+
+  /** Every listed operation of the config module passed the compatibility check. */
+  canAll(instanceId: string, ops: readonly string[]): boolean {
+    const ctx = this.ctx(instanceId, 'default');
+    return ops.every((op) => this.can(ctx, op));
   }
 
   /** Hermes call with error translation (texts masked). */
@@ -569,6 +581,61 @@ export class ConfigService {
     }
     return this.write(ctx, 'mcp', null, async () => {
       await this.call(ctx, 'addMcp', { body });
+    });
+  }
+
+  /**
+   * One MCP entry as written in the config file (the list of Hermes gives no headers): `unreadable` when
+   * the list or the file cannot be read. `authorization` must never leave the server.
+   */
+  async mcpRawEntry(instanceId: string, profile: string, name: string): Promise<McpRawEntry> {
+    const ctx = this.ctx(instanceId, profile);
+    let listed: { source?: string | null; url?: string | null; enabled?: boolean } | undefined;
+    try {
+      listed = McpServersSchema.parse(await this.call<unknown>(ctx, 'mcpServers')).servers.find((s) => s.name === name);
+    } catch {
+      return { status: 'unreadable' };
+    }
+    const raw = await this.readRaw(ctx).catch(() => null);
+    if (raw === null) return { status: 'unreadable' };
+    const servers = (parse(raw).toJS() as { mcp_servers?: unknown } | null)?.mcp_servers;
+    const entry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)[name] : undefined;
+    if (!listed && (entry === undefined || entry === null)) return { status: 'absent' };
+    const e = (entry && typeof entry === 'object' ? entry : {}) as { url?: unknown; enabled?: unknown; headers?: unknown };
+    const headers = (e.headers && typeof e.headers === 'object' ? e.headers : {}) as Record<string, unknown>;
+    const authKey = Object.keys(headers).find((k) => k.toLowerCase() === 'authorization');
+    return {
+      status: 'present',
+      source: listed?.source === 'plugin' ? 'plugin' : 'config',
+      url: typeof e.url === 'string' ? e.url : (listed?.url ?? null),
+      enabled: e.enabled !== false && listed?.enabled !== false,
+      authorization: authKey && typeof headers[authKey] === 'string' ? headers[authKey] : null,
+    };
+  }
+
+  /**
+   * Puts a bearer-token URL entry in place of `name`, in one write: the entry is removed (its env
+   * variable is kept: Hermes rewrites it on add), then added. When Hermes refuses the add after the
+   * removal, the text read before is put back by `putRaw`; an uncertain error, or no way to put the
+   * file back, gives `PartialWriteError`.
+   */
+  async replaceMcp(instanceId: string, profile: string, input: { name: string; url: string; token: string; exists: boolean }): Promise<{ version: string | null }> {
+    const ctx = this.ctx(instanceId, profile);
+    return this.write(ctx, 'mcp', null, async (original) => {
+      if (original === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+      if (input.exists) await this.call(ctx, 'removeMcp', { params: { name: input.name } }, 'Serveur MCP introuvable');
+      try {
+        await this.call(ctx, 'addMcp', { body: { name: input.name, url: input.url, auth: 'header', bearer_token: input.token } });
+      } catch (err) {
+        if (!input.exists) throw err;
+        if (!refused(err) || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
+        try {
+          await this.call(ctx, 'putRaw', { body: { yaml_text: original } });
+        } catch {
+          throw new PartialWriteError();
+        }
+        throw err;
+      }
     });
   }
 

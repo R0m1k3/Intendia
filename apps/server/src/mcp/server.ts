@@ -29,6 +29,9 @@ export function mcpToken(db: Db, instanceId: string): string {
   return db.select().from(settings).where(eq(settings.key, key(instanceId))).get()!.value;
 }
 
+const syncedKey = (id: string) => `mcp_synced:${id}`;
+
+/** New token; Hermes has not received it yet (`mcp_synced` cleared). */
 export function rotateMcpToken(db: Db, instanceId: string): string {
   forgetMcpToken(db, instanceId);
   return mcpToken(db, instanceId);
@@ -36,11 +39,22 @@ export function rotateMcpToken(db: Db, instanceId: string): string {
 
 export function forgetMcpToken(db: Db, instanceId: string): void {
   db.delete(settings).where(eq(settings.key, key(instanceId))).run();
+  db.delete(settings).where(eq(settings.key, syncedKey(instanceId))).run();
 }
 
-/** URL to give Hermes: the Intendia service name on the shared Docker network. */
-export function mcpUrl(config: Pick<AppConfig, 'mcpPort'>, instanceId: string): string {
-  return `http://intendia:${config.mcpPort}/mcp/${instanceId}`;
+/** The current token was written into Hermes (cleared by every rotation). */
+export function markMcpSynced(db: Db, instanceId: string): void {
+  db.insert(settings).values({ key: syncedKey(instanceId), value: '1' })
+    .onConflictDoUpdate({ target: settings.key, set: { value: '1' } }).run();
+}
+
+export function isMcpSynced(db: Db, instanceId: string): boolean {
+  return Boolean(db.select().from(settings).where(eq(settings.key, syncedKey(instanceId))).get());
+}
+
+/** URL to give Hermes: INTENDIA_MCP_URL, or the Intendia service name on the shared Docker network. */
+export function mcpUrl(config: Pick<AppConfig, 'mcpPort' | 'mcpUrlBase'>, instanceId: string): string {
+  return `${config.mcpUrlBase ?? `http://intendia:${config.mcpPort}`}/mcp/${instanceId}`;
 }
 
 const SHARE_FILE_TOOL = {
