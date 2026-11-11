@@ -106,6 +106,48 @@ export function mcpTokenEnv(name: string): string {
   return `MCP_${name.toUpperCase().replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+|_+$/g, '')}_API_KEY`;
 }
 
+/** GET /api/providers/oauth: providers with an account (subscription). `token_preview` and `source_label` never leave the server. */
+export const OAuthProvidersSchema = z.looseObject({
+  providers: z.array(z.looseObject({
+    id: z.string(),
+    name: z.string().nullish(),
+    flow: z.string().nullish(),
+    cli_command: z.string().nullish(),
+    docs_url: z.string().nullish(),
+    disconnectable: z.boolean().nullish(),
+    disconnect_hint: z.string().nullish(),
+    status: z.looseObject({ logged_in: z.boolean().nullish(), expires_at: z.unknown().optional() }).nullish(),
+  })),
+});
+export const OAuthStartSchema = z.looseObject({
+  session_id: z.string(),
+  user_code: z.string().nullish(),
+  verification_url: z.string().nullish(),
+  expires_in: z.number().nullish(),
+  poll_interval: z.number().nullish(),
+});
+export const OAuthPollSchema = z.looseObject({
+  status: z.string(),
+  error_message: z.string().nullish(),
+  model: z.string().nullish(),
+});
+/** GET /api/credentials/pool: API keys and OAuth logins, per provider. `index` is 1-based, as listed. */
+export const PoolSchema = z.looseObject({
+  providers: z.array(z.looseObject({
+    provider: z.string(),
+    entries: z.array(z.looseObject({
+      index: z.number(),
+      id: z.string(),
+      label: z.string().nullish(),
+      auth_type: z.string().nullish(),
+      source: z.string().nullish(),
+      last_status: z.string().nullish(),
+    })),
+  })),
+});
+/** POST /api/credentials/pool (`add_credential_pool_entry`). */
+export const PoolAddSchema = z.looseObject({ ok: z.boolean().optional(), provider: z.string().optional(), count: z.number().optional() });
+
 export const GATEWAY_RESTART_ACTION = 'gateway-restart';
 
 export const configModule: ModuleDef = {
@@ -150,5 +192,14 @@ export const configModule: ModuleDef = {
     enableMcp: { kind: 'write', routes: [{ via: 'dash', method: 'PUT', path: '/api/mcp/servers/{name}/enabled' }] },
     removeMcp: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/mcp/servers/{name}' }] },
     restartGateway: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/restart' }] },
+    // provider accounts (OAuth device code) and the credential pool: auth.json of the profile, not the config file
+    oauthList: { kind: 'read', probe: true, schema: OAuthProvidersSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/providers/oauth' }] },
+    poolList: { kind: 'read', probe: true, schema: PoolSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/credentials/pool' }] },
+    oauthPoll: { kind: 'read', probe: false, schema: OAuthPollSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/providers/oauth/{provider}/poll/{session}' }] },
+    oauthStart: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/providers/oauth/{provider}/start' }] },
+    oauthCancel: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/providers/oauth/sessions/{session}' }] },
+    oauthDisconnect: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/providers/oauth/{provider}' }] },
+    poolAdd: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/credentials/pool' }] },
+    poolRemove: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/credentials/pool/{provider}/{index}' }] },
   },
 };

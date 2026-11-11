@@ -11,14 +11,19 @@ import { configKey, ICON } from './common';
  * of its config file). The chat offers those, or the provider's whole catalogue when none is declared. Each add or
  * remove is written into Hermes at once.
  */
-export function ChatModels({ inst, profile, providers, writable, onYaml }: {
-  inst: string; profile: string; providers: ModelProvider[]; writable: boolean; onYaml?: () => void;
+export function ChatModels({ inst, profile, providers, writable, onYaml, onProviders }: {
+  inst: string; profile: string; providers: ModelProvider[]; writable: boolean; onYaml?: () => void; onProviders?: () => void;
 }) {
   const withKey = providers.filter((p) => p.authenticated);
   return (
     <Section title="Modèles du chat" description="Les modèles proposés dans le chat, par fournisseur. Sans modèle choisi, le chat propose tout le catalogue du fournisseur. La liste est écrite dans la configuration d’Hermes.">
       {withKey.length === 0
-        ? <p className="text-sm text-ink-soft">Aucun fournisseur n’a de clé : le chat propose seulement « Auto ».</p>
+        ? (
+          <p className="text-sm text-ink-soft">
+            Aucun fournisseur n’est connecté : le chat propose seulement « Auto ». Ajoutez un abonnement ou une clé dans l’onglet{' '}
+            {onProviders ? <button type="button" className="text-accent underline-offset-2 hover:underline" onClick={onProviders}>Fournisseurs</button> : 'Fournisseurs'}.
+          </p>
+        )
         : <div className="space-y-3">{withKey.map((p) => <ProviderBlock key={p.slug} inst={inst} profile={profile} p={p} writable={writable} onYaml={onYaml} />)}</div>}
     </Section>
   );

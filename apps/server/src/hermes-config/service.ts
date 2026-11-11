@@ -27,7 +27,7 @@ const HISTORY_PURPOSE = 'config-history-v1';
 const STATUS_LINES = 200;
 const TEST_MS = 40_000;
 
-export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models';
+export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
 
 export class ConfigInputError extends Error {
@@ -139,6 +139,21 @@ function getPath(obj: unknown, path: string): unknown {
   return node;
 }
 
+/**
+ * Intendia error for a failed Hermes call (returned, the caller throws it): an HTTP answer becomes a refusal (400,
+ * 422), a conflict (409), a not found (404) or a Hermes error, its detail masked. `scrub` cleans the detail first
+ * (e.g. removes a key the request carried, which Hermes may repeat). Other errors are returned as they are.
+ */
+export function toConfigError(mask: Masker, err: unknown, what = 'Introuvable', scrub: (s: string) => string = (s) => s): unknown {
+  if (!(err instanceof HermesError && err.kind === 'http')) return err;
+  const detail = mask.text(scrub(hermesDetail(err)));
+  const status = err.detail.status;
+  if (status === 404) return new NotFoundError(`${what} : ${detail}`);
+  if (status === 400 || status === 422) return new ConfigInputError('hermes_refused', `Requête refusée par Hermes : ${detail}`);
+  if (status === 409) return new ConfigConflictError('hermes_conflict', `Conflit signalé par Hermes : ${detail}`);
+  return new HermesError('http', `Hermes a répondu ${status} : ${detail}`, err.detail);
+}
+
 export class ConfigService {
   private readonly mask: Masker;
   private readonly locks = new Map<string, Promise<unknown>>();
@@ -172,15 +187,7 @@ export class ConfigService {
     try {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
-      if (err instanceof HermesError && err.kind === 'http') {
-        const detail = this.mask.text(hermesDetail(err));
-        const status = err.detail.status;
-        if (status === 404) throw new NotFoundError(`${what} : ${detail}`);
-        if (status === 400 || status === 422) throw new ConfigInputError('hermes_refused', `Requête refusée par Hermes : ${detail}`);
-        if (status === 409) throw new ConfigConflictError('hermes_conflict', `Conflit signalé par Hermes : ${detail}`);
-        throw new HermesError('http', `Hermes a répondu ${status} : ${detail}`, err.detail);
-      }
-      throw err;
+      throw toConfigError(this.mask, err, what);
     }
   }
 
@@ -236,6 +243,30 @@ export class ConfigService {
   }
 
   // ---------------------------------------------------------------- history
+
+  /**
+   * Copy of the current file before Hermes may change it by itself (an approved provider login can write the main
+   * model). Id of the copy, null when nothing was copied (no file, or same text as the latest copy). The history is
+   * trimmed only after the action succeeded (`trimHistory`), and the copy dropped if it failed (`dropSnapshot`),
+   * in the same order as `write()`.
+   */
+  snapshot(instanceId: string, profile: string, source: WriteSource): Promise<number | null> {
+    const ctx = this.ctx(instanceId, profile);
+    return this.locked(`${ctx.instanceId}:${ctx.profile}`, async () => {
+      const current = await this.readRaw(ctx);
+      return current === null ? null : this.copy(ctx, source, current);
+    });
+  }
+
+  dropSnapshot(instanceId: string, profile: string, id: number): void {
+    this.db.delete(configVersions).where(and(
+      eq(configVersions.id, id), eq(configVersions.instanceId, instanceId), eq(configVersions.profile, profile),
+    )).run();
+  }
+
+  trimHistory(instanceId: string, profile: string): void {
+    this.trim(this.ctx(instanceId, profile));
+  }
 
   private rows(ctx: Ctx) {
     return this.db.select().from(configVersions)
@@ -534,14 +565,7 @@ export class ConfigService {
       try {
         return await callOp<T>(http, report, 'kanban', op, opts);
       } catch (err) {
-        if (err instanceof HermesError && err.kind === 'http') {
-          const detail = this.mask.text(hermesDetail(err));
-          const status = err.detail.status;
-          if (status === 400 || status === 422) throw new ConfigInputError('hermes_refused', `Requête refusée par Hermes : ${detail}`);
-          if (status === 409) throw new ConfigConflictError('hermes_conflict', `Conflit signalé par Hermes : ${detail}`);
-          if (status === 404) throw new NotFoundError(`Orchestration : ${detail}`);
-        }
-        throw err;
+        throw toConfigError(this.mask, err, 'Orchestration');
       }
     };
     const current = await kanban<{ active_profile?: unknown }>('orchestration');

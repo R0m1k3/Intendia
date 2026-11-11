@@ -214,7 +214,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', linkRoutes(links));
   priv.route('/', cronRoutes(deps.services.crons));
   priv.route('/', skillRoutes(deps.services.skills));
-  priv.route('/', configRoutes(deps.services.config));
+  priv.route('/', configRoutes(deps.services.config, deps.services.providers));
   priv.route('/', agentRoutes(deps.services.agents));
   priv.route('/', activityRoutes(deps.services.activity));
   priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));

@@ -12,6 +12,7 @@ import { ConfigForm } from '../config/Form';
 import { ConfigHistory } from '../config/History';
 import { ConfigMcp } from '../config/Mcp';
 import { ConfigModelsTab } from '../config/Models';
+import { ConfigProviders } from '../config/Providers';
 import { ConfigPlatforms } from '../config/Platforms';
 import { ConfigYaml } from '../config/Yaml';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
@@ -23,14 +24,19 @@ const OPTIONAL: OptionalOp[] = [
   ['config', 'putRaw', 'Enregistrer le YAML, restaurer'], ['config', 'modelInfo', 'Modèles'], ['config', 'setModel', 'Changer de modèle'],
   ['config', 'env', 'Variables'], ['config', 'putEnv', 'Définir une variable'], ['config', 'mcpServers', 'Serveurs MCP'],
   ['config', 'platforms', 'Plateformes'], ['config', 'restartGateway', 'Redémarrer la passerelle'],
+  ['config', 'oauthList', 'Abonnements'], ['config', 'oauthStart', 'Connecter un abonnement'], ['config', 'oauthPoll', 'Suivre une connexion'],
+  ['config', 'oauthCancel', 'Annuler une connexion'], ['config', 'oauthDisconnect', 'Déconnecter un abonnement'],
+  ['config', 'poolList', 'Clés d’API'], ['config', 'poolAdd', 'Ajouter une clé'], ['config', 'poolRemove', 'Retirer une clé'],
 ];
 
-export const CONFIG_TABS = ['modeles', 'reglages', 'yaml', 'variables', 'mcp', 'plateformes', 'historique'] as const;
+export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'yaml', 'variables', 'mcp', 'plateformes', 'historique'] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 export interface ConfigSearch { profile?: string; tab?: ConfigTab; key?: string }
 
-const TAB: Record<ConfigTab, { label: string; op: string }> = {
+/** A tab shows when the config module has its operation (one of them, for a list). */
+const TAB: Record<ConfigTab, { label: string; op: string | string[] }> = {
   modeles: { label: 'Modèles', op: 'modelInfo' },
+  fournisseurs: { label: 'Fournisseurs', op: ['oauthList', 'poolList'] },
   reglages: { label: 'Réglages', op: 'schema' },
   yaml: { label: 'YAML', op: 'raw' },
   variables: { label: 'Variables', op: 'env' },
@@ -53,7 +59,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   const profiles = useQuery({ queryKey: ['profiles', inst], queryFn: () => api.profiles(inst).then((r) => r.profiles) });
   const a = useModuleAvailability(inst, 'config', REQUIRED, OPTIONAL);
   const can = (op: string) => a.has('config', op);
-  const tabs = CONFIG_TABS.filter((t) => can(TAB[t].op));
+  const tabs = CONFIG_TABS.filter((t) => [TAB[t].op].flat().some(can));
   const tab: ConfigTab | undefined = search.tab && tabs.includes(search.tab) ? search.tab : tabs[0];
   const [needRestart, setNeedRestart] = useState(false);
   const restart = useRestart(inst, profile, () => setNeedRestart(false));
@@ -116,7 +122,8 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
                 </button>
               ))}
             </div>
-            {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} />}
+            {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
+            {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}
             {tab === 'yaml' && <ConfigYaml {...props} />}
             {tab === 'variables' && <ConfigEnv key={search.key ?? ''} {...props} focusKey={search.key} />}

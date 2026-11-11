@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument, stringify } from 'yaml';
+import { ProviderStore } from './providers.js';
 
 // YAML 1.1 as PyYAML reads it: a float needs a digit (the library alone reads `.` as NaN)
 const PY_FLOAT = /^(?:[-+]?[0-9][0-9_]*\.[0-9_]*|\.[0-9][0-9_]*)$/;
@@ -91,6 +92,11 @@ export class ConfigStore {
   failPutRaw: number | null = null;
   /** Name of the MCP server provided by a plugin (listed, refused by POST). */
   pluginMcpName = 'plugin-srv';
+  /** Accounts and credential pool, per profile; an approved Nous login writes the main model, like Hermes. */
+  readonly providers = new ProviderStore((model) => {
+    const file = this.file();
+    this.write({ ...file, model: { ...(isObj(file.model) ? file.model : {}), default: model, provider: 'nous' } });
+  });
 
   constructor(fixturesDir: string, private readonly stepMs: number, private readonly terminalBackend?: string) {
     const raw = fixture<{ yaml: string }>(fixturesDir, 'GET_api_config_raw.json').yaml;
@@ -155,11 +161,25 @@ export class ConfigStore {
   /**
    * GET /api/model/options per profile (dashboard `?profile=`, API server `/p/<profile>`): `default` has OpenRouter
    * with a key and 6 models (the recorded entry, made authenticated), any other profile only Anthropic with 2.
+   * Both also list DeepSeek and Mistral without a key; a provider with a connected account or a pool API key is
+   * authenticated (models `<slug>-small`/`<slug>-large` when its row has none, a row added when there is none).
    */
   modelOptionsFor(profile: string): { providers: Obj[] } {
-    const rows = profile !== 'default'
+    const base: Obj[] = profile !== 'default'
       ? [{ ...(this.modelOptions.providers.find((p) => p.slug === 'anthropic') ?? { slug: 'anthropic', name: 'Anthropic' }), authenticated: true, key_env: 'ANTHROPIC_API_KEY', models: ['claude-opus-4.6', 'claude-haiku-4.5'] }]
       : this.modelOptions.providers.map((p) => p.slug === 'openrouter' ? { ...p, authenticated: true, models: [...OPENROUTER_MODELS] } : p);
+    for (const [slug, name] of [['deepseek', 'DeepSeek'], ['mistral', 'Mistral']] as const) {
+      if (!base.some((p) => p.slug === slug)) base.push({ slug, name, authenticated: false, key_env: `${slug.toUpperCase()}_API_KEY`, models: [`${slug}-chat`, `${slug}-reasoner`] });
+    }
+    const authed = this.providers.authenticated(profile);
+    const rows = base.map((p) => {
+      if (!authed.has(String(p.slug))) return p;
+      const models = Array.isArray(p.models) && p.models.length ? p.models : [`${String(p.slug)}-small`, `${String(p.slug)}-large`];
+      return { ...p, authenticated: true, models };
+    });
+    for (const slug of authed) {
+      if (!rows.some((p) => p.slug === slug)) rows.push({ slug, name: slug, authenticated: true, models: [`${slug}-small`, `${slug}-large`] });
+    }
     // like Hermes `_lap_builtin_rows`: providers.<slug>.models declared in the file go first, without duplicates
     const declared = isObj(this.file().providers) ? (this.file().providers as Obj) : {};
     return {
@@ -181,6 +201,8 @@ export class ConfigStore {
       return json({ ...this.modelOptionsFor(prof), model: String(model?.default ?? ''), provider: String(model?.provider ?? 'auto') });
     }
     if (via !== 'dash') return null;
+    const acc = this.providers.handle(method, path, query.profile ?? 'default', body);
+    if (acc) return acc;
     const b = (body ?? {}) as Obj;
     if (path === '/api/config' && method === 'GET') {
       const out = query.include_defaults === 'false' ? this.file() : this.effective();

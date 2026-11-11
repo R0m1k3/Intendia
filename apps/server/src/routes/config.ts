@@ -1,6 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { ConfigInputError, type ConfigService } from '../hermes-config/service.js';
+import type { ProvidersService } from '../hermes-config/providers.js';
+import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
 
 const VERSION = z.string().regex(/^[0-9a-f]{16}$/, 'version invalide');
@@ -58,7 +60,17 @@ const ProviderModelsBody = z.object({
   remove: ModelName.optional(),
 });
 
-export function configRoutes(config: ConfigService): Hono {
+const PROVIDER_RE = /^[A-Za-z0-9:._-]{1,100}$/;
+const SESSION_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const KEY_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+// the key is never logged nor sent back (the validation errors carry no input)
+const ProviderKeyBody = z.object({
+  provider: z.string().regex(PROVIDER_RE),
+  apiKey: z.string().trim().min(1).max(4000),
+  label: z.string().max(80).optional(),
+});
+
+export function configRoutes(config: ConfigService, providers: ProvidersService): Hono {
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
   const id = (c: Context) => {
@@ -84,6 +96,28 @@ export function configRoutes(config: ConfigService): Hono {
     const body = RestoreBody.parse(await c.req.json());
     return c.json(await config.restore(inst(c), profileOf(c), id(c), body.version));
   });
+
+  // ---- provider accounts and API keys (auth.json of the profile)
+  const param = (c: Context, name: string, re: RegExp) => {
+    const v = c.req.param(name) ?? '';
+    if (!re.test(v)) throw new ValidationError(`${name} invalide`);
+    return v;
+  };
+  r.get('/i/:inst/config/providers', async (c) => c.json(await providers.list(inst(c), profileOf(c))));
+  r.post('/i/:inst/config/providers/:provider/connect', async (c) =>
+    c.json(await providers.start(inst(c), profileOf(c), param(c, 'provider', PROVIDER_RE))));
+  r.get('/i/:inst/config/providers/:provider/connect/:session', async (c) =>
+    c.json(await providers.poll(inst(c), profileOf(c), param(c, 'provider', PROVIDER_RE), param(c, 'session', SESSION_RE))));
+  r.delete('/i/:inst/config/connect/:session', async (c) =>
+    c.json(await providers.cancel(inst(c), profileOf(c), param(c, 'session', SESSION_RE))));
+  r.delete('/i/:inst/config/providers/:provider/account', async (c) =>
+    c.json(await providers.disconnect(inst(c), profileOf(c), param(c, 'provider', PROVIDER_RE))));
+  r.post('/i/:inst/config/provider-keys', async (c) => {
+    const body = ProviderKeyBody.parse(await c.req.json());
+    return c.json(await providers.addKey(inst(c), profileOf(c), body));
+  });
+  r.delete('/i/:inst/config/provider-keys/:provider/:id', async (c) =>
+    c.json(await providers.removeKey(inst(c), profileOf(c), { provider: param(c, 'provider', PROVIDER_RE), id: param(c, 'id', KEY_ID_RE) })));
 
   r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
   r.post('/i/:inst/config/models', async (c) => {

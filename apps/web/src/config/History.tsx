@@ -9,6 +9,7 @@ import { ask } from '../components/Dialog';
 
 const SOURCE: Record<string, string> = {
   form: 'Formulaire', yaml: 'Éditeur YAML', restore: 'Restauration', model: 'Modèle', env: 'Variable', mcp: 'Serveur MCP', orchestration: 'Orchestration du kanban',
+  'provider-models': 'Modèles du chat', 'provider-login': 'Connexion à un fournisseur',
 };
 
 /** Copies taken by Intendia before each write; restoring sends the whole copied file. */
