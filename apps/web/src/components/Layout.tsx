@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Folder, FolderOpen, House, KanbanSquare, Link2, ListChecks, LogOut, MessagesSquare, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, FolderOpen, House, KanbanSquare, ListChecks, LogOut, MessagesSquare, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -18,6 +18,7 @@ interface NavEntry { key: string; to: string; label: string; icon: typeof House;
 const NAV: readonly NavEntry[] = [
   { key: 'home', to: '/', label: 'Accueil', icon: House, group: 'top' },
   { key: 'sessions', to: '/sessions', label: 'Sessions', icon: MessagesSquare, group: 'top' },
+  { key: 'files', to: '/files', label: 'Fichiers', icon: Files, group: 'top', page: 'files' },
   { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
   { key: 'skills', to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto', page: 'skills' },
   { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'auto', page: 'agents' },
@@ -25,7 +26,6 @@ const NAV: readonly NavEntry[] = [
   { key: 'workspaces', to: '/w', label: 'Workspaces', icon: FolderOpen, group: 'hidden' },
   { key: 'activity', to: '/activite', label: 'Activité', icon: Activity, group: 'instance' },
   { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'instance', page: 'config' },
-  { key: 'links', to: '/liens', label: 'Liens', icon: Link2, group: 'instance' },
   { key: 'status', to: '/etat', label: 'État', icon: ListChecks, group: 'instance' },
   { key: 'settings', to: '/reglages', label: 'Réglages', icon: Settings2, group: 'foot' },
 ];

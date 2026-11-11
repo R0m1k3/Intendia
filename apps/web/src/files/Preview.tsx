@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, ExternalLink, Link2, Pencil, Save, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { api, ApiError, rawUrl } from '../api';
+import { api, ApiError } from '../api';
 import { Md } from '../chat/Thread';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { baseName, fileKind, formatSize } from './paths';
+import type { FileScope } from './scope';
 
 const CodeView = lazy(() => import('./CodeView'));
 const TEXT_MAX = 1024 * 1024;
@@ -33,20 +34,21 @@ export function ShareButton({ slug, path, compact = false }: { slug: string; pat
   );
 }
 
-/** Preview of one workspace file: picks the viewer from the extension. */
-export function Preview({ slug, path, onClose }: { slug: string; path: string; onClose?: () => void }) {
+/** Preview of one file: picks the viewer from the extension. Edit and share only in a workspace. */
+export function Preview({ scope, path, onClose }: { scope: FileScope; path: string; onClose?: () => void }) {
   const qc = useQueryClient();
+  const slug = scope.workspace;
   const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   const name = baseName(path);
-  const listing = useQuery({ queryKey: ['tree', slug, parent], queryFn: () => api.tree(slug, parent) });
+  const listing = useQuery({ queryKey: [...scope.key, parent], queryFn: () => scope.tree(parent) });
   const entry = listing.data?.entries.find((e) => e.path === path);
   const kind = fileKind(name);
   const isText = kind === 'text' || kind === 'markdown';
   const tooBig = (entry?.size ?? 0) > TEXT_MAX;
   const text = useQuery({
-    queryKey: ['file-text', slug, path, entry?.mtime],
+    queryKey: ['file-text', ...(slug ? [slug] : scope.key), path, entry?.mtime],
     queryFn: async () => {
-      const res = await fetch(rawUrl(slug, path), { credentials: 'same-origin' });
+      const res = await fetch(scope.raw(path), { credentials: 'same-origin' });
       if (!res.ok) throw new ApiError(res.status, res.status === 404 ? 'Fichier introuvable' : `HTTP ${res.status}`);
       return res.text();
     },
@@ -63,7 +65,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
   useEffect(() => { setEditing(false); setDraft(null); setBase(null); setSource(false); setError(null); }, [path]);
 
   const save = async () => {
-    if (!base || draft === null) { setEditing(false); setBase(null); return; }
+    if (!slug || !base || draft === null) { setEditing(false); setBase(null); return; }
     setSaving(true);
     setError(null);
     try {
@@ -71,7 +73,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
       setEditing(false);
       setDraft(null);
       setBase(null);
-      await qc.invalidateQueries({ queryKey: ['tree', slug, parent] });
+      await qc.invalidateQueries({ queryKey: [...scope.key, parent] });
     } catch (err) {
       setError(err instanceof ApiError && err.status === 409 ? new Error('Modifié sur le disque depuis l’ouverture : recharger le fichier') : err);
     } finally {
@@ -80,7 +82,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
   };
 
   const missing = listing.isSuccess && !entry;
-  const url = rawUrl(slug, path);
+  const url = scope.raw(path);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -89,7 +91,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="truncate font-mono text-[11px] text-ink-faint">{path}{entry && entry.kind !== 'dir' ? ` · ${formatSize(entry.size)}` : ''}</p>
         </div>
-        {isText && entry && !tooBig && (editing ? (
+        {slug && isText && entry && !tooBig && (editing ? (
           <Button variant="primary" className="h-8 px-3" onClick={() => void save()} disabled={saving}>
             <Save className="size-4" strokeWidth={1.5} />Enregistrer
           </Button>
@@ -103,11 +105,11 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
             <Pencil className="size-4" strokeWidth={1.5} /><span className="hidden text-[13px] sm:inline">Modifier</span>
           </Button>
         ))}
-        {entry && <ShareButton slug={slug} path={path} compact />}
+        {slug && entry && <ShareButton slug={slug} path={path} compact />}
         <a href={url} target="_blank" rel="noreferrer" className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Ouvrir dans un onglet" aria-label="Ouvrir">
           <ExternalLink className="size-4" strokeWidth={1.5} />
         </a>
-        <a href={rawUrl(slug, path, true)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger" aria-label="Télécharger">
+        <a href={scope.raw(path, true)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger" aria-label="Télécharger">
           <Download className="size-4" strokeWidth={1.5} />
         </a>
         {onClose && (
@@ -151,7 +153,7 @@ export function Preview({ slug, path, onClose }: { slug: string; path: string; o
         ) : (
           <div className="p-6 text-sm text-ink-soft">
             <p>{tooBig ? 'Fichier trop gros pour l’aperçu.' : 'Pas d’aperçu pour ce type de fichier.'}</p>
-            <a href={rawUrl(slug, path, true)} className="mt-3 inline-flex items-center gap-2 text-accent hover:underline">
+            <a href={scope.raw(path, true)} className="mt-3 inline-flex items-center gap-2 text-accent hover:underline">
               <Download className="size-4" strokeWidth={1.5} />Télécharger
             </a>
           </div>

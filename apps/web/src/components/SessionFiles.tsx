@@ -8,6 +8,7 @@ import { FileRows } from '../files/FileRows';
 import { baseName } from '../files/paths';
 import { absoluteUrl } from '../files/Preview';
 import { copyText, cx } from './ui';
+import { workspaceScope } from '../files/scope';
 
 /** Links made by share_file (or the preview) for a file of this session's folder. */
 export function sessionLinks(links: ShareLink[], inst: string, slug: string, sessionId: string): ShareLink[] {
@@ -94,13 +95,13 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
           ) : links.isSuccess ? (
             <p className="px-4 py-3 text-sm text-ink-soft">Aucun lien partagé pour un fichier de cette session</p>
           ) : null}
-          <Link to="/liens" className="block px-4 py-3 text-xs text-ink-soft hover:text-ink">Tous les liens</Link>
+          <Link to="/files" search={{ tab: 'liens' }} className="block px-4 py-3 text-xs text-ink-soft hover:text-ink">Tous les liens</Link>
         </div>
       ) : (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <p className="px-4 pb-1 pt-3 font-mono text-[11px] text-ink-faint">{dir}/</p>
         {own.length ? (
-          <FileRows slug={slug} entries={own} onOpen={(e) => (e.kind === 'dir' || e.target === 'dir' ? undefined : onOpen(e.path))} />
+          <FileRows scope={workspaceScope(slug)} entries={own} onOpen={(e) => (e.kind === 'dir' || e.target === 'dir' ? undefined : onOpen(e.path))} />
         ) : tree.isSuccess ? (
           <p className="px-4 py-3 text-sm text-ink-soft">Aucun fichier pour l’instant</p>
         ) : null}

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { InstanceFileService } from '../files/instance-files.js';
 import type { FileService } from '../files/service.js';
 import { EXISTS_MAX } from '../files/service.js';
 import { sendFile } from '../files/send.js';
@@ -17,9 +18,23 @@ function slugOf(c: { req: { param: (k: string) => string } }): string {
   return slug;
 }
 
-/** Workspace files, under /x/workspaces/:slug/files (authenticated by the caller). */
-export function fileRoutes(files: FileService): Hono {
+/**
+ * Workspace files, under /x/workspaces/:slug/files, and the whole file root of an instance (read only), under
+ * /x/i/:inst/files (authenticated by the caller).
+ */
+export function fileRoutes(files: FileService, instanceFiles: InstanceFileService): Hono {
   const r = new Hono();
+  const inst = (c: { req: { param: (k: string) => string | undefined } }) => c.req.param('inst') ?? '';
+
+  r.get('/i/:inst/files/tree', async (c) => c.json(await instanceFiles.list(inst(c), c.req.query('path') ?? '')));
+
+  r.get('/i/:inst/files/search', async (c) => c.json(await instanceFiles.search(inst(c), (c.req.query('q') ?? '').slice(0, 200))));
+
+  r.get('/i/:inst/files/raw', async (c) => {
+    const file = await instanceFiles.read(inst(c), c.req.query('path') ?? '', c.req.raw.signal);
+    return sendFile(c, file, file.name, { download: c.req.query('download') === '1' });
+  });
+
   const base = '/workspaces/:slug/files';
 
   r.get(`${base}/tree`, async (c) => c.json(await files.list(slugOf(c), c.req.query('path') ?? '')));

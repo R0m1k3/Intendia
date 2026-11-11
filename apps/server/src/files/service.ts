@@ -44,7 +44,7 @@ const join2 = (a: string, b: string) => (a ? `${a}/${b}` : b);
 const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const nameOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
 
-function toFileEntry(e: FsEntry, rel: string): FileEntry {
+export function toFileEntry(e: FsEntry, rel: string): FileEntry {
   const path = join2(rel, e.name);
   if (e.isLink) return { name: e.name, path, kind: 'link', outside: true, size: 0, mtime: e.mtimeMs };
   return { name: e.name, path, kind: e.isDir ? 'dir' : 'file', size: e.isDir ? 0 : e.size, mtime: e.mtimeMs };
@@ -91,46 +91,7 @@ export class FileService {
   /** Name search, breadth first, 4 folders at a time, symbolic links not followed; bounded in entries, results and time. */
   async search(slug: string, q: string): Promise<{ results: FileEntry[]; truncated: boolean }> {
     const c = this.ctx(slug);
-    const needle = fold(q.trim());
-    if (!needle) return { results: [], truncated: false };
-    const results: FileEntry[] = [];
-    const deadline = Date.now() + SEARCH_MAX_MS;
-    let level = [''];
-    let visited = 0;
-    let truncated = false;
-    while (level.length && !truncated) {
-      const next: string[] = [];
-      await mapLimit(level, PARALLEL, async (rel) => {
-        if (truncated) return;
-        if (Date.now() > deadline) {
-          truncated = true;
-          return;
-        }
-        let entries: FsEntry[];
-        try {
-          entries = (await c.fs.list(this.vol(c, rel))).entries;
-        } catch {
-          return; // unreadable folder: skipped
-        }
-        for (const e of entries) {
-          if (truncated) return;
-          if (++visited > SEARCH_VISIT_MAX) {
-            truncated = true;
-            return;
-          }
-          if (fold(e.name).includes(needle)) {
-            results.push(toFileEntry(e, rel));
-            if (results.length >= SEARCH_RESULTS_MAX) {
-              truncated = true;
-              return;
-            }
-          }
-          if (e.isDir && !e.isLink && !SKIP_DIRS.has(e.name)) next.push(join2(rel, e.name));
-        }
-      });
-      level = next;
-    }
-    return { results, truncated };
+    return searchTree(async (rel) => (await c.fs.list(this.vol(c, rel))).entries, q);
   }
 
   /** A regular file to stream (raw view). */
@@ -274,4 +235,51 @@ export class FileService {
     const row = await this.links.share(c.inst.id, this.vol(c, rel), { forAgent: false });
     return { token: row.token, url: this.links.url(row.token), publicUntil: row.publicUntil };
   }
+}
+
+/**
+ * Name search from a folder, breadth first, 4 folders at a time, symbolic links not followed; bounded in entries,
+ * results and time. `list(rel)` gives the entries of a folder relative to the starting point.
+ */
+export async function searchTree(list: (rel: string) => Promise<FsEntry[]>, q: string): Promise<{ results: FileEntry[]; truncated: boolean }> {
+  const needle = fold(q.trim());
+  if (!needle) return { results: [], truncated: false };
+  const results: FileEntry[] = [];
+  const deadline = Date.now() + SEARCH_MAX_MS;
+  let level = [''];
+  let visited = 0;
+  let truncated = false;
+  while (level.length && !truncated) {
+    const next: string[] = [];
+    await mapLimit(level, PARALLEL, async (rel) => {
+      if (truncated) return;
+      if (Date.now() > deadline) {
+        truncated = true;
+        return;
+      }
+      let entries: FsEntry[];
+      try {
+        entries = await list(rel);
+      } catch {
+        return; // unreadable folder: skipped
+      }
+      for (const e of entries) {
+        if (truncated) return;
+        if (++visited > SEARCH_VISIT_MAX) {
+          truncated = true;
+          return;
+        }
+        if (fold(e.name).includes(needle)) {
+          results.push(toFileEntry(e, rel));
+          if (results.length >= SEARCH_RESULTS_MAX) {
+            truncated = true;
+            return;
+          }
+        }
+        if (e.isDir && !e.isLink && !SKIP_DIRS.has(e.name)) next.push(join2(rel, e.name));
+      }
+    });
+    level = next;
+  }
+  return { results, truncated };
 }

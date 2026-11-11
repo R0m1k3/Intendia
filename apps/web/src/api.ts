@@ -167,6 +167,8 @@ export interface FileEntry {
   outside?: true;
   size: number;
   mtime: number;
+  /** Instance root listing only: top-level folder that is a workspace of this instance (its slug). */
+  workspace?: string;
 }
 export interface ShareLink {
   token: string;
@@ -536,6 +538,10 @@ export const api = {
     call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
 
   tree: (slug: string, path = '') => call<{ path: string; entries: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
+  instanceTree: (inst: string, path = '') =>
+    call<{ path: string; entries: FileEntry[]; truncated: boolean }>('GET', `/i/${enc(inst)}/files/tree?path=${enc(path)}`),
+  instanceSearchFiles: (inst: string, q: string) =>
+    call<{ results: FileEntry[]; truncated: boolean }>('GET', `/i/${enc(inst)}/files/search?q=${enc(q)}`),
   searchFiles: (slug: string, q: string) => call<{ results: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/search?q=${enc(q)}`),
   moveFile: (slug: string, from: string, to: string) => call<{ path: string }>('PATCH', `${filesPath(slug)}/move`, { from, to }),
   deleteFile: (slug: string, path: string) => call<{ ok: true }>('DELETE', `${filesPath(slug)}?path=${enc(path)}`),
@@ -665,6 +671,10 @@ export const api = {
 /** URL of a file's content (preview, download); served with CSP sandbox. */
 export const rawUrl = (slug: string, path: string, download = false) =>
   `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
+
+/** URL of a file of an instance's file root (read only page « Fichiers »). */
+export const instanceRawUrl = (inst: string, path: string, download = false) =>
+  `/x/i/${enc(inst)}/files/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
 
 /** URL of a run's SSE stream (EventSource). */
 export const runEventsUrl = (inst: string, id: string, runId: string) => `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events`;

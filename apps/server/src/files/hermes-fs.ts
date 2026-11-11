@@ -102,6 +102,12 @@ export class HermesFs {
     return `${this.root}/${v}`;
   }
 
+  /** Absolute path of any root-relative path (read only callers); '' is the root. */
+  private absAt(rel: string): string {
+    const v = normalizeRel(rel, { allowRoot: true });
+    return v ? `${this.root}/${v}` : this.root;
+  }
+
   private async fetchList(path: string, dirVol: string): Promise<{ entries: FsEntry[] }> {
     let list: HermesFilesList;
     try {
@@ -137,13 +143,17 @@ export class HermesFs {
     return p;
   }
 
-  /** The workspace root itself (folders to adopt). */
-  listRoot(): Promise<{ entries: FsEntry[] }> {
-    let p = this.lists.get('');
+  /**
+   * Read only: any folder under the root, the root itself included (`rel` = ''), whatever its first segment.
+   * Used for the workspace root (folders to adopt) and the instance file browser.
+   */
+  listAt(rel: string): Promise<{ entries: FsEntry[] }> {
+    const key = normalizeRel(rel, { allowRoot: true });
+    let p = this.lists.get(key);
     if (!p) {
-      p = this.fetchList(this.root, '');
-      this.lists.set('', p);
-      p.catch(() => this.lists.delete(''));
+      p = this.fetchList(this.absAt(key), key);
+      this.lists.set(key, p);
+      p.catch(() => this.lists.delete(key));
     }
     return p;
   }
@@ -153,7 +163,7 @@ export class HermesFs {
     const v = normalizeRel(vol);
     const parent = parentOf(v);
     try {
-      const { entries } = parent ? await this.list(parent) : await this.listRoot();
+      const { entries } = parent ? await this.list(parent) : await this.listAt('');
       return entries.find((e) => e.name === nameOf(v)) ?? null;
     } catch (err) {
       if (err instanceof WorkspaceFsError && err.code === 'not_found') return null;
@@ -181,8 +191,17 @@ export class HermesFs {
   }
 
   /** A regular file as a stream (no partial requests). */
-  async read(vol: string, opts: { signal?: AbortSignal } = {}): Promise<{ body: ReadableStream<Uint8Array>; size: number | null; mime: string | null }> {
-    const path = this.abs(vol);
+  read(vol: string, opts: { signal?: AbortSignal } = {}): Promise<{ body: ReadableStream<Uint8Array>; size: number | null; mime: string | null }> {
+    return this.readPath(this.abs(vol), vol, opts);
+  }
+
+  /** Read only: a regular file anywhere under the root. */
+  readAt(rel: string, opts: { signal?: AbortSignal } = {}): Promise<{ body: ReadableStream<Uint8Array>; size: number | null; mime: string | null }> {
+    const v = normalizeRel(rel);
+    return this.readPath(this.absAt(v), v, opts);
+  }
+
+  private async readPath(path: string, vol: string, opts: { signal?: AbortSignal }): Promise<{ body: ReadableStream<Uint8Array>; size: number | null; mime: string | null }> {
     let res: Response;
     try {
       res = await streamOp(this.http, this.report, 'files', 'download', { query: { path }, signal: opts.signal, timeoutMs: 30_000 });
