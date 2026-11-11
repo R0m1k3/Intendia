@@ -30,7 +30,7 @@ jobs:
             -e API_SERVER_ENABLED=true -e API_SERVER_HOST=0.0.0.0 -e API_SERVER_KEY=$API_KEY \
             nousresearch/hermes-agent:latest gateway run
           docker run -d --name hermes-dash -v hermes-data:/opt/data -p 9119:9119 \
-            -e HERMES_DASHBOARD_SESSION_TOKEN=$DASH_TOKEN \
+            -e HERMES_DASHBOARD_SESSION_TOKEN=$DASH_TOKEN -e HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace \
             nousresearch/hermes-agent:latest dashboard --host 0.0.0.0 --no-open
           for i in $(seq 1 60); do
             curl -sf http://127.0.0.1:8642/health >/dev/null && curl -s -o /dev/null http://127.0.0.1:9119/ && break

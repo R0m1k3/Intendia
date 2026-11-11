@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { api, type CompatReport, type InstanceInput } from '../api';
 import { Button, ErrorText, Field, Input, StateMark } from './ui';
 
-const EMPTY: InstanceInput = { id: '', label: '', api: 'http://hermes:8642', apiKey: '', dashboard: '', dashboardToken: '', dashboardLink: '', mount: '/workspace' };
+const EMPTY: InstanceInput = { id: '', label: '', api: 'http://hermes:8642', apiKey: '', dashboard: '', dashboardToken: '', dashboardLink: '' };
 
 function clean(i: InstanceInput): InstanceInput {
   const out: InstanceInput = { ...i, id: i.id.trim(), label: i.label.trim(), api: i.api.trim() };
-  for (const k of ['dashboard', 'dashboardToken', 'dashboardLink', 'mount'] as const) {
+  for (const k of ['dashboard', 'dashboardToken', 'dashboardLink'] as const) {
     const v = out[k]?.trim();
     if (v) out[k] = v;
     else delete out[k];
@@ -53,7 +53,7 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
         <Field label="Clé de l’API server" hint="API_SERVER_KEY, 16 caractères minimum">
           <Input value={v.apiKey} onChange={set('apiKey')} required minLength={16} type="password" autoComplete="off" />
         </Field>
-        <Field label="URL du dashboard" hint="Port 9119 ; facultatif, requis pour la console">
+        <Field label="URL du dashboard" hint="Port 9119 ; requis pour les fichiers des workspaces">
           <Input value={v.dashboard} onChange={set('dashboard')} type="url" placeholder="http://hermes:9119" />
         </Field>
         <Field label="Jeton du dashboard" hint="HERMES_DASHBOARD_SESSION_TOKEN">
@@ -61,9 +61,6 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
         </Field>
         <Field label="Lien public du dashboard" hint="Facultatif : pour les liens « ouvrir dans le dashboard »">
           <Input value={v.dashboardLink} onChange={set('dashboardLink')} type="url" />
-        </Field>
-        <Field label="Dossier monté" hint="Volume workspace de l’agent, vu depuis Intendia">
-          <Input value={v.mount} onChange={set('mount')} placeholder="/workspace" />
         </Field>
       </div>
 
@@ -77,6 +74,13 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
               API {report.api.reachable ? 'joignable' : 'injoignable'} · dashboard {!report.dash.configured ? 'non configuré' : report.dash.reachable ? 'joignable' : 'injoignable'}
             </span>
           </div>
+          {report.files && (
+            <div className="border-b border-line px-4 py-3 text-sm">
+              {report.files.workspaceRoot
+                ? <>Racine des workspaces : <span className="font-mono text-xs">{report.files.workspaceRoot}</span></>
+                : <span className="text-bad">{report.files.reason}</span>}
+            </div>
+          )}
           <ul className="divide-y divide-line">
             {report.modules.map((m) => (
               <li key={m.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">

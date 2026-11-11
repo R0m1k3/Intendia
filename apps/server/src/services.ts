@@ -4,6 +4,7 @@ import type { CompatService } from './compat/service.js';
 import type { AppConfig } from './config.js';
 import { CronService } from './crons/service.js';
 import type { Db } from './db/index.js';
+import { FileRoots } from './files/hermes-fs.js';
 import { FileService } from './files/service.js';
 import { ConfigService } from './hermes-config/service.js';
 import { McpLink } from './mcp/connect.js';
@@ -15,6 +16,7 @@ import { SkillService } from './skills/service.js';
 import { WorkspaceService } from './workspaces/service.js';
 
 export interface Services {
+  roots: FileRoots;
   workspaces: WorkspaceService;
   links: LinkService;
   files: FileService;
@@ -29,11 +31,14 @@ export interface Services {
 }
 
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
-export function createServices(deps: { config: AppConfig; db: Db; store: InstanceStore; compat: CompatService }): Services {
-  const workspaces = new WorkspaceService(deps.db, deps.store);
-  const links = new LinkService(deps.db, deps.store, deps.config);
-  const files = new FileService(deps.db, workspaces, links, deps.config.uploadMaxBytes);
-  const crons = new CronService(deps.compat, workspaces, deps.store);
+export function createServices(deps: {
+  config: AppConfig; db: Db; store: InstanceStore; compat: CompatService; uploadTimeoutMs?: number;
+}): Services {
+  const roots = new FileRoots(deps.compat, { uploadTimeoutMs: deps.uploadTimeoutMs });
+  const workspaces = new WorkspaceService(deps.db, deps.store, roots);
+  const links = new LinkService(deps.db, deps.store, deps.config, roots);
+  const files = new FileService(workspaces, links, roots, deps.config.uploadMaxBytes);
+  const crons = new CronService(deps.compat, workspaces, deps.store, roots);
   const skills = new SkillService(deps.compat, deps.store);
   const kanban = new KanbanService(deps.compat, deps.store, workspaces, deps.config.secret);
   const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban);
@@ -41,5 +46,5 @@ export function createServices(deps: { config: AppConfig; db: Db; store: Instanc
   const recent = new RecentService(deps.compat, deps.store, workspaces);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
   const mcpLink = new McpLink(config, deps.db, deps.config);
-  return { workspaces, links, files, crons, skills, agents, kanban, activity, recent, config, mcpLink };
+  return { roots, workspaces, links, files, crons, skills, agents, kanban, activity, recent, config, mcpLink };
 }

@@ -100,7 +100,7 @@ describe('instances', () => {
     await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
     const saved = await t.req('POST', '/x/instances', fakeInstance());
     expect(saved.status).toBe(200);
-    expect(saved.json.report.modules).toHaveLength(8);
+    expect(saved.json.report.modules).toHaveLength(9);
     expect(JSON.stringify(saved.json.instance)).not.toContain('fake-api-key');
     const list = await t.req('GET', '/x/instances');
     expect(list.json.instances[0]).toMatchObject({ id: 'fake', source: 'db' });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { splitAttachments } from './attachments';
 
-const m = { agentMount: '/opt/data/workspace/ws', mount: '/data/ws' };
+const m = { root: '/opt/data/workspace/ws' };
 
 describe('splitAttachments', () => {
   it('a lone path becomes an attachment', () => {
@@ -20,7 +20,7 @@ describe('splitAttachments', () => {
     expect(splitAttachments(t, m)).toEqual({ text: t, files: [] });
   });
   it('trailing spaces are ignored', () => {
-    expect(splitAttachments('Salut\n/data/ws/inbox/a.png   ', m)).toEqual({ text: 'Salut', files: ['/data/ws/inbox/a.png'] });
+    expect(splitAttachments('Salut\n/opt/data/workspace/ws/inbox/a.png   ', m)).toEqual({ text: 'Salut', files: ['/opt/data/workspace/ws/inbox/a.png'] });
   });
   it('a path outside the workspace stays', () => {
     const t = 'Salut\n/etc/x.png';

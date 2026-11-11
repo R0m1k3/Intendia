@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 # Follows docs/install.md with the image built by CI (intendia:ci) against fake-hermes on the host:
-# uid 10000, data volume, workspace volume owned by 10000, instance declared in INTENDIA_INSTANCES,
-# installation code from the logs, password, module check, a workspace written on the volume.
+# uid 10000, data volume, no workspace volume, instance declared in INTENDIA_INSTANCES,
+# installation code from the logs, password, module check, a workspace written through the fake dashboard
+# (its managed files root is $FAKE_FILES_ROOT, set by the workflow).
 set -euo pipefail
 U=http://127.0.0.1:3000
 J=$(mktemp)
 fail() { echo "FAIL: $*"; docker logs intendia 2>&1 | tail -30; exit 1; }
 
 docker volume create intendia-data >/dev/null
-docker volume create workspace >/dev/null
-# the Hermes workspace volume belongs to uid 10000 (official image)
-docker run --rm -v workspace:/w busybox chown 10000:10000 /w
+: "${FAKE_FILES_ROOT:?FAKE_FILES_ROOT must be the managed files root of the fake Hermes}"
 
 docker run -d --name intendia --network host --user 10000:10000 \
-  -v intendia-data:/data -v workspace:/workspace \
+  -v intendia-data:/data \
   -e INTENDIA_SECRET="$(openssl rand -hex 32)" \
   -e INTENDIA_PUBLIC_URL=http://127.0.0.1:3000 \
-  -e INTENDIA_INSTANCES='[{"id":"fake","label":"Hermes simulé","api":"http://127.0.0.1:18642","apiKey":"fake-api-key-000000000000","dashboard":"http://127.0.0.1:19119","dashboardToken":"fake-dashboard-token","mount":"/workspace"}]' \
+  -e INTENDIA_INSTANCES='[{"id":"fake","label":"Hermes simulé","api":"http://127.0.0.1:18642","apiKey":"fake-api-key-000000000000","dashboard":"http://127.0.0.1:19119","dashboardToken":"fake-dashboard-token"}]' \
   intendia:ci >/dev/null
 
 for i in $(seq 1 30); do curl -sf $U/x/health >/dev/null && break; sleep 2; done
@@ -40,8 +39,8 @@ X $U/x/compat | node -e '
   if (bad.length) { console.log("FAIL unavailable: " + bad.join(", ")); process.exit(1); }' || fail "modules"
 
 X -d '{"slug":"essai","name":"Essai","instanceId":"fake"}' $U/x/workspaces >/dev/null || fail "workspace"
-docker run --rm -v workspace:/w busybox test -d /w/essai || fail "workspace folder not on the volume"
-echo "OK   workspace created on the volume as uid 10000"
+test -f "$FAKE_FILES_ROOT/essai/AGENTS.md" || fail "workspace folder not written by the dashboard"
+echo "OK   workspace created through the Hermes dashboard"
 
 docker inspect --format '{{.State.Health.Status}}' intendia
 for i in $(seq 1 15); do [ "$(docker inspect --format '{{.State.Health.Status}}' intendia)" = healthy ] && break; sleep 3; done

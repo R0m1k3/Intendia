@@ -239,6 +239,25 @@ Sub-agents and runs (API server):
     session history (`/v1/sessions/{id}/messages`) has no sub-agent events.
 19. There is **no run list**: only `GET /v1/runs/{id}`, kept in memory (404 after a Hermes restart).
 
+## Managed files (read in the 0.23.0 source, `web_routers/files.py`, `web_server_files.py`; same routes in 0.23.1)
+
+- Root per process (`locked_root` in every answer): `HERMES_DASHBOARD_FILES_ROOT` if set, else `/opt/data` in the
+  official image (it holds the configuration and the keys), else none (any absolute path).
+- `GET /api/files?path=` → `{path, parent, entries:[{name, path, is_directory, size, mtime, mime_type, broken_link?}],
+  root, locked_root, can_change_path}`. Relative paths are relative to the root, `..` → 400, outside → 403. Paths are
+  resolved (links followed): an entry whose resolved path leaves the root makes the whole listing fail with 403; a
+  broken link is listed with `broken_link: true` and its own (unresolved) path; `size`/`mtime` (seconds, float) are
+  null for folders or broken links.
+- Hidden from listings and downloads (case-insensitive): `.env`, `.env.*`, `.envrc`, `auth.json`, `auth.lock`,
+  `credentials`, `config.yaml`, OAuth caches, `.git-credentials`, anything under `mcp-tokens/` or `pairing/`.
+  **Writes to these names are not blocked.**
+- `GET /api/files/download?path=` (100 MiB, Range supported); `POST /api/files/upload-stream` multipart `file`, `path`,
+  `overwrite` (default true; false + existing → 409), parents created, temporary file then `os.replace`: an existing
+  link is followed (its target is replaced), a broken link is replaced by the file. `POST /api/files/mkdir {path}`
+  (parents, idempotent, 409 if a file has that name). `DELETE /api/files {path, recursive}` (follows a link, 404 on a
+  broken one, 409 for a non-empty folder without `recursive`, 400 on the root).
+- No rename or move, no stat route. `GET /api/fs/*` (files of the agent's machine) has no locked root: not used.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

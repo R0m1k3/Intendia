@@ -16,6 +16,7 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
   // created on the current instance (the sidebar's choice)
   const { id: currentId, instance: current, instances: list } = useCurrentInstance();
   const inst = currentId ?? '';
+  const root = current?.files?.workspaceRoot ?? null;
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -47,7 +48,7 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
           <Input value={name} required autoFocus maxLength={80} placeholder="Magasins"
             onChange={(e) => { setName(e.target.value); if (!slugEdited) setSlug(slugify(e.target.value)); }} />
         </Field>
-        <Field label="Identifiant" hint={current ? `Dossier ${current.mount}/${slug || '…'} ; définitif` : 'Définitif'}>
+        <Field label="Identifiant" hint={root ? `Dossier ${root}/${slug || '…'} chez Hermes ; définitif` : 'Définitif'}>
           <Input value={slug} required pattern="[a-z0-9][a-z0-9\-]{0,39}" className="font-mono"
             onChange={(e) => { setSlug(e.target.value); setSlugEdited(true); }} />
         </Field>
@@ -64,9 +65,14 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
           </select>
         </Field>
       </div>
+      {current && !root && (
+        <p className="text-sm text-bad" data-no-files-root="">
+          {current.files?.reason ?? 'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.'}
+        </p>
+      )}
       <ErrorText error={error} />
       <div className="flex gap-2">
-        <Button variant="primary" disabled={busy || !inst}>{busy ? 'Création…' : 'Créer le workspace'}</Button>
+        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? 'Création…' : 'Créer le workspace'}</Button>
         {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}
       </div>
     </form>

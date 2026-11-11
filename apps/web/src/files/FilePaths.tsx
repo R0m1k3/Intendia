@@ -7,7 +7,7 @@ export interface FilePathsValue {
   found: Map<string, string>;
   open: (path: string) => void;
   slug: string;
-  /** The workspace as the agent and Intendia see it; null until the instances are loaded. */
+  /** The workspace root as the agent sees it; null until the instances are loaded. */
   mounts: MountInfo | null;
 }
 

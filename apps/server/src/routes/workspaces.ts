@@ -69,7 +69,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
 
   r.post('/workspaces', async (c) => {
     const body = CreateWorkspace.parse(await c.req.json());
-    return c.json({ workspace: workspaces.createWorkspace(body) }, 201);
+    return c.json({ workspace: await workspaces.createWorkspace(body) }, 201);
   });
 
   r.get('/workspaces/:slug', (c) => c.json({ workspace: workspaces.getWorkspace(c.req.param('slug')) }));
@@ -79,11 +79,11 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ workspace: workspaces.updateWorkspace(c.req.param('slug'), body) });
   });
 
-  r.get('/workspaces/:slug/agents-md', (c) => c.json({ text: workspaces.readAgentsMd(c.req.param('slug')) }));
+  r.get('/workspaces/:slug/agents-md', async (c) => c.json({ text: await workspaces.readAgentsMd(c.req.param('slug')) }));
 
   r.put('/workspaces/:slug/agents-md', async (c) => {
     const { text } = AgentsMd.parse(await c.req.json());
-    workspaces.writeAgentsMd(c.req.param('slug'), text);
+    await workspaces.writeAgentsMd(c.req.param('slug'), text);
     return c.json({ ok: true });
   });
 
@@ -91,7 +91,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     sessions: workspaces.listSessions(c.req.param('slug'), { archived: c.req.query('archived') === '1' }),
   }));
 
-  r.post('/workspaces/:slug/sessions', (c) => c.json({ session: workspaces.createSession(c.req.param('slug')) }, 201));
+  r.post('/workspaces/:slug/sessions', async (c) => c.json({ session: await workspaces.createSession(c.req.param('slug')) }, 201));
 
   r.get('/sessions/:inst/:id', (c) => {
     const { inst, id } = sessionParams(c);

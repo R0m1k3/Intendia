@@ -15,7 +15,7 @@ describe('sessions', () => {
     const { t, s } = await withWorkspace();
     expect(s.id).toMatch(/^iw-dev-[a-z0-9]{12}$/);
     expect(s).toMatchObject({ instanceId: 'fake', workspace: 'dev', title: null, archived: false, lastRunId: null });
-    expect(existsSync(join(t.mount, 'dev', 'sessions', s.id))).toBe(true);
+    expect(existsSync(join(t.root, 'dev', 'sessions', s.id))).toBe(true);
     expect((await t.request('GET', '/x/workspaces/dev/sessions')).json.sessions).toHaveLength(1);
   });
 
@@ -78,7 +78,7 @@ describe('sessions', () => {
     expect((await t.request('DELETE', base)).status).toBe(200);
     expect(t.fake.requests.some((r) => r.method === 'DELETE' && r.path === `/api/sessions/${first.id}`)).toBe(true);
     expect((await t.request('GET', base)).status).toBe(404);
-    expect(existsSync(join(t.mount, 'dev', 'sessions', first.id))).toBe(true);
+    expect(existsSync(join(t.root, 'dev', 'sessions', first.id))).toBe(true);
     // never sent to Hermes: Hermes answers 404, the row goes anyway
     expect((await t.request('DELETE', `/x/sessions/fake/${second.id}`)).status).toBe(200);
   });

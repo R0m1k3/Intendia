@@ -10,18 +10,18 @@ const RELATIVE = new RegExp(`(?<![\\w/.:~-])(?:(?:files|inbox|sessions)/${CHARS}
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export interface MountInfo {
-  agentMount: string;
-  mount: string;
+  /** Root of the workspaces of the instance, as the agent sees it; null when the instance has none. */
+  root: string | null;
 }
 
-/** Absolute paths under agentMount or mount, and paths relative to the workspace (files/, inbox/, sessions/, AGENTS.md). */
+/** Absolute paths under the workspace root, and paths relative to the workspace (files/, inbox/, sessions/, AGENTS.md). */
 export function findPathCandidates(text: string, m: MountInfo): string[] {
   const found = new Set<string>();
   const add = (raw: string) => {
     const p = raw.replace(TRAILING, '').replace(/\/+$/, '');
     if (p && !/^(files|inbox|sessions)$/.test(p)) found.add(p);
   };
-  const bases = [...new Set([m.agentMount, m.mount].filter(Boolean).map((b) => b.replace(/\/+$/, '')))];
+  const bases = m.root ? [m.root.replace(/\/+$/, '')] : [];
   for (const base of bases) {
     const re = new RegExp(`(?<![\\w/.:~-])${escapeRe(base)}/${CHARS}+`, 'g');
     for (const match of text.matchAll(re)) add(match[0]);

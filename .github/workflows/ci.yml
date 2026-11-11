@@ -28,7 +28,9 @@ jobs:
       - run: corepack enable && pnpm install --frozen-lockfile
       - name: Start fake-hermes
         run: |
-          (cd apps/fake-hermes && nohup pnpm dev > /tmp/fake.log 2>&1 &)
+          mkdir -p /tmp/fake-files
+          (cd apps/fake-hermes && FAKE_FILES_ROOT=/tmp/fake-files nohup pnpm dev > /tmp/fake.log 2>&1 &)
           for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:18642/health && break; sleep 1; done
       - name: Install and check
         run: .github/scripts/install-smoke.sh
+        env: { FAKE_FILES_ROOT: /tmp/fake-files }

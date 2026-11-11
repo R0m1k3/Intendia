@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { testApp } from './helpers.js';
 
 async function setup() {
-  const t = await testApp({ instance: { agentMount: '/opt/data/workspace' }, env: { INTENDIA_PUBLIC_URL: 'https://intendia.example.test' } });
+  const t = await testApp({ env: { INTENDIA_PUBLIC_URL: 'https://intendia.example.test' } });
   expect((await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' })).status).toBe(201);
-  const ws = join(t.mount, 'dev');
+  const ws = join(t.root, 'dev');
   mkdirSync(join(ws, 'files', 'a_b'));
   mkdirSync(join(ws, 'files', 'axb'));
   writeFileSync(join(ws, 'files', 'a_b', 'r.md'), '# r');
@@ -33,7 +33,7 @@ describe('share links', () => {
     const until = Date.now() + 86_400_000;
     expect((await t.request('PATCH', `/x/links/${a.token}`, { publicUntil: until })).status).toBe(200);
     expect((await t.share('files/a_b/r.md')).token).toBe(a.token);
-    const agent = t.links.share('fake', 'dev/files/a_b/r.md', { forAgent: true });
+    const agent = await t.links.share('fake', 'dev/files/a_b/r.md', { forAgent: true });
     expect(agent.token).not.toBe(a.token);
     expect(agent.publicUntil).toBeNull();
   });
@@ -69,11 +69,11 @@ describe('share links', () => {
     const gone = await t.rawRequest('GET', `/f/${b.token}`);
     expect(gone.status).toBe(404);
     const html = await gone.text();
-    expect(html).toContain('/opt/data/workspace/dev/files/note &#60;b&#62;.txt');
+    expect(html).toContain(`${t.root}/dev/files/note &#60;b&#62;.txt`);
     await t.request('PATCH', `/x/links/${b.token}`, { publicUntil: Date.now() + 60_000 });
     const goneAnon = await t.anon(`/f/${b.token}`);
     expect(goneAnon.status).toBe(404);
-    expect(await goneAnon.text()).not.toContain('/opt/data');
+    expect(await goneAnon.text()).not.toContain(t.root);
 
     expect((await t.request('DELETE', `/x/links/${a.token}`)).status).toBe(200);
     const revoked = await t.rawRequest('GET', `/f/${a.token}`);
@@ -96,14 +96,29 @@ describe('share links', () => {
     const t = await setup();
     const inA = await t.share('files/a_b/r.md');
     const inX = await t.share('files/axb/r.md');
-    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b', to: 'files/c' })).status).toBe(200);
-    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/c/r.md', to: 'files/c/s.md' })).status).toBe(200);
+    // folders cannot be moved (Hermes has no route): the file moves alone
+    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b', to: 'files/c' })).status).toBe(409);
+    mkdirSync(join(t.ws, 'files', 'c'));
+    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b/r.md', to: 'files/c/s.md' })).status).toBe(200);
     // a failed move (target exists) changes no link
     expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/c/s.md', to: 'files/axb/r.md' })).status).toBe(409);
     const list = (await t.request('GET', '/x/links')).json.links;
     const by = (tok: string) => list.find((l: any) => l.token === tok);
-    expect(by(inA.token)).toMatchObject({ path: 'dev/files/c/s.md', exists: true, workspace: 'dev', agentPath: '/opt/data/workspace/dev/files/c/s.md' });
+    expect(by(inA.token)).toMatchObject({ path: 'dev/files/c/s.md', exists: true, workspace: 'dev', agentPath: `${t.root}/dev/files/c/s.md` });
     expect(by(inX.token)).toMatchObject({ path: 'dev/files/axb/r.md', exists: true });
     expect((await t.rawRequest('GET', `/f/${inA.token}`)).status).toBe(200);
+  });
+
+  it('/f with Hermes down: 502 page, not "missing"', async () => {
+    const breaks: Record<string, { status: number }> = {};
+    const t = await testApp({ breaks });
+    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    writeFileSync(join(t.root, 'dev', 'files', 'r.md'), '# r');
+    const a = (await t.request('POST', '/x/workspaces/dev/files/share', { path: 'files/r.md' })).json;
+    breaks['dash GET /api/files'] = { status: 503 };
+    const res = await t.rawRequest('GET', `/f/${a.token}`);
+    expect(res.status).toBe(502);
+    expect(await res.text()).toContain('Hermes injoignable');
+    expect((await t.request('GET', '/x/links')).json.links[0].exists).toBe(false);
   });
 });

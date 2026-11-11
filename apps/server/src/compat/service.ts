@@ -5,10 +5,12 @@ import { compatReports } from '../db/schema.js';
 import { HermesHttp, type FetchLike } from '../hermes/http.js';
 import type { InstanceStore } from '../instances/store.js';
 import { checkInstance, stateChanges } from './engine.js';
+import { withFilesRoot } from './files-root.js';
 import type { Notifier } from './notify.js';
 
 const KEEP_REPORTS = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const NO_ROOT_RETRY_MS = 15 * 60 * 1000;
 
 /**
  * Keeps one compatibility report per instance. Reruns the full check at boot, when the
@@ -51,8 +53,14 @@ export class CompatService {
     const existing = this.running.get(instanceId);
     if (existing) return existing;
     const task = (async () => {
-      const { report } = await checkInstance(this.http(instanceId));
+      const http = this.http(instanceId);
+      const { report } = await checkInstance(http);
+      await withFilesRoot(http, report);
       const prev = this.reports.get(instanceId);
+      const before = prev?.files?.workspaceRoot;
+      if (prev?.files && before !== report.files?.workspaceRoot) {
+        console.warn(`[intendia] instance "${instanceId}": workspace root ${before ?? '(none)'} -> ${report.files?.workspaceRoot ?? '(none)'}`);
+      }
       this.reports.set(instanceId, report);
       this.persist(report);
       const changes = stateChanges(prev, report);
@@ -76,7 +84,8 @@ export class CompatService {
   async tick(): Promise<void> {
     for (const inst of this.store.list()) {
       const prev = this.reports.get(inst.id);
-      if (!prev || Date.now() - prev.checkedAt > DAY_MS || !prev.api.reachable) {
+      // a report saved before the files root existed counts as not checked
+      if (!prev || !prev.files || Date.now() - prev.checkedAt > DAY_MS || !prev.api.reachable) {
         await this.check(inst.id).catch(() => undefined);
         continue;
       }

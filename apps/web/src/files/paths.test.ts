@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { fileKind, findPathCandidates } from './paths';
 
-const m = { agentMount: '/opt/data/workspace', mount: '/workspace' };
+const m = { root: '/opt/data/workspace' };
 
 describe('findPathCandidates', () => {
-  it('finds absolute paths on both sides of the volume and relative workspace paths', () => {
+  it('finds absolute paths under the workspace root and relative workspace paths', () => {
     const text = 'Voir /opt/data/workspace/dev/sessions/iw-1/rapport.md, puis /workspace/dev/files/a.csv et files/b.txt ou AGENTS.md.';
     expect(findPathCandidates(text, m)).toEqual([
-      '/opt/data/workspace/dev/sessions/iw-1/rapport.md', '/workspace/dev/files/a.csv', 'files/b.txt', 'AGENTS.md',
+      '/opt/data/workspace/dev/sessions/iw-1/rapport.md', 'files/b.txt', 'AGENTS.md',
     ]);
+    expect(findPathCandidates('/opt/data/workspace/dev/a.md', { root: null })).toEqual([]);
   });
 
   it('strips final punctuation and brackets, reads inside backticks', () => {

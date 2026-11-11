@@ -1,16 +1,16 @@
 # Intendia next to an existing Hermes Agent stack. Copy to docker-compose.yml and adapt the
-# three external names (workspace volume, Hermes network, reverse-proxy network).
+# two external names (Hermes network, reverse-proxy network). No shared volume: workspace files are read
+# and written through each Hermes dashboard, which needs HERMES_DASHBOARD_FILES_ROOT (docs/install.md).
 services:
   intendia:
     image: ghcr.io/r0m1k3/intendia:0.0      # development versions (0.0.x); from 1.0, use the major alias :1
     container_name: intendia
     restart: unless-stopped
     init: true
-    user: "${PUID:-10000}:${PGID:-10000}"   # must be able to write the Hermes workspace volume
+    user: "${PUID:-10000}:${PGID:-10000}"   # owner of the data volume
     env_file: .env
     volumes:
       - intendia-data:/data
-      - workspace:/workspace
     networks: [hermes, proxy]
     # No published ports: your reverse proxy reaches intendia:3000 on the "proxy" network.
     # Port 3001 (MCP, tool share_file) must stay reachable from the Hermes network only: Hermes calls
@@ -24,9 +24,6 @@ services:
 
 volumes:
   intendia-data:
-  workspace:
-    name: hermes_workspace          # the volume your Hermes containers use as workspace
-    external: true
 
 networks:
   hermes:

@@ -245,10 +245,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
       }
       const { model, modelProvider, effort } = fresh.session;
+      const instructions = await workspaces.instructionsFor(fresh);
       const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
         profile: ctx.profile,
         body: {
-          input, session_id: ctx.session.id, instructions: workspaces.instructionsFor(fresh),
+          input, session_id: ctx.session.id, instructions,
           // provider only with a model picked in a group (docs/hermes-api-notes.md)
           ...(model ? { model, ...(modelProvider ? { provider: modelProvider } : {}) } : {}),
           ...(effort ? { model_options: { reasoning_effort: effort } } : {}),

@@ -21,6 +21,18 @@ HERMES_DASHBOARD_SESSION_TOKEN=<openssl rand -hex 32>   # or file:/run/secrets/h
 hermes dashboard --host 0.0.0.0 --no-open               # official image: command ["dashboard", "--host", "0.0.0.0", "--no-open"]
 ```
 
+**Workspace files**: Intendia reads and writes the workspaces through the dashboard's file API, confined to one folder.
+Set it, in the environment of the **dashboard** container:
+
+```bash
+HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace   # any folder that does not contain HERMES_HOME
+```
+
+The agent must run its terminal in the Hermes container (`terminal.backend: local`, the default) so that it sees the
+same paths. Without this variable (or with a root that contains Hermes' configuration, such as `/opt/data`), the
+**Fichiers** module of the instance stays unavailable and no workspace can be created on it; Settings shows the reason
+and the line to add. After changing it, restart Hermes and click « Revérifier ».
+
 Do not publish 8642 or 9119 on the host nor in your reverse proxy: these keys control the whole agent, terminal included.
 
 **Multi-profile routing**: each `/p/<profile>/` prefix has its own API key; add them to the instance as `profileKeys`.
@@ -45,16 +57,24 @@ The image is `ghcr.io/r0m1k3/intendia`. While the repository is private, the ima
 token that has `read:packages` (`echo <token> | docker login ghcr.io -u <user> --password-stdin`).
 
 Edit `.env`: `INTENDIA_PUBLIC_URL` (your domain) and `INTENDIA_SECRET` (`openssl rand -hex 32`).
-Edit `docker-compose.yml`: the names of the Hermes workspace volume, the Hermes network and your reverse-proxy network.
-`PUID`/`PGID` must own the workspace volume (official Hermes image: 10000).
+Edit `docker-compose.yml`: the names of the Hermes network and your reverse-proxy network.
+`PUID`/`PGID` must own the data volume.
 
-### Workspace volume
+### Workspace files
 
-Each workspace is a folder `<mount>/<slug>/` on the volume shared with the agent (`files/`, `inbox/`, `sessions/`,
-`AGENTS.md`). Intendia creates folders with mode `0775` and files with `0664`: the agent can write in them when it runs
-with the same uid, or with another uid in the same group. If the agent sees the volume under another path than
-Intendia (for example `/opt/data/workspace` in the Hermes container, `/workspace` in Intendia), set `agentMount` on the
-instance: it is the path written in the instructions sent to the agent.
+Intendia mounts no workspace volume. Each workspace is a folder `<root>/<slug>/` (`files/`, `inbox/`, `sessions/`,
+`AGENTS.md`) kept by the Hermes of its instance, where `<root>` is that Hermes' `HERMES_DASHBOARD_FILES_ROOT` (read
+during the instance check, shown in Settings). Every file action goes to that Hermes only, so two instances never share
+their files. Limits that come from Hermes' file API: 100 MB per file, folders cannot be moved, names Hermes hides
+(`.env`, `config.yaml`, `auth.json`…) are not shown, and symbolic links are never opened, written, moved nor deleted.
+
+**Upgrading from 0.0.3 or earlier** (shared workspace volume):
+1. Add `HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace` to each Hermes dashboard container, so that the root is the
+   folder that already held the workspaces, and restart it.
+2. Remove the `workspace` volume from Intendia's compose file (the `mount`/`agentMount` keys of `INTENDIA_INSTANCES` are
+   ignored, with a warning in the logs), then restart Intendia and click « Revérifier » on each instance.
+3. A second instance used to write its workspaces into the volume of the first one: copy those folders into the root of
+   the right Hermes. Until then their page says « Dossier introuvable chez <instance> ».
 
 ```bash
 docker compose up -d
@@ -95,7 +115,7 @@ intendia.example.com {
 - traefik.http.services.intendia.loadbalancer.server.port=3000
 ```
 
-Uploads are streamed up to `INTENDIA_UPLOAD_MAX_MB` (default 200): let the proxy accept bodies that big
+Uploads are streamed up to `INTENDIA_UPLOAD_MAX_MB` (default and maximum 100, the limit of Hermes' file API): let the proxy accept bodies that big
 (Nginx Proxy Manager, *Advanced*: `client_max_body_size 200m;`).
 
 Never expose port 3001: it is the MCP endpoint for the agents (next section).
@@ -103,7 +123,7 @@ Never expose port 3001: it is the MCP endpoint for the agents (next section).
 ## 3b. The `share_file` tool (links for Telegram and crons)
 
 Intendia exposes one MCP tool to the agents, `share_file(path)`: it creates (or reuses) a **private** link
-`<INTENDIA_PUBLIC_URL>/f/<token>` to a file of the workspace volume and returns it, so the agent can give a link
+`<INTENDIA_PUBLIC_URL>/f/<token>` to a file of a workspace (under the workspace root of its instance) and returns it, so the agent can give a link
 from Telegram or a cron. The agent can never create a public link; you make a link public (with an expiry date,
 365 days at most) or revoke it on the **Liens** screen.
 
