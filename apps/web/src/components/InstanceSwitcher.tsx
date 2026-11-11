@@ -96,7 +96,7 @@ export function InstanceSwitcher({ className, onPicked }: { className?: string; 
                 >
                   <Line instance={i} report={report(i.id)} />
                   <Alert n={a.failed + a.approvals} label={alertLabel(a)} />
-                  <Check className={cx('size-3.5 shrink-0 text-accent', i.id !== id && 'invisible')} strokeWidth={1.75} />
+                  <Check className={cx('size-3.5 shrink-0 text-accent-ink', i.id !== id && 'invisible')} strokeWidth={1.75} />
                 </button>
               );
             })}

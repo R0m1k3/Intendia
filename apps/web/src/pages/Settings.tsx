@@ -131,7 +131,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
         </div>
       )}
       {auto && (written || d.state === 'stale' || d.state === 'connected') && (
-        <div className={cx('space-y-2', written && 'rounded-lg border border-accent/30 p-3')}>
+        <div className={cx('space-y-2', written && 'rounded-lg border border-ink/30 p-3')}>
           {written && <p className="text-sm font-medium">Redémarrez Hermes pour que l’agent ait l’outil</p>}
           <RestartInstance instanceId={instanceId} label={label} />
         </div>

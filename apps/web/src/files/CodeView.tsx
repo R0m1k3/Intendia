@@ -30,13 +30,13 @@ function language(name: string): LanguageSupport | null {
 
 // Colours from the design tokens: ink for text, accent for keywords, muted for comments.
 const highlight = HighlightStyle.define([
-  { tag: [t.keyword, t.operatorKeyword, t.modifier], color: 'var(--color-accent)' },
+  { tag: [t.keyword, t.operatorKeyword, t.modifier], color: 'var(--color-accent-ink)' },
   { tag: [t.string, t.special(t.string), t.regexp], color: 'var(--color-warn)' },
   { tag: [t.number, t.bool, t.null, t.atom], color: 'var(--color-bad)' },
   { tag: [t.comment, t.meta], color: 'var(--color-ink-faint)', fontStyle: 'italic' },
   { tag: [t.heading], fontWeight: '600' },
   { tag: [t.propertyName, t.attributeName], color: 'var(--color-ink-soft)' },
-  { tag: [t.link, t.url], color: 'var(--color-accent)', textDecoration: 'underline' },
+  { tag: [t.link, t.url], color: 'var(--color-accent-ink)', textDecoration: 'underline' },
 ]);
 
 const theme = EditorView.theme({

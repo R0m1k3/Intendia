@@ -103,7 +103,7 @@ function InstanceTimeline({ label, crons, now, many, open }: { label: string | n
           })}
         </div>
         {rows.length > MOBILE_ROWS && (
-          <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent hover:underline md:hidden">
+          <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent-ink hover:underline md:hidden">
             et {rows.length - MOBILE_ROWS} autres
           </Link>
         )}

@@ -30,7 +30,7 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
             </ul>
           )}
           {m.state !== 'full' && m.dashboardLink && (
-            <a href={m.dashboardLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:text-accent-strong">
+            <a href={m.dashboardLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:text-ink">
               Ouvrir dans le dashboard officiel
               <ArrowUpRight className="size-4" strokeWidth={1.5} />
             </a>

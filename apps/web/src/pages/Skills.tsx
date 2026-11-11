@@ -20,9 +20,9 @@ const OPTIONAL: OptionalOp[] = [
   ['skills', 'toolsets', "Outils de l'agent"],
 ];
 const ICON = 'size-4';
-const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 
-export interface SkillsSearch { profile?: string }
+export interface SkillsSearch { profile?: string; skill?: string }
 
 // ---------------------------------------------------------------- actions
 
@@ -297,7 +297,7 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
           )}
           {s.policy === 'ask' && (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
               J’ai lu les constats
             </label>
           )}

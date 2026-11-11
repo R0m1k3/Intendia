@@ -187,7 +187,7 @@ function PickerList({ items, value, close, onPick }: {
           onClick={() => { close(); if (it.value !== value) onPick(it.value); }}
           className={cx('flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-raised focus:bg-raised focus:outline-none', groups[i]! >= 0 && 'pl-5')}
         >
-          <Check className={cx('mt-0.5 size-3.5 shrink-0 text-accent', it.value !== value && 'invisible')} strokeWidth={2} />
+          <Check className={cx('mt-0.5 size-3.5 shrink-0 text-accent-ink', it.value !== value && 'invisible')} strokeWidth={2} />
           <span className="min-w-0">
             <span className={cx('block truncate', it.mono && 'font-mono text-[13px]')}>{it.label}</span>
             {it.hint && <span className="block text-xs text-ink-faint">{it.hint}</span>}

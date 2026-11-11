@@ -42,7 +42,7 @@ export function ModuleNotice({ instanceId, module, title, required, optional, ex
       </div>
       {a.reasons.length > 0 && <ul className="mt-2 space-y-1 text-ink-soft">{a.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
       {a.link && (
-        <a href={a.link} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-medium text-accent hover:text-accent-strong">
+        <a href={a.link} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-medium text-accent-ink hover:text-ink">
           Ouvrir le dashboard officiel
           <ArrowUpRight className="size-4" strokeWidth={1.5} />
         </a>

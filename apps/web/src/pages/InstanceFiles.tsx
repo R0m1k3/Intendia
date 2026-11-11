@@ -108,7 +108,7 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
         {wsSlug && (
           <p className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-ink-soft">
             Dossier du workspace <span className="font-mono">{wsSlug}</span> : pour déposer, renommer ou modifier,
-            <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="text-accent hover:underline">ouvrez le workspace</Link>
+            <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="text-accent-ink hover:underline">ouvrez le workspace</Link>
           </p>
         )}
         {debounced && <p className="px-5 pt-3 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans toute l’instance${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
@@ -123,7 +123,7 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
             <div className="flex flex-wrap gap-2">
               {workspaces.map((e) => (
                 <Link key={e.path} to="/w/$slug/fichiers" params={{ slug: e.workspace! }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] hover:bg-raised">
-                  <FolderOpen className="size-4 text-accent" strokeWidth={1.5} />Ouvrir {e.name}
+                  <FolderOpen className="size-4 text-accent-ink" strokeWidth={1.5} />Ouvrir {e.name}
                 </Link>
               ))}
             </div>

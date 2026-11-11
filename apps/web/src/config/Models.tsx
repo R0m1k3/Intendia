@@ -218,7 +218,7 @@ function AuxRow({ task, providers, disabled, value, other, onChange }: {
         <div className="min-w-0 md:w-52 md:shrink-0">
           <p className="text-sm font-medium">
             {label}
-            {changed && <span className="font-normal text-accent"> · modifié</span>}
+            {changed && <span className="font-normal text-accent-ink"> · modifié</span>}
           </p>
           <p className="font-mono text-[11.5px] text-ink-faint">{task.task}</p>
         </div>

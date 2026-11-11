@@ -8,7 +8,7 @@ import {
 } from '../crons/schedule';
 import { Button, cx, ErrorText, Field, Input } from './ui';
 
-const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 
 function ScheduleFields({ form, onChange }: { form: ScheduleForm; onChange: (f: ScheduleForm) => void }) {
   const time = 'time' in form && (
@@ -132,7 +132,7 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
 
           <Field label="Prompt" hint="Ce que l’agent doit faire à chaque exécution">
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} required maxLength={20_000} rows={6}
-              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-accent focus:outline-none"
+              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
               placeholder="Fais le point des ventes de la semaine et range le tableau dans le workspace." />
           </Field>
 
@@ -187,7 +187,7 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
 
           {!cron && (
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+              <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
               Créer en pause
             </label>
           )}

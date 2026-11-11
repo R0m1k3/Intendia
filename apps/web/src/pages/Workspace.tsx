@@ -99,7 +99,7 @@ export function WorkspacePage() {
                 rows={14}
                 disabled={!agents.isSuccess}
                 aria-label="Consignes du projet"
-                className="w-full resize-y rounded-lg border border-line bg-paper p-3 font-mono text-xs leading-relaxed focus:border-accent focus:outline-none"
+                className="w-full resize-y rounded-lg border border-line bg-paper p-3 font-mono text-xs leading-relaxed focus:border-ink focus:outline-none"
               />
               <p className="text-xs text-ink-faint">Envoyées à l’agent avec chaque message (4 premiers Kio)</p>
               <ErrorText error={saveAgents.error} />

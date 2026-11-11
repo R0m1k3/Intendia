@@ -111,7 +111,7 @@ function AddMcp({ inst, profile, existing, onSaved }: { inst: string; profile: s
       ) : (
         <div className="space-y-2">
           <Input className="font-mono text-[12.5px]" placeholder="npx" value={command} onChange={(e) => setCommand(e.target.value)} aria-label="Commande" />
-          <textarea rows={3} className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-accent focus:outline-none"
+          <textarea rows={3} className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-ink focus:outline-none"
             placeholder="un argument par ligne" value={args} onChange={(e) => setArgs(e.target.value)} aria-label="Arguments" />
         </div>
       )}

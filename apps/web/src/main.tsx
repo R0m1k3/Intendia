@@ -24,11 +24,13 @@ import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
 import { SessionPage } from './pages/Session';
-import { SessionsPage, type SessionsSearch } from './pages/Sessions';
+import { InboxLayout } from './sessions/InboxLayout';
+import { parseCronKey } from './components/selection';
+import type { SessionSource } from './api';
 import { WorkspacePage } from './pages/Workspace';
 import { WorkspacesPage } from './pages/Workspaces';
-import '@fontsource-variable/inter';
-import '@fontsource-variable/jetbrains-mono';
+import '@fontsource-variable/hanken-grotesk';
+import '@fontsource-variable/spline-sans-mono';
 import './styles.css';
 
 const savedTheme = localStorage.getItem('intendia-theme');
@@ -59,16 +61,21 @@ const appRoute = createRoute({
     if (s.needsInstance && !s.declarativeInstances) throw redirect({ to: '/installation' });
   },
 });
-export interface HomeSearch { nouvelle?: 1 }
+/** The inbox: the sessions column beside the home page and the open session (no path of its own). */
+const inboxRoute = createRoute({ getParentRoute: () => appRoute, id: 'inbox', component: InboxLayout });
+export interface HomeSearch { nouvelle?: 1; source?: Exclude<SessionSource, 'all'> }
+const sourceOf = (v: unknown): Exclude<SessionSource, 'all'> | undefined => (v === 'intendia' || v === 'telegram' || v === 'cron' ? v : undefined);
 const homeRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/', component: HomePage,
-  validateSearch: (s: Record<string, unknown>): HomeSearch => (s.nouvelle !== undefined ? { nouvelle: 1 } : {}),
+  getParentRoute: () => inboxRoute, path: '/', component: HomePage,
+  validateSearch: (s: Record<string, unknown>): HomeSearch => ({
+    ...(s.nouvelle !== undefined ? { nouvelle: 1 as const } : {}),
+    ...(sourceOf(s.source) ? { source: sourceOf(s.source) } : {}),
+  }),
 });
+/** /sessions (page merged into the inbox): the home page, with the source filter it named. */
 const sessionsRoute = createRoute({
-  getParentRoute: () => appRoute, path: '/sessions', component: SessionsPage,
-  validateSearch: (s: Record<string, unknown>): SessionsSearch => (
-    s.source === 'intendia' || s.source === 'telegram' || s.source === 'cron' ? { source: s.source } : {}
-  ),
+  getParentRoute: () => appRoute, path: '/sessions',
+  beforeLoad: ({ search }) => { throw redirect({ to: '/', search: sourceOf((search as { source?: unknown }).source) ? { source: (search as { source: string }).source } : {} } as never); },
 });
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
@@ -83,7 +90,7 @@ const filesRoute = createRoute({
 });
 /** /liens (page removed): the share links are a tab of « Fichiers ». */
 const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', beforeLoad: () => { throw redirect({ to: '/files', search: { tab: 'liens' } } as never); } });
-const sessionRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
+const sessionRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
 /** Entry of an instance page (bookmarks, old links): the current instance of this tab, else the first. */
 async function toCurrent(page: InstancePage, search?: object): Promise<never> {
   const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
@@ -105,13 +112,18 @@ const instanceFilesRoute = createRoute({
 });
 /** /crons: the current instance */
 const cronsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/crons', beforeLoad: () => toCurrent('crons') });
-const cronsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage });
+export interface CronsSearch { cron?: string }
+const cronsRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage,
+  validateSearch: (s: Record<string, unknown>): CronsSearch => (typeof s.cron === 'string' && parseCronKey(s.cron) ? { cron: s.cron } : {}),
+});
 /** /skills: the current instance */
 const skillsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/skills', beforeLoad: () => toCurrent('skills') });
 const skillsRoute = createRoute({
   getParentRoute: () => appRoute, path: '/i/$inst/skills', component: SkillsPage,
   validateSearch: (s: Record<string, unknown>): SkillsSearch => ({
     profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+    skill: typeof s.skill === 'string' && s.skill.length > 0 && s.skill.length <= 200 ? s.skill : undefined,
   }),
 });
 /** /config: the current instance */
@@ -138,10 +150,10 @@ const kanbanRoute = createRoute({
   }),
 });
 const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/activite', component: ActivityPage });
-const externalRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
+const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([homeRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, sessionRoute, externalRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

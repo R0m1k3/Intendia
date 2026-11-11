@@ -7,7 +7,6 @@ import { api, type CompatReport, type OverviewCron, type PublicInstance } from '
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, Mark, Panel, timeAgo, worst } from '../components/ui';
 import { Ask } from '../home/Ask';
-import { RecentSessions } from '../home/Recent';
 import { CronTimeline } from '../home/Timeline';
 import { FAILED, failureLabel } from '../home/summary';
 import { Toggle } from '../home/Toggle';
@@ -86,7 +85,7 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
           <h2 id="crons-title" className="text-[15px] font-semibold">Prochains crons</h2>
           <Toggle open={open} onToggle={() => setOpen(!open)} controls="upcoming-body" />
         </div>
-        <Link to="/crons" className="text-[13px] font-medium text-accent hover:underline">Gérer</Link>
+        <Link to="/crons" className="text-[13px] font-medium text-accent-ink hover:underline">Gérer</Link>
       </header>
       <ul id="upcoming-body" className="divide-y divide-line border-t border-line">
         {list.map((c) => (
@@ -132,7 +131,7 @@ export function HomePage() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
   const crons = (overview.data?.crons ?? []).filter((c) => c.instanceId === id);
-  const search = useSearch({ from: '/app/' });
+  const search = useSearch({ from: '/app/inbox/' });
   const navigate = useNavigate();
   const list = instances.data?.instances ?? [];
   const reports = compat.data?.reports ?? [];
@@ -142,7 +141,7 @@ export function HomePage() {
   return (
     <>
       <PageHeader eyebrow={today()} title="Accueil" />
-      <div className="space-y-6 px-5 pb-12 md:px-8">
+      <div className="max-w-[920px] space-y-5 px-4 pb-12 md:px-8">
         {instances.isSuccess && list.length === 0 && (
           <Panel>
             <p className="text-sm text-ink-soft">Intendia n’est relié à aucune instance Hermes pour l’instant</p>
@@ -167,12 +166,9 @@ export function HomePage() {
         ))}
         {list.length > 0 && <CronTimeline crons={crons} />}
         {list.length > 0 && (
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            {id && <RecentSessions inst={id} />}
-            <div className="space-y-6">
-              <UpcomingCrons crons={crons} />
-              {instance && <InstanceCard instance={instance} report={reports.find((r) => r.instanceId === instance.id)} />}
-            </div>
+          <div className="grid items-start gap-5 2xl:grid-cols-2">
+            <UpcomingCrons crons={crons} />
+            {instance && <InstanceCard instance={instance} report={reports.find((r) => r.instanceId === instance.id)} />}
           </div>
         )}
       </div>

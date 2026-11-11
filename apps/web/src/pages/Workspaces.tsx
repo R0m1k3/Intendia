@@ -26,7 +26,7 @@ function OtherSessions({ inst }: { inst: PublicInstance }) {
       title={<span>Autres sessions <span className="ml-2 text-xs font-normal text-ink-faint">{inst.label}</span></span>}
       action={inst.profiles.length > 0 && (
         <select value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Agent"
-          className="h-8 rounded-lg border border-line bg-sheet px-2 text-xs focus:border-accent focus:outline-none">
+          className="h-8 rounded-lg border border-line bg-sheet px-2 text-xs focus:border-ink focus:outline-none">
           <option value="default">default</option>
           {inst.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>

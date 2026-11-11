@@ -25,7 +25,7 @@ function RunLine({ cron, run, live }: { cron: Cron; run: CronRun; live?: boolean
         {run.costUsd !== null ? ` · ${run.costUsd.toFixed(3)} $` : ''}{run.endReason ? ` · ${run.endReason}` : ''}
       </span>
       <Link to="/i/$inst/p/$profile/s/$sessionId" params={{ inst: cron.instanceId, profile: cron.profile, sessionId: run.id }}
-        className="inline-flex items-center gap-1 text-[13px] text-accent hover:text-accent-strong">
+        className="inline-flex items-center gap-1 text-[13px] text-accent-ink hover:text-ink">
         Ouvrir
         <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
       </Link>

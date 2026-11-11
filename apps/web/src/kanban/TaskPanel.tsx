@@ -153,7 +153,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
               {[...d.parents.map((p) => ({ ...p, role: 'parent' as const })), ...d.children.map((c) => ({ ...c, role: 'child' as const }))].map((x) => (
                 <li key={`${x.role}:${x.id}`} className="flex items-center gap-2 text-sm">
                   <span className="w-20 shrink-0 text-xs text-ink-faint">{x.role === 'parent' ? 'dépend de' : 'bloque'}</span>
-                  <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-accent" onClick={() => onOpen(x.id)}>{x.title ?? x.id}</button>
+                  <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-accent-ink" onClick={() => onOpen(x.id)}>{x.title ?? x.id}</button>
                   <span className="text-xs text-ink-faint">{x.status ? statusLabel(x.status) : ''}</span>
                   <Button variant="ghost" className="h-7 px-1.5" aria-label="Délier" disabled={unlink.isPending}
                     onClick={() => unlink.mutate(x.role === 'parent' ? { parent: x.id, child: taskId } : { parent: taskId, child: x.id })}>
@@ -194,7 +194,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
               <ul className="space-y-1">
                 {d.attachments.map((a) => (
                   <li key={a.id}>
-                    <a href={`/x${kanbanPath(inst, `attachments/${a.id}`, board)}`} className="inline-flex items-center gap-2 text-sm hover:text-accent" download>
+                    <a href={`/x${kanbanPath(inst, `attachments/${a.id}`, board)}`} className="inline-flex items-center gap-2 text-sm hover:text-accent-ink" download>
                       <Download className="size-3.5" strokeWidth={1.5} />{a.filename}
                       {a.size !== null && <span className="text-xs text-ink-faint">{Math.ceil(a.size / 1024)} Kio</span>}
                     </a>

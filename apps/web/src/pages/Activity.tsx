@@ -26,7 +26,7 @@ function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: string 
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm">
       <Mark state="readonly" className={waiting ? undefined : 'animate-pulse'} />
       <div className="min-w-0 flex-1">
-        <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }} className="font-medium hover:text-accent">
+        <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }} className="font-medium hover:text-accent-ink">
           {run.title || 'Session sans titre'}
         </Link>
         <p className="text-xs text-ink-soft">
@@ -63,7 +63,7 @@ function WorkerRow({ worker, instanceLabel, onStopped }: { worker: KanbanWorker;
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm">
       <Mark state="readonly" className="animate-pulse" />
       <div className="min-w-0 flex-1">
-        <Link to="/i/$inst/kanban" params={{ inst: worker.instance }} search={{ board: worker.board, task: worker.taskId }} className="block truncate font-medium hover:text-accent">
+        <Link to="/i/$inst/kanban" params={{ inst: worker.instance }} search={{ board: worker.board, task: worker.taskId }} className="block truncate font-medium hover:text-accent-ink">
           {title}
         </Link>
         <p className="text-xs text-ink-soft">

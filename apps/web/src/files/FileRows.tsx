@@ -72,7 +72,7 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
               title={e.outside ? 'Lien symbolique : Intendia ne l’ouvre pas et ne le modifie pas' : e.path}
               className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm transition-colors hover:bg-raised/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Icon className={cx('size-4 shrink-0', isDirEntry(e) ? 'text-accent' : 'text-ink-faint')} strokeWidth={1.5} />
+              <Icon className={cx('size-4 shrink-0', isDirEntry(e) ? 'text-accent-ink' : 'text-ink-faint')} strokeWidth={1.5} />
               <span className="min-w-0 flex-1 truncate">{e.name}</span>
               <span className="hidden w-20 shrink-0 text-right font-mono text-[11px] text-ink-faint sm:block">{isDirEntry(e) ? '' : formatSize(e.size)}</span>
               <span className="hidden w-24 shrink-0 text-right text-[11px] text-ink-faint md:block">{timeAgo(e.mtime)}</span>

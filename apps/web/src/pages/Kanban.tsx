@@ -47,7 +47,7 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
       <button type="button" onClick={onOpen} className="block w-full text-left">
         <span className="flex items-start gap-2">
           {running && <Mark state="readonly" className="mt-1 animate-pulse" />}
-          <span className="min-w-0 flex-1 font-medium leading-snug group-hover:text-accent">{task.title}</span>
+          <span className="min-w-0 flex-1 font-medium leading-snug group-hover:text-accent-ink">{task.title}</span>
         </span>
         <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
           <span className={task.assignee ? 'text-ink-soft' : undefined}>{task.assignee ?? 'sans agent'}</span>
@@ -61,7 +61,7 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
       </button>
       {targets.length > 0 && (
         <select value="" onChange={(e) => e.target.value && onMove(e.target.value)} aria-label={`Déplacer « ${task.title} » vers…`}
-          className="mt-2 h-7 w-full rounded-md border border-line bg-paper px-1.5 text-xs text-ink-soft focus:border-accent focus:outline-none md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100">
+          className="mt-2 h-7 w-full rounded-md border border-line bg-paper px-1.5 text-xs text-ink-soft focus:border-ink focus:outline-none md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100">
           <option value="">Déplacer vers…</option>
           {targets.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
@@ -85,7 +85,7 @@ function Column({ col, workflow, canWrite, dragging, onOpen, onMove }: {
         const id = e.dataTransfer.getData('text/x-kanban-task');
         if (id && accepts && dragging) onMove(id, dragging, col.key);
       }}
-      className={cx('flex w-full shrink-0 flex-col rounded-2xl border bg-raised/50 md:w-[272px]', over ? 'border-accent' : accepts ? 'border-accent/40 border-dashed' : 'border-transparent',
+      className={cx('flex w-full shrink-0 flex-col rounded-2xl border bg-raised/50 md:w-[272px]', over ? 'border-ink' : accepts ? 'border-ink/40 border-dashed' : 'border-transparent',
         dragging !== null && !accepts && 'opacity-60')}>
       <header className="flex items-center justify-between px-3 pt-3 pb-2">
         <h2 className="text-[13px] font-medium">{statusLabel(col.key, col.label)}</h2>
@@ -247,11 +247,11 @@ function Orchestration({ inst, assignees, onClose }: { inst: string; assignees: 
           <Field label="Agent orchestrateur" hint="Celui qui découpe les tâches en triage">{sel(f.orchestrator, (v) => setF({ ...f, orchestrator: v }), 'Agent orchestrateur')}</Field>
           <Field label="Agent par défaut" hint="Donné aux tâches prêtes qui n’en ont pas">{sel(f.assignee, (v) => setF({ ...f, assignee: v }), 'Agent par défaut')}</Field>
           <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={f.decompose} onChange={(e) => setF({ ...f, decompose: e.target.checked })} />
+            <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.decompose} onChange={(e) => setF({ ...f, decompose: e.target.checked })} />
             <span>Découper automatiquement<span className="block text-xs text-ink-faint">Hermes découpe les tâches en triage et lance les morceaux</span></span>
           </label>
           <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={f.promote} onChange={(e) => setF({ ...f, promote: e.target.checked })} />
+            <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.promote} onChange={(e) => setF({ ...f, promote: e.target.checked })} />
             <span>Lancer les sous-tâches dès que possible<span className="block text-xs text-ink-faint">Une sous-tâche passe en « prête » quand ses dépendances sont finies</span></span>
           </label>
           <p className="text-xs text-ink-faint">
@@ -351,7 +351,7 @@ export function KanbanPage() {
                 <div className="-mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Colonnes">
                   {columns.map((c) => (
                     <button key={c.key} type="button" role="tab" aria-selected={c.key === shownCol?.key} onClick={() => setMobileCol(c.key)}
-                      className={cx('h-8 shrink-0 rounded-lg border px-3 text-[13px]', c.key === shownCol?.key ? 'border-accent text-ink' : 'border-line text-ink-soft')}>
+                      className={cx('h-8 shrink-0 rounded-lg border px-3 text-[13px]', c.key === shownCol?.key ? 'border-ink text-ink' : 'border-line text-ink-soft')}>
                       {statusLabel(c.key, c.label)} <span className="font-mono text-[11px] text-ink-faint">{c.tasks.length}</span>
                     </button>
                   ))}

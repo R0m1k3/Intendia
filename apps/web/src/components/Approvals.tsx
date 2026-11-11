@@ -27,7 +27,7 @@ function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; 
       setBusy(false);
     }
   };
-  const link = 'text-[13px] font-medium text-accent hover:underline';
+  const link = 'text-[13px] font-medium text-accent-ink hover:underline';
   return (
     <section role="alertdialog" aria-label={`Approbation demandée sur ${a.instanceLabel}`} data-approval={a.key}
       className="enter overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]">

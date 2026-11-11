@@ -21,7 +21,7 @@ export function ChatModels({ inst, profile, providers, writable, onYaml, onProvi
         ? (
           <p className="text-sm text-ink-soft">
             Aucun fournisseur n’est connecté : le chat propose seulement « Auto ». Ajoutez un abonnement ou une clé dans l’onglet{' '}
-            {onProviders ? <button type="button" className="text-accent underline-offset-2 hover:underline" onClick={onProviders}>Fournisseurs</button> : 'Fournisseurs'}.
+            {onProviders ? <button type="button" className="text-accent-ink underline-offset-2 hover:underline" onClick={onProviders}>Fournisseurs</button> : 'Fournisseurs'}.
           </p>
         )
         : <div className="space-y-3">{withKey.map((p) => <ProviderBlock key={p.slug} inst={inst} profile={profile} p={p} writable={writable} onYaml={onYaml} />)}</div>}

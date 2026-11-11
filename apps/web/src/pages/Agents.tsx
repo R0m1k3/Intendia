@@ -14,7 +14,7 @@ const OPTIONAL: OptionalOp[] = [
   ['kanban', 'workers', 'Workers en cours'],
 ];
 const ICON = 'size-4';
-const SELECT = 'h-9 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+const SELECT = 'h-9 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 /** What to do so that Intendia can chat with a new agent: its API server key goes in profileKeys. */
@@ -55,7 +55,7 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
           </Field>
           <Field label="Description" hint="Ce que fait cet agent ; le kanban s’en sert pour lui confier des tâches">
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} rows={4}
-              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-accent focus:outline-none"
+              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
               placeholder="Cherche et résume les sources sur un sujet." />
           </Field>
           <Field label="Partir de" hint="Copie la configuration, les skills et le SOUL.md d’un agent existant">
@@ -132,7 +132,7 @@ export function AgentsPage() {
                     {items.map((x) => (
                       <tr key={x.name} className="transition-colors hover:bg-raised/60">
                         <td className="max-w-[150px] px-4 py-3 md:max-w-[340px] md:px-5">
-                          <Link to="/i/$inst/agents/$name" params={{ inst, name: x.name }} className="font-medium hover:text-accent">{x.name}</Link>
+                          <Link to="/i/$inst/agents/$name" params={{ inst, name: x.name }} className="font-medium hover:text-accent-ink">{x.name}</Link>
                           {x.isDefault && <span className="ml-2 text-xs text-ink-faint">par défaut</span>}
                           {x.description && <p className="mt-0.5 truncate text-xs text-ink-soft" title={x.description}>{x.description}</p>}
                           {x.model && <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint md:hidden">{x.model}</p>}
