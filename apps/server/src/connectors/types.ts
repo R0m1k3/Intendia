@@ -23,6 +23,11 @@ export interface OpDef {
   kind: 'read' | 'write';
   /** Without this operation the module cannot work at all. */
   required?: boolean;
+  /**
+   * An option of the module (e.g. a dashboard route): missing, it does not change the module's state, only its
+   * feature is hidden.
+   */
+  optional?: true;
   routes: RouteDef[];
   /** Response schema: tolerant (looseObject), only the fields Intendia reads. */
   schema?: z.ZodType;

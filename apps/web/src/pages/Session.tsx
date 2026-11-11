@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Ellipsis, Link2, PanelRight, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Link2, PanelRight, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
+import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
@@ -253,6 +254,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     },
     onError: setError,
   });
+  const { canCopy, canExportJson } = useCopyOps(inst);
+  const duplicate = useMutation({
+    mutationFn: (key: string) => api.duplicateSession(inst!, sessionId, key),
+    onSuccess: async ({ session }) => {
+      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+    },
+    onError: setError,
+  });
   // deleted at Hermes only once the undo window is over (banner « Annuler »)
   const remove = useMutation({
     mutationFn: () => api.deleteSession(inst!, sessionId),
@@ -286,6 +296,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     return m;
   }, [messages, runs, lostInput]);
   const running = Boolean(active);
+  /** The session exists at Hermes (sent once, or a copy): it has something to copy and export. */
+  const sentOnce = Boolean(sess.data?.session.lastRunId || sess.data?.session.copiedFrom);
   // context gauge: read on opening and after each run
   const usage = useQuery({
     queryKey: ['usage', inst, sessionId, runCount], queryFn: () => api.sessionUsage(inst!, sessionId),
@@ -402,6 +414,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 sess.data?.session.archived
                   ? { label: 'Désarchiver', icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
                   : { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
+                ...(sentOnce && !canCopy ? [] : [{ label: 'Dupliquer', icon: <Copy className="size-4" strokeWidth={1.5} />, disabled: running || duplicate.isPending, onSelect: () => duplicate.mutate(newKey()) }]),
+                ...(sentOnce ? [
+                  { label: 'Exporter en Markdown', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'md')) },
+                  { label: 'Exporter en HTML', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
+                  ...(canExportJson ? [{ label: 'Exporter en JSON', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
+                ] : []),
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />

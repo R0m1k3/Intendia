@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { api, type RecentSession } from '../api';
 import { cx, ErrorText } from '../components/ui';
 import { SessionRow } from '../sessions/SessionRow';
-import { FILTERS, filterRecent, type RecentFilter } from './labels';
+import { HOME_FILTERS, filterRecent, type RecentFilter } from './labels';
 
 /** The latest sessions of the instance, of every source (Intendia, Telegram, crons…), filtered by source. */
 export function RecentSessions({ inst }: { inst: string }) {
@@ -16,7 +16,7 @@ export function RecentSessions({ inst }: { inst: string }) {
       <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <h2 id="recent-title" className="text-[15px] font-semibold">Sessions récentes</h2>
         <div role="radiogroup" aria-label="Source" className="inline-flex gap-0.5 rounded-[9px] bg-raised p-[3px]">
-          {FILTERS.map((f) => (
+          {HOME_FILTERS.map((f) => (
             <button
               key={f.key} type="button" role="radio" aria-checked={filter === f.key} onClick={() => setFilter(f.key)}
               className={cx('h-[26px] rounded-md px-2.5 text-xs font-medium transition-colors', filter === f.key ? 'bg-sheet text-ink shadow-[0_1px_2px_rgb(22_24_27/0.08)]' : 'text-ink-soft hover:text-ink')}

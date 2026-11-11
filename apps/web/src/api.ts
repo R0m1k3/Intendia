@@ -112,6 +112,8 @@ export interface Session {
   effort: Effort | null;
   /** First in the lists (kept by Intendia only). */
   pinned: boolean;
+  /** Copy of another session (its id) or "import:<key>". */
+  copiedFrom: string | null;
 }
 export type BulkAction = 'archive' | 'unarchive' | 'pin' | 'unpin' | 'delete' | 'move';
 export interface BulkResult { id: string; ok: boolean; error?: string }
@@ -160,7 +162,8 @@ export interface RecentSession {
   /** Search hit in the messages (hit between `>>>` and `<<<`); null outside a search. */
   snippet: string | null;
 }
-export type SessionSource = 'all' | 'intendia' | 'telegram' | 'cron';
+export type SessionSource = 'all' | 'intendia' | 'cli' | 'telegram' | 'discord' | 'cron' | 'kanban';
+export const SESSION_SOURCES: SessionSource[] = ['all', 'intendia', 'cli', 'telegram', 'discord', 'cron', 'kanban'];
 export interface SessionErrors { errors: { instance: string; message: string }[] }
 /**
  * Models of the chat's picker for one agent (instance + profile), one group per provider with a key: the models
@@ -560,6 +563,12 @@ export const api = {
   bulkSessions: (inst: string, ids: string[], action: BulkAction, workspace?: string) =>
     call<{ results: BulkResult[]; undoUntil?: number }>('POST', `/i/${enc(inst)}/sessions/bulk`, { ids, action, ...(workspace ? { workspace } : {}) }),
   restoreSessions: (inst: string, ids: string[]) => call<{ restored: string[] }>('POST', `/i/${enc(inst)}/sessions/restore`, { ids }),
+  /** `key`: made once per action (a retry gives the same copy). */
+  duplicateSession: (inst: string, id: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/duplicate`, { key }),
+  exportUrl: (inst: string, id: string, format: 'md' | 'html' | 'json') => `/x${sessionPath(inst, id)}/export?format=${format}`,
+  importSession: (slug: string, file: unknown, key: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions/import`, { key, file }),
+  continueExternal: (inst: string, id: string, profile: string, workspace: string, key: string) =>
+    call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { FolderOpen, Pencil, Plus } from 'lucide-react';
+import { FolderOpen, Pencil, Plus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
@@ -8,6 +8,7 @@ import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
 import { Button, ErrorText, Panel } from '../components/ui';
 import { SessionSelectList } from '../sessions/Selection';
+import { newKey, useCopyOps } from '../sessions/copies';
 
 export function WorkspacePage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -37,6 +38,26 @@ export function WorkspacePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
   });
 
+  const { canCopy } = useCopyOps(w?.instanceId);
+  /** A JSON export (Intendia or Hermes) as a new session of this workspace. */
+  const importFile = useMutation({
+    mutationFn: async (file: File) => {
+      if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop gros (10 Mo au plus)');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        throw new Error('Ce fichier n’est pas un JSON lisible');
+      }
+      return api.importSession(slug, parsed, newKey());
+    },
+    onSuccess: async ({ session }) => {
+      await qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+    },
+  });
+
   const saveName = useMutation({
     mutationFn: (n: string) => api.updateWorkspace(slug, { name: n }),
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['workspace', slug] }), qc.invalidateQueries({ queryKey: ['workspaces'] })]),
@@ -61,6 +82,15 @@ export function WorkspacePage() {
             <Link to="/w/$slug/fichiers" params={{ slug }} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-4 text-sm font-medium transition-colors hover:border-ink-faint/60 hover:bg-raised/60">
               <FolderOpen className="size-4" strokeWidth={1.5} />Fichiers
             </Link>
+            {canCopy && (
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-line bg-sheet px-4 text-sm font-medium transition-colors hover:border-ink-faint/60 hover:bg-raised/60">
+                <Upload className="size-4" strokeWidth={1.5} />Importer
+                <input
+                  type="file" accept=".json,application/json" className="sr-only" aria-label="Importer une session (JSON)" disabled={importFile.isPending}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile.mutate(f); }}
+                />
+              </label>
+            )}
             <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}><Plus className="size-4" strokeWidth={1.75} />Nouvelle session</Button>
           </div>
         }
@@ -70,6 +100,7 @@ export function WorkspacePage() {
           <div className="empty:hidden"><ChatNotice instanceId={w?.instanceId} /></div>
           <ErrorText error={create.error} />
           <ErrorText error={saveName.error} />
+          <ErrorText error={importFile.error} />
           <Panel
             bodyClassName=""
             title={archived ? 'Sessions archivées' : 'Sessions'}
