@@ -152,7 +152,8 @@ export class RecentService {
             }
             sessions.push(...found);
           }
-          return { instanceId: inst.id, label: inst.label, profile, sessions: sessions.slice(0, limit) };
+          // not cut here: with several sources (CLI = local + cli) mergeRecent sorts them by activity, then limits
+          return { instanceId: inst.id, label: inst.label, profile, sessions };
         } catch (err) {
           if (!errors.some((e) => e.instance === inst.label)) errors.push({ instance: inst.label, message: errText(err) });
           return null;
