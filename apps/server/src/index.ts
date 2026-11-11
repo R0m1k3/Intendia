@@ -9,8 +9,9 @@ import { openDb } from './db/index.js';
 import { InstanceStore } from './instances/store.js';
 import { createMcpApp } from './mcp/server.js';
 import { createServices } from './services.js';
+import { appVersion, readPkgVersion } from './version.js';
 
-const VERSION = process.env.INTENDIA_VERSION ?? '0.0.3-dev';
+const VERSION = appVersion(process.env.INTENDIA_VERSION, readPkgVersion());
 
 function checkWritable(dir: string, what: string): void {
   try {
