@@ -329,6 +329,8 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
 export function mergeHistory(history: ChatMessage[], runCreatedAt: number | null, live: Entry[]): Entry[] {
   if (runCreatedAt === null) return [...historyEntries(history), ...live];
   const before = history.filter((m) => (m.timestamp ?? 0) < runCreatedAt);
-  const runUser = live.some((e) => e.kind === 'user') ? undefined : history.find((m) => m.role === 'user' && (m.timestamp ?? 0) >= runCreatedAt);
+  // the run's own prompt, never a reorientation (live or written by Hermes during the run)
+  const runUser = live.some((e) => e.kind === 'user' && !e.steer) ? undefined
+    : history.find((m) => m.role === 'user' && !m.steer && (m.timestamp ?? 0) >= runCreatedAt);
   return [...historyEntries(runUser ? [...before, runUser] : before), ...live];
 }

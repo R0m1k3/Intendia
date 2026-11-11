@@ -9,7 +9,7 @@ import { ContextGauge } from '../chat/ContextGauge';
 import { estimateTokens } from '../chat/estimate';
 import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
-import { EMPTY_QUEUE, dropItem, enqueue, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
+import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
 import { ClarifyCard } from '../chat/ClarifyCard';
@@ -110,18 +110,26 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     const seed: Entry[] = h ? [{ kind: 'user', key: `u-${lastRunId}`, text: h.text, ts: h.ts }] : [];
     if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, seed });
     else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
-  }, [lastRun.data, lastRunId, active, inst, sessionId]);
+    // ended while the page was closed with a reorientation Hermes did not deliver: back in front of the queue, once
+    if (isTerminal(s.status) && s.pendingSteer && queueLoaded && firstTime(inst, lastRunId)) {
+      setQueue((q) => pauseQueue(pushHead(q, s.pendingSteer!), 'réorientation non livrée'));
+    }
+  }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
   useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
 
+  /** Run being followed, read by onEnd (once per run). */
+  const endingRun = useRef<string | null>(null);
+  endingRun.current = active?.id ?? null;
   const onEnd = useCallback(async (state: RunState) => {
     // once per run: a reorientation not delivered goes back in front and waits; a run that did not end well stops the queue
-    if (state.pendingSteer) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), 'réorientation non livrée'));
-    else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
+    if (state.pendingSteer) {
+      if (firstTime(inst ?? '', endingRun.current ?? '')) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), 'réorientation non livrée'));
+    } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
     else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
     if (tree) setTrees((t) => [...t, tree]);
-    const input = state.entries.find((e) => e.kind === 'user')?.text ?? null;
+    const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }),

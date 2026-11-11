@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dropItem, EMPTY_QUEUE, enqueue, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead } from './queue';
+import { dropItem, EMPTY_QUEUE, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead } from './queue';
 
 function memory(): Storage {
   const m = new Map<string, string>();
@@ -28,6 +28,13 @@ describe('queue', () => {
     q = dropItem(q, q.items[0]!.id);
     expect(q).toEqual(EMPTY_QUEUE);
     expect(takeHead(pauseQueue(enqueue(EMPTY_QUEUE, 'seul'), 'x'))[1].paused).toBeNull();
+  });
+
+  it('puts a reorientation back once per run', () => {
+    const store = memory();
+    expect(firstTime('a', 'run_1', store)).toBe(true);
+    expect(firstTime('a', 'run_1', store)).toBe(false);
+    expect(firstTime('a', 'run_2', store)).toBe(true);
   });
 
   it('is stored per instance and session; an empty queue removes the key; bad data reads as empty', () => {

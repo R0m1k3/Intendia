@@ -43,5 +43,20 @@ export function takeHead(q: Queue): [QueueItem | null, Queue] {
   const [head, ...items] = q.items;
   return [head ?? null, { items, paused: items.length ? q.paused : null }];
 }
+/**
+ * True the first time for this run, then false: a reorientation Hermes did not deliver is put back in the queue once,
+ * whether the page saw the run end or read its status later.
+ */
+export function firstTime(inst: string, runId: string, store: Storage = sessionStorage): boolean {
+  const key = `intendia-steer-back:${inst}:${runId}`;
+  try {
+    if (store.getItem(key)) return false;
+    store.setItem(key, '1');
+  } catch {
+    // storage refused: may come back twice, never lost
+  }
+  return true;
+}
+
 export const pauseQueue = (q: Queue, reason: string): Queue => (q.items.length ? { ...q, paused: reason } : q);
 export const resumeQueue = (q: Queue): Queue => ({ ...q, paused: null });

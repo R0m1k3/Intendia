@@ -58,6 +58,13 @@ describe('reduceEvent', () => {
     expect(reduceEvent(s, { event: 'run.cancelled', pending_steer: '  ' }).pendingSteer).toBeNull();
   });
 
+  it('keeps the run prompt from the history when a reorientation is given after a reload', () => {
+    const history = [msg(1, 'user', 'Avant', 5), msg(2, 'user', 'Tâche du run', 11), msg(3, 'user', 'Plutôt Houdemont', 12, { steer: true })];
+    const live = run([{ event: 'run.started' }, { event: 'intendia.steer', text: 'Plutôt Houdemont', timestamp: 12 }]).entries;
+    const texts = mergeHistory(history, 10, live).flatMap((e) => (e.kind === 'user' ? [e.text] : []));
+    expect(texts).toEqual(['Avant', 'Tâche du run', 'Plutôt Houdemont']);
+  });
+
   it('marks the reorientations of the history', () => {
     const entries = historyEntries([msg(1, 'user', 'Bonjour', 1), msg(2, 'user', 'Plutôt Houdemont', 2, { steer: true })]);
     expect(entries.map((e) => Boolean(e.kind === 'user' && e.steer))).toEqual([false, true]);

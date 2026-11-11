@@ -125,7 +125,8 @@ demand from the State screen. State changes go to the webhook.
   (`controlBody`, `routes/chat.ts`).
 - Queue: messages written during a run wait in the tab (`web/src/chat/queue.ts`, `sessionStorage` per session) and
   leave one per run when the previous run ends `completed`; a failed or stopped run, a reorientation Hermes did not
-  deliver (`pending_steer`, put back in front) or a refused send pauses the queue until « Reprendre ». Nothing leaves
+  deliver (`pending_steer` of the final event, or of the run status when the page reopens after the end; put back in
+  front once per run) or a refused send pauses the queue until « Reprendre ». Nothing leaves
   when the page opens. « Réorienter » sends the text at once (`POST …/runs/:runId/steer`), shown in the thread as a
   user message marked « Réorientation » (local event `intendia.steer` folded into the run, `chat/useRun.ts`).
 - Context gauge (`GET /x/sessions/:inst/:id/usage`, `src/chat/usage.ts`): the model's context size from
