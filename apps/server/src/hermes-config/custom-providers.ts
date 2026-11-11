@@ -86,6 +86,7 @@ export function checkEndpoint(input: { name: string; baseUrl: string; model?: st
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new ConfigInputError('invalid', 'Adresse invalide : http://… ou https://…');
   if (url.username || url.password) throw new ConfigInputError('invalid', 'Pas d’identifiants dans l’adresse : mettez la clé dans le champ Clé');
+  if (url.search || url.hash) throw new ConfigInputError('invalid', 'Pas de paramètres (?…) dans l’adresse : mettez la clé dans le champ Clé');
   const model = input.model?.trim() || null;
   return { slug, name, baseUrl: input.baseUrl.trim().replace(/\/+$/, ''), model };
 }

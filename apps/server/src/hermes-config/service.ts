@@ -708,7 +708,13 @@ export class ConfigService {
     const env = read.some((e) => e.key?.kind === 'env') ? await this.env(instanceId, profile).catch(() => null) : null;
     const isSet = new Map((env ?? []).map((v) => [v.key, v.isSet]));
     return {
-      endpoints: read.map((e) => ({ ...e, key: e.key?.kind === 'env' ? { ...e.key, set: isSet.get(e.key.name) ?? false } : e.key })),
+      // an address may carry a password or a key in its query: masked like the YAML tab
+      endpoints: read.map((e) => ({
+        ...e,
+        baseUrl: this.mask.url(e.baseUrl),
+        name: e.name === e.baseUrl ? this.mask.url(e.name) : e.name,
+        key: e.key?.kind === 'env' ? { ...e.key, set: isSet.get(e.key.name) ?? false } : e.key,
+      })),
       writable: this.can(ctx, 'put') && this.can(ctx, 'putRaw'),
     };
   }
@@ -749,7 +755,11 @@ export class ConfigService {
         // refused: nothing written, the variable goes too; uncertain (timeout, 5xx): the file may hold the entry
         if (!keyEnv) throw err;
         if (!refused(err)) throw new PartialWriteError();
-        await this.call(ctx, 'deleteEnv', { body: { key: keyEnv } }).catch(() => undefined);
+        try {
+          await this.call(ctx, 'deleteEnv', { body: { key: keyEnv } });
+        } catch {
+          throw new PartialWriteError(`Endpoint refusé par Hermes, mais la variable ${keyEnv} n'a pas pu être retirée : retirez-la dans l'onglet Variables`);
+        }
         throw err;
       }
     });

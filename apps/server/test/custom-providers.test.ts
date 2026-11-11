@@ -47,7 +47,7 @@ describe('custom endpoints: reading and helpers', () => {
   });
 
   it('refuses a bad address or a name without letters', () => {
-    for (const baseUrl of ['ftp://x.test', 'http://u:p@h.test/v1', 'pas une url']) {
+    for (const baseUrl of ['ftp://x.test', 'http://u:p@h.test/v1', 'http://h.test/v1?api_key=s', 'pas une url']) {
       expect(() => checkEndpoint({ name: 'X', baseUrl }), baseUrl).toThrow();
     }
     expect(() => checkEndpoint({ name: '!!', baseUrl: 'http://h.test' })).toThrow();
@@ -115,6 +115,21 @@ describe('custom endpoints: HTTP', () => {
     const r = await uncertain.request('POST', `${BASE}/custom-providers`, { name: 'X', baseUrl: 'http://x.test', apiKey: 'k1' });
     expect(r.status).toBeGreaterThanOrEqual(500);
     expect(uncertain.fake.config.envValues.has('INTENDIA_X_API_KEY')).toBe(true);
+    // refused, and the variable could not be removed: partial write naming it, history copy kept
+    const stuck = await testApp({ breaks: { 'dash PUT /api/config': { status: 400 }, 'dash DELETE /api/env': { status: 500 } } });
+    const s = await stuck.request('POST', `${BASE}/custom-providers`, { name: 'X', baseUrl: 'http://x.test', apiKey: 'k1' });
+    expect(s.json.code).toBe('partial_write');
+    expect(s.json.error ?? s.json.message).toContain('INTENDIA_X_API_KEY');
+    expect((await stuck.request('GET', `${BASE}/versions`)).json.versions.some((v: any) => v.source === 'custom-providers')).toBe(true);
+  });
+
+  it('masks credentials in existing endpoint addresses', async () => {
+    const t = await testApp();
+    t.fake.config.setRaw(`${t.fake.config.raw}\ncustom_providers:\n  - base_url: https://user:hunter2@old.test/v1?api_key=sk-q\n`);
+    t.fake.config.setRaw(t.fake.config.raw.replace(/^providers:\n/m, 'providers:\n  p:\n    api: https://p.test/v1?token=sk-tok\n'));
+    const body = JSON.stringify((await t.request('GET', `${BASE}/custom-providers`)).json);
+    for (const s of ['hunter2', 'sk-q', 'sk-tok']) expect(body).not.toContain(s);
+    expect(body).toContain('old.test');
   });
 
   it('removes an endpoint and its INTENDIA_ variable, never another variable', async () => {
