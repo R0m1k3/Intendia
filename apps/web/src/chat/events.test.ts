@@ -37,6 +37,15 @@ describe('reduceEvent', () => {
     expect(s.status).toBe('running');
   });
 
+  it('reads approvals in the format of Hermes 0.23 (prompt_id, approval.settled)', () => {
+    let s = run([{ event: 'approval.request', prompt_id: 'apr_1', execution_generation: 1, command: 'rm -rf build', choices: ['once', 'deny'] }]);
+    expect(s.approval).toMatchObject({ requestId: 'apr_1', command: 'rm -rf build' });
+    s = reduceEvent(s, { event: 'approval.settled', prompt_id: 'apr_1', execution_generation: 1 });
+    expect(s.approval).toBeNull();
+    expect(s.status).toBe('running');
+    expect(s.entries.at(-1)).toMatchObject({ kind: 'note', text: 'Approbation répondue' });
+  });
+
   it('handles approvals, failures and unknown events', () => {
     let s = run([{ event: 'approval.request', request_id: 'apr_1', command: 'rm -rf build', choices: ['once', 'deny'] }]);
     expect(s.status).toBe('waiting_for_approval');

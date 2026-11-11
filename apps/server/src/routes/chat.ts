@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
-import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
+import { RunStatusSchema, TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError, streamOp } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
 import { pushTitle } from '../workspaces/title.js';
@@ -71,6 +71,31 @@ function sseError(status: number, message: string): Response {
   return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, message })}`, {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
+}
+
+const CONTROL_ERRORS = {
+  no_pending: 'Plus rien n’attend votre réponse',
+  ambiguous: 'Plusieurs demandes en attente : rechargez la page',
+} as const;
+
+/**
+ * Body of an answer to an approval (or a question) of a run. With the gateway session authority (Hermes 0.23: the
+ * status has an integer `execution_generation`), Hermes wants exactly `{request_id, execution_generation, choice}`
+ * (`answer` for a question), the id being one of `pending_controls`: the page's id when it is listed, else the only
+ * one of that kind. Without it (API server without authority), `{choice, request_id?}` as before.
+ */
+export function controlBody(
+  kind: 'approval' | 'clarify', raw: unknown, requestId: string | null, value: string,
+): { body: Record<string, unknown> } | { code: keyof typeof CONTROL_ERRORS } {
+  const field = kind === 'approval' ? 'choice' : 'answer';
+  const parsed = RunStatusSchema.safeParse(raw);
+  const generation = parsed.success ? parsed.data.execution_generation : null;
+  if (typeof generation !== 'number') return { body: { [field]: value, ...(requestId ? { request_id: requestId } : {}) } };
+  const pending = (parsed.success ? parsed.data.pending_controls : []).filter((p) => p.kind === kind && p.prompt_id);
+  // an id that is no longer pending is refused: never answer another prompt than the one the page showed
+  const chosen = requestId ? pending.find((p) => p.prompt_id === requestId) : pending.length === 1 ? pending[0] : undefined;
+  if (!chosen) return { code: pending.length && !requestId ? 'ambiguous' : 'no_pending' };
+  return { body: { request_id: chosen.prompt_id, execution_generation: chosen.execution_generation ?? generation, [field]: value } };
 }
 
 export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
@@ -308,9 +333,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
     const { choice, requestId } = ApprovalBody.parse(await c.req.json());
-    return c.json(await callOp(http(ctx), report(ctx), 'chat', 'approval', {
-      params: { run_id: runId }, profile: ctx.profile, body: { choice, ...(requestId ? { request_id: requestId } : {}) },
-    }));
+    const s = await status(ctx, runId);
+    if (s.status === 'unknown') return c.json({ error: 'Ce run est terminé', code: 'run_gone' }, 409);
+    const built = controlBody('approval', s.raw, requestId ?? null, choice);
+    if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
+    return c.json(await callOp(http(ctx), report(ctx), 'chat', 'approval', { params: { run_id: runId }, profile: ctx.profile, body: built.body }));
   });
 
   // ---- instance-level

@@ -6,7 +6,10 @@
  *
  * Run scenarios, chosen by words in the run input:
  * - default: run.started, two message.delta, tool.started, tool.completed, run.completed
- * - "approval": stops on approval.request until POST /v1/runs/{id}/approval
+ * - "approval": stops on approval.request until POST /v1/runs/{id}/approval. Format of Hermes 0.23 with its gateway
+ *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
+ *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
+ *   `approval.responded`, body `{choice}`)
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * - "panne": the run ends in `failed` (run.failed, no usage)
@@ -75,6 +78,8 @@ export interface FakeOptions {
   kanbanStepMs?: number;
   /** Managed files root of the dashboard (`locked_root`), also where the fake agent writes (default: a temporary folder). */
   filesRoot?: string;
+  /** Format of approvals: 'authority' (Hermes 0.23 gateway, default) or 'legacy' (API server without authority). */
+  controls?: 'authority' | 'legacy';
   /** `hermes_home` announced by the dashboard's /api/status (default /opt/data). */
   hermesHome?: string;
   /** `terminal.backend` in GET /api/config (default: the recording's, `local`). */
@@ -132,7 +137,7 @@ interface SimRun {
   usage: Record<string, number> | null;
   events: (Ev & { seq: number })[];
   listeners: Set<() => void>;
-  approval: { resolve: (choice: string) => void } | null;
+  approval: { resolve: (choice: string) => void; prompt: Record<string, unknown> } | null;
 }
 
 interface SimMessage {
@@ -162,6 +167,8 @@ class Simulator {
   titles = new Map<string, string>();
   /** POST /v1/runs received since start. */
   runsPosted = 0;
+  /** Approval format, see FakeOptions.controls. */
+  controls: 'authority' | 'legacy' = 'authority';
   private counter = 0;
   private msgId = 1000;
 
@@ -221,16 +228,18 @@ class Simulator {
     }
     if (/approval/i.test(run.input)) {
       run.status = 'waiting_for_approval';
+      const authority = this.controls === 'authority';
+      const question = { command: 'rm -rf build/', description: 'Supprimer le dossier build', choices: ['once', 'session', 'always', 'deny'] };
+      const prompt = authority ? { kind: 'approval', prompt_id: 'apr_1', execution_generation: 1, ...question } : { request_id: 'apr_1', ...question };
       const choice = await new Promise<string>((resolve) => {
-        run.approval = { resolve };
-        this.push(run, {
-          event: 'approval.request', request_id: 'apr_1', command: 'rm -rf build/', description: 'Supprimer le dossier build',
-          choices: ['once', 'session', 'always', 'deny'],
-        });
+        run.approval = { resolve, prompt };
+        this.push(run, { event: 'approval.request', ...prompt });
       });
       run.approval = null;
       run.status = 'running';
-      this.push(run, { event: 'approval.responded', choice, request_id: 'apr_1', resolved: 1 });
+      this.push(run, authority
+        ? { event: 'approval.settled', prompt_id: 'apr_1', execution_generation: 1 }
+        : { event: 'approval.responded', choice, request_id: 'apr_1', resolved: 1 });
       if (choice === 'deny') {
         await sleep(step);
         return this.finish(run, 'Commande refusée, je m’arrête là.');
@@ -544,7 +553,10 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       return json({
         object: 'hermes.run', run_id: run.id, status: run.status, session_id: run.sessionId, model: run.model ?? 'fake/model-default',
         created_at: run.createdAt, updated_at: run.updatedAt, output: run.output,
-        ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}), pending_controls: [],
+        ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
+        // with the gateway authority: the run's generation and the questions waiting for an answer
+        ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
+        pending_controls: sim.controls === 'authority' && run.approval ? [run.approval.prompt] : [],
       });
     }
     if (sub === '/events' && method === 'GET') {
@@ -558,6 +570,17 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       return json({ object: 'hermes.run.stop', run_id: run.id, status: 'stopping' });
     }
     if (sub === '/approval' && method === 'POST') {
+      if (sim.controls === 'authority') {
+        // Hermes 0.23 (api_server_authority_runs.respond_run): exactly these three keys, the run's generation
+        const keys = Object.keys(b).sort().join(',');
+        if (keys !== 'choice,execution_generation,request_id') return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+        if (b.execution_generation !== 1) return json({ error: { message: 'stale_generation', code: 'stale_generation' } }, 409);
+        if (!run.approval || b.request_id !== 'apr_1') return json({ error: { message: 'approval_not_pending', code: 'approval_not_pending' } }, 409);
+        if (!(run.approval.prompt.choices as string[]).includes(String(b.choice))) return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+        const choice = String(b.choice);
+        run.approval.resolve(choice);
+        return json({ run_id: run.id, status: 'resolved', prompt_id: 'apr_1' });
+      }
       if (!run.approval) return json({ error: { message: 'No pending approval', code: 'no_pending_approval' } }, 409);
       const choice = String(b.choice ?? 'deny');
       run.approval.resolve(choice);
@@ -625,6 +648,7 @@ export function createFakeHermes(opts: FakeOptions) {
   const files = new FilesStore(opts.filesRoot ?? mkdtempSync(join(tmpdir(), 'fake-hermes-files-')));
   files.delayMs = opts.filesDelayMs ?? 0;
   const sim = new Simulator(opts.stepMs ?? 5, files.root);
+  sim.controls = opts.controls ?? 'authority';
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);

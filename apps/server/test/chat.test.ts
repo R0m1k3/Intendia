@@ -139,14 +139,28 @@ describe('run stream', () => {
     expect((await t.request('GET', '/x/sessions/fake/a%2Fb/messages')).status).toBe(400);
   });
 
-  it('forwards approvals with choice and request_id', async () => {
+  it('answers approvals in the format of Hermes 0.23 (gateway session authority)', async () => {
     const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'approval' })).json.runId;
+    const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`), 200);
+    expect(ev.at(-1)?.data).toMatchObject({ event: 'approval.request', prompt_id: 'apr_1', execution_generation: 1 });
+    // no id from the page: the only pending approval of the run status is answered
+    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'session' })).status).toBe(200);
+    expect(t.fake.requests.find((r) => r.path.endsWith('/approval'))?.body).toEqual({ request_id: 'apr_1', execution_generation: 1, choice: 'session' });
+    await waitRun(t, base, run);
+    const again = await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'once', requestId: 'apr_1' });
+    expect(again.status).toBe(409);
+    expect(again.json.code).toBe('no_pending');
+    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'peut-être' })).status).toBe(400);
+  });
+
+  it('forwards approvals with choice and request_id to an API server without the session authority', async () => {
+    const { t, base } = await session({ controls: 'legacy' });
     const run = (await t.request('POST', `${base}/runs`, { input: 'approval' })).json.runId;
     const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`), 200);
     expect(ev.at(-1)?.data).toMatchObject({ event: 'approval.request', choices: ['once', 'session', 'always', 'deny'], request_id: 'apr_1' });
     expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'session', requestId: 'apr_1' })).status).toBe(200);
     expect(t.fake.requests.find((r) => r.path.endsWith('/approval'))?.body).toEqual({ choice: 'session', request_id: 'apr_1' });
-    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'peut-être' })).status).toBe(400);
   });
 });
 

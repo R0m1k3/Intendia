@@ -129,16 +129,18 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
       return {
         ...s, status: 'waiting_for_approval',
         approval: {
-          requestId: typeof ev.request_id === 'string' ? ev.request_id : null,
+          // gateway session authority (Hermes 0.23): prompt_id; API server without it: request_id
+          requestId: typeof ev.prompt_id === 'string' ? ev.prompt_id : typeof ev.request_id === 'string' ? ev.request_id : null,
           command: typeof ev.command === 'string' ? ev.command : null,
           description: typeof ev.description === 'string' ? ev.description : null,
           choices: Array.isArray(ev.choices) ? ev.choices.map(String) : ['once', 'deny'],
         },
       };
     case 'approval.responded':
+    case 'approval.settled':
       return {
         ...s, status: 'running', approval: null,
-        entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: `Approbation : ${CHOICE_LABEL[str(ev.choice)] ?? str(ev.choice)}`, tone: 'muted', ts }],
+        entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.choice == null ? 'Approbation répondue' : `Approbation : ${CHOICE_LABEL[str(ev.choice)] ?? str(ev.choice)}`, tone: 'muted', ts }],
       };
     case 'subagent.start':
     case 'subagent.complete':
