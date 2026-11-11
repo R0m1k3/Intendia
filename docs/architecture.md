@@ -56,6 +56,14 @@ demand from the State screen. State changes go to the webhook.
   text) and `PUT /api/config {config: {providers: {<slug>: {models: [...]}}}}` (Hermes' merge replaces lists). A
   change that changes nothing writes nothing. Mappings, lists of objects, custom endpoints (`base_url`) and
   `custom:<name>` providers are read-only here (YAML tab).
+- Auxiliary models: one list per task in the Modèles tab, changes kept in a draft (`web/src/config/aux-draft.ts`)
+  and saved together by `POST /x/i/:inst/config/auxiliary {version, changes[1..20], confirm?}`
+  (`ConfigService.setAuxiliary`): one version check, one history copy, then one `POST /api/model/set` per task. All
+  or nothing: when Hermes refuses task k > 0 (400/422, expensive model to confirm, 404, conflict: nothing written
+  for it), the text read before is put back with `PUT /api/config/raw` and the refusal is returned (no copy kept). An
+  uncertain error after the first task (timeout, 5xx), or no way to put the file back, answers 502 `partial_write`
+  and keeps the copy (Historique tab). `confirm_required` carries the task; the page resends the whole draft with
+  `confirm: true`.
 - Migrations: `migrate()` applies every file missing from `_migrations` (not only those above the highest id), so
   branches can be merged in any order.
 - One `run_stats` row per run started from Intendia: written `running` at send time (options asked for, cost of
@@ -83,9 +91,20 @@ demand from the State screen. State changes go to the webhook.
   workspace, sends the message, then opens the session page. The message is handed over in memory
   (`home/handoff.ts`, read once) so the page shows it while it plugs into the run. "Nouvelle session" in the sidebar
   is `/?nouvelle=1`, which puts the cursor in that box.
-- Recent sessions: `GET /x/sessions/recent?limit=` (`src/sessions/recent.ts`) merges the Intendia sessions with
-  the Hermes sessions of every instance (`default` and the workspace profiles that have a key; 3 s per call, errors
-  listed per instance, not fatal). The home page filters them by source (`home/labels.ts`).
+- Sessions of every source: `GET /x/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
+  (`src/sessions/recent.ts`) merges the Intendia sessions with the Hermes sessions of every instance (`default` and
+  the workspace profiles that have a key; 3 s per call, errors listed per instance, not fatal). The source is
+  filtered on the server: `intendia` reads the database only, `telegram`/`cron` ask Hermes for that source only. The
+  home page shows 7 lines; the Sessions page (`/sessions`, `pages/Sessions.tsx`) groups them by day (browser time)
+  and loads 50 more per click, up to 200.
+- Search: `GET /x/sessions/search?q=(2..100)&source=` → `{sessions, errors, partial}`, 30 lines at most. Intendia
+  titles are matched in the database (`LIKE`, `%`, `_` and `\` literal); message content goes through the
+  dashboard's search (op `sessions.search`, FTS5, the hit between `>>>` and `<<<` in `snippet`). A hit on a session
+  Intendia owns becomes its Intendia line with the snippet. An instance without dashboard, or whose search answers
+  404/500, is listed in `partial` (only Intendia titles were searched there). The snippet is shown as text nodes,
+  never HTML (`sessions/marks.ts`).
+- Ctrl/Cmd K (`components/CommandPalette.tsx`, logic in `components/palette.ts`): actions, pages, workspaces, crons
+  and sessions; without text the latest sessions of the home page, with 2 characters or more the search above.
 - Attachments: the composer (`chat/Composer.tsx`) turns pasted, picked or dropped files into tiles, uploads them to
   `inbox/` one by one (`upload` prop), and only adds their paths to the message at send time, one per line after the
   text: that is how the agent reads them. In the thread, `chat/attachments.ts` (`splitAttachments`) takes those last
@@ -137,8 +156,15 @@ sequenceDiagram
 ## Crons
 
 - `src/crons/service.ts` (`CronService`) calls the `crons` connector; `src/routes/crons.ts` serves
-  `/x/i/:inst/crons...` and `/x/crons/upcoming`. Dashboard routes first, API server as a fallback (no history, no
+  `/x/i/:inst/crons...` and `/x/crons/overview` (every active cron of every instance, with its last status and its
+  own time zone, errors per instance). Dashboard routes first, API server as a fallback (no history, no
   cancel: the module is then read-only and the page says what is missing).
+- Home page: « Aujourd'hui » (`home/Timeline.tsx`) draws the runs of the day computed from each schedule
+  (`crons/timeline.ts`: intervals anchored on `next_run_at`, cron expressions with names, ranges, steps, lists,
+  @aliases and croniter's day-of-month OR day-of-week rule, `once`), on an axis in Hermes's time (offset of the
+  `next_run_at` of a cron without its own zone; a cron with `timezone` is converted with `Intl`). Only the last real
+  run is marked (Hermes keeps 20 runs per cron). « Prochains crons » adds a red line per cron whose last run failed;
+  the sidebar counts active crons and each workspace's sessions (`sessionCount` of `GET /x/workspaces`).
 - Hermes stays the only source: no table. A cron attached to a workspace has a block at the very start of its prompt
   (`[Intendia] Workspace : <name> (<slug>) ; dossier : crons/<key>` ... `[/Intendia]`) asking the agent to read
   `AGENTS.md`, store its files in `<agentPath>/crons/<key>/` and use `share_file`; `workdir` is set to the

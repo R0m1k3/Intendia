@@ -15,6 +15,8 @@ const PY = {
  * Configuration routes of the dashboard (phase 6), with state: config file text, env, MCP servers,
  * auxiliary models, gateway restart. One configuration for all profiles, like SkillStore.
  * Unlike Hermes, PUT /api/config/raw keeps the text as sent (Hermes rewrites it; checked on the real one).
+ * Words in a model sent to POST /api/model/set: `cher` → confirm_required (without confirm_expensive_model),
+ * `refuse` → 400, `notice` → answer with a notice. Auxiliary tasks are written in the file (`auxiliary.<task>`).
  */
 
 function json(body: unknown, status = 200): Response {
@@ -85,6 +87,8 @@ export class ConfigStore {
   private restart: Restart | null = null;
   /** Set by tests: GET /api/config/raw answers this status. */
   failRaw: number | null = null;
+  /** Set by tests: PUT /api/config/raw answers this status without writing. */
+  failPutRaw: number | null = null;
 
   constructor(fixturesDir: string, private readonly stepMs: number) {
     const raw = fixture<{ yaml: string }>(fixturesDir, 'GET_api_config_raw.json').yaml;
@@ -189,6 +193,7 @@ export class ConfigStore {
       return json({ yaml: this.raw, path: '/opt/data/config.yaml' });
     }
     if (path === '/api/config/raw' && method === 'PUT') {
+      if (this.failPutRaw) return json({ detail: 'raw config write failed' }, this.failPutRaw);
       const text = typeof b.yaml_text === 'string' ? b.yaml_text : '';
       const doc = parseDocument(text, PY);
       if (doc.errors.length) return json({ detail: `Invalid YAML: ${doc.errors[0]!.message}` }, 400);
@@ -255,25 +260,35 @@ export class ConfigStore {
       const m = isObj(model) ? model : { default: model };
       return json({ model: String(m.default ?? ''), provider: String(m.provider ?? 'auto'), auto_context_length: 1000000, config_context_length: 0, effective_context_length: 1000000, capabilities: {} });
     }
-    if (path === '/api/model/auxiliary' && method === 'GET') return json(this.auxiliary);
+    if (path === '/api/model/auxiliary' && method === 'GET') {
+      // like Hermes: the tasks live in the file (`auxiliary.<task>.provider/model`), so a raw restore puts them back too
+      const aux = this.file().auxiliary;
+      const tasks = this.auxiliary.tasks.map((t) => {
+        const entry = isObj(aux) ? aux[String(t.task)] : undefined;
+        return isObj(entry) ? { ...t, provider: String(entry.provider ?? 'auto'), model: String(entry.model ?? '') } : t;
+      });
+      return json({ ...this.auxiliary, tasks });
+    }
     if (path === '/api/model/set' && method === 'POST') {
       const model = String(b.model ?? '');
       if (model.includes('cher') && !b.confirm_expensive_model) return json({ ok: false, confirm_required: true, confirm_message: 'Modèle coûteux : confirmer ?' });
+      if (model.includes('refuse')) return json({ detail: `Model refused: ${model}` }, 400);
+      const notice = model.includes('notice') ? 'Contexte réduit, token=sk-test-notice-0007' : undefined;
       if (b.scope === 'auxiliary') {
         const task = String(b.task ?? '');
-        const tasks = this.auxiliary.tasks;
-        if (task === '__reset__') for (const t of tasks) { t.provider = 'auto'; t.model = ''; }
-        else {
-          const t = tasks.find((x) => x.task === task);
-          if (!t && task !== '') return json({ detail: `Unknown auxiliary task: ${task}` }, 400);
-          for (const x of t ? [t] : tasks) { x.provider = b.provider; x.model = model; }
-        }
-        return json({ ok: true, scope: 'auxiliary', tasks: [task], provider: b.provider, model });
+        const names = this.auxiliary.tasks.map((t) => String(t.task));
+        if (task !== '__reset__' && task !== '' && !names.includes(task)) return json({ detail: `Unknown auxiliary task: ${task}` }, 400);
+        const file = this.file();
+        const aux: Obj = isObj(file.auxiliary) ? { ...file.auxiliary } : {};
+        const value = task === '__reset__' ? { provider: 'auto', model: '' } : { provider: b.provider, model };
+        for (const name of task === '__reset__' || task === '' ? names : [task]) aux[name] = { ...(isObj(aux[name]) ? aux[name] : {}), ...value };
+        this.write({ ...file, auxiliary: aux });
+        return json({ ok: true, scope: 'auxiliary', tasks: [task], provider: b.provider, model, notice });
       }
       const file = this.file();
       const current = isObj(file.model) ? file.model : {};
       this.write({ ...file, model: { ...current, default: model, provider: b.provider } });
-      return json({ ok: true, scope: 'main', provider: b.provider, model, notice: model.includes('notice') ? 'Contexte réduit, token=sk-test-notice-0007' : undefined });
+      return json({ ok: true, scope: 'main', provider: b.provider, model, notice });
     }
     if (path === '/api/messaging/platforms' && method === 'GET') return json(this.platforms);
     if (path === '/api/gateway/restart' && method === 'POST') {

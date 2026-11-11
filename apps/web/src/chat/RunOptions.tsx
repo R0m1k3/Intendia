@@ -32,7 +32,8 @@ export function RunOptions({ inst, profile, model, provider, effort, hasRuns, di
   return (
     <div className="flex min-w-0 items-center gap-0.5">
       <Picker
-        title="Modèle des prochains messages" items={modelItems} value={value} disabled={disabled} onPick={pickModel}
+        // not before the agent's models are read: the menu would only offer Auto
+        title="Modèle des prochains messages" items={modelItems} value={value} disabled={disabled || list.isLoading} onPick={pickModel}
         label={model ? <span className="font-mono">{shortModel(model)}</span> : (modelItems[0] as { label: string }).label}
       />
       <Picker

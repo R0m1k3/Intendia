@@ -40,6 +40,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
     try {
       const { session } = await api.createSession(ws.slug);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
       const res = await api.send(ws.instanceId, session.id, text);
       setHandoff({ inst: ws.instanceId, sessionId: session.id, runId: res.runId, text, ts: Date.now() / 1000 });
       localStorage.setItem(LAST, ws.slug);

@@ -65,7 +65,7 @@ export function CronRuns({ cron, follow, canRuns, canCancel, onFollowEnd }: {
     if (!state || state.state === 'running') return;
     setResult({ cron: live.data ?? cron, timeout: state.state === 'timeout' });
     void qc.invalidateQueries({ queryKey: ['crons', cron.instanceId] });
-    void qc.invalidateQueries({ queryKey: ['upcoming-crons'] });
+    void qc.invalidateQueries({ queryKey: ['crons-overview'] });
     onFollowEnd();
   }, [state?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 

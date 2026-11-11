@@ -19,6 +19,15 @@ const ModelBody = z.object({
   confirm: z.boolean().optional(),
   version: VERSION,
 });
+const AuxBody = z.object({
+  version: VERSION,
+  changes: z.array(z.object({
+    task: z.string().regex(/^[a-z_]{1,40}$/),
+    provider: z.string().min(1).max(100),
+    model: z.string().min(1).max(200),
+  })).min(1).max(20),
+  confirm: z.boolean().optional(),
+});
 const EnvBody = z.object({ key: z.string(), value: z.string() });
 const McpBody = z.object({
   name: z.string(),
@@ -83,6 +92,12 @@ export function configRoutes(config: ConfigService): Hono {
       throw new ConfigInputError('invalid_task', 'Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui');
     }
     return c.json(await config.setModel(inst(c), profileOf(c), body));
+  });
+
+  // several auxiliary models in one write, all or nothing
+  r.post('/i/:inst/config/auxiliary', async (c) => {
+    const body = AuxBody.parse(await c.req.json());
+    return c.json(await config.setAuxiliary(inst(c), profileOf(c), body));
   });
 
   r.post('/i/:inst/config/provider-models', async (c) => {

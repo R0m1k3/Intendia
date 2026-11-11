@@ -64,6 +64,8 @@ export interface Workspace {
   modelProvider: string | null;
   effort: string | null;
   createdAt: number;
+  /** Non-archived sessions (GET /x/workspaces only). */
+  sessionCount?: number;
 }
 export type Effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 /** One run started from Intendia: options asked for, then what Hermes reported (times in ms). */
@@ -138,7 +140,11 @@ export interface RecentSession {
   workspace: string | null;
   /** ms */
   at: number;
+  /** Search hit in the messages (hit between `>>>` and `<<<`); null outside a search. */
+  snippet: string | null;
 }
+export type SessionSource = 'all' | 'intendia' | 'telegram' | 'cron';
+export interface SessionErrors { errors: { instance: string; message: string }[] }
 /**
  * Models of the chat's picker for one agent (instance + profile), one group per provider with a key: the models
  * declared in Hermes for it (`declared`), else its whole catalogue. `managed` = editable in the Modèles tab.
@@ -234,14 +240,20 @@ export interface CronInput {
 
 export interface DeliveryTarget { id: string; name: string }
 
-export interface UpcomingCron {
+/** An active cron of any instance (home page: next runs, timeline, failures, counter). */
+export interface OverviewCron {
   instanceId: string;
   instanceLabel: string;
   id: string;
   profile: string;
   name: string;
-  nextRunAt: string;
   schedule: CronSchedule;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  /** The cron's own IANA time zone, null = Hermes' zone. */
+  timezone: string | null;
 }
 
 export interface Skill {
@@ -509,8 +521,12 @@ export const api = {
     call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
-  recentSessions: (limit = 20) => call<{ sessions: RecentSession[]; errors: { instance: string; message: string }[] }>('GET', `/sessions/recent?limit=${limit}`),
-  upcomingCrons: () => call<{ upcoming: UpcomingCron[] }>('GET', '/crons/upcoming'),
+  recentSessions: (limit = 20, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[] } & SessionErrors>('GET', `/sessions/recent?limit=${limit}${source === 'all' ? '' : `&source=${source}`}`),
+  /** Intendia titles + message content (dashboard); `partial` = instances where only titles were searched. */
+  searchSessions: (q: string, source: SessionSource = 'all') =>
+    call<{ sessions: RecentSession[]; partial: string[] } & SessionErrors>('GET', `/sessions/search?q=${encodeURIComponent(q)}${source === 'all' ? '' : `&source=${source}`}`),
+  cronsOverview: () => call<{ crons: OverviewCron[]; errors: { instance: string; message: string }[] }>('GET', '/crons/overview'),
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
   agent: (inst: string, name: string) => call<{ agent: AgentDetail }>('GET', instPath(inst, `agents/${enc(name)}/detail`)),
@@ -570,6 +586,9 @@ export const api = {
   configModels: (inst: string, profile: string) => call<ConfigModels>('GET', instPath(inst, 'config/models', profile)),
   changeProviderModels: (inst: string, profile: string, body: { provider: string; add?: string; remove?: string }) =>
     call<{ declared: string[] }>('POST', instPath(inst, 'config/provider-models', profile), body),
+  /** Several auxiliary tasks in one write, all or nothing. */
+  setAuxiliary: (inst: string, profile: string, body: { version: string; changes: { task: string; provider: string; model: string }[]; confirm?: boolean }) =>
+    call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/auxiliary', profile), body),
   setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
   configEnv: (inst: string, profile: string) => call<{ env: EnvVar[] }>('GET', instPath(inst, 'config/env', profile)),
   setEnv: (inst: string, profile: string, key: string, value: string) => call<WriteResult>('PUT', instPath(inst, 'config/env', profile), { key, value }),

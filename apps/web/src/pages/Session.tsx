@@ -148,7 +148,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   });
   const archive = useMutation({
     mutationFn: () => api.updateSession(inst!, sessionId, { archived: true }),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
+    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); void qc.invalidateQueries({ queryKey: ['workspaces'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
   });
   /** Model / effort of the next messages (also remembered as the workspace's last choice). */
   const setOptions = useMutation({
@@ -161,7 +161,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   });
   const remove = useMutation({
     mutationFn: () => api.deleteSession(inst!, sessionId),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
+    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); void qc.invalidateQueries({ queryKey: ['workspaces'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
   });
 
   const messages = history.data?.messages ?? [];

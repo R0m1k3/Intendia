@@ -195,16 +195,23 @@ describe('crons', () => {
     expect((await t.request('POST', `${BASE}/${id}/trigger?profile=default`)).status).toBe(200);
   });
 
-  it('upcoming: active crons sorted by next run, a broken instance left out', async () => {
+  it('overview: active crons sorted by next run, a broken instance reported', async () => {
     const t = await testApp();
     await t.request('POST', BASE, input({ name: 'Dans 2 h', schedule: 'every 2h' }));
     await t.request('POST', BASE, input({ name: 'Dans 30 min', schedule: 'every 30m' }));
     await t.request('POST', BASE, input({ name: 'En pause', schedule: 'every 10m', paused: true }));
-    const up = (await t.request('GET', '/x/crons/upcoming')).json.upcoming;
-    expect(up.map((u: { name: string }) => u.name)).toEqual(['Dans 30 min', 'Dans 2 h']);
-    expect(up[0]).toMatchObject({ instanceId: 'fake', instanceLabel: 'Fake', profile: 'default' });
+    const res = (await t.request('GET', '/x/crons/overview')).json;
+    expect(res.crons.map((u: { name: string }) => u.name)).toEqual(['Dans 30 min', 'Dans 2 h']);
+    expect(res.crons[0]).toMatchObject({
+      instanceId: 'fake', instanceLabel: 'Fake', profile: 'default', lastRunAt: null, lastStatus: null, lastError: null, timezone: null,
+    });
+    expect(res.crons[0].schedule.kind).toBe('interval');
+    expect(res.errors).toEqual([]);
 
-    const broken = await testApp({ breaks: { 'dash GET /api/cron/jobs': { status: 500 } } });
-    expect((await broken.request('GET', '/x/crons/upcoming')).json).toEqual({ upcoming: [] });
+    const broken = await testApp({ breaks: { 'dash GET /api/cron/jobs': { status: 500 }, 'api GET /api/jobs': { status: 500 } } });
+    const b = (await broken.request('GET', '/x/crons/overview')).json;
+    expect(b.crons).toEqual([]);
+    expect(b.errors).toHaveLength(1);
+    expect(b.errors[0].instance).toBe('Fake');
   });
 });

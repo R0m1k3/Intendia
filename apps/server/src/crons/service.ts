@@ -57,14 +57,20 @@ export interface PublicRun {
   model: string | null;
 }
 
-export interface Upcoming {
+/** An active cron of any instance, for the home page (next runs, timeline, failures, counter). */
+export interface OverviewCron {
   instanceId: string;
   instanceLabel: string;
   id: string;
   profile: string;
   name: string;
-  nextRunAt: string;
   schedule: PublicSchedule;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  /** The cron's own IANA time zone, null = Hermes' zone. */
+  timezone: string | null;
 }
 
 export interface CronInput {
@@ -293,17 +299,25 @@ export class CronService {
   }
 
   /** Next active crons across instances; an instance that fails or times out is left out. */
-  async upcoming(limit = 3): Promise<Upcoming[]> {
+  /** Every active cron of every instance; an instance that does not answer adds an error line. */
+  async overview(): Promise<{ crons: OverviewCron[]; errors: { instance: string; message: string }[] }> {
     const instances = this.store.list();
-    const results = await Promise.allSettled(instances.map(async (inst) => {
-      const jobs = await this.rawList(inst.id, UPCOMING_TIMEOUT_MS);
-      return jobs.filter((j) => j.enabled !== false && j.next_run_at).map((j): Upcoming => ({
-        instanceId: inst.id, instanceLabel: inst.label ?? inst.id, id: j.id, profile: j.profile ?? 'default',
-        name: j.name || '(sans nom)', nextRunAt: j.next_run_at!, schedule: schedule(j.schedule, j.schedule_display),
-      }));
+    const errors: { instance: string; message: string }[] = [];
+    const results = await Promise.all(instances.map(async (inst) => {
+      try {
+        const jobs = await this.rawList(inst.id, UPCOMING_TIMEOUT_MS);
+        return jobs.filter((j) => j.enabled !== false).map((j): OverviewCron => ({
+          instanceId: inst.id, instanceLabel: inst.label ?? inst.id, id: j.id, profile: j.profile ?? 'default',
+          name: j.name || '(sans nom)', schedule: schedule(j.schedule, j.schedule_display),
+          nextRunAt: j.next_run_at ?? null, lastRunAt: j.last_run_at ?? null, lastStatus: j.last_status ?? null,
+          lastError: j.last_error ?? null, timezone: j.timezone ?? null,
+        }));
+      } catch (err) {
+        errors.push({ instance: inst.label ?? inst.id, message: err instanceof Error ? err.message : String(err) });
+        return [];
+      }
     }));
-    return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
-      .sort((a, b) => Date.parse(a.nextRunAt) - Date.parse(b.nextRunAt))
-      .slice(0, limit);
+    const t = (v: string | null) => (v ? Date.parse(v) : Number.POSITIVE_INFINITY);
+    return { crons: results.flat().sort((a, b) => t(a.nextRunAt) - t(b.nextRunAt)), errors };
   }
 }

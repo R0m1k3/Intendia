@@ -147,6 +147,90 @@ describe('config: YAML editor', () => {
   });
 });
 
+describe('config: auxiliary models in one write', () => {
+  const aux = async (t: T) => (await t.request('GET', `${BASE}/models`)).json.auxiliary as { task: string; provider: string; model: string }[];
+  const versions = async (t: T) => (await t.request('GET', `${BASE}/versions`)).json.versions as unknown[];
+
+  it('sends every task, keeps one history copy and returns the new version', async () => {
+    const t = await testApp();
+    const v = await version(t);
+    const changes = [
+      { task: 'vision', provider: 'openrouter', model: 'm-vision' },
+      { task: 'compression', provider: 'openrouter', model: 'm-comp' },
+      { task: 'title_generation', provider: 'openrouter', model: 'm-title' },
+    ];
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes });
+    expect(res.status).toBe(200);
+    expect(res.json.version).not.toBe(v);
+    expect(res.json.version).toBe(await version(t));
+    expect(dashCalls(t, 'POST', '/api/model/set')).toHaveLength(3);
+    expect(await versions(t)).toHaveLength(1);
+    const now = await aux(t);
+    expect(now.find((a) => a.task === 'compression')).toMatchObject({ provider: 'openrouter', model: 'm-comp' });
+  });
+
+  it('refuses a stale version without calling Hermes, and invalid bodies', async () => {
+    const t = await testApp();
+    const v = await version(t);
+    await t.request('PUT', BASE, { changes: { 'runtime.nofile_soft_limit': 123 }, version: v });
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes: [{ task: 'vision', provider: 'p', model: 'm' }] });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('config_changed');
+    expect(dashCalls(t, 'POST', '/api/model/set')).toHaveLength(0);
+    const v2 = await version(t);
+    expect((await t.request('POST', `${BASE}/auxiliary`, { version: v2, changes: [] })).status).toBe(400);
+    expect((await t.request('POST', `${BASE}/auxiliary`, { version: v2, changes: [{ task: 'Vision!', provider: 'p', model: 'm' }] })).status).toBe(400);
+  });
+
+  it('an expensive model at the 2nd task: 409 with the task, file put back, no copy; confirm writes all', async () => {
+    const t = await testApp();
+    const v = await version(t);
+    const changes = [{ task: 'vision', provider: 'openrouter', model: 'ok-1' }, { task: 'mcp', provider: 'openrouter', model: 'cher-2' }];
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes });
+    expect(res.status).toBe(409);
+    expect(res.json).toMatchObject({ code: 'confirm_required', task: 'mcp', message: 'Modèle coûteux : confirmer ?' });
+    expect(await version(t)).toBe(v);
+    expect((await aux(t)).find((a) => a.task === 'vision')?.model).not.toBe('ok-1');
+    expect(await versions(t)).toHaveLength(0);
+    const ok = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes, confirm: true });
+    expect(ok.status).toBe(200);
+    expect((await aux(t)).find((a) => a.task === 'mcp')?.model).toBe('cher-2');
+  });
+
+  it('a refusal at the 2nd task puts the file back (400); with the raw write broken → 502 partial_write, copy kept', async () => {
+    const t = await testApp();
+    const v = await version(t);
+    const changes = [{ task: 'vision', provider: 'openrouter', model: 'ok-1' }, { task: 'mcp', provider: 'openrouter', model: 'refuse-2' }];
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes });
+    expect(res.status).toBe(400);
+    expect(await version(t)).toBe(v);
+    expect(await versions(t)).toHaveLength(0);
+
+    t.fake.config.failPutRaw = 500;
+    const partial = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes });
+    expect(partial.status).toBe(502);
+    expect(partial.json.code).toBe('partial_write');
+    expect(partial.json.error).toContain('Historique');
+    expect(await versions(t)).toHaveLength(1);
+  });
+
+  it('a refusal at the first task passes through as is', async () => {
+    const t = await testApp();
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: await version(t), changes: [{ task: 'vision', provider: 'p', model: 'refuse-1' }] });
+    expect(res.status).toBe(400);
+    expect(res.json.code).toBe('hermes_refused');
+  });
+
+  it('joins the notices without duplicates, masked', async () => {
+    const t = await testApp();
+    const changes = [{ task: 'vision', provider: 'p', model: 'notice-a' }, { task: 'mcp', provider: 'p', model: 'notice-b' }];
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: await version(t), changes });
+    expect(res.status).toBe(200);
+    expect(res.json.notice.match(/Contexte réduit/g)).toHaveLength(1);
+    expect(JSON.stringify(res.json)).not.toMatch(LEAKS);
+  });
+});
+
 describe('config: history', () => {
   it('keeps ten encrypted copies per profile and skips identical ones', async () => {
     const t = await testApp();

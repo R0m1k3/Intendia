@@ -27,6 +27,7 @@ export function WorkspacePage() {
     mutationFn: () => api.createSession(slug),
     onSuccess: async ({ session }) => {
       await qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] }); // session counters of the sidebar
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
     },
   });
