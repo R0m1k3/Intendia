@@ -12,6 +12,7 @@ import type { Db } from '../db/index.js';
 import { configVersions } from '../db/schema.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
+import { checkEndpoint, HERMES_ALIASES, keyEnvFor, readCustomProviders, slugFor, withoutProvider, type PublicCustomProvider } from './custom-providers.js';
 import { declaredModels, editableShape, type Declared } from './declared.js';
 import { Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
@@ -27,7 +28,7 @@ const HISTORY_PURPOSE = 'config-history-v1';
 const STATUS_LINES = 200;
 const TEST_MS = 40_000;
 
-export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login';
+export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login' | 'custom-providers';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
 
 export class ConfigInputError extends Error {
@@ -39,7 +40,8 @@ export class ConfigInputError extends Error {
 
 export class ConfigConflictError extends Error {
   constructor(
-    readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable',
+    readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable'
+      | 'exists' | 'in_use' | 'raw_unavailable',
     message: string,
   ) {
     super(message);
@@ -110,9 +112,12 @@ type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatS
 /** Thrown inside `write()` when the change would not modify the file: nothing written, no history copy. */
 class NoChange extends Error {}
 
+/** Conflicts found by Intendia or Hermes before anything was written. */
+const REFUSALS: ReadonlySet<ConfigConflictError['code']> = new Set(['hermes_conflict', 'exists', 'in_use', 'raw_unavailable', 'config_unavailable']);
+
 function refused(err: unknown): boolean {
   return err instanceof NoChange || err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
-    || (err instanceof ConfigConflictError && err.code === 'hermes_conflict');
+    || (err instanceof ConfigConflictError && REFUSALS.has(err.code));
 }
 
 export function versionOf(text: string): string {
@@ -690,6 +695,107 @@ export class ConfigService {
       }
     });
     return tokenLeft ? { ...res, tokenLeft } : res;
+  }
+
+  // ---------------------------------------------------------------- custom endpoints
+
+  /** Custom endpoints of the file (v12 and old shapes), with whether their key variable is set. Never a key value. */
+  async customProviders(instanceId: string, profile: string): Promise<{ endpoints: PublicCustomProvider[]; writable: boolean }> {
+    const ctx = this.ctx(instanceId, profile);
+    const raw = await this.readRaw(ctx);
+    if (raw === null) return { endpoints: [], writable: false };
+    const read = readCustomProviders(raw);
+    const env = read.some((e) => e.key?.kind === 'env') ? await this.env(instanceId, profile).catch(() => null) : null;
+    const isSet = new Map((env ?? []).map((v) => [v.key, v.isSet]));
+    return {
+      // an address may carry a password or a key in its query: masked like the YAML tab
+      endpoints: read.map((e) => ({
+        ...e,
+        baseUrl: this.mask.url(e.baseUrl),
+        name: e.name === e.baseUrl ? this.mask.url(e.name) : e.name,
+        key: e.key?.kind === 'env' ? { ...e.key, set: isSet.get(e.key.name) ?? false } : e.key,
+      })),
+      writable: this.can(ctx, 'put') && this.can(ctx, 'putRaw'),
+    };
+  }
+
+  /**
+   * Adds `providers.<slug>`; its key goes to the variable INTENDIA_<SLUG>_API_KEY, never into the file. One `write`
+   * (lock + one history copy), raw calls inside. `reserved`: slugs of Hermes's built-in providers (from the caller).
+   */
+  async addCustomProvider(
+    instanceId: string, profile: string, input: { name: string; baseUrl: string; apiKey?: string; model?: string }, reserved: ReadonlySet<string>,
+  ): Promise<{ slug: string; version: string | null }> {
+    const ctx = this.ctx(instanceId, profile);
+    const e = checkEndpoint(input);
+    const apiKey = input.apiKey?.trim() || null;
+    const res = await this.write(ctx, 'custom-providers', null, async (current) => {
+      if (current === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+      const taken = new Set([...reserved, ...HERMES_ALIASES].map((x) => x.toLowerCase()));
+      const doc = parse(current).toJS() as Record<string, unknown> | null;
+      const providers = doc && typeof doc.providers === 'object' && doc.providers ? Object.keys(doc.providers) : [];
+      for (const k of providers) taken.add(k.toLowerCase());
+      for (const old of readCustomProviders(current).filter((x) => x.legacy)) taken.add(slugFor(old.name));
+      if (taken.has(e.slug)) throw new ConfigConflictError('exists', `Nom déjà pris (${e.slug}) : choisissez-en un autre`);
+      const keyEnv = apiKey ? keyEnvFor(e.slug) : null;
+      if (keyEnv) {
+        const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env'));
+        if (env[keyEnv]?.is_set) throw new ConfigConflictError('exists', `La variable ${keyEnv} existe déjà : choisissez un autre nom`);
+        await this.call(ctx, 'putEnv', { body: { key: keyEnv, value: apiKey } });
+      }
+      const entry: Record<string, unknown> = { name: e.name, api: e.baseUrl };
+      if (keyEnv) entry.key_env = keyEnv;
+      if (e.model) {
+        entry.default_model = e.model;
+        entry.models = [e.model];
+      }
+      try {
+        await this.call(ctx, 'put', { body: { config: { providers: { [e.slug]: entry } } } });
+      } catch (err) {
+        // refused: nothing written, the variable goes too; uncertain (timeout, 5xx): the file may hold the entry
+        if (!keyEnv) throw err;
+        if (!refused(err)) throw new PartialWriteError();
+        try {
+          await this.call(ctx, 'deleteEnv', { body: { key: keyEnv } });
+        } catch {
+          throw new PartialWriteError(`Endpoint refusé par Hermes, mais la variable ${keyEnv} n'a pas pu être retirée : retirez-la dans l'onglet Variables`);
+        }
+        throw err;
+      }
+    });
+    return { slug: e.slug, ...res };
+  }
+
+  /**
+   * Removes `providers.<slug>` by a raw write (Hermes 0.23: `PUT /api/config` with `null` answers ok and keeps the
+   * entry), then its INTENDIA_… key variable when no other entry uses it. Never another variable.
+   */
+  async removeCustomProvider(instanceId: string, profile: string, slug: string): Promise<{ version: string | null; keyLeft?: string }> {
+    const ctx = this.ctx(instanceId, profile);
+    let keyLeft: string | undefined;
+    const res = await this.write(ctx, 'custom-providers', null, async (current) => {
+      if (current === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+      const all = readCustomProviders(current);
+      const target = all.find((x) => x.slug === slug);
+      if (!target) throw new NotFoundError(`Endpoint introuvable : ${slug}`);
+      const doc = parse(current).toJS() as Record<string, unknown> | null;
+      const model = doc && typeof doc.model === 'object' && doc.model ? (doc.model as Record<string, unknown>) : {};
+      if (model.provider === slug || model.provider === `custom:${slug}`) {
+        throw new ConfigConflictError('in_use', 'Cet endpoint sert le modèle principal : changez de modèle (onglet Modèles) avant de le supprimer');
+      }
+      if (!this.can(ctx, 'putRaw')) throw new ConfigConflictError('raw_unavailable', 'Suppression impossible sur cette instance : retirez-le dans l’onglet YAML');
+      await this.call(ctx, 'putRaw', { body: { yaml_text: withoutProvider(current, slug) } });
+      const keyEnv = target.key?.kind === 'env' ? target.key.name : null;
+      const shared = keyEnv && all.some((x) => x !== target && x.key?.kind === 'env' && x.key.name === keyEnv);
+      if (keyEnv && keyEnv.startsWith('INTENDIA_') && !shared) {
+        try {
+          await this.call(ctx, 'deleteEnv', { body: { key: keyEnv } });
+        } catch (err) {
+          if (!(err instanceof NotFoundError)) keyLeft = keyEnv;
+        }
+      }
+    });
+    return keyLeft ? { ...res, keyLeft } : res;
   }
 
   // ---------------------------------------------------------------- platforms, gateway

@@ -332,6 +332,15 @@ export interface ProviderAccount {
   connected: boolean; expiresAt: string | null;
 }
 /** API key of the credential pool (never its value). `source`: `manual`, or `env:NAME` for a key variable. */
+/** Custom endpoint of the config file: `providers.<slug>` (v12) or an old `custom_providers` entry (slug null). */
+export interface CustomProvider {
+  slug: string | null;
+  name: string;
+  baseUrl: string;
+  model: string | null;
+  key: { kind: 'env'; name: string; set: boolean } | { kind: 'inline' } | null;
+  legacy: boolean;
+}
 export interface ProviderKey { provider: string; id: string; label: string; source: string; lastStatus: string | null }
 export interface ProvidersInfo {
   accounts: ProviderAccount[] | null;
@@ -639,6 +648,12 @@ export const api = {
   setAuxiliary: (inst: string, profile: string, body: { version: string; changes: { task: string; provider: string; model: string }[]; confirm?: boolean }) =>
     call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/auxiliary', profile), body),
   setModel: (inst: string, profile: string, m: ModelInput) => call<WriteResult & { notice?: string }>('POST', instPath(inst, 'config/models', profile), m),
+  customProviders: (inst: string, profile: string) =>
+    call<{ endpoints: CustomProvider[]; writable: boolean }>('GET', instPath(inst, 'config/custom-providers', profile)),
+  addCustomProvider: (inst: string, profile: string, body: { name: string; baseUrl: string; apiKey?: string; model?: string }) =>
+    call<WriteResult & { slug: string }>('POST', instPath(inst, 'config/custom-providers', profile), body),
+  removeCustomProvider: (inst: string, profile: string, slug: string) =>
+    call<WriteResult & { keyLeft?: string }>('DELETE', instPath(inst, `config/custom-providers/${enc(slug)}`, profile)),
   configProviders: (inst: string, profile: string) => call<ProvidersInfo>('GET', instPath(inst, 'config/providers', profile)),
   connectProvider: (inst: string, profile: string, provider: string) =>
     call<ConnectStart>('POST', instPath(inst, `config/providers/${enc(provider)}/connect`, profile), {}),

@@ -70,6 +70,15 @@ const ProviderKeyBody = z.object({
   label: z.string().max(80).optional(),
 });
 
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+// same rule for the key as ProviderKeyBody: never logged nor sent back
+const CustomProviderBody = z.object({
+  name: z.string().max(64),
+  baseUrl: z.string().max(2048),
+  apiKey: z.string().max(4000).optional(),
+  model: z.string().max(200).optional(),
+});
+
 export function configRoutes(config: ConfigService, providers: ProvidersService): Hono {
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
@@ -118,6 +127,16 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   });
   r.delete('/i/:inst/config/provider-keys/:provider/:id', async (c) =>
     c.json(await providers.removeKey(inst(c), profileOf(c), { provider: param(c, 'provider', PROVIDER_RE), id: param(c, 'id', KEY_ID_RE) })));
+
+  r.get('/i/:inst/config/custom-providers', async (c) => c.json(await config.customProviders(inst(c), profileOf(c))));
+  r.post('/i/:inst/config/custom-providers', async (c) => {
+    const body = CustomProviderBody.parse(await c.req.json());
+    // built-in providers of Hermes (catalogue), read outside the config lock
+    const known = await providers.list(inst(c), profileOf(c));
+    return c.json(await config.addCustomProvider(inst(c), profileOf(c), body, new Set(known.keyProviders.map((p) => p.slug))), 201);
+  });
+  r.delete('/i/:inst/config/custom-providers/:slug', async (c) =>
+    c.json(await config.removeCustomProvider(inst(c), profileOf(c), param(c, 'slug', SLUG_RE))));
 
   r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
   r.post('/i/:inst/config/models', async (c) => {

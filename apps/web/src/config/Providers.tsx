@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, ExternalLink, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, KeyRound, Plus, Server, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, type ConnectPoll, type ProviderAccount, type ProviderKey, type ProvidersInfo } from '../api';
+import { api, type ConnectPoll, type CustomProvider, type ProviderAccount, type ProviderKey, type ProvidersInfo } from '../api';
 import { ask } from '../components/Dialog';
 import { Button, copyText, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, SELECT, type TabProps } from './common';
@@ -15,6 +15,7 @@ import { loadConnect, nextPollDelay, resumable, saveConnect, type PendingConnect
 export function ConfigProviders({ inst, profile, can, onVariable }: TabProps & { onVariable: (key: string) => void }) {
   const info = useQuery({ queryKey: configKey(inst, profile, 'providers'), queryFn: () => api.configProviders(inst, profile) });
   const refresh = useRefreshProviders(inst, profile);
+  const custom = useQuery({ queryKey: configKey(inst, profile, 'custom-providers'), queryFn: () => api.customProviders(inst, profile) });
   if (info.isPending) return <p className="text-sm text-ink-soft">Lecture des fournisseurs…</p>;
   if (info.isError) return <ErrorText error={info.error} />;
   return (
@@ -23,7 +24,8 @@ export function ConfigProviders({ inst, profile, can, onVariable }: TabProps & {
         Un fournisseur connecté ici est proposé dans le chat de cet agent. Les clés et les jetons restent dans Hermes : Intendia ne les affiche jamais.
       </p>
       <Accounts inst={inst} profile={profile} accounts={info.data.accounts} can={can} refresh={refresh} />
-      <Keys inst={inst} profile={profile} info={info.data} can={can} refresh={refresh} onVariable={onVariable} />
+      <Keys inst={inst} profile={profile} info={info.data} can={can} refresh={refresh} onVariable={onVariable} endpoints={custom.data?.endpoints ?? []} />
+      <CustomEndpoints inst={inst} profile={profile} data={custom.data} error={custom.error} refresh={refresh} />
     </div>
   );
 }
@@ -33,6 +35,8 @@ function useRefreshProviders(inst: string, profile: string) {
   const qc = useQueryClient();
   return () => Promise.all([
     qc.invalidateQueries({ queryKey: configKey(inst, profile, 'providers') }),
+    qc.invalidateQueries({ queryKey: configKey(inst, profile, 'custom-providers') }),
+    qc.invalidateQueries({ queryKey: configKey(inst, profile, 'env') }),
     qc.invalidateQueries({ queryKey: configKey(inst, profile, 'models') }),
     qc.invalidateQueries({ queryKey: ['chat-models', inst, profile] }),
   ]);
@@ -223,8 +227,9 @@ function formatDate(v: string): string {
 
 // ---------------------------------------------------------------- API keys
 
-function Keys({ inst, profile, info, can, refresh, onVariable }: {
+function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
   inst: string; profile: string; info: ProvidersInfo; can: (op: string) => boolean; refresh: Refresh; onVariable: (key: string) => void;
+  endpoints: CustomProvider[];
 }) {
   if (info.keys === null) return <Panel title="Clés d’API"><p className="px-5 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
   const names = new Map(info.keyProviders.map((p) => [p.slug, p.name]));
@@ -237,7 +242,10 @@ function Keys({ inst, profile, info, can, refresh, onVariable }: {
         <div key={provider} className="px-5 py-3" data-provider-keys={provider}>
           <h3 className="text-sm font-medium">{names.get(provider) ?? provider} <span className="font-mono text-xs font-normal text-ink-faint">{provider}</span></h3>
           <ul className="mt-1 divide-y divide-line/60">
-            {keys.map((k) => <KeyRow key={k.id} inst={inst} profile={profile} k={k} name={names.get(provider) ?? provider} canRemove={can('poolRemove')} refresh={refresh} onVariable={onVariable} />)}
+            {keys.map((k) => (
+              <KeyRow key={k.id} inst={inst} profile={profile} k={k} name={names.get(provider) ?? provider} canRemove={can('poolRemove')}
+                canDeleteEnv={can('deleteEnv')} endpoints={endpoints} refresh={refresh} onVariable={onVariable} />
+            ))}
           </ul>
         </div>
       ))}
@@ -246,11 +254,32 @@ function Keys({ inst, profile, info, can, refresh, onVariable }: {
   );
 }
 
-function KeyRow({ inst, profile, k, name, canRemove, refresh, onVariable }: {
-  inst: string; profile: string; k: ProviderKey; name: string; canRemove: boolean; refresh: Refresh; onVariable: (key: string) => void;
+function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, refresh, onVariable }: {
+  inst: string; profile: string; k: ProviderKey; name: string; canRemove: boolean; canDeleteEnv: boolean; endpoints: CustomProvider[];
+  refresh: Refresh; onVariable: (key: string) => void;
 }) {
+  const qc = useQueryClient();
   const remove = useMutation({ mutationFn: () => api.removeProviderKey(inst, profile, k.provider, k.id), onSuccess: () => refresh() });
   const variable = k.source.startsWith('env:') ? k.source.slice(4) : null;
+  // the variable is deleted from Hermes's .env; still listed after a reload = set outside Hermes (container env)
+  const [tried, setTried] = useState(false);
+  const dropEnv = useMutation({
+    mutationFn: () => api.deleteEnv(inst, profile, variable!),
+    onSettled: async () => { setTried(true); await refresh(); },
+  });
+  const askDropEnv = async () => {
+    if (!variable) return;
+    const users = endpoints.filter((e) => e.key?.kind === 'env' && e.key.name === variable).map((e) => e.name);
+    const main = qc.getQueryData<{ main: { provider: string } }>(configKey(inst, profile, 'models'))?.main.provider;
+    const still = [...users.map((u) => `l’endpoint ${u}`), ...(main === k.provider ? ['le modèle principal'] : [])];
+    const ok = await ask({
+      title: `Retirer la clé ${k.label} ?`,
+      message: `La variable ${variable} sera supprimée du fichier .env d’Hermes. Ce n’est pas annulable : il faudra ressaisir la clé.`
+        + (still.length ? ` Elle sert encore à : ${still.join(', ')}.` : ''),
+      confirmLabel: 'Retirer', danger: true,
+    });
+    if (ok) dropEnv.mutate();
+  };
   return (
     <li className="py-2" data-key={k.id}>
       <div className="flex flex-wrap items-center gap-3">
@@ -263,6 +292,11 @@ function KeyRow({ inst, profile, k, name, canRemove, refresh, onVariable }: {
           </span>
         </div>
         {variable && <Button variant="ghost" className="h-8" onClick={() => onVariable(variable)}>Voir la variable</Button>}
+        {variable && canDeleteEnv && (
+          <Button variant="ghost" className="h-8 px-2" aria-label={`Retirer la clé ${k.label}`} disabled={dropEnv.isPending} onClick={() => void askDropEnv()}>
+            <Trash2 className={ICON} strokeWidth={1.5} />
+          </Button>
+        )}
         {k.source === 'manual' && canRemove && (
           <Button variant="ghost" className="h-8 px-2" aria-label={`Retirer la clé ${k.label}`} disabled={remove.isPending}
             onClick={async () => {
@@ -272,7 +306,10 @@ function KeyRow({ inst, profile, k, name, canRemove, refresh, onVariable }: {
           </Button>
         )}
       </div>
-      <ErrorText error={remove.error} />
+      {tried && !dropEnv.isError && (
+        <p className="mt-1 text-xs text-ink-soft">Cette variable est définie hors d’Hermes (environnement du conteneur) : retirez-la là où elle est posée.</p>
+      )}
+      <ErrorText error={remove.error ?? dropEnv.error} />
     </li>
   );
 }
@@ -302,6 +339,104 @@ function AddKey({ inst, profile, providers, refresh }: { inst: string; profile: 
       </div>
       <div className="flex gap-2">
         <Button variant="primary" type="submit" disabled={!provider || !key.trim() || add.isPending}>{add.isPending ? 'Ajout…' : 'Ajouter'}</Button>
+        <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>Annuler</Button>
+      </div>
+      <ErrorText error={add.error} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------- custom endpoints
+
+/**
+ * OpenAI-compatible servers (Ollama, vLLM, LM Studio, a proxy…) written in `providers.<slug>` of the config file,
+ * their key in a variable of Hermes. Old `custom_providers` entries are shown, changed in the YAML tab.
+ */
+function CustomEndpoints({ inst, profile, data, error, refresh }: {
+  inst: string; profile: string; data: { endpoints: CustomProvider[]; writable: boolean } | undefined; error: unknown; refresh: Refresh;
+}) {
+  const [left, setLeft] = useState<string | null>(null);
+  const remove = useMutation({
+    mutationFn: (slug: string) => api.removeCustomProvider(inst, profile, slug),
+    onSuccess: async (r) => { setLeft(r.keyLeft ?? null); await refresh(); },
+  });
+  if (error) return <Panel title="Endpoints personnalisés"><div className="px-5 py-4"><ErrorText error={error} /></div></Panel>;
+  if (!data) return null;
+  return (
+    <Panel title="Endpoints personnalisés" bodyClassName="divide-y divide-line">
+      <p className="px-5 py-3 text-sm text-ink-soft">Un serveur compatible OpenAI (Ollama, vLLM, LM Studio, un proxy…). Ses modèles sont proposés dans le chat.</p>
+      {data.endpoints.length === 0 && <p className="px-5 py-3 text-sm text-ink-soft">Aucun endpoint personnalisé.</p>}
+      {data.endpoints.map((e) => (
+        <div key={e.slug ?? `old:${e.name}:${e.baseUrl}`} className="flex flex-wrap items-center gap-3 px-5 py-3" data-endpoint={e.slug ?? e.name}>
+          <Server className="size-4 text-ink-faint" strokeWidth={1.5} />
+          <div className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">{e.name} {e.slug && <span className="font-mono text-xs font-normal text-ink-faint">{e.slug}</span>}</span>
+            <span className="block truncate font-mono text-xs text-ink-faint" title={e.baseUrl}>{e.baseUrl}</span>
+            <span className="block text-xs text-ink-faint">
+              {e.model ? <>Modèle : <span className="font-mono">{e.model}</span> · </> : null}
+              {e.key === null ? 'Sans clé' : e.key.kind === 'inline' ? 'Clé écrite dans le fichier' : e.key.set ? <>Clé dans <span className="font-mono">{e.key.name}</span></> : <>Variable <span className="font-mono">{e.key.name}</span> absente</>}
+              {e.legacy && ' · ancienne forme, à modifier dans l’onglet YAML'}
+            </span>
+          </div>
+          {e.slug && data.writable && (
+            <Button variant="ghost" className="h-8 px-2" aria-label={`Supprimer l’endpoint ${e.name}`} disabled={remove.isPending}
+              onClick={async () => {
+                const ok = await ask({
+                  title: `Supprimer l’endpoint ${e.name} ?`,
+                  message: 'Ses modèles ne seront plus proposés dans le chat.'
+                    + (e.key?.kind === 'env' && e.key.name.startsWith('INTENDIA_') ? ` Sa clé (${e.key.name}) est supprimée aussi : restaurer la configuration depuis Historique ne la remettra pas.` : ''),
+                  confirmLabel: 'Supprimer', danger: true,
+                });
+                if (ok) remove.mutate(e.slug!);
+              }}>
+              <Trash2 className={ICON} strokeWidth={1.5} />
+            </Button>
+          )}
+        </div>
+      ))}
+      {!data.writable && data.endpoints.some((e) => e.slug) && <p className="px-5 py-3 text-xs text-ink-faint">Modification impossible sur cette instance : utilisez l’onglet YAML.</p>}
+      {(remove.error || left) && (
+        <div className="px-5 py-3">
+          <ErrorText error={remove.error} />
+          {left && <p className="text-xs text-ink-soft">Endpoint supprimé, mais la variable {left} n’a pas pu l’être : retirez-la dans l’onglet Variables.</p>}
+        </div>
+      )}
+      {data.writable && <div className="px-5 py-4"><AddEndpoint inst={inst} profile={profile} refresh={refresh} /></div>}
+    </Panel>
+  );
+}
+
+function AddEndpoint({ inst, profile, refresh }: { inst: string; profile: string; refresh: Refresh }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [key, setKey] = useState('');
+  const [model, setModel] = useState('');
+  const add = useMutation({
+    mutationFn: () => api.addCustomProvider(inst, profile, {
+      name: name.trim(), baseUrl: baseUrl.trim(), ...(key.trim() ? { apiKey: key.trim() } : {}), ...(model.trim() ? { model: model.trim() } : {}),
+    }),
+    // the key field is emptied after a success as after a failure: the value is never kept on screen
+    onSettled: () => setKey(''),
+    onSuccess: async () => { setName(''); setBaseUrl(''); setModel(''); setOpen(false); await refresh(); },
+  });
+  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />Ajouter un endpoint</Button>;
+  const ready = name.trim() && /^https?:\/\/./.test(baseUrl.trim());
+  return (
+    <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (ready) add.mutate(); }}>
+      <div className="flex flex-wrap gap-2">
+        <Input className="w-48" placeholder="Nom (ex. Ollama maison)" maxLength={64} value={name} onChange={(e) => setName(e.target.value)} aria-label="Nom de l’endpoint" />
+        <Input className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="http://127.0.0.1:11434/v1" maxLength={2048} value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)} aria-label="Adresse de l’endpoint" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="Clé d’API (facultative)" value={key}
+          onChange={(e) => setKey(e.target.value)} aria-label="Clé d’API de l’endpoint" />
+        <Input className="w-56 font-mono text-[12.5px]" placeholder="Modèle (facultatif)" maxLength={200} value={model} onChange={(e) => setModel(e.target.value)} aria-label="Modèle" />
+      </div>
+      <p className="text-xs text-ink-faint">La clé est gardée dans une variable d’Hermes, jamais dans le fichier de configuration.</p>
+      <div className="flex gap-2">
+        <Button variant="primary" type="submit" disabled={!ready || add.isPending}>{add.isPending ? 'Ajout…' : 'Ajouter'}</Button>
         <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>Annuler</Button>
       </div>
       <ErrorText error={add.error} />
