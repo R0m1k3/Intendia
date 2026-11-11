@@ -1,3 +1,4 @@
+import { readSseFrames } from '../src/connectors/sse.js';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -38,7 +39,8 @@ export function tempDir(): string {
  * Full app against fake-hermes, logged in, with a temporary workspace mount.
  * `request` adds the session cookie and the X-Intendia header.
  */
-export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig>; env?: Record<string, string> } = {}) {
+/** `extra`: more instances (own id, label and mount), served by the same fake. */
+export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?: string; instance?: Partial<InstanceConfig>; extra?: Partial<InstanceConfig>[]; env?: Record<string, string> } = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
   const { CompatService } = await import('../src/compat/service.js');
@@ -51,9 +53,10 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const dataDir = tempDir();
   const mount = opts.mount ?? tempDir();
   const inst = fakeInstance({ mount, profileKeys: opts.profileKeys ?? {}, ...opts.instance });
+  const extra = (opts.extra ?? []).map((e) => fakeInstance({ mount: tempDir(), profileKeys: opts.profileKeys ?? {}, ...e }));
   const config = loadConfig({
     INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, INTENDIA_TRUST_PROXY: 'true',
-    INTENDIA_INSTANCES: JSON.stringify([inst]), ...opts.env,
+    INTENDIA_INSTANCES: JSON.stringify([inst, ...extra]), ...opts.env,
   });
   const db = openDb(dataDir);
   const store = new InstanceStore(db, config);
@@ -62,6 +65,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
   const fetchImpl = fakeFetch(fake);
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
   await compat.check(inst.id);
+  for (const e of extra) await compat.check(e.id);
   const services = createServices({ config, db, store, compat });
   const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
   const mcp = createMcpApp({ db, store, links: services.links, config, version: 'test' });
@@ -98,26 +102,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & { mount?:
 }
 
 /** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */
-export async function readSse(res: Response, ms = 2000): Promise<{ id: string | null; data: any }[]> {
-  const reader = res.body!.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), Math.max(1, deadline - Date.now()))),
-    ]);
-    if (chunk.done) break;
-    buf += dec.decode(chunk.value, { stream: true });
-  }
-  await reader.cancel().catch(() => {});
-  return buf.split('\n\n').filter((f) => f.includes('data:')).map((f) => {
-    const id = /^id: (.*)$/m.exec(f)?.[1] ?? null;
-    const data = JSON.parse(/^data: (.*)$/m.exec(f)![1]!);
-    return { id, data };
-  });
-}
+export const readSse = (res: Response, ms = 2000) => readSseFrames(res, { maxMs: ms });
 
 /** Polls the Intendia run status until it is terminal. */
 export async function waitRun(t: Awaited<ReturnType<typeof testApp>>, base: string, runId: string): Promise<string> {

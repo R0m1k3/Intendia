@@ -91,13 +91,14 @@ demand from the State screen. State changes go to the webhook.
   workspace, sends the message, then opens the session page. The message is handed over in memory
   (`home/handoff.ts`, read once) so the page shows it while it plugs into the run. "Nouvelle session" in the sidebar
   is `/?nouvelle=1`, which puts the cursor in that box.
-- Sessions of every source: `GET /x/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
-  (`src/sessions/recent.ts`) merges the Intendia sessions with the Hermes sessions of every instance (`default` and
-  the workspace profiles that have a key; 3 s per call, errors listed per instance, not fatal). The source is
+- Sessions of every source, per instance: `GET /x/i/:inst/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
+  (`src/sessions/recent.ts`) merges the Intendia sessions of the instance's workspaces (filtered before the limit)
+  with the Hermes sessions of that instance only (`default` and the workspace profiles that have a key; 3 s per
+  call, errors listed, not fatal). Unknown instance → 404. The source is
   filtered on the server: `intendia` reads the database only, `telegram`/`cron` ask Hermes for that source only. The
   home page shows 7 lines; the Sessions page (`/sessions`, `pages/Sessions.tsx`) groups them by day (browser time)
   and loads 50 more per click, up to 200.
-- Search: `GET /x/sessions/search?q=(2..100)&source=` → `{sessions, errors, partial}`, 30 lines at most. Intendia
+- Search: `GET /x/i/:inst/sessions/search?q=(2..100)&source=` (the instance only) → `{sessions, errors, partial}`, 30 lines at most. Intendia
   titles are matched in the database (`LIKE`, `%`, `_` and `\` literal); message content goes through the
   dashboard's search (op `sessions.search`, FTS5, the hit between `>>>` and `<<<` in `snippet`). A hit on a session
   Intendia owns becomes its Intendia line with the snippet. An instance without dashboard, or whose search answers
@@ -223,12 +224,19 @@ sequenceDiagram
   renames).
 - Activity and the agent page read the kanban workers through `KanbanService` (see Kanban below), and stop one
   there.
-- `src/agents/activity.ts` (`ActivityService`, `GET /x/activity`): Hermes has no run list, so the candidates are the
+- `src/agents/activity.ts` (`ActivityService`, `GET /x/i/:inst/activity`, one instance): Hermes has no run list, so the candidates are the
   last run of each session active in the last 24 h (20 at most, `WorkspaceService.recentRuns`, read by pages and
   skipping runs already known as finished, so an older run still going is reached), checked 4 at a time
   with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
-  never asked again. Kanban workers come from every live board of every instance. An unreachable instance is an
+  never asked again. Kanban workers come from every live board of the instance. An unreachable instance is an
   `errors` line, not a failure of the page. The page rereads every 5 s while visible.
+- Approvals of every instance: `GET /x/approvals` (`ActivityService.approvals`, `src/agents/approvals.ts`) takes the
+  same candidates on all instances, and for each run in `waiting_for_approval` reads its events again from the start
+  (the question is only in `approval.request`): the stream of a waiting run stays open, so the reading stops 300 ms
+  after the last frame (2 s at most). Key `<runId>:<request_id>` (or `seq<id>` without request_id); a question not
+  found gives an item without command and choices. One computation at a time, shared 5 s (several tabs poll it).
+  The web (`components/Approvals.tsx`) polls it every 10 s and shows a notification with the question, answered in
+  place through the session's approval route, whatever the current instance.
 - Sub-agents (`apps/web/src/chat/events.ts`, `Subagents.tsx`): one `subagents` entry per run, at the first
   `subagent.start` (keyed by its `run_id`: `seq` is local to a run), nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
   root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page
