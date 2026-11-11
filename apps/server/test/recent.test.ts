@@ -56,6 +56,22 @@ describe('GET /x/sessions/recent', () => {
     expect(res.json.errors).toEqual([]);
   });
 
+  it('reads further Hermes pages when the first ones are Intendia sessions', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    for (const input of ['Un', 'Deux']) {
+      const s = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+      const run = (await t.request('POST', `/x/sessions/fake/${s.id}/runs`, { input })).json.runId;
+      await waitRun(t, `/x/sessions/fake/${s.id}`, run);
+      await t.request('PATCH', `/x/sessions/fake/${s.id}`, { archived: true });
+    }
+    t.fake.sim.extraSessions.set('tg-1', { id: 'tg-1', source: 'telegram', title: 'Plus ancienne', started_at: 1, messages: [] });
+    const res = (await t.request('GET', '/x/sessions/recent?limit=2')).json;
+    expect(res.sessions.map((s: any) => s.id)).toContain('tg-1');
+    const offsets = t.fake.requests.filter((r) => r.via === 'api' && r.path === '/api/sessions').map((r) => r.query?.offset);
+    expect(offsets.filter((o) => o !== undefined)).toEqual(['0', '2']);
+  });
+
   it('bounds the limit and reports an instance that fails with its label', async () => {
     const t = await testApp({ breaks: { 'api GET /api/sessions': { status: 500 } } });
     expect((await t.request('GET', '/x/sessions/recent?limit=0')).status).toBe(400);
@@ -142,6 +158,14 @@ describe('GET /x/sessions/search', () => {
       expect(res.errors).toEqual([]);
       expect(res.sessions.map((s: any) => s.id)).toEqual([a.id]);
     }
+  });
+
+  it('title search folds case beyond ASCII (É matches é)', async () => {
+    const t = await setup();
+    const a = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    await t.request('PATCH', `/x/sessions/fake/${a.id}`, { title: 'Électricité du chalet' });
+    const res = (await t.request('GET', `/x/sessions/search?q=${encodeURIComponent('électricité')}&source=intendia`)).json;
+    expect(res.sessions.map((s: any) => s.id)).toEqual([a.id]);
   });
 
   it('a network-level failure is an error line; q is bounded; % is searched literally', async () => {

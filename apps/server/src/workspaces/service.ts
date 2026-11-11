@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, ne } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
@@ -175,14 +175,16 @@ export class WorkspaceService {
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
   }
 
-  /** Non-archived Intendia sessions whose title contains `q` (case-insensitive, `%`, `_` and `\\` literal). */
+  /** Non-archived Intendia sessions whose title contains `q`, case-insensitive with Unicode folding (SQLite's `lower()` only folds ASCII). */
   searchSessions(q: string, limit: number): (PublicSession & { workspaceName: string; profile: string })[] {
-    const pattern = `%${q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+    const needle = q.toLocaleLowerCase();
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(and(eq(sessionWorkspace.archived, false), sql`lower(${sessionWorkspace.title}) LIKE ${pattern} ESCAPE '\\'`))
-      .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(limit).all()
+      .where(eq(sessionWorkspace.archived, false))
+      .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).all()
+      .filter((r) => r.s.title?.toLocaleLowerCase().includes(needle))
+      .slice(0, limit)
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
   }
 

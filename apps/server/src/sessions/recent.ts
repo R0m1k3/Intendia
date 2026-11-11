@@ -94,6 +94,9 @@ function searchUnavailable(err: unknown): boolean {
   return err instanceof HermesError && (err.kind === 'unconfigured' || (err.kind === 'http' && (err.detail.status === 404 || err.detail.status === 500)));
 }
 
+/** Pages of Hermes sessions read per profile at most when skipping Intendia's own. */
+const MAX_PAGES = 5;
+
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /** Sessions of every source across instances; an instance that does not answer adds an error line. */
@@ -118,10 +121,16 @@ export class RecentService {
       const owned = this.workspaces.ownedIds(inst.id);
       const pages = await Promise.all(this.profiles(inst.id).map(async (profile) => {
         try {
-          const res = await callOp<{ data: HermesSessionRaw[] }>(this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'list', {
-            profile, query: { limit, offset: 0, ...(source === 'all' ? {} : { source }) }, timeoutMs: TIMEOUT_MS,
-          });
-          return { instanceId: inst.id, label: inst.label, profile, sessions: res.data.filter((s) => !owned.has(String(s.id))) };
+          // Intendia's own rows are dropped, so keep reading pages until `limit` others are found (bounded).
+          const sessions: HermesSessionRaw[] = [];
+          for (let page = 0; page < MAX_PAGES && sessions.length < limit; page++) {
+            const res = await callOp<{ data: HermesSessionRaw[] }>(this.compat.http(inst.id), this.compat.get(inst.id), 'sessions', 'list', {
+              profile, query: { limit, offset: page * limit, ...(source === 'all' ? {} : { source }) }, timeoutMs: TIMEOUT_MS,
+            });
+            sessions.push(...res.data.filter((s) => !owned.has(String(s.id))));
+            if (res.data.length < limit) break;
+          }
+          return { instanceId: inst.id, label: inst.label, profile, sessions: sessions.slice(0, limit) };
         } catch (err) {
           if (!errors.some((e) => e.instance === inst.label)) errors.push({ instance: inst.label, message: errText(err) });
           return null;
