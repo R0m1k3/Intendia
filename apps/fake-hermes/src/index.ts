@@ -394,6 +394,12 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
+    // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
+    if (via === 'api' && method === 'GET' && path === '/_fake/pool') return c.json({ entries: config.providers.poolOf(c.req.query('profile') ?? 'default') });
+    if (via === 'api' && method === 'POST' && path === '/_fake/pool/seed') {
+      config.providers.seedSamples(c.req.query('profile') ?? 'default');
+      return c.json({ ok: true });
+    }
     if (via === 'api' && method === 'POST' && path === '/_fake/sessions') {
       const b = (body ?? {}) as Record<string, unknown>;
       const id = typeof b.id === 'string' ? b.id : `fake_extra_${sim.extraSessions.size + 1}`;
