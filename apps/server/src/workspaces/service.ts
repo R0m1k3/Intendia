@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
@@ -26,6 +26,19 @@ export interface PublicSession {
   /** Provider of `model` (picker group), sent with it; null = model sent alone. */
   modelProvider: string | null;
   effort: string | null;
+  pinned: boolean;
+}
+
+/** Undo window of a deletion: the session stays at Hermes and can be restored until it is over. */
+export const UNDO_MS = 10_000;
+/** A never used Intendia session (no run, not a copy) older than this is offered to the clean-up. */
+export const UNUSED_AFTER_MS = 60 * 60 * 1000;
+
+/** A deleted session the purger took: delete it at Hermes, then drop its row. */
+export interface PurgeItem {
+  instanceId: string;
+  sessionId: string;
+  profile: string;
 }
 
 export interface SessionContext {
@@ -67,6 +80,7 @@ function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
     lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
+    pinned: r.pinned,
   };
 }
 
@@ -79,6 +93,9 @@ export function titleFrom(input: string): string {
   const flat = input.replace(/\s+/g, ' ').trim();
   return flat.length <= TITLE_MAX ? flat : `${flat.slice(0, TITLE_MAX - 1).trimEnd()}…`;
 }
+
+/** Rows not deleted (deletion pending undo, or taken by the purger). */
+const alive = isNull(sessionWorkspace.deletedAt);
 
 export class WorkspaceService {
   /** Last AGENTS.md read per workspace: the chat keeps its instructions while Hermes' dashboard is down. */
@@ -173,10 +190,11 @@ export class WorkspaceService {
   listSessions(slug: string, opts: { archived?: boolean } = {}): PublicSession[] {
     this.getWorkspace(slug);
     return this.db.select().from(sessionWorkspace)
-      .where(and(eq(sessionWorkspace.workspaceSlug, slug), eq(sessionWorkspace.archived, opts.archived ?? false)))
+      .where(and(eq(sessionWorkspace.workspaceSlug, slug), eq(sessionWorkspace.archived, opts.archived ?? false), alive))
       .all()
       .map(toPublic)
-      .sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt));
+      // pinned first, then most recently active
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt));
   }
 
   /** Unarchived sessions of the instance's workspaces, most recently active first (home page). */
@@ -184,7 +202,7 @@ export class WorkspaceService {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId), alive))
       // lastActiveAt is set from creation on
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(limit).all()
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
@@ -196,7 +214,7 @@ export class WorkspaceService {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId)))
+      .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId), alive))
       .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).all()
       .filter((r) => r.s.title?.toLocaleLowerCase().includes(needle))
       .slice(0, limit)
@@ -209,7 +227,7 @@ export class WorkspaceService {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.archived, false), inArray(sessionWorkspace.sessionId, ids)))
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.archived, false), inArray(sessionWorkspace.sessionId, ids), alive))
       .all()
       .map((r) => ({ ...toPublic(r.s), workspaceName: r.workspaceName, profile: r.profile ?? 'default' }));
   }
@@ -217,11 +235,11 @@ export class WorkspaceService {
   /** Non-archived sessions per workspace slug. */
   sessionCounts(): Map<string, number> {
     const rows = this.db.select({ slug: sessionWorkspace.workspaceSlug, n: count() }).from(sessionWorkspace)
-      .where(eq(sessionWorkspace.archived, false)).groupBy(sessionWorkspace.workspaceSlug).all();
+      .where(and(eq(sessionWorkspace.archived, false), alive)).groupBy(sessionWorkspace.workspaceSlug).all();
     return new Map(rows.map((r) => [r.slug, r.n]));
   }
 
-  /** Every session id Intendia owns on an instance (to filter "other sessions"). */
+  /** Every session id Intendia owns on an instance (to filter "other sessions"), deleted ones included. */
   ownedIds(instanceId: string): Set<string> {
     return new Set(this.db.select({ id: sessionWorkspace.sessionId }).from(sessionWorkspace)
       .where(eq(sessionWorkspace.instanceId, instanceId)).all().map((r) => r.id));
@@ -229,7 +247,7 @@ export class WorkspaceService {
 
   getSession(instanceId: string, sessionId: string): SessionContext {
     const row = this.db.select().from(sessionWorkspace)
-      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).get();
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId), alive)).get();
     if (!row) throw new NotFoundError(`Session inconnue : ${sessionId}`);
     const workspace = this.getWorkspace(row.workspaceSlug);
     return { session: toPublic(row), workspace, instance: this.instance(instanceId), profile: workspace.profile ?? 'default' };
@@ -255,12 +273,13 @@ export class WorkspaceService {
 
   updateSession(
     instanceId: string, sessionId: string,
-    patch: { title?: string | null; archived?: boolean; model?: string | null; provider?: string | null; effort?: string | null },
+    patch: { title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: string | null },
   ): PublicSession {
     const { workspace } = this.getSession(instanceId, sessionId);
     const set: Partial<SessionRow> = {};
     if (patch.title !== undefined) set.title = patch.title ? titleFrom(patch.title) : null;
     if (patch.archived !== undefined) set.archived = patch.archived;
+    if (patch.pinned !== undefined) set.pinned = patch.pinned;
     // the run options are also remembered as the workspace's last choice (start of its next sessions)
     const choice: Partial<Workspace> = {};
     // model and provider always change together: a model alone clears the provider
@@ -280,9 +299,63 @@ export class WorkspaceService {
     return this.getSession(instanceId, sessionId).session;
   }
 
-  deleteSession(instanceId: string, sessionId: string): void {
+  // ---- deletion with undo (rows stay, hidden, until the purger deletes them at Hermes)
+
+  /** Hides the sessions; returns the end of the undo window. */
+  markDeleted(instanceId: string, ids: string[], now = Date.now()): number {
+    if (ids.length) {
+      this.db.update(sessionWorkspace).set({ deletedAt: now })
+        .where(and(eq(sessionWorkspace.instanceId, instanceId), inArray(sessionWorkspace.sessionId, ids), alive)).run();
+    }
+    return now + UNDO_MS;
+  }
+
+  /** Sessions brought back (still in their undo window); the others are gone or taken by the purger. */
+  restore(instanceId: string, ids: string[], now = Date.now()): string[] {
+    if (!ids.length) return [];
+    const where = and(eq(sessionWorkspace.instanceId, instanceId), inArray(sessionWorkspace.sessionId, ids), gt(sessionWorkspace.deletedAt, now - UNDO_MS));
+    return this.db.transaction((tx) => {
+      const back = tx.select({ id: sessionWorkspace.sessionId }).from(sessionWorkspace).where(where).all().map((r) => r.id);
+      if (back.length) tx.update(sessionWorkspace).set({ deletedAt: null }).where(where).run();
+      return back;
+    });
+  }
+
+  /** Deleted sessions whose undo window is over, marked as taken (0: no longer restorable) in the same transaction. */
+  claimPurgeable(now: number, limit: number): PurgeItem[] {
+    return this.db.transaction((tx) => {
+      const rows = tx.select({ instanceId: sessionWorkspace.instanceId, sessionId: sessionWorkspace.sessionId, profile: workspaces.profile })
+        .from(sessionWorkspace)
+        .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+        .where(and(isNotNull(sessionWorkspace.deletedAt), lte(sessionWorkspace.deletedAt, now - UNDO_MS)))
+        .orderBy(asc(sessionWorkspace.deletedAt)).limit(limit).all();
+      for (const r of rows) {
+        tx.update(sessionWorkspace).set({ deletedAt: 0 })
+          .where(and(eq(sessionWorkspace.instanceId, r.instanceId), eq(sessionWorkspace.sessionId, r.sessionId))).run();
+      }
+      return rows.map((r) => ({ ...r, profile: r.profile ?? 'default' }));
+    });
+  }
+
+  /** Drops a row for good (after Hermes deleted the session). */
+  dropRow(instanceId: string, sessionId: string): void {
     this.db.delete(sessionWorkspace)
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
+  }
+
+  /** Never used sessions of the instance (no run, not a copy, not pinned) created before `now - UNUSED_AFTER_MS`. */
+  unusedSessions(instanceId: string, now = Date.now()): string[] {
+    return this.db.select({ id: sessionWorkspace.sessionId }).from(sessionWorkspace)
+      .where(and(
+        eq(sessionWorkspace.instanceId, instanceId), alive, isNull(sessionWorkspace.lastRunId), isNull(sessionWorkspace.copiedFrom),
+        eq(sessionWorkspace.pinned, false), lte(sessionWorkspace.createdAt, now - UNUSED_AFTER_MS),
+      )).all().map((r) => r.id);
+  }
+
+  /** Moves a session row to another workspace (the caller checks instance, profile and folder). */
+  moveSession(instanceId: string, sessionId: string, slug: string): void {
+    this.db.update(sessionWorkspace).set({ workspaceSlug: slug })
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId), alive)).run();
   }
 
   /** Sessions whose last run started after `sinceMs`, most recent first (Activity page). */
@@ -300,7 +373,7 @@ export class WorkspaceService {
         lastActiveAt: sessionWorkspace.lastActiveAt,
       }).from(sessionWorkspace)
         .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
-        .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs)))
+        .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs), alive))
         .orderBy(desc(sessionWorkspace.lastActiveAt), desc(sessionWorkspace.sessionId)).limit(PAGE).offset(offset).all()
         .map((r) => ({ ...r, runId: r.runId!, profile: r.profile ?? 'default', lastActiveAt: r.lastActiveAt ?? 0 }));
       for (const r of page) if (out.length < limit && keep(r)) out.push(r);

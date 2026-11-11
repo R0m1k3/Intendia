@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Ellipsis, Link2, PanelRight, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
@@ -228,8 +229,20 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }).then(() => qc.invalidateQueries({ queryKey: ['sessions'] })),
   });
   const archive = useMutation({
-    mutationFn: () => api.updateSession(inst!, sessionId, { archived: true }),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); void qc.invalidateQueries({ queryKey: ['workspaces'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
+    mutationFn: (archived: boolean) => api.updateSession(inst!, sessionId, { archived }),
+    onSuccess: async (_res, archived) => {
+      await qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+      if (archived) await navigate({ to: '/w/$slug', params: { slug } });
+    },
+  });
+  const pin = useMutation({
+    mutationFn: (pinned: boolean) => api.updateSession(inst!, sessionId, { pinned }),
+    onSuccess: (res) => {
+      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
   });
   /** Model / effort of the next messages (also remembered as the workspace's last choice). */
   const setOptions = useMutation({
@@ -240,9 +253,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     },
     onError: setError,
   });
+  // deleted at Hermes only once the undo window is over (banner « Annuler »)
   const remove = useMutation({
     mutationFn: () => api.deleteSession(inst!, sessionId),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['sessions'] }); void qc.invalidateQueries({ queryKey: ['workspaces'] }); await navigate({ to: '/w/$slug', params: { slug } }); },
+    onSuccess: async ({ undoUntil }) => {
+      showUndo({ inst: inst!, ids: [sessionId], undoUntil, label: 'Session supprimée' });
+      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+      await navigate({ to: '/w/$slug', params: { slug } });
+    },
+    onError: setError,
   });
 
   const messages = history.data?.messages ?? [];
@@ -377,9 +396,13 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               items={[
                 { label: 'Renommer', icon: <Pencil className="size-4" strokeWidth={1.5} />,
                   onSelect: async () => { const t = await askText({ title: 'Renommer la session', label: 'Nouveau titre', value: sess.data?.session.title ?? '', confirmLabel: 'Renommer' }); if (t) rename.mutate(t); } },
-                { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate() },
-                { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true,
-                  onSelect: async () => { if (await ask({ title: 'Supprimer cette session chez Hermes ?', message: 'Les fichiers de son dossier restent sur le disque.', confirmLabel: 'Supprimer', danger: true })) remove.mutate(); } },
+                sess.data?.session.pinned
+                  ? { label: 'Désépingler', icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
+                  : { label: 'Épingler', icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },
+                sess.data?.session.archived
+                  ? { label: 'Désarchiver', icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
+                  : { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
+                { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
           </div>

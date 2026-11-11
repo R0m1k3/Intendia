@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { api, ApiError } from './api';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
+import { UndoHost } from './sessions/UndoBar';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
 import { LoginPage } from './pages/Login';
@@ -154,6 +155,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <DialogHost />
+      <UndoHost />
     </QueryClientProvider>
   </StrictMode>,
 );

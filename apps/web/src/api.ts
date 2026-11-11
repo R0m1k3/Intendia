@@ -110,7 +110,11 @@ export interface Session {
   /** Provider of `model` (picker group), sent with it; null = model sent alone. */
   modelProvider: string | null;
   effort: Effort | null;
+  /** First in the lists (kept by Intendia only). */
+  pinned: boolean;
 }
+export type BulkAction = 'archive' | 'unarchive' | 'pin' | 'unpin' | 'delete' | 'move';
+export interface BulkResult { id: string; ok: boolean; error?: string }
 export interface ChatMessage {
   id: number;
   role: string;
@@ -549,9 +553,15 @@ export const api = {
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
-  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null }) =>
+  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
-  deleteSession: (inst: string, id: string) => call<{ ok: true }>('DELETE', sessionPath(inst, id)),
+  /** Hidden at once, deleted at Hermes after `undoUntil` unless restored. */
+  deleteSession: (inst: string, id: string) => call<{ ok: true; undoUntil: number }>('DELETE', sessionPath(inst, id)),
+  bulkSessions: (inst: string, ids: string[], action: BulkAction, workspace?: string) =>
+    call<{ results: BulkResult[]; undoUntil?: number }>('POST', `/i/${enc(inst)}/sessions/bulk`, { ids, action, ...(workspace ? { workspace } : {}) }),
+  restoreSessions: (inst: string, ids: string[]) => call<{ restored: string[] }>('POST', `/i/${enc(inst)}/sessions/restore`, { ids }),
+  cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
+  cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
   send: (inst: string, id: string, input: string) => call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, { input }),
   sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),

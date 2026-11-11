@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
-import { callOp, HermesError } from '../connectors/runtime.js';
 import { EFFORTS } from '../chat/run-stats.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { pushTitle } from '../workspaces/title.js';
 import { SESSION_SOURCES, type SessionSource } from '../sessions/recent.js';
-import { ValidationError, type WorkspaceService } from '../workspaces/service.js';
+import { NotFoundError, ValidationError, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
+import { createSessionDir, WorkspaceFsError } from '../workspaces/fs.js';
+import { isRunActive } from '../chat/history.js';
+import type { HermesFs } from '../files/hermes-fs.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
 export const SESSION_ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
@@ -23,12 +25,26 @@ const AgentsMd = z.object({ text: z.string() });
 const PatchSession = z.object({
   title: z.string().max(200).nullish(),
   archived: z.boolean().optional(),
+  /** Kept by Intendia only (first in the lists). */
+  pinned: z.boolean().optional(),
   /** null = Hermes default */
   model: z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne').nullable().optional(),
   /** Provider of `model` (picker group); accepts `custom:<name>` keys. Only with `model`. */
   provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, 'fournisseur invalide').nullable().optional(),
   effort: z.enum(EFFORTS).nullable().optional(),
 });
+
+const Ids = z.array(z.string().regex(SESSION_ID_RE)).min(1).max(200)
+  .refine((ids) => new Set(ids).size === ids.length, 'identifiants en double');
+const BulkBody = z.object({
+  ids: Ids,
+  action: z.enum(['archive', 'unarchive', 'pin', 'unpin', 'delete', 'move']),
+  workspace: z.string().regex(SLUG_RE).optional(),
+}).refine((b) => b.action !== 'move' || b.workspace, { message: 'workspace requis pour déplacer', path: ['workspace'] });
+const RestoreBody = z.object({ ids: Ids });
+
+export const RUN_ACTIVE = 'Un travail est en cours';
+const MOVE_FILES = "Ses fichiers resteraient dans l'ancien workspace";
 
 export function sessionParams(c: { req: { param: (k: string) => string } }): { inst: string; id: string } {
   const inst = c.req.param('inst');
@@ -99,6 +115,41 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ session: ctx.session, workspace: ctx.workspace, profile: ctx.profile });
   });
 
+  const runActive = (ctx: SessionContext) => isRunActive(deps.compat, ctx);
+
+  /**
+   * Moves a session to another workspace of the same instance and profile. Its folder cannot move (Hermes does not
+   * move folders): refused when the agent wrote files there; an empty one is recreated in the target.
+   */
+  const moveOne = async (ctx: SessionContext, slug: string): Promise<string | null> => {
+    const target = workspaces.getWorkspace(slug);
+    if (target.instanceId !== ctx.instance.id || (target.profile ?? 'default') !== ctx.profile) return 'Autre agent';
+    if (target.slug === ctx.workspace.slug) return null;
+    if (await runActive(ctx)) return RUN_ACTIVE;
+    const from = `${ctx.workspace.slug}/sessions/${ctx.session.id}`;
+    let fs: HermesFs;
+    try {
+      fs = deps.services.roots.fs(ctx.instance.id);
+    } catch (err) {
+      // no file root on this instance: the session has no folder, only its row moves
+      if (!(err instanceof WorkspaceFsError && err.code === 'no_root')) throw err;
+      workspaces.moveSession(ctx.instance.id, ctx.session.id, slug);
+      return null;
+    }
+    let present = true;
+    try {
+      if ((await fs.list(from)).entries.length) return MOVE_FILES;
+    } catch (err) {
+      if (!(err instanceof WorkspaceFsError && err.code === 'not_found')) return (err as Error).message;
+      present = false;
+    }
+    // one attempt, as at creation: without it the agent creates the folder when it writes there
+    await createSessionDir(fs, slug, ctx.session.id).catch(() => undefined);
+    workspaces.moveSession(ctx.instance.id, ctx.session.id, slug);
+    if (present) await fs.remove(from, false).catch(() => undefined);
+    return null;
+  };
+
   r.patch('/sessions/:inst/:id', async (c) => {
     const { inst, id } = sessionParams(c);
     const body = PatchSession.parse(await c.req.json());
@@ -107,19 +158,58 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ session });
   });
 
+  // deletion with undo: hidden now, deleted at Hermes by the purger once the undo window is over
   r.delete('/sessions/:inst/:id', async (c) => {
     const { inst, id } = sessionParams(c);
     const ctx = workspaces.getSession(inst, id);
-    try {
-      await callOp(deps.compat.http(inst), deps.compat.get(inst), 'sessions', 'remove', {
-        params: { session_id: id }, profile: ctx.profile,
-      });
-    } catch (err) {
-      // never sent to Hermes (no message yet): nothing to delete there
-      if (!(err instanceof HermesError && err.detail.status === 404)) throw err;
+    if (await runActive(ctx)) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
+    return c.json({ ok: true, undoUntil: workspaces.markDeleted(inst, [id]) });
+  });
+
+  r.post('/i/:inst/sessions/restore', async (c) => {
+    const inst = c.req.param('inst');
+    const { ids } = RestoreBody.parse(await c.req.json());
+    const restored = workspaces.restore(inst, ids);
+    if (!restored.length) return c.json({ error: 'Trop tard : la suppression est faite', code: 'too_late' }, 409);
+    return c.json({ restored });
+  });
+
+  r.post('/i/:inst/sessions/bulk', async (c) => {
+    const inst = c.req.param('inst');
+    const { ids, action, workspace } = BulkBody.parse(await c.req.json());
+    const results: { id: string; ok: boolean; error?: string }[] = [];
+    const toDelete: string[] = [];
+    for (const id of ids) {
+      let ctx: SessionContext;
+      try {
+        ctx = workspaces.getSession(inst, id);
+      } catch (err) {
+        if (err instanceof NotFoundError) { results.push({ id, ok: false, error: 'Introuvable' }); continue; }
+        throw err;
+      }
+      try {
+        let error: string | null = null;
+        if (action === 'archive' || action === 'unarchive') workspaces.updateSession(inst, id, { archived: action === 'archive' });
+        else if (action === 'pin' || action === 'unpin') workspaces.updateSession(inst, id, { pinned: action === 'pin' });
+        else if (action === 'delete') {
+          if (await runActive(ctx)) error = RUN_ACTIVE;
+          else toDelete.push(id);
+        } else error = await moveOne(ctx, workspace!);
+        results.push(error ? { id, ok: false, error } : { id, ok: true });
+      } catch (err) {
+        results.push({ id, ok: false, error: (err as Error).message });
+      }
     }
-    workspaces.deleteSession(inst, id);
-    return c.json({ ok: true });
+    const undoUntil = toDelete.length ? workspaces.markDeleted(inst, toDelete) : undefined;
+    return c.json({ results, ...(undoUntil ? { undoUntil } : {}) });
+  });
+
+  // clean-up: Intendia sessions never used (they do not exist at Hermes), deleted with the same undo
+  r.get('/i/:inst/sessions/cleanup', (c) => c.json({ unused: workspaces.unusedSessions(c.req.param('inst')).length }));
+  r.post('/i/:inst/sessions/cleanup', (c) => {
+    const inst = c.req.param('inst');
+    const ids = workspaces.unusedSessions(inst);
+    return c.json({ ids, undoUntil: workspaces.markDeleted(inst, ids) });
   });
 
   return r;

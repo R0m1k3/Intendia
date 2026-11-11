@@ -1,6 +1,9 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Search } from 'lucide-react';
+import { Brush, Search } from 'lucide-react';
+import { ask } from '../components/Dialog';
+import { sessionsCount } from '../sessions/actions';
+import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { useEffect, useState } from 'react';
 import { api, type SessionSource } from '../api';
 import { useCurrentInstance } from '../instance/current';
@@ -45,6 +48,27 @@ export function SessionsPage() {
     queryKey: ['sessions-search', inst, source, q], queryFn: () => api.searchSessions(inst!, q, source),
     enabled: searching && inst !== null, refetchOnWindowFocus: false,
   });
+  const qc = useQueryClient();
+  const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
+  const [cleanError, setCleanError] = useState<unknown>(null);
+  const n = unused.data?.unused ?? 0;
+  /** Never used Intendia sessions (nothing at Hermes), deleted with the same undo as a deletion. */
+  const cleanUp = async () => {
+    if (!inst) return;
+    const ok = await ask({
+      title: 'Faire le ménage ?', danger: true, confirmLabel: 'Supprimer',
+      message: `${sessionsCount(n)} jamais utilisée${n > 1 ? 's' : ''} dans Intendia, créée${n > 1 ? 's' : ''} il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.`,
+    });
+    if (!ok) return;
+    setCleanError(null);
+    try {
+      const res = await api.cleanup(inst);
+      if (res.ids.length) showUndo({ inst, ids: res.ids, undoUntil: res.undoUntil, label: `${sessionsCount(res.ids.length)} supprimée${res.ids.length > 1 ? 's' : ''}` });
+    } catch (err) {
+      setCleanError(err);
+    }
+    await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+  };
   const active = searching ? found : list;
   const rows = active.data?.sessions ?? [];
   const groups = groupByDay(rows);
@@ -53,7 +77,10 @@ export function SessionsPage() {
 
   return (
     <>
-      <PageHeader title="Sessions" subtitle={`Les sessions d’Intendia, de Telegram et des crons${instance && instances.length > 1 ? ` sur ${instance.label}` : ''}`} />
+      <PageHeader
+        title="Sessions" subtitle={`Les sessions d’Intendia, de Telegram et des crons${instance && instances.length > 1 ? ` sur ${instance.label}` : ''}`}
+        action={n > 0 ? <Button onClick={() => void cleanUp()}><Brush className="size-4" strokeWidth={1.5} />Ménage ({n})</Button> : undefined}
+      />
       <div className="px-5 pb-12 md:px-8">
         <section className="overflow-hidden card" aria-label="Sessions">
           <header className="flex flex-wrap items-center gap-3 px-5 py-4">
@@ -78,6 +105,7 @@ export function SessionsPage() {
             </div>
           </header>
           <ErrorText error={active.error} />
+          <ErrorText error={cleanError} />
           {partial.map((name) => (
             <p key={name} data-partial className="border-t border-line px-5 py-2 text-xs text-ink-soft">
               Recherche dans le contenu indisponible sur {name} : seuls les titres des sessions Intendia y sont cherchés
