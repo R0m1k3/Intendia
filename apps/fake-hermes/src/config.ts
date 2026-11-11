@@ -182,6 +182,13 @@ export class ConfigStore {
     }
     // like Hermes `_lap_builtin_rows`: providers.<slug>.models declared in the file go first, without duplicates
     const declared = isObj(this.file().providers) ? (this.file().providers as Obj) : {};
+    // like Hermes 0.23 (checked 2026-11-11): a providers.<slug> entry with an endpoint (api, base_url, url) is its own
+    // row, user defined, authenticated even without a key, with its declared models
+    for (const [slug, entry] of Object.entries(declared)) {
+      if (!isObj(entry) || rows.some((p) => p.slug === slug)) continue;
+      if (!['api', 'base_url', 'url'].some((k) => typeof entry[k] === 'string' && entry[k] !== '')) continue;
+      rows.push({ slug, name: typeof entry.name === 'string' ? entry.name : slug, authenticated: true, is_user_defined: true, models: declaredIds(entry.models) });
+    }
     return {
       providers: rows.map((p) => {
         const entry = declared[String(p.slug)];
