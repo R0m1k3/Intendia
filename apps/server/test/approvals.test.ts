@@ -13,7 +13,8 @@ describe('lastPendingApproval', () => {
       f(4, { event: 'approval.request', request_id: 'r2', command: 'rm x', description: 'Supprimer' }),
     ];
     expect(lastPendingApproval('run_1', frames)).toEqual({
-      key: 'run_1:r2', requestId: 'r2', command: 'rm x', description: 'Supprimer', choices: ['once', 'deny'],
+      kind: 'approval', key: 'run_1:r2', requestId: 'r2', command: 'rm x', description: 'Supprimer', choices: ['once', 'deny'],
+      question: null, multiSelect: false,
     });
   });
 
@@ -35,7 +36,13 @@ describe('Hermes 0.23 format (gateway session authority)', () => {
 
   it('reads the approval listed in the run status', () => {
     expect(pendingFromStatus('run_1', [prompt])).toMatchObject({ key: 'run_1:p1', requestId: 'p1', description: 'Supprimer' });
-    expect(pendingFromStatus('run_1', [{ ...prompt, kind: 'clarify' }])).toBeNull();
+    // a question of the agent: second, after any approval
+    const question = { kind: 'clarify', prompt_id: 'c1', execution_generation: 3, question: 'Quel magasin ?', choices: ['A', 'B'], multi_select: true };
+    expect(pendingFromStatus('run_1', [question])).toEqual({
+      kind: 'clarify', key: 'run_1:c1', requestId: 'c1', question: 'Quel magasin ?', choices: ['A', 'B'], multiSelect: true, command: null, description: null,
+    });
+    expect(pendingFromStatus('run_1', [question, prompt])?.kind).toBe('approval');
+    expect(pendingFromStatus('run_1', [{ ...question, choices: null }])?.choices).toEqual([]);
     expect(pendingFromStatus('run_1', [])).toBeNull();
   });
 
@@ -50,5 +57,9 @@ describe('Hermes 0.23 format (gateway session authority)', () => {
     // without the authority: the former body
     expect(controlBody('approval', { run_id: 'run_1', status: 'waiting_for_approval' }, 'apr_1', 'once')).toEqual({ body: { choice: 'once', request_id: 'apr_1' } });
     expect(controlBody('approval', null, null, 'deny')).toEqual({ body: { choice: 'deny' } });
+    // clarify: answer instead of choice, never confused with an approval
+    const q = { kind: 'clarify', prompt_id: 'c1', execution_generation: 3, question: 'Q', choices: [] };
+    expect(controlBody('clarify', status([prompt, q]), null, 'Frouard')).toEqual({ body: { request_id: 'c1', execution_generation: 3, answer: 'Frouard' } });
+    expect(controlBody('clarify', status([prompt]), null, 'x')).toEqual({ code: 'no_pending' });
   });
 });

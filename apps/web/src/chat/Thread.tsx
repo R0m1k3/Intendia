@@ -197,7 +197,13 @@ function TurnView({ t, agent }: { t: Turn; agent?: string }) {
     return (
       <div className="flex flex-col items-end" data-turn="user">
         <UserMessage text={t.entry.text} />
-        {t.entry.ts !== null && <span className="mt-1 text-[11px] text-ink-faint">{clock(t.entry.ts)}</span>}
+        {(t.entry.ts !== null || t.entry.steer) && (
+          <span className="mt-1 text-[11px] text-ink-faint">
+            {t.entry.steer && <span data-steer className="font-medium text-accent" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
+            {t.entry.steer && t.entry.ts !== null && ' · '}
+            {t.entry.ts !== null && clock(t.entry.ts)}
+          </span>
+        )}
         {t.footers.map((r) => <div key={r.runId} className="w-full"><RunFooter r={r} /></div>)}
       </div>
     );

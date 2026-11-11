@@ -5,6 +5,10 @@ import { readSseFrames, type SseFrame } from '../connectors/sse.js';
 
 /** The question of a run waiting for approval, as read in its events. */
 export interface ApprovalQuestion {
+  /** approval: a command to allow; clarify: a question of the agent (answered with text). */
+  kind: 'approval' | 'clarify';
+  question: string | null;
+  multiSelect: boolean;
   /** `<runId>:<id>`, or `<runId>:seq<frame id>` when Hermes sends no id. */
   key: string;
   requestId: string | null;
@@ -28,6 +32,7 @@ export function lastPendingApproval(runId: string, frames: SseFrame[]): Approval
     if (ev.event === 'approval.request') {
       const requestId = str(ev.prompt_id) ?? str(ev.request_id);
       pending = {
+        kind: 'approval', question: null, multiSelect: false,
         key: `${runId}:${requestId ?? `seq${f.id ?? '?'}`}`,
         requestId,
         command: str(ev.command),
@@ -41,13 +46,16 @@ export function lastPendingApproval(runId: string, frames: SseFrame[]): Approval
   return pending;
 }
 
-/** The first approval listed in the run status (`pending_controls`, gateway session authority), or null. */
+/** The first approval (else question of the agent) listed in the run status (`pending_controls`, gateway session authority). */
 export function pendingFromStatus(runId: string, controls: PendingControl[]): ApprovalQuestion | null {
-  const p = controls.find((c) => c.kind === 'approval' && c.prompt_id);
+  const p = controls.find((c) => c.kind === 'approval' && c.prompt_id) ?? controls.find((c) => c.kind === 'clarify' && c.prompt_id);
   if (!p) return null;
+  const clarify = p.kind === 'clarify';
   return {
-    key: `${runId}:${p.prompt_id}`, requestId: p.prompt_id ?? null, command: p.command ?? null, description: p.description ?? null,
-    choices: p.choices?.length ? p.choices.map(String) : ['once', 'deny'],
+    kind: clarify ? 'clarify' : 'approval', key: `${runId}:${p.prompt_id}`, requestId: p.prompt_id ?? null,
+    command: p.command ?? null, description: p.description ?? null, question: clarify ? (p.question ?? null) : null,
+    multiSelect: clarify && p.multi_select === true,
+    choices: p.choices?.length ? p.choices.map(String) : clarify ? [] : ['once', 'deny'],
   };
 }
 

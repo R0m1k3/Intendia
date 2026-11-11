@@ -14,6 +14,8 @@ export const PendingControlSchema = z.looseObject({
   kind: z.string().nullish().catch(null),
   prompt_id: z.string().nullish().catch(null),
   execution_generation: z.number().int().nullish().catch(null),
+  /** Reorientation not given to the agent before the end of the run. */
+  pending_steer: z.string().nullish().catch(null),
   command: z.string().nullish().catch(null),
   description: z.string().nullish().catch(null),
   question: z.string().nullish().catch(null),
@@ -83,6 +85,15 @@ export const chatModule: ModuleDef = {
     approval: {
       kind: 'write',
       routes: [{ via: 'api', method: 'POST', path: '/v1/runs/{run_id}/approval', capability: 'run_approval', feature: 'run_approval_response' }],
+    },
+    /**
+     * Answer to a question of the agent (clarify tool). In the 0.23.0 source (gateway/platforms/api_server_runs.py) but not
+     * announced in /v1/capabilities: no capability, always tried. Gateway session authority only. No fixture (a question
+     * needs a provider key to happen); covered by the fake.
+     */
+    clarify: {
+      kind: 'write',
+      routes: [{ via: 'api', method: 'POST', path: '/v1/runs/{run_id}/clarify' }],
     },
     steer: {
       kind: 'write',

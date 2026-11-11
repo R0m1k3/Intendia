@@ -37,11 +37,15 @@ export interface PendingApproval {
   sessionId: string;
   title: string | null;
   runId: string;
+  /** approval: allow a command; clarify: a question of the agent, answered with text. */
+  kind: 'approval' | 'clarify';
   requestId: string | null;
+  question: string | null;
+  multiSelect: boolean;
   command: string | null;
   description: string | null;
   choices: string[];
-  /** The instance can answer approvals (module chat, op approval). */
+  /** The instance can answer (module chat, op approval or clarify). */
   canAnswer: boolean;
 }
 
@@ -151,16 +155,19 @@ export class ActivityService {
   }
 
   private async computeApprovals(now: number): Promise<{ approvals: PendingApproval[] }> {
-    const waiting = (await this.running(now, undefined, () => {})).filter((r) => r.status === 'waiting_for_approval');
+    // a run waiting for a question of the agent stays `running`: it is found by the questions listed in its status
+    const waiting = (await this.running(now, undefined, () => {}))
+      .filter((r) => r.status === 'waiting_for_approval' || r.controls.some((p) => p.kind === 'clarify' && p.prompt_id));
     const approvals = await inBatches(waiting, PARALLEL, async (r): Promise<PendingApproval> => {
       const report = this.compat.get(r.instance);
       // the status already read lists the question (gateway session authority); else it is read in the run's events
       const q = pendingFromStatus(r.runId, r.controls) ?? await readApproval(this.compat, r.instance, r.runId, r.profile);
-      const canAnswer = Boolean(report?.modules.find((m) => m.id === 'chat')?.ops.approval?.ok);
+      const kind = q?.kind ?? 'approval';
+      const canAnswer = Boolean(report?.modules.find((m) => m.id === 'chat')?.ops[kind]?.ok);
       return {
         key: q?.key ?? `${r.runId}:attente`, instanceId: r.instance, instanceLabel: this.store.get(r.instance)?.label ?? r.instance,
         workspace: r.workspace, workspaceName: r.workspaceName, sessionId: r.sessionId, title: r.title, runId: r.runId,
-        requestId: q?.requestId ?? null, command: q?.command ?? null, description: q?.description ?? null,
+        kind, requestId: q?.requestId ?? null, question: q?.question ?? null, multiSelect: q?.multiSelect ?? false, command: q?.command ?? null, description: q?.description ?? null,
         choices: q?.choices ?? [], canAnswer,
       };
     });

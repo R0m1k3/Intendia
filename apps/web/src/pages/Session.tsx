@@ -2,13 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
+import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
+import { ContextGauge } from '../chat/ContextGauge';
+import { estimateTokens } from '../chat/estimate';
 import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
+import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
+import { ClarifyCard } from '../chat/ClarifyCard';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
 import { SessionFiles } from '../components/SessionFiles';
@@ -79,6 +83,23 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
   const [trees, setTrees] = useState<Extract<Entry, { kind: 'subagents' }>[]>([]);
   const composer = useRef<ComposerHandle>(null);
+  // Messages written during a run (chat/queue.ts): one leaves when a run ends well (`drain`), never on opening the page
+  const [queue, setQueue] = useState<Queue>(EMPTY_QUEUE);
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [drain, setDrain] = useState<string | null>(null);
+  useEffect(() => {
+    if (!inst) return;
+    setQueue(loadQueue(inst, sessionId));
+    setQueueLoaded(true);
+  }, [inst, sessionId]);
+  useEffect(() => { if (inst && queueLoaded) saveQueue(inst, sessionId, queue); }, [inst, sessionId, queue, queueLoaded]);
+  const queued = queue.items.length;
+  useEffect(() => {
+    if (!queued) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [queued]);
 
   // Reopened during a run (reload, other tab, network cut, sent from the home page): plug back into its stream.
   // A message sent from the home page is shown at once (handoff), and kept on screen if its run failed.
@@ -89,14 +110,26 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     const seed: Entry[] = h ? [{ kind: 'user', key: `u-${lastRunId}`, text: h.text, ts: h.ts }] : [];
     if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, seed });
     else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
-  }, [lastRun.data, lastRunId, active, inst, sessionId]);
+    // ended while the page was closed with a reorientation Hermes did not deliver: back in front of the queue, once
+    if (isTerminal(s.status) && s.pendingSteer && queueLoaded && firstTime(inst, lastRunId)) {
+      setQueue((q) => pauseQueue(pushHead(q, s.pendingSteer!), 'réorientation non livrée'));
+    }
+  }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
   useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
 
+  /** Run being followed, read by onEnd (once per run). */
+  const endingRun = useRef<string | null>(null);
+  endingRun.current = active?.id ?? null;
   const onEnd = useCallback(async (state: RunState) => {
+    // once per run: a reorientation not delivered goes back in front and waits; a run that did not end well stops the queue
+    if (state.pendingSteer) {
+      if (firstTime(inst ?? '', endingRun.current ?? '')) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), 'réorientation non livrée'));
+    } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
+    else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
     if (tree) setTrees((t) => [...t, tree]);
-    const input = state.entries.find((e) => e.kind === 'user')?.text ?? null;
+    const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }),
@@ -109,10 +142,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [qc, inst, sessionId]);
 
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
-  const live = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  const [live, localEvent] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
 
-  const send = async (text: string): Promise<boolean> => {
-    if (!inst) return false;
+  const send = async (text: string): Promise<boolean> => (await launch(text)) === null;
+  /** Starts a run; the error, or null once started. */
+  const launch = async (text: string): Promise<unknown> => {
+    if (!inst) return new Error('Instance inconnue');
     setError(null);
     setOutcome(null);
     try {
@@ -121,18 +156,61 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
       setActive({ id: res.runId, createdAt: status?.createdAt ?? null, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
       void qc.invalidateQueries({ queryKey: ['sessions'] });
+      return null;
+    } catch (err) {
+      setError(err);
+      return err;
+    }
+  };
+
+  // the head of the queue leaves once the run is over (and not paused); a refused send puts it back and pauses
+  useEffect(() => {
+    if (active || drain === null || !inst) return;
+    setDrain(null);
+    if (queue.paused) return;
+    const [head, rest] = takeHead(queue);
+    if (!head) return;
+    setQueue(rest);
+    void launch(head.text).then((err) => {
+      if (err === null) return;
+      const reason = err instanceof ApiError && err.status === 409 ? 'un autre onglet a lancé un travail' : 'l’envoi a échoué';
+      setQueue((q) => pauseQueue(pushHead(q, head.text), reason));
+    });
+  }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const steer = async (text: string): Promise<boolean> => {
+    if (!inst || !active) return false;
+    setError(null);
+    try {
+      await api.steer(inst, sessionId, active.id, text);
+      localEvent({ event: 'intendia.steer', text, timestamp: Date.now() / 1000 });
       return true;
     } catch (err) {
       setError(err);
       return false;
     }
   };
+  const steerDisabled = live?.approval || live?.clarify ? 'Un accord ou une réponse est attendu'
+    : !chat.has('chat', 'steer') ? 'Réorientation indisponible sur cette instance'
+    : live?.status !== 'running' ? 'L’agent n’a pas encore commencé' : undefined;
 
   const approve = async (choice: ApprovalChoice) => {
     if (!inst || !active || !live?.approval) return;
     setBusy(true);
     try {
       await api.approve(inst, sessionId, active.id, choice, live.approval.requestId ?? undefined);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const answer = async (text: string) => {
+    if (!inst || !active || !live?.clarify) return;
+    setBusy(true);
+    try {
+      await api.clarify(inst, sessionId, active.id, text, live.clarify.requestId ?? undefined);
     } catch (err) {
       setError(err);
     } finally {
@@ -189,6 +267,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     return m;
   }, [messages, runs, lostInput]);
   const running = Boolean(active);
+  // context gauge: read on opening and after each run
+  const usage = useQuery({
+    queryKey: ['usage', inst, sessionId, runCount], queryFn: () => api.sessionUsage(inst!, sessionId),
+    enabled: Boolean(inst), staleTime: 60_000, refetchOnWindowFocus: false,
+  });
+  const estimate = estimateTokens(entries);
 
   // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
   // scrolled up. `measure` (chat/follow.ts) judges from the scroll position, measured on each scroll event and again
@@ -220,7 +304,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(followIfPinned, [tail, live?.approval]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(followIfPinned, [tail, live?.approval, live?.clarify]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = sess.data?.session.title || 'Nouvelle session';
 
@@ -315,9 +399,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
         <Thread entries={entries} footers={footers} agent={agent} />
-        {running && !live?.approval && <ThinkingIndicator entries={entries} agent={agent} />}
+        {running && !live?.approval && !live?.clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
+        )}
+        {live?.clarify && (
+          <div className="mt-5"><ClarifyCard key={live.clarify.requestId ?? ''} clarify={live.clarify} onAnswer={(t) => void answer(t)} busy={busy} /></div>
         )}
         {endNote && (
           <div className={cx('mt-5', AGENT_INDENT)}>
@@ -340,6 +427,14 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             onStop={stop}
             running={running}
             disabled={!chat.available || !inst}
+            onQueue={(text) => setQueue((q) => enqueue(q, text))}
+            onSteer={steer}
+            steerDisabled={steerDisabled}
+            queue={{
+              items: queue.items, paused: queue.paused,
+              onRemove: (id) => setQueue((q) => dropItem(q, id)),
+              onResume: () => { setQueue(resumeQueue); if (!active) setDrain(`resume-${Date.now()}`); },
+            }}
             options={inst && sess.data && (
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
@@ -348,8 +443,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : 'L’agent travaille…') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
-            hint="Entrée pour envoyer · Maj+Entrée pour aller à la ligne"
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
+            hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
+              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne'}
           />
         </div>
       </div>

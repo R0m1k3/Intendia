@@ -48,6 +48,24 @@ of the diff are empty lists (no session, no cron in that container).
     `request_id`, end `approval.responded`, answer `{choice, request_id?}`.
   Intendia builds the body on the server from the run status (`controlBody` in `routes/chat.ts`); the fake uses the
   authority format, `FAKE_CONTROLS=legacy` the other.
+  A page id no longer pending is refused (409 `no_pending`), never replaced by another prompt.
+- Questions of the agent (clarify tool), authority only (read in the 0.23.0 source): `clarify.request {prompt_id,
+  execution_generation, question, choices, multi_select}`, end `clarify.settled`; answer `POST /v1/runs/{id}/clarify
+  {request_id, execution_generation, answer}` (a string; several choices = a JSON array of the labels,
+  `tools/clarify_gateway.py`). Route not in `/v1/capabilities`; without the authority Hermes answers 409 `not_found`
+  (Intendia: 409 `clarify_unavailable`). A run waiting on a question stays `running`; the question is also in
+  `pending_controls` (`kind: "clarify"`).
+- Reorientation: `POST /v1/runs/{id}/steer {input}` (`run_steer`), only while the status is exactly `running` (else 409
+  `run_not_accepting_steer`, also during an approval); given to the agent after its current tools. `run.steered`
+  carries only `accepted`, not the text. A text never delivered comes back as `pending_steer` on the final event and in
+  the status; a delivered one is a `user` line with `display_kind: "steer"` in the messages.
+- Dashboard JSON-RPC WebSocket `/api/ws?token=<dashboard token>` (outside the OpenAPI; `?token=` accepted in
+  loopback / `--insecure`, an authenticated dashboard needs a user ticket Intendia has not): frames `{jsonrpc, id,
+  method, params}`, pushed events have no `id`. `session.stats {session_id}` → `context_tokens`, `context_length`,
+  `plan_gauge {label, used_bp, resets_at_ms}`, `tokens_per_s` (`gateway/session_usage.py`; 0 / null before the agent's
+  first turn) **only when the dashboard runs inside the gateway**: a standalone dashboard (reference instance, the
+  usual setup) answers `-32601 unknown method`. `commands.catalog` and `session.list` answer in both cases;
+  `session.resume` copies the session into the dashboard's process (never call it).
 - `GET /api/sessions` is paged (`limit` up to 200, `offset`, `has_more`) and takes `source` (`telegram`, `cron`…); its
   `title` filter is an exact match, useless for a search.
 - Search: dashboard `GET /api/sessions/search?q=&limit=(1..100)&profile=&source=` (not on the API server) looks for

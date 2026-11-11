@@ -46,6 +46,47 @@ describe('reduceEvent', () => {
     expect(s.entries.at(-1)).toMatchObject({ kind: 'note', text: 'Approbation répondue' });
   });
 
+  it('shows a reorientation where it was given, and reads the one Hermes did not deliver', () => {
+    let s = run([{ event: 'run.started' }, { event: 'message.delta', delta: 'Je regarde' }]);
+    s = reduceEvent(s, { event: 'intendia.steer', text: 'Plutôt Houdemont', timestamp: 10 });
+    s = reduceEvent(s, { event: 'run.steered', accepted: true });
+    s = reduceEvent(s, { event: 'message.delta', delta: 'Houdemont, donc.' });
+    expect(s.entries.map((e) => e.kind)).toEqual(['assistant', 'user', 'assistant']);
+    expect(s.entries[1]).toMatchObject({ kind: 'user', text: 'Plutôt Houdemont', steer: true, ts: 10 });
+    expect(s.pendingSteer).toBeNull();
+    expect(reduceEvent(s, { event: 'run.completed', output: 'x', pending_steer: 'Et Frouard' }).pendingSteer).toBe('Et Frouard');
+    expect(reduceEvent(s, { event: 'run.cancelled', pending_steer: '  ' }).pendingSteer).toBeNull();
+  });
+
+  it('keeps the run prompt from the history when a reorientation is given after a reload', () => {
+    const history = [msg(1, 'user', 'Avant', 5), msg(2, 'user', 'Tâche du run', 11), msg(3, 'user', 'Plutôt Houdemont', 12, { steer: true })];
+    const live = run([{ event: 'run.started' }, { event: 'intendia.steer', text: 'Plutôt Houdemont', timestamp: 12 }]).entries;
+    const texts = mergeHistory(history, 10, live).flatMap((e) => (e.kind === 'user' ? [e.text] : []));
+    expect(texts).toEqual(['Avant', 'Tâche du run', 'Plutôt Houdemont']);
+  });
+
+  it('marks the reorientations of the history', () => {
+    const entries = historyEntries([msg(1, 'user', 'Bonjour', 1), msg(2, 'user', 'Plutôt Houdemont', 2, { steer: true })]);
+    expect(entries.map((e) => Boolean(e.kind === 'user' && e.steer))).toEqual([false, true]);
+    expect(entries[0]).not.toHaveProperty('steer');
+  });
+
+  it('keeps a question of the agent until it is settled or the run ends', () => {
+    let s = run([
+      { event: 'run.started' },
+      { event: 'clarify.request', prompt_id: 'clr_1', execution_generation: 1, question: 'Quel magasin ?', choices: ['Frouard', 'Houdemont'], multi_select: true },
+    ]);
+    expect(s.status).toBe('waiting_for_clarify');
+    expect(s.clarify).toEqual({ requestId: 'clr_1', question: 'Quel magasin ?', choices: ['Frouard', 'Houdemont'], multiSelect: true });
+    s = reduceEvent(s, { event: 'clarify.settled', prompt_id: 'clr_1', execution_generation: 1 });
+    expect(s.clarify).toBeNull();
+    expect(s.status).toBe('running');
+    s = reduceEvent(s, { event: 'clarify.request', prompt_id: 'clr_2', question: '', choices: null });
+    expect(s.clarify).toMatchObject({ question: 'Hermes vous pose une question', choices: [], multiSelect: false });
+    s = reduceEvent(s, { event: 'run.cancelled' });
+    expect(s.clarify).toBeNull();
+  });
+
   it('handles approvals, failures and unknown events', () => {
     let s = run([{ event: 'approval.request', request_id: 'apr_1', command: 'rm -rf build', choices: ['once', 'deny'] }]);
     expect(s.status).toBe('waiting_for_approval');

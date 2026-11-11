@@ -94,6 +94,12 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
       <div className="flex flex-wrap gap-x-6 gap-y-1 px-5 py-4 text-sm">
         <span><span className="text-ink-soft">API server</span> {report.api.reachable ? 'joignable' : <span className="text-bad">injoignable ({report.api.error ?? '?'})</span>}</span>
         <span><span className="text-ink-soft">Dashboard</span> {dash}</span>
+        {report.socket && (
+          <span data-socket={report.socket.sessionStats ? 'on' : 'off'}>
+            <span className="text-ink-soft">Statistiques de session (WebSocket)</span> {report.socket.sessionStats ? 'disponibles' : 'indisponibles'}
+            <span className="text-ink-faint"> · {report.socket.note}</span>
+          </span>
+        )}
       </div>
       <ul className="divide-y divide-line border-t border-line">
         {report.modules.map((m) => <ModuleRow key={m.id} m={m} anchor={`${report.instanceId}-${m.id}`} />)}

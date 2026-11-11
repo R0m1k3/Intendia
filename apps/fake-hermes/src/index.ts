@@ -10,6 +10,12 @@
  *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
  *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
  *   `approval.responded`, body `{choice}`)
+ * - steer (POST /v1/runs/{id}/steer): taken while the run is `running` (else 409), `run.steered` + a user line
+ *   `display_kind: "steer"`; with "perdu" in the run's message never delivered, back as `pending_steer` at the end
+ * - "secours": the run is served by another model than the one asked (`runtime.model = fake/model-fallback`)
+ * - "question": the agent asks a question (clarify.request, 3 choices; "multi": several may be picked) until
+ *   POST /v1/runs/{id}/clarify; the run stays `running`, the question is in `pending_controls`; the answer is quoted in
+ *   the final text. Gateway session authority only: with `controls: 'legacy'` the route answers 409 not_found
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * - "panne": the run ends in `failed` (run.failed, no usage)
@@ -86,6 +92,11 @@ export interface FakeOptions {
   terminalBackend?: string;
   /** Delay before each managed files answer, in ms (slow Hermes). */
   filesDelayMs?: number;
+  /**
+   * `session.stats` on the dashboard WebSocket `/api/ws` (dashboard inside the gateway); default false = standalone
+   * dashboard, the method answers -32601 like Hermes 0.23.
+   */
+  sessionStats?: boolean;
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -138,6 +149,11 @@ interface SimRun {
   events: (Ev & { seq: number })[];
   listeners: Set<() => void>;
   approval: { resolve: (choice: string) => void; prompt: Record<string, unknown> } | null;
+  clarify: { resolve: (answer: string) => void; prompt: Record<string, unknown> } | null;
+  /** Answer given to the question of the run (quoted in the final text). */
+  answer?: string;
+  /** "perdu": a reorientation not given to the agent, sent back as `pending_steer` at the end. */
+  pendingSteer?: string;
 }
 
 interface SimMessage {
@@ -148,6 +164,7 @@ interface SimMessage {
   tool_calls: unknown;
   tool_name: string | null;
   timestamp: number;
+  display_kind?: string;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
@@ -180,7 +197,7 @@ class Simulator {
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
       sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, provider, status: 'queued', output: '', usage: null,
-      events: [], listeners: new Set(), approval: null,
+      events: [], listeners: new Set(), approval: null, clarify: null,
     };
     this.runs.set(run.id, run);
     this.lastRun = run;
@@ -244,6 +261,21 @@ class Simulator {
         await sleep(step);
         return this.finish(run, 'Commande refusée, je m’arrête là.');
       }
+    }
+    if (/question/i.test(run.input) && this.controls === 'authority') {
+      const prompt = {
+        kind: 'clarify', prompt_id: 'clr_1', execution_generation: 1, question: 'Quel magasin dois-je traiter ?',
+        choices: ['Frouard', 'Houdemont', 'Les deux'], multi_select: /multi/i.test(run.input),
+      };
+      run.answer = await new Promise<string>((resolve) => {
+        run.clarify = { resolve, prompt };
+        this.push(run, { event: 'clarify.request', ...prompt });
+      });
+      run.clarify = null;
+      if (TERMINAL.has(run.status)) return;
+      this.push(run, { event: 'clarify.settled', prompt_id: 'clr_1', execution_generation: 1 });
+      await sleep(step);
+      return this.finish(run, `Vous avez choisi : ${run.answer}.`);
     }
     if (/panne/i.test(run.input)) {
       await sleep(step);
@@ -322,10 +354,24 @@ class Simulator {
     if (/tard/i.test(run.input)) setTimeout(addCost, 8_000).unref?.();
     else addCost();
     this.addMessage(run.sessionId, 'assistant', output);
-    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run) });
+    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run), ...(run.pendingSteer ? { pending_steer: run.pendingSteer } : {}) });
+  }
+
+  /** Like Hermes: taken only while the run is exactly `running`; "perdu" in the run's message: never delivered. */
+  steer(run: SimRun, text: string): boolean {
+    if (run.status !== 'running') return false;
+    if (/perdu/i.test(run.input)) {
+      run.pendingSteer = run.pendingSteer ? `${run.pendingSteer}\n${text}` : text;
+      return true;
+    }
+    this.addMessage(run.sessionId, 'user', text, { display_kind: 'steer' });
+    this.push(run, { event: 'run.steered', accepted: true });
+    return true;
   }
 
   runtime(run: SimRun) {
+    // "secours": the provider fell back to another model
+    if (/secours/i.test(run.input)) return { provider: 'fake', model: 'fake/model-fallback' };
     return { provider: 'fake', model: run.model ?? 'fake/model-default' };
   }
 
@@ -338,6 +384,7 @@ class Simulator {
     if (TERMINAL.has(run.status)) return;
     run.status = 'cancelled';
     run.approval?.resolve('deny');
+    run.clarify?.resolve('');
     this.push(run, { event: 'run.cancelled' });
   }
 
@@ -556,7 +603,8 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
         ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
         // with the gateway authority: the run's generation and the questions waiting for an answer
         ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
-        pending_controls: sim.controls === 'authority' && run.approval ? [run.approval.prompt] : [],
+        ...(run.pendingSteer && TERMINAL.has(run.status) ? { pending_steer: run.pendingSteer } : {}),
+        pending_controls: sim.controls === 'authority' ? [run.approval?.prompt, run.clarify?.prompt].filter(Boolean) : [],
       });
     }
     if (sub === '/events' && method === 'GET') {
@@ -568,6 +616,22 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     if (sub === '/stop' && method === 'POST') {
       sim.stop(run);
       return json({ object: 'hermes.run.stop', run_id: run.id, status: 'stopping' });
+    }
+    if (sub === '/steer' && method === 'POST') {
+      const text = typeof b.input === 'string' ? b.input.trim() : '';
+      if (!text) return json({ error: { message: 'input is required', code: 'invalid_request' } }, 400);
+      if (!sim.steer(run, text)) return json({ error: { message: `Run is ${run.status}`, code: 'run_not_accepting_steer' } }, 409);
+      return json({ object: 'hermes.run.steer', run_id: run.id, accepted: true });
+    }
+    if (sub === '/clarify' && method === 'POST') {
+      // Hermes 0.23: through the session authority only (else not_found, answered 409)
+      if (sim.controls !== 'authority') return json({ error: { message: 'not_found', code: 'not_found' } }, 409);
+      const keys = Object.keys(b).sort().join(',');
+      if (keys !== 'answer,execution_generation,request_id' || typeof b.answer !== 'string') return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+      if (b.execution_generation !== 1) return json({ error: { message: 'stale_generation', code: 'stale_generation' } }, 409);
+      if (!run.clarify || b.request_id !== 'clr_1') return json({ error: { message: 'approval_not_pending', code: 'approval_not_pending' } }, 409);
+      run.clarify.resolve(b.answer);
+      return json({ run_id: run.id, status: 'resolved', prompt_id: 'clr_1' });
     }
     if (sub === '/approval' && method === 'POST') {
       if (sim.controls === 'authority') {
@@ -661,6 +725,8 @@ export function createFakeHermes(opts: FakeOptions) {
     requests, sim, crons, skills, config, profiles, kanban, files,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
+    /** Can be switched at run time by tests. */
+    sessionStats: opts.sessionStats ?? false,
   };
 }
 
@@ -695,6 +761,32 @@ export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: 
   });
 }
 
+/** Fixed figures of `session.stats` (a session of 12 345 tokens out of 200 000, plan used at 42 %). */
+export const FAKE_SESSION_STATS = {
+  context_tokens: 12_345, context_length: 200_000, tokens_per_s: 41.5,
+  plan_gauge: { label: 'Plan Pro', used_bp: 4200, resets_at_ms: Date.UTC(2026, 10, 12, 6) },
+};
+
+/**
+ * One connection to the dashboard JSON-RPC WebSocket `/api/ws?token=` (token already checked): answers
+ * `session.stats` (with `sessionStats`) and `commands.catalog`; any other method, or `session.stats` on a standalone
+ * dashboard, gets -32601. Pushes an `event` frame first, like the gateway. Returns the handler of incoming frames.
+ */
+export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
+  io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
+  return (text) => {
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown } };
+    try { msg = JSON.parse(text) as typeof msg; } catch { return; }
+    const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
+    if (msg.method === 'session.stats' && fake.sessionStats) {
+      if (msg.params?.session_id === 'intendia-probe') return reply({ error: { code: 4001, message: 'session not found' } });
+      return reply({ result: FAKE_SESSION_STATS });
+    }
+    if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
+    return reply({ error: { code: -32601, message: `unknown method: ${String(msg.method)}` } });
+  };
+}
+
 /** WebSocket-like factory for tests (same shape as the server's `WsFactory`), backed by `connectKanbanEvents`. */
 export function fakeWebSocketFactory(fake: Fake) {
   return (url: string) => {
@@ -702,6 +794,7 @@ export function fakeWebSocketFactory(fake: Fake) {
     const fire = (type: string, ev: { data?: unknown; code?: number } = {}) => { for (const l of listeners.get(type) ?? []) l(ev); };
     let open = true;
     let stop = () => {};
+    let onText: ((text: string) => void) | null = null;
     const end = (code: number) => {
       if (!open) return;
       open = false;
@@ -711,13 +804,16 @@ export function fakeWebSocketFactory(fake: Fake) {
     queueMicrotask(() => {
       if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
       fire('open');
-      stop = connectKanbanEvents(fake, url, { send: (data) => { if (open) fire('message', { data }); }, close: end });
+      const io = { send: (data: string) => { if (open) fire('message', { data }); }, close: end };
+      if (new URL(url, 'ws://fake-dash').pathname === '/api/ws') onText = connectGatewaySocket(fake, io);
+      else stop = connectKanbanEvents(fake, url, io);
     });
     return {
       addEventListener(type: string, l: (ev: { data?: unknown; code?: number }) => void) {
         listeners.set(type, [...(listeners.get(type) ?? []), l]);
       },
       close: (code = 1000) => end(code),
+      send: (text: string) => { if (open) queueMicrotask(() => onText?.(text)); },
       /** test helper: is the connection still open? */
       get isOpen() { return open; },
     };
