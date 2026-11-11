@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, Check, Ellipsis, Link2, PanelRight, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, Check, Ellipsis, Link2, Maximize2, Minimize2, PanelRight, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
 import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
-import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
+import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
@@ -23,6 +23,34 @@ import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { workspaceScope } from '../files/scope';
+import { useInbox } from '../sessions/InboxLayout';
+
+/** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
+export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg border border-line bg-sheet text-ink transition-colors hover:bg-paper';
+
+/** Session date in the header: "16:21" today, else "2 nov. 16:21" (ms). */
+export function when(ms: number): string {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${time}`;
+}
+
+/** "Plein écran": hides the inbox column (kept in this browser); only from 1280 px, where the column shows. */
+export function FullScreen() {
+  const { full, setFull } = useInbox();
+  return (
+    <button
+      type="button" onClick={() => setFull(!full)} aria-pressed={full}
+      className={cx(
+        'hidden h-[34px] items-center gap-2 rounded-lg border px-3.5 text-[13.5px] font-medium transition-colors xl:inline-flex',
+        full ? 'border-line bg-sheet text-ink hover:bg-paper' : 'border-accent-strong bg-accent text-on-accent hover:bg-accent-strong',
+      )}
+    >
+      {full ? <Minimize2 className="size-4" strokeWidth={1.5} /> : <Maximize2 className="size-4" strokeWidth={1.5} />}
+      {full ? 'Afficher la liste' : 'Plein écran'}
+    </button>
+  );
+}
 
 interface ActiveRun {
   id: string;
@@ -72,8 +100,14 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const mounts = instances.data?.instances.find((i) => i.id === inst);
   const agent = agentName(sess.data?.profile, mounts?.label);
-  const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  // closed at first: the inbox column takes the room; opening it (or a preview) moves the column aside
+  const [panel, setPanel] = useState(false);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const inbox = useInbox();
+  const sideOpen = panel || previewPath !== null;
+  const { setPanelOpen } = inbox;
+  useEffect(() => { setPanelOpen(sideOpen); }, [sideOpen, setPanelOpen]);
+  useEffect(() => () => setPanelOpen(false), [setPanelOpen]);
   const [linkCopied, setLinkCopied] = useState(false);
   const [runCount, setRunCount] = useState(0);
   /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
@@ -267,29 +301,33 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     <FilePaths.Provider value={filePaths}>
     <div className="flex min-h-full">
     <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
-      <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
-        <div className="flex items-center gap-3 px-5 py-3 md:px-6">
+      <header className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
+        <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
+          <Link to="/" aria-label="Revenir à la liste" className={cx(ICON_BTN, 'border-transparent md:hidden')}>
+            <ArrowLeft className="size-4" strokeWidth={1.5} />
+          </Link>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs text-ink-faint">
-              <Link to="/w/$slug" params={{ slug }} className="transition-colors hover:text-ink">{ws.data?.workspace.name ?? slug}</Link>
-              <span className="mx-1">/</span>
-              <span className="font-mono">{sess.data?.profile ?? 'default'}</span>
+            <h2 className="truncate text-lg font-semibold leading-snug">{title}</h2>
+            <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">
+              {[mounts?.label, null, sess.data?.profile ?? 'default', sess.data?.session.model ? shortModel(sess.data.session.model) : null, sess.data ? when(sess.data.session.createdAt) : null]
+                .map((part, i) => (i === 1
+                  ? <span key="ws">{i > 0 && mounts?.label ? ' · ' : ''}<Link to="/w/$slug" params={{ slug }} className="transition-colors hover:text-ink">{ws.data?.workspace.name ?? slug}</Link></span>
+                  : part ? <span key={i}>{i > 0 ? ' · ' : ''}{part}</span> : null))}
             </p>
-            <h1 className="truncate text-[15px] font-semibold">{title}</h1>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" className="size-8 px-0" aria-label="Copier le lien de la session" title="Copier le lien de la session"
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" className={ICON_BTN} aria-label="Copier le lien de la session" title="Copier le lien de la session"
               onClick={() => void copyText(window.location.href, 'Lien de la session').then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
-            </Button>
-            <Button variant="ghost" className={cx('size-8 px-0', panel && 'lg:bg-raised lg:text-ink')} aria-label="Fichiers de la session" title="Fichiers de la session"
+            </button>
+            <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label="Fichiers de la session" title="Fichiers de la session"
               aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
               <PanelRight className="size-4" strokeWidth={1.5} />
-            </Button>
+            </button>
             <Menu
               title="Actions de la session"
               trigger={<Ellipsis className="size-4" strokeWidth={1.5} />}
-              triggerClass="flex size-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink aria-expanded:bg-raised"
+              triggerClass={cx(ICON_BTN, 'aria-expanded:bg-raised')}
               items={[
                 { label: 'Renommer', icon: <Pencil className="size-4" strokeWidth={1.5} />,
                   onSelect: async () => { const t = await askText({ title: 'Renommer la session', label: 'Nouveau titre', value: sess.data?.session.title ?? '', confirmLabel: 'Renommer' }); if (t) rename.mutate(t); } },
@@ -298,16 +336,17 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                   onSelect: async () => { if (await ask({ title: 'Supprimer cette session chez Hermes ?', message: 'Les fichiers de son dossier restent sur le disque.', confirmLabel: 'Supprimer', danger: true })) remove.mutate(); } },
               ]}
             />
+            {!sideOpen && <FullScreen />}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-3xl flex-1 px-5 py-6 md:px-8">
+      <div className="mx-auto w-full max-w-[748px] flex-1 px-4 py-7 md:px-6">
         <div className="mb-6 empty:hidden"><ChatNotice instanceId={inst} /></div>
         {history.isSuccess && entries.length === 0 && !running && !endNote && (
           <div className="py-16 text-center">
-            <p className="text-[15px]">Nouvelle session dans {ws.data?.workspace.name}</p>
-            <p className="mt-2 text-sm text-ink-soft">L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session</p>
+            <p className="text-base font-semibold">Nouvelle session dans {ws.data?.workspace.name}</p>
+            <p className="mt-1.5 text-sm text-ink-faint">L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session</p>
           </div>
         )}
         {messages.length >= 500 && <p className="mb-4 text-center text-xs text-ink-faint">Messages plus anciens non affichés</p>}
@@ -331,7 +370,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       </div>
 
       <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent pt-4">
-        <div className="mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
+        <div className="mx-auto max-w-[796px] px-4 pb-4 md:px-6 md:pb-5">
           <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
           <Composer
             ref={composer}
@@ -356,7 +395,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     </DropZone>
     {panel && (
       <aside className={cx(
-        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-[var(--content-h)] lg:shrink-0 lg:border-l lg:border-line',
+        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-[var(--content-h)] lg:shrink-0 lg:border-l lg:border-line/70',
         previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]',
       )}>
         {side}

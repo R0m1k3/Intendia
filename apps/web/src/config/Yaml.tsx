@@ -52,7 +52,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
   return (
     <div className="space-y-4">
       {conflict && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
           <span>{CHANGED_TEXT} Votre brouillon est gardé.</span>
           <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />Recharger en gardant mes changements</Button>
         </div>
@@ -77,7 +77,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
               onChange={(v) => { if (!start) setStart(shown); setDraft(v); setSaved(false); }} />
           </Suspense>
         </div>
-        <p className="border-t border-line px-5 py-2.5 text-xs text-ink-faint">
+        <p className="border-t border-line px-4 py-2.5 text-xs text-ink-faint">
           Les secrets sont affichés « «secret:…» » : laissez-les tels quels pour garder la valeur, ou remplacez-les. Hermes réécrit le fichier : les commentaires ajoutés ici ne sont pas gardés.
         </p>
       </Panel>

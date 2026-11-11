@@ -120,7 +120,7 @@ export function Composer({
   };
 
   return (
-    <div className={cx('card p-2 transition-colors focus-within:border-ink-faint/60', disabled && 'opacity-60')}>
+    <div className={cx('card p-2 pl-2.5 transition-colors focus-within:border-ink-faint', disabled && 'opacity-60')}>
       {files.length > 0 && (
         <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label="Pièces jointes">
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
@@ -141,7 +141,7 @@ export function Composer({
         }}
         placeholder={placeholder ?? 'Écrire à l’agent'}
         aria-label="Message"
-        className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-2 py-2 text-sm placeholder:text-ink-faint focus:outline-none"
+        className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
       <div className="flex items-center gap-1">
         {leading}
@@ -154,7 +154,7 @@ export function Composer({
               disabled={disabled}
               aria-label="Joindre des fichiers"
               title="Joindre des fichiers (déposés dans inbox/)"
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink disabled:opacity-40"
+              className="flex size-[34px] shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-40"
             >
               <Paperclip className="size-4" strokeWidth={1.5} />
             </button>
@@ -168,7 +168,7 @@ export function Composer({
             onClick={onStop}
             aria-label="Arrêter"
             title="Arrêter"
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-ink transition-colors hover:bg-raised"
+            className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border border-line text-ink transition-colors hover:bg-raised"
           >
             <Square className="size-3.5 fill-current" strokeWidth={1.5} />
           </button>
@@ -179,7 +179,7 @@ export function Composer({
             disabled={!canSend}
             aria-label="Envoyer"
             title={waiting ? (files.some((a) => a.state === 'failed') ? 'Retirez les pièces jointes en échec' : 'Envoi des pièces jointes…') : 'Envoyer (Entrée)'}
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-40"
+            className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border border-accent-strong bg-accent text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-40"
           >
             <ArrowUp className="size-4" strokeWidth={1.75} />
           </button>

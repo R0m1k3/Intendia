@@ -74,7 +74,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   return (
     <div className="space-y-4">
       {conflict && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
           <span>{CHANGED_TEXT}</span>
           <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />Recharger en gardant mes changements</Button>
         </div>
@@ -108,7 +108,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
             })}
           </div>
         </nav>
-        <Panel title={needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line">
+        <Panel title={needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line/70 border-t border-line/70">
           {paths.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucun réglage.</p>}
           {paths.map((path) => (
             <FieldRow key={path} path={path} field={data.schema[path]!} original={data.values[path]}
@@ -163,7 +163,7 @@ function FieldRow({ path, field, original, value, text, error, disabled, onText,
   const id = `f-${path}`;
   const description = field.description && !field.description.includes('→') ? field.description : null;
   return (
-    <div className="grid gap-2 px-5 py-3 md:grid-cols-[1fr_minmax(0,320px)] md:items-center">
+    <div className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_minmax(0,320px)] md:items-center">
       <label htmlFor={id} className="min-w-0">
         <span className={cx('block break-all font-mono text-[12.5px]', changed ? 'text-accent-ink' : 'text-ink')}>{path}</span>
         {description && <span className="mt-0.5 block text-xs text-ink-faint">{description}</span>}

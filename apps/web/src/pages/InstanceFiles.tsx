@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, FolderOpen, Search, X } from 'lucide-react';
+import { ChevronRight, FolderOpen, Link2, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type FileEntry } from '../api';
 import { PageHeader } from '../components/Layout';
-import { cx, ErrorText, Input, Panel } from '../components/ui';
+import { Empty } from '../components/Panes';
+import { Button, Chips, cx, ErrorText, Input, Panel } from '../components/ui';
 import { FileRows, isDirEntry } from '../files/FileRows';
 import { LinkRow } from '../files/LinkRow';
 import { Preview } from '../files/Preview';
@@ -34,19 +35,14 @@ export function InstanceFilesPage() {
     <div>
       <PageHeader
         title="Fichiers"
-        subtitle={<span className="font-mono text-xs">{label} · tous les fichiers de l’instance, en lecture</span>}
+        subtitle={<>Tous les fichiers de <span className="text-ink">{label}</span>, en lecture ; on écrit dans le dossier d’un workspace</>}
       />
-      <div className="px-5 md:px-8">
-        <div role="tablist" aria-label="Fichiers" className="mb-4 flex gap-0.5">
-          {([['fichiers', 'Fichiers'], ['liens', 'Liens partagés']] as const).map(([k, text]) => (
-            <button
-              key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => void go(k === 'fichiers' ? {} : { tab: k })}
-              className={cx('h-8 rounded-lg px-3 text-[13px] font-medium transition-colors', tab === k ? 'bg-raised text-ink' : 'text-ink-soft hover:text-ink')}
-            >
-              {text}
-            </button>
-          ))}
-        </div>
+      <div className="px-4 pb-5 md:px-8">
+        <Chips
+          role="tab" label="Fichiers" value={tab}
+          items={[{ key: 'fichiers', label: 'Fichiers' }, { key: 'liens', label: 'Liens partagés' }]}
+          onChange={(k) => void go(k === 'fichiers' ? {} : { tab: k })}
+        />
       </div>
       {tab === 'liens' ? <SharedLinks inst={inst} /> : <Browser inst={inst} search={search} go={go} />}
     </div>
@@ -79,10 +75,10 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
   const wsSlug = inWorkspace && ws.data?.entries.find((e) => e.name === inWorkspace)?.workspace;
 
   return (
-    <div className={cx('grid gap-6 px-5 pb-10 md:px-8', open && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]')}>
+    <div className={cx('grid gap-5 px-4 pb-14 md:px-8', open ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]' : 'max-w-[1000px]')}>
       <Panel
-        className="min-w-0"
-        bodyClassName="p-0"
+        className="min-w-0 overflow-hidden"
+        bodyClassName="border-t border-line/70"
         title={
           <nav aria-label="Dossier" className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
             <button onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>racine</button>
@@ -104,35 +100,35 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
           </div>
         }
       >
-        <div className="px-5 pt-3 empty:hidden"><ErrorText error={debounced ? found.error : tree.error} /></div>
+        <div className="px-4 pt-3 empty:hidden"><ErrorText error={debounced ? found.error : tree.error} /></div>
         {wsSlug && (
-          <p className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-ink-soft">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-paper px-4 py-2.5 text-[13px] text-ink-soft">
             Dossier du workspace <span className="font-mono">{wsSlug}</span> : pour déposer, renommer ou modifier,
-            <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="text-accent-ink hover:underline">ouvrez le workspace</Link>
+            <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="font-medium text-ink underline underline-offset-2">ouvrez le workspace</Link>
           </p>
         )}
-        {debounced && <p className="px-5 pt-3 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans toute l’instance${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
+        {debounced && <p className="px-4 pb-2 pt-1 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans toute l’instance${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
         {entries.length > 0 ? (
           <FileRows scope={scope} entries={entries} selected={open} onOpen={onOpen} />
         ) : (tree.isSuccess && !debounced) ? (
-          <p className="px-5 py-12 text-center text-sm text-ink-soft">Dossier vide</p>
+          <p className="border-t border-line/70 px-4 py-12 text-center text-sm text-ink-faint">Dossier vide</p>
         ) : null}
         {workspaces.length > 0 && !debounced && (
-          <div className="border-t border-line px-5 py-3">
+          <div className="border-t border-line/70 px-4 py-3">
             <p className="mb-2 text-xs text-ink-faint">Workspaces de cette instance</p>
             <div className="flex flex-wrap gap-2">
               {workspaces.map((e) => (
-                <Link key={e.path} to="/w/$slug/fichiers" params={{ slug: e.workspace! }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] hover:bg-raised">
-                  <FolderOpen className="size-4 text-accent-ink" strokeWidth={1.5} />Ouvrir {e.name}
+                <Link key={e.path} to="/w/$slug/fichiers" params={{ slug: e.workspace! }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] font-medium hover:bg-paper">
+                  <FolderOpen className="size-4 text-ink-faint" strokeWidth={1.5} />Ouvrir {e.name}
                 </Link>
               ))}
             </div>
           </div>
         )}
-        {tree.data?.truncated && !debounced && <p className="border-t border-line px-5 py-2 text-xs text-ink-faint">Dossier coupé à 2 000 éléments : utilisez la recherche</p>}
+        {tree.data?.truncated && !debounced && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Dossier coupé à 2 000 éléments : utilisez la recherche</p>}
       </Panel>
       {open && (
-        <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:rounded-xl lg:border lg:border-line">
+        <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:overflow-hidden lg:rounded-xl lg:border lg:border-line">
           <Preview scope={scope} path={open} onClose={() => void go({ path: dir || undefined })} />
         </section>
       )}
@@ -142,23 +138,41 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
 
 function SharedLinks({ inst }: { inst: string }) {
   const links = useQuery({ queryKey: ['links'], queryFn: api.links });
+  const navigate = useNavigate();
   const list = (links.data?.links ?? []).filter((l) => l.instanceId === inst);
   const live = list.filter((l) => !l.revoked);
   const revoked = list.filter((l) => l.revoked);
   return (
-    <div className="space-y-6 px-5 pb-10 md:px-8">
-      <p className="text-sm text-ink-soft">Liens de partage vers des fichiers de cette instance. Privés par défaut : il faut être connecté pour les ouvrir. L’agent ne peut créer que des liens privés.</p>
+    <div className="flex max-w-[1000px] flex-col gap-5 px-4 pb-14 md:px-8">
+      <p className="text-ink-faint">Liens vers des fichiers de cette instance, privés par défaut : il faut être connecté pour les ouvrir. L’agent ne crée que des liens privés.</p>
       <ErrorText error={links.error} />
-      <Panel bodyClassName="p-0" title="Liens actifs" action={<span className="font-mono text-[11px] text-ink-faint">{live.length}</span>}>
-        {live.length ? (
-          <ul className="divide-y divide-line">{live.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
-        ) : links.isSuccess ? (
-          <p className="px-5 py-10 text-center text-sm text-ink-soft">Aucun lien. Partagez un fichier depuis l’explorateur d’un workspace, ou demandez-le à l’agent.</p>
-        ) : null}
-      </Panel>
+      {links.isSuccess && list.length === 0 ? (
+        <div className="card">
+          <Empty
+            icon={<Link2 strokeWidth={1.5} />}
+            title="Aucun lien pour l’instant"
+            actions={(
+              <>
+                <Button variant="dark" onClick={() => void navigate({ to: '/i/$inst/files', params: { inst } })}>Parcourir les fichiers</Button>
+                <Button onClick={() => void navigate({ to: '/', search: { nouvelle: 1 } })}>Demander à Hermes</Button>
+              </>
+            )}
+          >
+            Partagez un fichier depuis l’explorateur d’un workspace, ou demandez-le à l’agent. Il ne crée que des liens privés.
+          </Empty>
+        </div>
+      ) : (
+        <Panel bodyClassName="p-0" title="Liens actifs" action={<span className="font-mono text-xs text-ink-faint">{live.length}</span>}>
+          {live.length ? (
+            <ul className="divide-y divide-line/70 border-t border-line/70">{live.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
+          ) : links.isSuccess ? (
+            <p className="border-t border-line/70 px-4 py-8 text-center text-sm text-ink-faint">Aucun lien actif</p>
+          ) : null}
+        </Panel>
+      )}
       {revoked.length > 0 && (
-        <Panel bodyClassName="p-0" title="Révoqués" action={<span className="font-mono text-[11px] text-ink-faint">{revoked.length}</span>}>
-          <ul className="divide-y divide-line">{revoked.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
+        <Panel bodyClassName="p-0" title="Révoqués" action={<span className="font-mono text-xs text-ink-faint">{revoked.length}</span>}>
+          <ul className="divide-y divide-line/70 border-t border-line/70">{revoked.map((l) => <LinkRow key={l.token} l={l} />)}</ul>
         </Panel>
       )}
     </div>

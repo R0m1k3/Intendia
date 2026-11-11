@@ -61,7 +61,7 @@ export function LinkRow({ l }: { l: ShareLink }) {
   };
 
   return (
-    <li className={cx('px-5 py-3.5', (!l.exists || l.revoked) && 'text-ink-faint')}>
+    <li className={cx('px-4 py-3', (!l.exists || l.revoked) && 'text-ink-faint')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
@@ -72,14 +72,14 @@ export function LinkRow({ l }: { l: ShareLink }) {
             ) : (
               <span className="truncate text-sm font-medium">{name}</span>
             )}
-            {!l.exists && <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[11px]">introuvable</span>}
+            {!l.exists && <span className="shrink-0 rounded bg-raised px-1.5 py-px font-mono text-[11px] text-ink-soft">introuvable</span>}
           </div>
           <p className="mt-0.5 truncate pl-5 font-mono text-[11px] text-ink-faint" title={l.agentPath}>
             {l.workspace ?? 'hors workspace'} · {inWs ?? l.path} · créé {timeAgo(l.createdAt)}
           </p>
         </div>
         <div className="w-40 shrink-0 text-[13px]">
-          <span className={cx(s.mark === 'full' && 'text-ok')}>{s.label}</span>
+          <span className={cx('rounded bg-raised px-1.5 py-px font-mono text-[11px]', s.mark === 'full' ? 'bg-ok-soft text-ok' : 'text-ink-soft')}>{s.label.toLowerCase()}</span>
           {s.note && <span className="block text-[11px] text-ink-faint">{s.note}</span>}
         </div>
         <div className="flex shrink-0 items-center gap-1">

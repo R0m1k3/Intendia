@@ -74,7 +74,7 @@ export function CommandPalette({ nav, onClose }: { nav: PaletteSources['nav']; o
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
       <div
         role="dialog" aria-modal="true" aria-label="Rechercher" onMouseDown={(e) => e.stopPropagation()}
-        className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-[14px] border border-line bg-sheet shadow-[0_24px_64px_rgb(22_24_27/0.18)]"
+        className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-4">
           <Search className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} aria-hidden />
@@ -95,7 +95,7 @@ export function CommandPalette({ nav, onClose }: { nav: PaletteSources['nav']; o
                 <div
                   key={item.id} id={`${id}-${item.id}`} role="option" aria-selected={item === current}
                   onMouseMove={() => setIndex(items.indexOf(item))} onClick={() => go(item)}
-                  className={cx('flex cursor-pointer items-baseline gap-3 rounded-lg px-2.5 py-2 text-sm', item === current ? 'bg-raised text-ink' : 'text-ink-soft')}
+                  className={cx('flex cursor-pointer items-baseline gap-3 rounded-lg px-2.5 py-2 text-sm', item === current ? 'bg-accent-soft text-ink' : 'text-ink-soft')}
                 >
                   <span className="min-w-0 flex-1 truncate font-medium text-ink">{item.label}</span>
                   {item.hint && <span className="max-w-[45%] shrink-0 truncate text-xs text-ink-faint">{item.hint}</span>}

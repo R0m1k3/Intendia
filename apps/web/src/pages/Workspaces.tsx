@@ -1,113 +1,84 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { Pencil, Plus } from 'lucide-react';
-import { useState } from 'react';
-import { api, type PublicInstance, type Workspace } from '../api';
+import { useQuery } from '@tanstack/react-query';
+import { useParams } from '@tanstack/react-router';
+import { Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api } from '../api';
 import { useCurrentInstance } from '../instance/current';
-import { askText } from '../components/Dialog';
-import { PageHeader } from '../components/Layout';
 import { NewWorkspace } from '../components/NewWorkspace';
-import { Button, ErrorText, Panel, timeAgo } from '../components/ui';
+import { DetailBody, DetailHeader, ListItemBody, ListLink, ListPane, SplitView, listItemClass } from '../components/Panes';
+import { pickSelected } from '../components/selection';
+import { Button, ErrorText, Tag } from '../components/ui';
+import { WorkspaceDetail } from '../workspaces/WorkspaceDetail';
 
-const SOURCE: Record<string, string> = { telegram: 'Telegram', cli: 'CLI', cron: 'Cron', api_server: 'API', discord: 'Discord', slack: 'Slack' };
-
-function OtherSessions({ inst }: { inst: PublicInstance }) {
-  const [profile, setProfile] = useState('default');
-  const q = useInfiniteQuery({
-    queryKey: ['other-sessions', inst.id, profile],
-    queryFn: ({ pageParam }) => api.otherSessions(inst.id, profile, pageParam),
-    initialPageParam: 0,
-    getNextPageParam: (last) => (last.hasMore ? last.nextOffset : undefined),
-  });
-  const rows = q.data?.pages.flatMap((p) => p.sessions) ?? [];
-  return (
-    <Panel
-      bodyClassName=""
-      title={<span>Autres sessions <span className="ml-2 text-xs font-normal text-ink-faint">{inst.label}</span></span>}
-      action={inst.profiles.length > 0 && (
-        <select value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Agent"
-          className="h-8 rounded-lg border border-line bg-sheet px-2 text-xs focus:border-ink focus:outline-none">
-          <option value="default">default</option>
-          {inst.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-      )}
-    >
-      <p className="px-5 pt-4 text-xs text-ink-faint">Sessions venues de Telegram, du CLI ou des crons, en lecture seule</p>
-      {q.isSuccess && rows.length === 0 && <p className="px-5 py-4 text-sm text-ink-soft">Aucune</p>}
-      <ul className="mt-2 divide-y divide-line">
-        {rows.map((s) => (
-          <li key={s.id}>
-            <Link to="/i/$inst/p/$profile/s/$sessionId" params={{ inst: inst.id, profile, sessionId: s.id }}
-              className="flex h-12 items-center gap-3 px-5 text-sm transition-colors hover:bg-raised/50">
-              <span className="w-16 shrink-0 font-mono text-[11px] text-ink-faint">{SOURCE[s.source ?? ''] ?? s.source ?? '?'}</span>
-              <span className="min-w-0 flex-1 truncate">{s.title || s.preview || <span className="font-mono text-xs text-ink-faint">{s.id}</span>}</span>
-              <span className="shrink-0 text-xs text-ink-faint">{s.lastActive ?? s.startedAt ? timeAgo((s.lastActive ?? s.startedAt)! * 1000) : ''}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {q.hasNextPage && (
-        <div className="border-t border-line px-5 py-3">
-          <Button variant="ghost" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage}>Plus</Button>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
+/**
+ * /w and /w/$slug: the workspaces of the current instance (a folder shared with the agent, its instructions and its
+ * sessions) in a list, the one in the address (else the first) beside it. No workspace yet: the creation form.
+ */
 export function WorkspacesPage() {
+  const { slug } = useParams({ strict: false }) as { slug?: string };
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const { id: inst, instance, instances } = useCurrentInstance();
   const [adding, setAdding] = useState(false);
+  useEffect(() => setAdding(false), [slug]);
   const list = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
   const empty = workspaces.isSuccess && inst !== null && list.length === 0;
-  const qc = useQueryClient();
-  const [error, setError] = useState<unknown>(null);
-  const rename = async (w: Workspace) => {
-    const n = await askText({ title: 'Renommer le workspace', label: 'Nom affiché', value: w.name, maxLength: 80, message: `Le dossier reste ${w.slug}/ : seul le nom change.`, confirmLabel: 'Renommer' });
-    if (!n || n === w.name) return;
-    try {
-      setError(null);
-      await api.updateWorkspace(w.slug, { name: n });
-      await Promise.all([qc.invalidateQueries({ queryKey: ['workspaces'] }), qc.invalidateQueries({ queryKey: ['workspace', w.slug] })]);
-    } catch (e) { setError(e); }
-  };
+  // a workspace of another instance named in the address is still shown (its own link), not replaced by the first
+  const shown = slug ?? pickSelected(list, undefined, (w) => w.slug)?.slug ?? null;
+  const creating = adding || empty;
+  const root = instance?.files?.workspaceRoot;
+
+  const pane = (
+    <ListPane
+      title="Workspaces"
+      action={!empty && (
+        <Button className="w-[34px] px-0" aria-label="Nouveau workspace" title="Nouveau workspace" onClick={() => setAdding(true)}>
+          <Plus className="size-4" strokeWidth={1.5} />
+        </Button>
+      )}
+    >
+      <ErrorText error={workspaces.error} />
+      {creating && (
+        <button type="button" className={listItemClass(true)} onClick={() => setAdding(true)}>
+          <ListItemBody title="Nouveau workspace" sub="Un dossier partagé avec l’agent" />
+        </button>
+      )}
+      <ul className="flex flex-col gap-0.5" aria-label="Workspaces">
+        {list.map((w) => {
+          const on = !creating && w.slug === shown;
+          return (
+            <li key={w.slug} data-workspace={w.slug}>
+              <ListLink link={{ to: '/w/$slug', params: { slug: w.slug } }} selected={on}>
+                <ListItemBody
+                  title={w.name}
+                  meta={w.sessionCount !== undefined ? <span title="Sessions en cours">{w.sessionCount}</span> : undefined}
+                  sub={<span title={root ? `${root}/${w.slug}` : undefined}>Agent {w.profile ?? 'default'}{instance ? ` · ${instance.label}` : ''}</span>}
+                  tag={<Tag className={on ? 'bg-sheet' : undefined}>{w.slug}</Tag>}
+                />
+              </ListLink>
+            </li>
+          );
+        })}
+      </ul>
+      {workspaces.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">Chargement…</p>}
+    </ListPane>
+  );
 
   return (
-    <>
-      <PageHeader
-        title="Workspaces"
-        subtitle={`Un workspace = un dossier partagé avec l’agent, ses consignes et ses sessions${instance && instances.length > 1 ? `. Ceux de ${instance.label}` : ''}`}
-        action={!adding && !empty && <Button variant="primary" onClick={() => setAdding(true)}><Plus className="size-4" strokeWidth={1.75} />Nouveau workspace</Button>}
-      />
-      <div className="space-y-6 px-5 pb-12 md:px-8">
-        {(adding || empty) && (
-          <Panel title="Nouveau workspace">
+    <SplitView label="Workspaces" selected={Boolean(slug) || adding} list={pane}>
+      {creating ? (
+        <>
+          <DetailHeader
+            title="Nouveau workspace"
+            sub={`Un dossier partagé avec l’agent, ses consignes et ses sessions${instance && instances.length > 1 ? `, sur ${instance.label}` : ''}`}
+            back={adding ? { to: '/w' } : undefined}
+          />
+          <DetailBody>
             <NewWorkspace onCancel={empty ? undefined : () => setAdding(false)} />
-          </Panel>
-        )}
-        <ErrorText error={error} />
-        {list.length > 0 && (
-          <Panel bodyClassName="">
-            <ul className="divide-y divide-line">
-              {list.map((w) => (
-                <li key={w.slug} className="flex items-center pr-3 transition-colors hover:bg-raised/50">
-                  <Link to="/w/$slug" params={{ slug: w.slug }} className="flex min-h-14 min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
-                    <span className="text-sm font-medium">{w.name}</span>
-                    <span className="font-mono text-xs text-ink-faint">{w.slug}</span>
-                    <span className="ml-auto text-xs text-ink-soft">agent {w.profile ?? 'default'}</span>
-                  </Link>
-                  <button type="button" title="Renommer" aria-label={`Renommer ${w.name}`} onClick={() => void rename(w)}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink">
-                    <Pencil className="size-4" strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        )}
-        {instance && <OtherSessions key={instance.id} inst={instance} />}
-      </div>
-    </>
+          </DetailBody>
+        </>
+      ) : shown ? (
+        <WorkspaceDetail key={shown} slug={shown} instance={instance ?? undefined} back={Boolean(slug)} />
+      ) : null}
+    </SplitView>
   );
 }

@@ -51,7 +51,7 @@ export function ConfigEnv({ inst, profile, can, onSaved, focusKey }: TabProps & 
       <p className="text-xs text-ink-faint">Les valeurs ne sont jamais affichées. Une variable change au prochain démarrage de la passerelle.</p>
       {groups.length === 0 && <p className="text-sm text-ink-soft">Aucune variable.</p>}
       {groups.map(([g, vars]) => (
-        <Panel key={g} title={g} bodyClassName="divide-y divide-line">
+        <Panel key={g} title={g} bodyClassName="divide-y divide-line/70 border-t border-line/70">
           {vars.map((v) => (
             <EnvRow key={v.key} v={v} inst={inst} profile={profile} writable={writable && !v.channelManaged}
               open={editing === v.key} onOpen={(o) => setEditing(o ? v.key : null)} onSaved={() => onSaved(true)} />
@@ -76,7 +76,7 @@ function EnvRow({ v, inst, profile, writable, open, onOpen, onSaved }: {
     onSuccess: async () => { await invalidate(); onSaved(); },
   });
   return (
-    <div className="px-5 py-3">
+    <div className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <Mark state={v.isSet ? 'full' : 'unavailable'} />
         <div className="min-w-0 flex-1">

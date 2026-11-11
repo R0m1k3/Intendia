@@ -60,22 +60,22 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
   };
 
   return (
-    <ul className="divide-y divide-line">
+    <ul className="divide-y divide-line/70">
       {entries.map((e) => {
         const Icon = iconOf(e);
         return (
-          <li key={e.path} className={cx('group flex items-center gap-1 pr-2', selected === e.path && 'bg-accent-soft/60')}>
+          <li key={e.path} className={cx('group flex items-center gap-1 pr-2', selected === e.path && 'bg-accent-soft')}>
             <button
               type="button"
               disabled={e.outside}
               onClick={() => onOpen(e)}
               title={e.outside ? 'Lien symbolique : Intendia ne l’ouvre pas et ne le modifie pas' : e.path}
-              className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm transition-colors hover:bg-raised/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-11 min-w-0 flex-1 items-center gap-3.5 px-4 text-left transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Icon className={cx('size-4 shrink-0', isDirEntry(e) ? 'text-accent-ink' : 'text-ink-faint')} strokeWidth={1.5} />
-              <span className="min-w-0 flex-1 truncate">{e.name}</span>
-              <span className="hidden w-20 shrink-0 text-right font-mono text-[11px] text-ink-faint sm:block">{isDirEntry(e) ? '' : formatSize(e.size)}</span>
-              <span className="hidden w-24 shrink-0 text-right text-[11px] text-ink-faint md:block">{timeAgo(e.mtime)}</span>
+              <Icon className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+              <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{e.name}</span>
+              <span className="hidden w-20 shrink-0 text-right text-xs text-ink-faint sm:block">{isDirEntry(e) ? '' : formatSize(e.size)}</span>
+              <span className="hidden w-24 shrink-0 text-right text-xs text-ink-faint md:block">{timeAgo(e.mtime)}</span>
             </button>
             {actions && slug && (
               <div className="flex shrink-0 items-center justify-end opacity-100 transition-opacity md:w-32 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">

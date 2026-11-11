@@ -40,13 +40,13 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
   const mods = report?.modules ?? [];
   const full = mods.filter((m) => m.state === 'full').length;
   return (
-    <section data-instance={instance.id} className="card p-5" aria-label={`Instance ${instance.label}`}>
+    <section data-instance={instance.id} className="card px-4 py-3.5" aria-label={`Instance ${instance.label}`}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-[15px] font-semibold">{instance.label}</h2>
-          <p className="font-mono text-xs text-ink-faint">{report?.hermesVersion ? `Hermes ${report.hermesVersion}` : 'Hermes ?'}</p>
+          <p className="mt-0.5 font-mono text-xs text-ink-faint">{report?.hermesVersion ? `Hermes ${report.hermesVersion}` : 'Hermes ?'}</p>
         </div>
-        <Button onClick={() => recheck.mutate()} disabled={recheck.isPending} className="h-8 px-2.5 text-xs">
+        <Button onClick={() => recheck.mutate()} disabled={recheck.isPending} className="h-8 px-2.5 text-[12.5px]">
           <RotateCw className={cx('size-3.5', recheck.isPending && 'animate-spin')} strokeWidth={1.5} />
           {recheck.isPending ? 'Vérification…' : 'Revérifier'}
         </Button>
@@ -59,7 +59,7 @@ function InstanceCard({ instance, report }: { instance: PublicInstance; report?:
         />
       </div>
       <ErrorText error={recheck.error} />
-      <Link to="/etat" hash={instance.id} className="mt-4 flex items-center gap-2 border-t border-line pt-3 text-xs text-ink-soft transition-colors hover:text-ink">
+      <Link to="/etat" hash={instance.id} className="mt-3.5 flex items-center gap-2 border-t border-line/70 pt-3 text-xs text-ink-soft transition-colors hover:text-ink">
         {mods.length > 0 && <Mark state={worst(mods.map((m) => m.state))} />}
         {!report ? 'Pas encore vérifié' : `${full === mods.length ? `${full} modules complets` : `${full} modules complets sur ${mods.length}`} · vérifié ${timeAgo(report.checkedAt)}`}
       </Link>
@@ -80,18 +80,18 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
   if (list.length === 0 && failed.length === 0) return null;
   return (
     <section className="overflow-hidden card" aria-labelledby="crons-title" data-collapsed={open ? undefined : ''}>
-      <header className="flex items-center justify-between gap-3 px-5 py-4">
+      <header className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 id="crons-title" className="text-[15px] font-semibold">Prochains crons</h2>
           <Toggle open={open} onToggle={() => setOpen(!open)} controls="upcoming-body" />
         </div>
-        <Link to="/crons" className="text-[13px] font-medium text-accent-ink hover:underline">Gérer</Link>
+        <Link to="/crons" className="inline-flex h-7 items-center rounded-lg px-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:bg-raised hover:text-ink">Gérer</Link>
       </header>
-      <ul id="upcoming-body" className="divide-y divide-line border-t border-line">
+      <ul id="upcoming-body" className="divide-y divide-line/70 border-t border-line/70">
         {list.map((c) => (
           <li key={`${c.instanceId}/${c.id}`}>
-            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-baseline gap-3 px-5 py-3 transition-colors hover:bg-raised/50">
-              <span className="w-24 shrink-0 font-mono text-xs text-ink-soft">{whenFr(c.nextRunAt)}</span>
+            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-baseline gap-3.5 px-4 py-3 transition-colors hover:bg-paper">
+              <span className="w-28 shrink-0 font-mono text-xs text-ink-soft">{whenFr(c.nextRunAt)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{c.name}</span>
                 <span className="block truncate text-xs text-ink-faint">{describe(c.schedule)}</span>
@@ -101,7 +101,7 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
         ))}
         {!open && failed.length > 0 && (
           <li data-cron-failure-summary>
-            <Link to="/crons" className="flex items-center gap-2.5 bg-bad-soft/60 px-5 py-3 text-[13px] font-medium text-bad transition-colors hover:bg-bad-soft">
+            <Link to="/crons" className="flex items-center gap-2.5 bg-bad-soft/60 px-4 py-3 text-[13px] font-medium text-bad transition-colors hover:bg-bad-soft">
               <TriangleAlert className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
               {failureLabel(failed.length)}
             </Link>
@@ -109,7 +109,7 @@ function UpcomingCrons({ crons }: { crons: OverviewCron[] }) {
         )}
         {open && failed.map((c) => (
           <li key={`f:${c.instanceId}/${c.id}`} data-cron-failure>
-            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-start gap-2.5 bg-bad-soft/60 px-5 py-3 text-bad transition-colors hover:bg-bad-soft">
+            <Link to="/i/$inst/crons" params={{ inst: c.instanceId }} className="flex items-start gap-2.5 bg-bad-soft/60 px-4 py-3 text-bad transition-colors hover:bg-bad-soft">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden />
               <span className="min-w-0 flex-1 text-[13px]">
                 <span className="font-medium">Échec · {c.name}</span>
@@ -147,7 +147,7 @@ export function HomePage() {
             <p className="text-sm text-ink-soft">Intendia n’est relié à aucune instance Hermes pour l’instant</p>
             <Link
               to={instances.data.declarative ? '/reglages' : '/installation'}
-              className="mt-4 inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong"
+              className="mt-4 inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong"
             >
               Ajouter une instance
             </Link>
@@ -159,7 +159,7 @@ export function HomePage() {
           <Panel>
             <p className="text-[15px]">Commencez par un workspace{instance && list.length > 1 ? ` sur ${instance.label}` : ''}</p>
             <p className="mt-1 text-sm text-ink-soft">Un dossier partagé avec l’agent, ses consignes et ses sessions de travail</p>
-            <Link to="/w" className="mt-4 inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong">
+            <Link to="/w" className="mt-4 inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
               Créer un workspace
             </Link>
           </Panel>

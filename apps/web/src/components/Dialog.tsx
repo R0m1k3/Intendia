@@ -83,7 +83,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
         role={req.kind === 'ask' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); finish(true); }}
-        className="enter w-full max-w-[440px] rounded-[14px] border border-line bg-sheet p-5 shadow-[0_24px_64px_rgb(22_24_27/0.18)]"
+        className="enter w-full max-w-[440px] rounded-xl border border-line bg-sheet p-5 shadow-[var(--shadow-card)]"
       >
         <h2 className="text-[15px] font-semibold">{title}</h2>
         {message && <div className="mt-2 text-sm leading-relaxed text-ink-soft">{message}</div>}

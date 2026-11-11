@@ -84,15 +84,15 @@ function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
     if (r.status === 'approved') void refresh();
   };
 
-  if (accounts === null) return <Panel title="Abonnements"><p className="px-5 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
+  if (accounts === null) return <Panel title="Abonnements"><p className="px-4 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
   return (
-    <Panel title="Abonnements" bodyClassName="divide-y divide-line">
-      {accounts.length === 0 && <p className="px-5 py-4 text-sm text-ink-soft">Aucun fournisseur à abonnement.</p>}
+    <Panel title="Abonnements" bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      {accounts.length === 0 && <p className="px-4 py-4 text-sm text-ink-soft">Aucun fournisseur à abonnement.</p>}
       {visibleAccounts(accounts).map((a) => {
         const { name, hermes } = displayName(a.id, a.name);
         const isAnthropic = a.id === 'anthropic';
         return (
-        <div key={a.id} className="px-5 py-3" data-account={a.id}>
+        <div key={a.id} className="px-4 py-3" data-account={a.id}>
           <div className="flex flex-wrap items-center gap-3">
             <Mark state={a.connected ? 'full' : 'unavailable'} />
             <div className="min-w-0 flex-1">
@@ -358,15 +358,15 @@ function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
   inst: string; profile: string; info: ProvidersInfo; can: (op: string) => boolean; refresh: Refresh; onVariable: (key: string) => void;
   endpoints: CustomProvider[];
 }) {
-  if (info.keys === null) return <Panel title="Clés d’API"><p className="px-5 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
+  if (info.keys === null) return <Panel title="Clés d’API"><p className="px-4 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
   const names = new Map(info.keyProviders.map((p) => [p.slug, p.name]));
   const byProvider = new Map<string, ProviderKey[]>();
   for (const k of info.keys) byProvider.set(k.provider, [...(byProvider.get(k.provider) ?? []), k]);
   return (
-    <Panel title="Clés d’API" bodyClassName="divide-y divide-line">
-      {byProvider.size === 0 && <p className="px-5 py-4 text-sm text-ink-soft">Aucune clé d’API enregistrée dans Hermes.</p>}
+    <Panel title="Clés d’API" bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      {byProvider.size === 0 && <p className="px-4 py-4 text-sm text-ink-soft">Aucune clé d’API enregistrée dans Hermes.</p>}
       {[...byProvider.entries()].map(([provider, keys]) => (
-        <div key={provider} className="px-5 py-3" data-provider-keys={provider}>
+        <div key={provider} className="px-4 py-3" data-provider-keys={provider}>
           <h3 className="text-sm font-medium">{names.get(provider) ?? provider} <span className="font-mono text-xs font-normal text-ink-faint">{provider}</span></h3>
           <ul className="mt-1 divide-y divide-line/60">
             {keys.map((k) => (
@@ -376,7 +376,7 @@ function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
           </ul>
         </div>
       ))}
-      {can('poolAdd') && <div className="px-5 py-4"><AddKey inst={inst} profile={profile} providers={info.keyProviders} refresh={refresh} /></div>}
+      {can('poolAdd') && <div className="px-4 py-4"><AddKey inst={inst} profile={profile} providers={info.keyProviders} refresh={refresh} /></div>}
     </Panel>
   );
 }
@@ -487,14 +487,14 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
     mutationFn: (slug: string) => api.removeCustomProvider(inst, profile, slug),
     onSuccess: async (r) => { setLeft(r.keyLeft ?? null); await refresh(); },
   });
-  if (error) return <Panel title="Endpoints personnalisés"><div className="px-5 py-4"><ErrorText error={error} /></div></Panel>;
+  if (error) return <Panel title="Endpoints personnalisés"><div className="px-4 py-4"><ErrorText error={error} /></div></Panel>;
   if (!data) return null;
   return (
-    <Panel title="Endpoints personnalisés" bodyClassName="divide-y divide-line">
-      <p className="px-5 py-3 text-sm text-ink-soft">Un serveur compatible OpenAI (Ollama, vLLM, LM Studio, un proxy…). Ses modèles sont proposés dans le chat.</p>
-      {data.endpoints.length === 0 && <p className="px-5 py-3 text-sm text-ink-soft">Aucun endpoint personnalisé.</p>}
+    <Panel title="Endpoints personnalisés" bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      <p className="px-4 py-3 text-sm text-ink-soft">Un serveur compatible OpenAI (Ollama, vLLM, LM Studio, un proxy…). Ses modèles sont proposés dans le chat.</p>
+      {data.endpoints.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">Aucun endpoint personnalisé.</p>}
       {data.endpoints.map((e) => (
-        <div key={e.slug ?? `old:${e.name}:${e.baseUrl}`} className="flex flex-wrap items-center gap-3 px-5 py-3" data-endpoint={e.slug ?? e.name}>
+        <div key={e.slug ?? `old:${e.name}:${e.baseUrl}`} className="flex flex-wrap items-center gap-3 px-4 py-3" data-endpoint={e.slug ?? e.name}>
           <Server className="size-4 text-ink-faint" strokeWidth={1.5} />
           <div className="min-w-0 flex-1">
             <span className="block text-sm font-medium">{e.name} {e.slug && <span className="font-mono text-xs font-normal text-ink-faint">{e.slug}</span>}</span>
@@ -521,14 +521,14 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
           )}
         </div>
       ))}
-      {!data.writable && data.endpoints.some((e) => e.slug) && <p className="px-5 py-3 text-xs text-ink-faint">Modification impossible sur cette instance : utilisez l’onglet YAML.</p>}
+      {!data.writable && data.endpoints.some((e) => e.slug) && <p className="px-4 py-3 text-xs text-ink-faint">Modification impossible sur cette instance : utilisez l’onglet YAML.</p>}
       {(remove.error || left) && (
-        <div className="px-5 py-3">
+        <div className="px-4 py-3">
           <ErrorText error={remove.error} />
           {left && <p className="text-xs text-ink-soft">Endpoint supprimé, mais la variable {left} n’a pas pu l’être : retirez-la dans l’onglet Variables.</p>}
         </div>
       )}
-      {data.writable && <div className="px-5 py-4"><AddEndpoint inst={inst} profile={profile} refresh={refresh} /></div>}
+      {data.writable && <div className="px-4 py-4"><AddEndpoint inst={inst} profile={profile} refresh={refresh} /></div>}
     </Panel>
   );
 }

@@ -45,6 +45,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
       setHandoff({ inst: ws.instanceId, sessionId: session.id, runId: res.runId, text, ts: Date.now() / 1000 });
       localStorage.setItem(LAST, ws.slug);
       void qc.invalidateQueries({ queryKey: ['sessions-recent'] });
+      void qc.invalidateQueries({ queryKey: ['sessions-list'] });
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug: ws.slug, sessionId: session.id } });
       return true;
     } catch (err) {
@@ -78,7 +79,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
             title="Workspace de la nouvelle session" placement="below" value={ws.slug} disabled={attached > 0}
             items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? `agent ${w.profile}` : undefined }))}
             onPick={(v) => v && setSlug(v)}
-            triggerClass="flex h-8 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] text-ink transition-colors hover:bg-raised aria-expanded:bg-raised"
+            triggerClass="flex h-7 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-paper hover:text-ink aria-expanded:bg-paper"
             label={<span className="flex min-w-0 items-center gap-1.5"><Folder className="size-3.5 shrink-0 text-ink-faint" strokeWidth={1.5} /><span className="truncate">{ws.name}</span></span>}
           />
         )}

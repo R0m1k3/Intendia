@@ -121,7 +121,7 @@ export function CronTimeline({ crons }: { crons: OverviewCron[] }) {
   for (const c of crons) byInstance.set(c.instanceId, [...(byInstance.get(c.instanceId) ?? []), c]);
   const many = byInstance.size > 1;
   return (
-    <section className="card px-5 py-4" aria-labelledby="timeline-title" data-collapsed={open ? undefined : ''}>
+    <section className="card px-4 py-3" aria-labelledby="timeline-title" data-collapsed={open ? undefined : ''}>
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
           <h2 id="timeline-title" className="text-[15px] font-semibold">Aujourd’hui</h2>

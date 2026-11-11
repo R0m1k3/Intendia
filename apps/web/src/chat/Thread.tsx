@@ -14,6 +14,9 @@ import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
 import { Subagents } from './Subagents';
 
+/** How the user is named in the thread. */
+const USER = 'Vous';
+
 export function clock(ts: number | null): string {
   if (!ts) return '';
   return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -53,7 +56,7 @@ export function Md({ text }: { text: string }) {
 }
 
 /** Width of the avatar column: the agent's content and its cards line up after it. */
-export const AGENT_INDENT = 'pl-9';
+export const AGENT_INDENT = 'pl-10';
 
 function StepIcon({ state }: { state: ToolEntry['state'] }) {
   if (state === 'running') return <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-faint" strokeWidth={1.75} />;
@@ -65,23 +68,23 @@ function Step({ e }: { e: ToolEntry }) {
   const [open, setOpen] = useState(false);
   const hasResult = Boolean(e.result);
   return (
-    <li className="border-t border-line first:border-t-0">
+    <li>
       <button
         type="button"
         onClick={() => hasResult && setOpen(!open)}
         aria-expanded={hasResult ? open : undefined}
-        className={cx('flex w-full min-w-0 items-center gap-2.5 px-3 py-2 text-left text-xs', hasResult && 'hover:bg-raised/50')}
+        className={cx('flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[3px] text-left font-mono text-xs', hasResult && 'hover:bg-raised')}
       >
         <StepIcon state={e.state} />
         <span className="shrink-0 font-mono text-ink">{e.tool}</span>
-        <span className="min-w-0 truncate text-ink-soft">{e.preview}</span>
+        <span className="min-w-0 truncate text-ink-faint">{e.preview}</span>
         <span className="ml-auto shrink-0 font-mono text-ink-faint">
           {e.state === 'running' ? 'en cours' : e.duration !== null ? `${e.duration.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s` : ''}
         </span>
         {hasResult && <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform duration-150', open && 'rotate-90')} strokeWidth={1.5} />}
       </button>
       {open && e.result && (
-        <pre className={cx('mx-3 mb-3 max-h-72 overflow-auto rounded-lg border border-line bg-paper p-3 font-mono text-xs whitespace-pre-wrap', e.state === 'failed' && 'text-bad')}>
+        <pre className={cx('mx-1.5 mb-2 mt-1 max-h-72 overflow-auto rounded-lg border border-line bg-sheet p-3 font-mono text-xs whitespace-pre-wrap', e.state === 'failed' && 'text-bad')}>
           {e.result}
         </pre>
       )}
@@ -93,15 +96,15 @@ function Step({ e }: { e: ToolEntry }) {
 function Steps({ tools }: { tools: ToolEntry[] }) {
   const [open, setOpen] = useState(() => tools.length <= 3 || tools.some((t) => t.state === 'running'));
   return (
-    <div className="overflow-hidden card" data-steps>
+    <div className="rounded-lg bg-paper px-1.5 py-1.5 text-ink-soft" data-steps>
       <button
         type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-soft hover:text-ink"
+        className="flex w-full items-center gap-2 rounded-md px-1.5 py-[3px] text-left font-mono text-xs text-ink-faint hover:text-ink"
       >
         <ChevronDown className={cx('size-3.5 shrink-0 transition-transform duration-150', !open && '-rotate-90')} strokeWidth={1.75} />
         {stepsLabel(tools)}
       </button>
-      {open && <ul className="border-t border-line">{tools.map((t) => <Step key={t.key} e={t} />)}</ul>}
+      {open && <ul className="flex flex-col gap-0.5">{tools.map((t) => <Step key={t.key} e={t} />)}</ul>}
     </div>
   );
 }
@@ -139,13 +142,34 @@ function CopyReply({ text }: { text: string }) {
   );
 }
 
+/** Round 28 px avatar with an initial: the agent on black with an orange letter, the user on grey. */
+export function Avatar({ name, agent }: { name: string; agent: boolean }) {
+  return (
+    <span aria-hidden className={cx(
+      'grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold uppercase',
+      agent ? 'bg-[#0e0e10] text-accent dark:ring-1 dark:ring-line' : 'bg-raised text-ink',
+    )}>
+      {Array.from(name)[0] ?? 'H'}
+    </span>
+  );
+}
+
+/** Name of a turn and its time (mono), beside the avatar. */
+function Who({ name, ts, extra }: { name: string; ts: number | null; extra?: string }) {
+  return (
+    <span className="flex min-w-0 items-baseline gap-1.5 text-[13.5px]">
+      <span className="truncate font-semibold">{name}</span>
+      {(ts !== null || extra) && <span className="shrink-0 font-mono text-[11.5px] text-ink-faint">{[clock(ts), extra].filter(Boolean).join(' · ')}</span>}
+    </span>
+  );
+}
+
 /** The agent's header: avatar, name, time of the turn. */
 export function AgentHeader({ ts, name = 'Hermes' }: { ts: number | null; name?: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-semibold uppercase text-on-accent">{Array.from(name)[0] ?? 'H'}</span>
-      <span className="truncate text-sm font-semibold">{name}</span>
-      {ts !== null && <span className="text-xs text-ink-faint">{clock(ts)}</span>}
+      <Avatar name={name} agent />
+      <Who name={name} ts={ts} />
     </div>
   );
 }
@@ -182,9 +206,9 @@ function UserMessage({ text }: { text: string }) {
   const split = useMemo(() => (paths?.mounts ? splitAttachments(text, paths.mounts) : { text, files: [] }), [text, paths?.mounts]);
   return (
     <>
-      {split.text && <div className="max-w-[85%] rounded-2xl bg-accent/8 px-4 py-2.5 text-sm whitespace-pre-wrap md:max-w-[80%]">{split.text}</div>}
+      {split.text && <p className="text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{split.text}</p>}
       {split.files.length > 0 && (
-        <div className={cx('flex max-w-[85%] flex-wrap justify-end gap-2 md:max-w-[80%]', split.text && 'mt-1.5')} data-joined>
+        <div className={cx('flex flex-wrap gap-2', split.text && 'mt-2')} data-joined>
           {split.files.map((f) => <Joined key={f} written={f} />)}
         </div>
       )}
@@ -195,17 +219,20 @@ function UserMessage({ text }: { text: string }) {
 function TurnView({ t, agent }: { t: Turn; agent?: string }) {
   if (t.kind === 'user') {
     return (
-      <div className="flex flex-col items-end" data-turn="user">
-        <UserMessage text={t.entry.text} />
-        {t.entry.ts !== null && <span className="mt-1 text-[11px] text-ink-faint">{clock(t.entry.ts)}</span>}
-        {t.footers.map((r) => <div key={r.runId} className="w-full"><RunFooter r={r} /></div>)}
+      <div className="flex gap-3" data-turn="user">
+        <Avatar name={USER} agent={false} />
+        <div className="min-w-0 flex-1">
+          <Who name={USER} ts={t.entry.ts} />
+          <div className="mt-0.5"><UserMessage text={t.entry.text} /></div>
+          {t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
+        </div>
       </div>
     );
   }
   return (
     <div data-turn="agent" className="group">
       <AgentHeader ts={t.ts} name={agent} />
-      <div className={cx('mt-2 space-y-3', AGENT_INDENT)}>
+      <div className={cx('mt-1.5 space-y-2.5 text-[15px]', AGENT_INDENT)}>
         {t.parts.map((p) => <PartView key={p.key} p={p} />)}
         {(t.footers.length > 0 || (t.text && !t.streaming)) && (
           <div className="space-y-0.5">
@@ -235,7 +262,7 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 export function Thread({ entries, footers, agent }: { entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string }) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} />)}
     </div>
   );

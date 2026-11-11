@@ -6,7 +6,7 @@ import { Button, ErrorText, Field, Input, Wordmark } from '../components/ui';
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-full items-center justify-center p-5">
+    <div className="flex min-h-full items-center justify-center bg-sheet p-5">
       <div className="enter w-full max-w-sm">
         <div className="mb-10"><Wordmark size="lg" /></div>
         {children}
@@ -62,8 +62,8 @@ export function LoginPage() {
 
   return (
     <Shell>
-      <h1 className="text-[28px] font-medium leading-tight">Connexion</h1>
-      <p className="mt-2 text-sm text-ink-soft">Console de vos agents Hermes</p>
+      <h1 className="text-[26px] font-semibold leading-tight">Connexion</h1>
+      <p className="mt-1 text-sm text-ink-faint">Console de vos agents Hermes</p>
       <form onSubmit={submit} className="mt-8 space-y-4">
         <Field label="Mot de passe">
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="current-password" required />

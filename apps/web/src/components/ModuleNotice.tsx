@@ -35,7 +35,7 @@ export function ModuleNotice({ instanceId, module, title, required, optional, ex
   const a = useModuleAvailability(instanceId, module, required, optional, explainMissing);
   if (a.available && a.missing.length === 0) return null;
   return (
-    <div className={a.available ? 'rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm' : 'rounded-xl border border-bad/30 bg-bad-soft/50 p-4 text-sm'}>
+    <div className={a.available ? 'rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13.5px] text-warn' : 'rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13.5px] text-bad'}>
       <div className="flex items-center gap-2 font-medium">
         <Mark state={a.available ? 'readonly' : 'unavailable'} />
         {a.available ? `Indisponible sur cette instance : ${a.missing.join(', ').toLowerCase()}` : `${title} est indisponible sur cette instance`}

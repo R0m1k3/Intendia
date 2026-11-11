@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, RotateCcw, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type ConfigModels, type ModelInput } from '../api';
-import { Button, ErrorText, Input, Panel, Section } from '../components/ui';
+import { Button, ErrorText, Input, Panel } from '../components/ui';
+import { ConfigBox } from './Box';
 import { auxLabel } from './aux-labels';
 import { AUTO, changesOf, extraLabel, optionGroups, optionValue, OTHER, parseOption, valueOf } from './aux-draft';
 import { ChatModels } from './ChatModels';
@@ -42,10 +43,10 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
   const otherError = set.error && !['confirm_required'].includes(errorCode(set.error) ?? '') ? set.error : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {!writable && <p className="text-sm text-ink-soft">{m.version === null ? 'Écriture impossible : Hermes ne donne pas le fichier de configuration.' : 'Changement de modèle indisponible sur cette instance.'}</p>}
       {confirmFor && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
           <span>{confirmFor.message}</span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setConfirmFor(null)}>Annuler</Button>
@@ -91,15 +92,15 @@ function MainModel({ data, disabled, onSave, onKey }: {
   const p = data.providers.find((x) => x.slug === provider);
   const changed = provider !== data.main.provider || model !== data.main.model;
   return (
-    <Section title="Modèle principal" description="Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.">
-      <div className="card p-5">
+    <ConfigBox id="cf-m" title="Modèle principal" description="Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.">
+      <div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="mb-2 block text-sm font-medium">Fournisseur</span>
+          <span className="mb-1.5 block text-[13px] font-medium">Fournisseur</span>
           <ProviderSelect value={provider} providers={data.providers} onChange={setProvider} disabled={disabled} auto />
         </label>
         <label className="block min-w-64 flex-1">
-          <span className="mb-2 block text-sm font-medium">Modèle</span>
+          <span className="mb-1.5 block text-[13px] font-medium">Modèle</span>
           <Input className="font-mono text-[12.5px]" list="main-models" value={model} disabled={disabled} onChange={(e) => setModel(e.target.value)} />
           <datalist id="main-models">{(p?.models ?? []).map((x) => <option key={x} value={x} />)}</datalist>
         </label>
@@ -118,7 +119,7 @@ function MainModel({ data, disabled, onSave, onKey }: {
       )}
       {p?.warning && <p className="mt-1 text-xs text-ink-faint">{p.warning}</p>}
       </div>
-    </Section>
+    </ConfigBox>
   );
 }
 
@@ -163,7 +164,7 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
       action={<Button variant="ghost" disabled={disabled || n > 0} title={n > 0 ? 'Enregistrez ou annulez d’abord les modifications' : undefined}
         onClick={async () => { if (await ask({ title: 'Remettre toutes les tâches sur auto ?', confirmLabel: 'Remettre sur auto' })) onReset(); }}>
         <RotateCcw className={ICON} strokeWidth={1.5} />Tout remettre sur auto</Button>}
-      bodyClassName="divide-y divide-line">
+      bodyClassName="divide-y divide-line/70 border-t border-line/70">
       {data.auxiliary.map((t) => (
         <AuxRow key={t.task} task={t} providers={data.providers} disabled={disabled}
           value={draft[t.task] ?? valueOf(t)} other={other.has(t.task)}
@@ -213,7 +214,7 @@ function AuxRow({ task, providers, disabled, value, other, onChange }: {
   const firstKeyed = providers.find((p) => p.authenticated)?.slug ?? providers[0]?.slug ?? 'auto';
   const label = auxLabel(task.task, task.label);
   return (
-    <div data-aux={task.task} className="px-5 py-3">
+    <div data-aux={task.task} className="px-4 py-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
         <div className="min-w-0 md:w-52 md:shrink-0">
           <p className="text-sm font-medium">
