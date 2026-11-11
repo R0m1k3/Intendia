@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatModelList } from '../api';
 import { currentValue, decodeChoice, encodeChoice, modelItems } from './model-items';
+import { pickerGroups } from '../components/Menu';
 
 const noop = () => {};
 const none = { model: null, provider: null };
@@ -46,5 +47,14 @@ describe('modelItems', () => {
     expect(currentValue(LIST, { model: 'c', provider: null })).toBe(encodeChoice('c', 'anthropic'));
     expect(currentValue(LIST, { model: 'z', provider: null })).toBe('z');
     expect(currentValue(LIST, none)).toBeNull();
+  });
+});
+
+describe('picker groups', () => {
+  it('folds each provider group and leaves Auto and the actions outside', () => {
+    const l = { auto: null, managed: true, groups: [{ provider: 'a', name: 'A', models: ['m1', 'm2'] }, { provider: 'b', name: 'B', models: ['m3'] }] } as unknown as ChatModelList;
+    const items = modelItems(l, { model: null, provider: null }, noop);
+    expect(items.filter((i) => 'heading' in i).every((i) => 'heading' in i && i.collapsible)).toBe(true);
+    expect(pickerGroups(items)).toEqual([-1, -1, 1, 1, -1, 4, -1]);
   });
 });

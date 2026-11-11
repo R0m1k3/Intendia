@@ -16,18 +16,18 @@ export function decodeChoice(value: string | null): { model: string | null; prov
 }
 
 /**
- * Items of the chat's model picker: Auto, one group per provider (its title, then its models), the session's model
+ * Items of the chat's model picker: Auto, one folded group per provider (its title, then its models), the session's model
  * under "Autre" when it is in no group (no provider, removed from the declared list, provider without key), then
  * "Gérer les modèles…" when the declarations can be edited.
  */
 export function modelItems(list: ChatModelList | undefined, current: { model: string | null; provider: string | null }, manage: () => void): PickerItem[] {
   const auto = list?.auto ?? null;
   const items: PickerItem[] = [
-    { value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: 'Le modèle réglé pour l’agent Hermes' },
+    { value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: 'Le modèle réglé pour l’agent' },
   ];
   const groups = list?.groups ?? [];
   for (const g of groups) {
-    items.push({ heading: g.name });
+    items.push({ heading: g.name, collapsible: true });
     for (const m of g.models) items.push({ value: encodeChoice(m, g.provider), label: m, mono: true });
   }
   if (current.model) {

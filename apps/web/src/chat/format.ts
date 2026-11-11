@@ -91,3 +91,12 @@ export function costSettling(runs: RunStat[] | undefined, now = Date.now()): boo
   if (!last || last.costFinal || last.status === 'unknown' || last.endedAt === null) return false;
   return now - last.endedAt < COST_POLL_LIMIT_MS;
 }
+
+/**
+ * Name shown above the agent's replies: the agent (Hermes profile) when it is not the default one, else the
+ * instance's name; "Hermes" while neither is known.
+ */
+export function agentName(profile: string | null | undefined, instanceLabel: string | null | undefined): string {
+  if (profile && profile !== 'default') return profile;
+  return instanceLabel?.trim() || 'Hermes';
+}
