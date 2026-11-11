@@ -275,6 +275,13 @@ export class WorkspaceService {
     return this.getSession(ws.instanceId, id).session;
   }
 
+  /** The live row of `id` in workspace `slug`, if any (a copy action retried with the same key). */
+  existingCopy(slug: string, id: string): PublicSession | null {
+    const row = this.db.select().from(sessionWorkspace)
+      .where(and(eq(sessionWorkspace.workspaceSlug, slug), eq(sessionWorkspace.sessionId, id), alive)).get();
+    return row ? toPublic(row) : null;
+  }
+
   /**
    * Row of a session made by a copy (or an empty duplicate) under a known id: same id again (a retried action)
    * gives the existing session back. `copiedFrom` set = the session exists at Hermes without a run from Intendia.

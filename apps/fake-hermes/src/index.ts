@@ -619,7 +619,8 @@ function sessionCopies(method: string, path: string, body: unknown, sim: Simulat
       const id = String(raw.id ?? '');
       if (!id) { out.errors.push({ error: 'missing id' }); continue; }
       if (deleted.has(id)) { out.errors.push({ id, error: 'session id retired' }); continue; }
-      if (sim.messages.has(id) || sim.extraSessions.has(id)) { out.skipped_ids.push(id); continue; }
+      // like Hermes 0.23: the import is anchored on the id, an existing one is a revision conflict
+      if (sim.messages.has(id) || sim.extraSessions.has(id)) return json({ detail: 'revision_conflict' }, 409);
       const started = typeof raw.started_at === 'number' ? raw.started_at : Date.now() / 1000;
       const msgs = (Array.isArray(raw.messages) ? raw.messages : []) as Record<string, unknown>[];
       const source = typeof raw.source === 'string' ? raw.source : 'import';

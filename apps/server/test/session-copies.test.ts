@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { sessionWorkspace } from '../src/db/schema.js';
 import { testApp, waitRun } from './helpers.js';
 
 async function setup(opts: Parameters<typeof testApp>[0] = {}) {
@@ -29,6 +31,12 @@ describe('session copies', () => {
     expect(hist.json.messages.some((m: any) => m.role === 'user' && m.content === 'Bonjour')).toBe(true);
     // the copy takes runs
     await sendAndWait(t, `/x/sessions/fake/${dup.json.session.id}`, 'Et ensuite ?');
+
+    // imported at Hermes but the Intendia row lost (crash between both): Hermes answers 409, the copy is adopted
+    t.db.delete(sessionWorkspace).where(eq(sessionWorkspace.sessionId, dup.json.session.id)).run();
+    const retry = await t.request('POST', `${base}/duplicate`, { key: 'cle-dupli-1' });
+    expect(retry.status).toBe(201);
+    expect(retry.json.session.id).toBe(dup.json.session.id);
   });
 
   it('duplicates a session never sent as a new empty one, and refuses during a run', async () => {

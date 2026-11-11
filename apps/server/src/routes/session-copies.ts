@@ -43,6 +43,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const newId = copyId(inst, workspace.slug, key);
     const title = `${s.title || 'Nouvelle session'} (copie)`;
     const options = { model: s.model, provider: s.modelProvider, effort: s.effort };
+    const done = workspaces.existingCopy(workspace.slug, newId);
+    if (done) return c.json({ session: done });
     // never sent to Hermes: nothing to copy there, a new empty session with the same options
     if (!s.lastRunId && !s.copiedFrom) {
       const res = await workspaces.adoptSession(workspace.slug, newId, { title, ...options, copiedFrom: null });
@@ -74,6 +76,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     // the history stays with its profile: a copy is only made in a workspace of that profile
     if ((ws.profile ?? 'default') !== body.profile) return c.json({ error: 'Workspace d’un autre agent', code: 'other_profile' }, 400);
     const newId = copyId(inst, ws.slug, body.key);
+    const done = workspaces.existingCopy(ws.slug, newId);
+    if (done) return c.json({ session: done });
     const exported = await exportSession(compat, inst, body.profile, id);
     const title = exported.title?.trim() || `Suite de ${exported.source ?? 'session'}`;
     await importCopy(compat, inst, body.profile, copyPayload(exported, { id: newId, title }));
@@ -89,6 +93,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const { key, file } = ImportBody.parse(await c.req.json());
     const exported = exportedFromFile(file);
     const newId = copyId(ws.instanceId, ws.slug, key);
+    const done = workspaces.existingCopy(ws.slug, newId);
+    if (done) return c.json({ session: done });
     const title = exported.title?.trim() || 'Session importée';
     const profile = ws.profile ?? 'default';
     await importCopy(compat, ws.instanceId, profile, copyPayload(exported, { id: newId, title, untrusted: true }));

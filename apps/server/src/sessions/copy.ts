@@ -86,7 +86,8 @@ export async function exportSession(compat: CompatService, instanceId: string, p
 }
 
 /**
- * Imports the copy into `profile`. Already there (same key: a retry) → fine. Hermes busy (storage lock held by a
+ * Imports the copy into `profile`. Already there (same key: a retry) → fine: Hermes 0.23 answers 409
+ * `revision_conflict` for an id it has (the import is anchored on that id), older ones list it in `skipped_ids`. Hermes busy (storage lock held by a
  * run, seen on 0.23 as 503 storage_unavailable) → `busy`, to try again with the same key.
  */
 export async function importCopy(compat: CompatService, instanceId: string, profile: string, payload: Row): Promise<void> {
@@ -99,6 +100,7 @@ export async function importCopy(compat: CompatService, instanceId: string, prof
     });
   } catch (err) {
     if (err instanceof HermesError && err.detail.status === 503) throw new CopyError('busy', 'Hermes est occupé : réessayez dans un instant', 503);
+    if (err instanceof HermesError && err.detail.status === 409 && (await readHistory(compat, instanceId, id, profile, 1)).exists) return;
     throw err;
   }
   if (res.imported_ids.includes(id) || res.skipped_ids.includes(id)) return;
