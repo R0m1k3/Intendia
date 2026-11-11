@@ -1,15 +1,13 @@
-// Runs the fake Hermes on two ports. FAKE_FIXTURES defaults to the newest fixtures/hermes-* directory.
+// Runs the fake Hermes on two ports. FAKE_FIXTURES defaults to the reference recording (REFERENCE_FIXTURES).
 import { serve } from '@hono/node-server';
-import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import { WebSocketServer } from 'ws';
-import { connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, FAKE_DASH_TOKEN } from './index.ts';
+import { connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, FAKE_DASH_TOKEN, REFERENCE_FIXTURES } from './index.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
-const latest = readdirSync(root).filter((d) => d.startsWith('hermes-')).sort().at(-1);
-const fixturesDir = process.env.FAKE_FIXTURES ?? join(root, latest ?? '');
+const fixturesDir = process.env.FAKE_FIXTURES ?? join(root, REFERENCE_FIXTURES);
 const map = process.env.FAKE_PATH_MAP?.split('=');
 const pathMap = map?.length === 2 ? { from: map[0]!.replace(/\/$/, ''), to: map[1]!.replace(/\/$/, '') } : undefined;
 const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? JSON.parse(process.env.FAKE_BREAKS) : undefined, pathMap,

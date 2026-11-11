@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "body": {
+    "profiles": [
+      {
+        "name": "default",
+        "path": "/opt/data",
+        "is_default": true,
+        "model": "anthropic/claude-opus-4.6",
+        "provider": "auto",
+        "has_env": true,
+        "skill_count": 0,
+        "gateway_running": false,
+        "description": "",
+        "description_auto": false,
+        "display_name": "",
+        "bot_title": "",
+        "distribution_name": null,
+        "distribution_version": null,
+        "distribution_source": null,
+        "has_alias": false
+      }
+    ]
+  }
+}

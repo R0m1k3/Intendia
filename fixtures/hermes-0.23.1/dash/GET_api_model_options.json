@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "body": {
+    "providers": [],
+    "model": "anthropic/claude-opus-4.6",
+    "provider": "auto"
+  }
+}

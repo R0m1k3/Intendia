@@ -1,0 +1,2656 @@
+{
+  "status": 200,
+  "body": {
+    "skills": [
+      {
+        "name": "agent-merge-conflict-arbiter",
+        "description": "Neutral arbiter for merge conflicts between two agents.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/agent-merge-conflict-arbiter",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Multi-Agent",
+          "Git",
+          "Merge-Conflict",
+          "Kanban",
+          "Arbitration"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "antigravity-cli",
+        "description": "Operate the Antigravity CLI (agy): plugins, auth, sandbox.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/antigravity-cli",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "Antigravity",
+          "CLI",
+          "Auth",
+          "Plugins",
+          "Sandbox"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "blackbox",
+        "description": "Delegate coding tasks to the Blackbox AI multi-model CLI.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/blackbox",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "Blackbox",
+          "Multi-Agent",
+          "Judge",
+          "Multi-Model"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "dynamic-workflow",
+        "description": "Plan-in-code fan-outs, adversarial verification, waves.",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/dynamic-workflow",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "orchestration",
+          "fan-out",
+          "subagents",
+          "delegation",
+          "verification",
+          "migration",
+          "audit",
+          "research",
+          "campaign"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "grok",
+        "description": "Delegate coding to xAI Grok Build CLI (features, PRs).",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/grok",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "Grok",
+          "xAI",
+          "Code-Review",
+          "Refactoring",
+          "Automation"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "opencode",
+        "description": "Delegate coding to OpenCode CLI (features, PR review).",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/opencode",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "OpenCode",
+          "Autonomous",
+          "Refactoring",
+          "Code-Review"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "openhands",
+        "description": "Delegate coding to OpenHands CLI (model-agnostic, LiteLLM).",
+        "source": "official",
+        "identifier": "official/autonomous-ai-agents/openhands",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Coding-Agent",
+          "OpenHands",
+          "Model-Agnostic",
+          "LiteLLM"
+        ],
+        "category": "autonomous-ai-agents",
+        "installed": false
+      },
+      {
+        "name": "evm",
+        "description": "Read-only EVM client: wallets, tokens, gas across 8 chains.",
+        "source": "official",
+        "identifier": "official/blockchain/evm",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "EVM",
+          "Ethereum",
+          "BNB",
+          "BSC",
+          "Base",
+          "Arbitrum",
+          "Polygon",
+          "Optimism",
+          "Avalanche",
+          "zkSync",
+          "Blockchain",
+          "Crypto",
+          "Web3",
+          "DeFi",
+          "NFT",
+          "ENS",
+          "Whale",
+          "Security"
+        ],
+        "category": "blockchain",
+        "installed": false
+      },
+      {
+        "name": "hyperliquid",
+        "description": "Hyperliquid market data, account history, trade review.",
+        "source": "official",
+        "identifier": "official/blockchain/hyperliquid",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Hyperliquid",
+          "Blockchain",
+          "Crypto",
+          "Trading",
+          "Perpetuals",
+          "Spot",
+          "DeFi"
+        ],
+        "category": "blockchain",
+        "installed": false
+      },
+      {
+        "name": "solana",
+        "description": "Query Solana wallets, tokens, txs, and NFTs in USD.",
+        "source": "official",
+        "identifier": "official/blockchain/solana",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Solana",
+          "Blockchain",
+          "Crypto",
+          "Web3",
+          "RPC",
+          "DeFi",
+          "NFT"
+        ],
+        "category": "blockchain",
+        "installed": false
+      },
+      {
+        "name": "one-three-one-rule",
+        "description": "1-3-1 decision briefs: problem, three options, one pick.",
+        "source": "official",
+        "identifier": "official/communication/one-three-one-rule",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "communication",
+          "decision-making",
+          "proposals",
+          "trade-offs"
+        ],
+        "category": "communication",
+        "installed": false
+      },
+      {
+        "name": "ai-presenter-video",
+        "description": "Make a verified AI presenter video from script + image.",
+        "source": "official",
+        "identifier": "official/creative/ai-presenter-video",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "video",
+          "presenter",
+          "avatar",
+          "lipsync",
+          "tts",
+          "captions",
+          "creative"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "anatomy",
+        "description": "Explain an idea as an interactive isometric machine figure.",
+        "source": "official",
+        "identifier": "official/creative/anatomy",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "isometric",
+          "svg",
+          "webgl",
+          "3d",
+          "diagram",
+          "explainer",
+          "illustration",
+          "docs",
+          "html",
+          "react"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "archify",
+        "description": "Validated interactive HTML diagrams, upstream-maintained.",
+        "source": "official",
+        "identifier": "official/creative/archify",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "diagram",
+          "architecture",
+          "workflow",
+          "sequence",
+          "dataflow",
+          "state-machine",
+          "mermaid",
+          "html",
+          "svg"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "ascii-art",
+        "description": "ASCII art: pyfiglet, cowsay, boxes, image-to-ascii.",
+        "source": "official",
+        "identifier": "official/creative/ascii-art",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "ASCII",
+          "Art",
+          "Banners",
+          "Creative",
+          "Unicode",
+          "Text-Art",
+          "pyfiglet",
+          "figlet",
+          "cowsay",
+          "boxes"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "auteur",
+        "description": "Design and build cinematic, award-level web pages.",
+        "source": "official",
+        "identifier": "official/creative/auteur",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "web-design",
+          "cinematic",
+          "scroll-animation",
+          "design-system",
+          "anti-slop",
+          "frontend"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "baoyu-article-illustrator",
+        "description": "Article illustrations: type × style × palette consistency.",
+        "source": "official",
+        "identifier": "official/creative/baoyu-article-illustrator",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "article-illustration",
+          "creative",
+          "image-generation"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "baoyu-comic",
+        "description": "Knowledge comics (知识漫画): educational, biography, tutorial.",
+        "source": "official",
+        "identifier": "official/creative/baoyu-comic",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "comic",
+          "knowledge-comic",
+          "creative",
+          "image-generation"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "brag",
+        "description": "Project launch video via Hyperframes, upstream-maintained.",
+        "source": "official",
+        "identifier": "official/creative/brag",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "video",
+          "launch-video",
+          "marketing",
+          "hyperframes",
+          "motion-graphics",
+          "share-copy"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "brag-slim",
+        "description": "Launch video from a project or URL, upstream-maintained.",
+        "source": "official",
+        "identifier": "official/creative/brag-slim",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "video",
+          "launch-video",
+          "marketing",
+          "motion-graphics",
+          "share-copy"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "comfyui",
+        "description": "Generate images, video, and audio via diffusion workflows.",
+        "source": "official",
+        "identifier": "official/creative/comfyui",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "comfyui",
+          "image-generation",
+          "stable-diffusion",
+          "flux",
+          "sd3",
+          "wan-video",
+          "hunyuan-video",
+          "creative",
+          "generative-ai",
+          "video-generation"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "concept-diagrams",
+        "description": "Generate flat, minimal educational SVG visuals as HTML.",
+        "source": "official",
+        "identifier": "official/creative/concept-diagrams",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "diagrams",
+          "svg",
+          "visualization",
+          "education",
+          "physics",
+          "chemistry",
+          "engineering"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "creative-ideation",
+        "description": "Generate ideas via named methods from creative practice.",
+        "source": "official",
+        "identifier": "official/creative/creative-ideation",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Creative",
+          "Ideation",
+          "Brainstorming",
+          "Methods",
+          "Inspiration"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "design-md",
+        "description": "Author/validate/export Google's DESIGN.md token spec files.",
+        "source": "official",
+        "identifier": "official/creative/design-md",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "design",
+          "design-system",
+          "tokens",
+          "ui",
+          "accessibility",
+          "wcag",
+          "tailwind",
+          "dtcg",
+          "google"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "draw-your-font",
+        "description": "Turn a handwriting photo into an installable TTF font.",
+        "source": "official",
+        "identifier": "official/creative/draw-your-font",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "font",
+          "handwriting",
+          "typography",
+          "ttf",
+          "woff",
+          "vision",
+          "creative"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "dream-loop",
+        "description": "Build stunning 3D scenes via a concept-art fidelity loop.",
+        "source": "official",
+        "identifier": "official/creative/dream-loop",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "3d",
+          "games",
+          "webgl",
+          "threejs",
+          "image-generation",
+          "visual-fidelity",
+          "creative"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "excalidraw",
+        "description": "Hand-drawn Excalidraw JSON diagrams (arch, flow, seq).",
+        "source": "official",
+        "identifier": "official/creative/excalidraw",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Excalidraw",
+          "Diagrams",
+          "Flowcharts",
+          "Architecture",
+          "Visualization",
+          "JSON"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "heartmula",
+        "description": "HeartMuLa: Suno-like song generation from lyrics + tags.",
+        "source": "official",
+        "identifier": "official/creative/heartmula",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "music",
+          "audio",
+          "generation",
+          "ai",
+          "heartmula",
+          "heartcodec",
+          "lyrics",
+          "songs"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "hyperframes",
+        "description": "Render MP4/WebM videos from HTML compositions.",
+        "source": "official",
+        "identifier": "official/creative/hyperframes",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "creative",
+          "video",
+          "animation",
+          "html",
+          "gsap",
+          "motion-graphics"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "impeccable",
+        "description": "Frontend design guidance, upstream-maintained (impeccable).",
+        "source": "official",
+        "identifier": "official/creative/impeccable",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "design",
+          "frontend",
+          "ui",
+          "ux",
+          "web-design",
+          "anti-slop"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "ip-as-logo",
+        "description": "Design minimal cute IP mascot marks readable at 32px.",
+        "source": "official",
+        "identifier": "official/creative/ip-as-logo",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "logo",
+          "mascot",
+          "branding",
+          "ip-character",
+          "image-generation",
+          "creative"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "kanban-video-orchestrator",
+        "description": "Plan and run multi-agent video production pipelines.",
+        "source": "official",
+        "identifier": "official/creative/kanban-video-orchestrator",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "video",
+          "kanban",
+          "multi-agent",
+          "orchestration",
+          "production-pipeline"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "meme-generation",
+        "description": "Create meme PNGs from templates with Pillow text overlay.",
+        "source": "official",
+        "identifier": "official/creative/meme-generation",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "creative",
+          "memes",
+          "humor",
+          "images"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "mono-color",
+        "description": "Generate one- or two-ink editorial print poster images.",
+        "source": "official",
+        "identifier": "official/creative/mono-color",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "design",
+          "poster",
+          "print",
+          "duotone",
+          "risograph",
+          "editorial",
+          "image-generation"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "pixel-art",
+        "description": "Pixel art w/ era palettes (NES, Game Boy, PICO-8).",
+        "source": "official",
+        "identifier": "official/creative/pixel-art",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "creative",
+          "pixel-art",
+          "arcade",
+          "snes",
+          "nes",
+          "gameboy",
+          "retro",
+          "image",
+          "video"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "pretext",
+        "description": "Build creative browser demos with DOM-free text layout.",
+        "source": "official",
+        "identifier": "official/creative/pretext",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "creative-coding",
+          "typography",
+          "pretext",
+          "ascii-art",
+          "canvas",
+          "generative",
+          "text-layout",
+          "kinetic-typography"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "simple-english",
+        "description": "Rewrite text to ASD-STE100 Simplified Technical English.",
+        "source": "official",
+        "identifier": "official/creative/simple-english",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "writing",
+          "documentation",
+          "ste",
+          "asd-ste100",
+          "technical-writing",
+          "editing",
+          "anti-ai-slop"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "sketch",
+        "description": "Throwaway HTML mockups: 2-3 design variants to compare.",
+        "source": "official",
+        "identifier": "official/creative/sketch",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "sketch",
+          "mockup",
+          "design",
+          "ui",
+          "prototype",
+          "html",
+          "variants",
+          "exploration",
+          "wireframe",
+          "comparison"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "social-media-content-calendar",
+        "description": "Plan multi-platform social campaigns: briefs to posting.",
+        "source": "official",
+        "identifier": "official/creative/social-media-content-calendar",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Social-Media",
+          "Content-Calendar",
+          "Campaigns",
+          "Publishing"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "system-atlas",
+        "description": "Build explorable isometric architecture atlases as HTML.",
+        "source": "official",
+        "identifier": "official/creative/system-atlas",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "architecture",
+          "diagrams",
+          "isometric",
+          "documentation"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "tldraw-offline",
+        "description": "Drive and script tldraw offline canvases with an agent.",
+        "source": "official",
+        "identifier": "official/creative/tldraw-offline",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "tldraw",
+          "canvas",
+          "whiteboard",
+          "document-script",
+          "diagramming"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "unreal-mcp",
+        "description": "Automate Unreal Engine editor scenes, actors, and renders.",
+        "source": "official",
+        "identifier": "official/creative/unreal-mcp",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "unreal",
+          "unreal-engine",
+          "ue5",
+          "3d",
+          "mcp",
+          "scenes",
+          "cinematics",
+          "lighting",
+          "gamedev"
+        ],
+        "category": "creative",
+        "installed": false
+      },
+      {
+        "name": "jupyter-notebook",
+        "description": "Iterative Python via live Jupyter kernel (hamelnb).",
+        "source": "official",
+        "identifier": "official/data-science/jupyter-notebook",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "jupyter",
+          "notebook",
+          "repl",
+          "data-science",
+          "exploration",
+          "iterative"
+        ],
+        "category": "data-science",
+        "installed": false
+      },
+      {
+        "name": "actual-setup",
+        "description": "Set up Actual Computer (actual.inc) inference in Hermes.",
+        "source": "official",
+        "identifier": "official/devops/actual-setup",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "actual",
+          "actual-inc",
+          "provider",
+          "local-inference",
+          "relay",
+          "gguf",
+          "setup"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "docker-management",
+        "description": "Manage Docker containers, images, volumes, and Compose.",
+        "source": "official",
+        "identifier": "official/devops/docker-management",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "docker",
+          "containers",
+          "devops",
+          "infrastructure",
+          "compose",
+          "images",
+          "volumes",
+          "networks",
+          "debugging"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "hermes-s6-container-supervision",
+        "description": "Modify or debug s6 services in the Hermes Docker image.",
+        "source": "official",
+        "identifier": "official/devops/hermes-s6-container-supervision",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "docker",
+          "s6",
+          "supervision",
+          "gateway",
+          "profiles"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "inference-sh-cli",
+        "description": "Run 150+ AI apps (image, video, LLM) via inference.sh CLI.",
+        "source": "official",
+        "identifier": "official/devops/inference-sh-cli",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "AI",
+          "image-generation",
+          "video",
+          "LLM",
+          "search",
+          "inference",
+          "FLUX",
+          "Veo",
+          "Claude"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "pinggy-tunnel",
+        "description": "Zero-install localhost tunnels over SSH via Pinggy.",
+        "source": "official",
+        "identifier": "official/devops/pinggy-tunnel",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Pinggy",
+          "Tunnel",
+          "Networking",
+          "SSH",
+          "Webhook",
+          "Localhost"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "setup-wizard-generator",
+        "description": "Generate a bash wizard guiding a human through manual setup.",
+        "source": "official",
+        "identifier": "official/devops/setup-wizard-generator",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "wizard",
+          "setup",
+          "onboarding",
+          "credentials",
+          "secrets",
+          "migration",
+          "bash",
+          "human-in-the-loop"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "watchers",
+        "description": "Poll RSS, JSON APIs, and GitHub with watermark dedup.",
+        "source": "official",
+        "identifier": "official/devops/watchers",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "cron",
+          "polling",
+          "rss",
+          "github",
+          "http",
+          "automation",
+          "monitoring"
+        ],
+        "category": "devops",
+        "installed": false
+      },
+      {
+        "name": "adversarial-ux-test",
+        "description": "Roleplay a hostile user to find and triage UX pain points.",
+        "source": "official",
+        "identifier": "official/dogfood/adversarial-ux-test",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "qa",
+          "ux",
+          "testing",
+          "adversarial",
+          "dogfood",
+          "personas",
+          "user-testing"
+        ],
+        "category": "dogfood",
+        "installed": false
+      },
+      {
+        "name": "agentmail",
+        "description": "Use when an agent needs AgentMail CLI email inboxes.",
+        "source": "official",
+        "identifier": "official/email/agentmail",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Email",
+          "CLI",
+          "AgentMail",
+          "Communication"
+        ],
+        "category": "email",
+        "installed": false
+      },
+      {
+        "name": "3-statement-model",
+        "description": "Build integrated IS/BS/CF financial workbooks in Excel.",
+        "source": "official",
+        "identifier": "official/finance/3-statement-model",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "finance",
+          "three-statement",
+          "income-statement",
+          "balance-sheet",
+          "cash-flow",
+          "excel",
+          "openpyxl",
+          "modeling"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "comps-analysis",
+        "description": "Build comparable-company valuation workbooks in Excel.",
+        "source": "official",
+        "identifier": "official/finance/comps-analysis",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "finance",
+          "valuation",
+          "comps",
+          "excel",
+          "openpyxl",
+          "modeling",
+          "investment-banking"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "dcf-model",
+        "description": "Build discounted cash flow valuation workbooks in Excel.",
+        "source": "official",
+        "identifier": "official/finance/dcf-model",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "finance",
+          "valuation",
+          "dcf",
+          "excel",
+          "openpyxl",
+          "modeling",
+          "investment-banking"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "excel-author",
+        "description": "Build auditable financial workbooks headless via openpyxl.",
+        "source": "official",
+        "identifier": "official/finance/excel-author",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "excel",
+          "openpyxl",
+          "finance",
+          "spreadsheet",
+          "modeling"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "lbo-model",
+        "description": "Build leveraged buyout workbooks with IRR/MOIC in Excel.",
+        "source": "official",
+        "identifier": "official/finance/lbo-model",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "finance",
+          "valuation",
+          "lbo",
+          "private-equity",
+          "excel",
+          "openpyxl",
+          "modeling"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "merger-model",
+        "description": "Build M&A accretion/dilution workbooks in Excel.",
+        "source": "official",
+        "identifier": "official/finance/merger-model",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "finance",
+          "m-and-a",
+          "merger",
+          "accretion-dilution",
+          "excel",
+          "openpyxl",
+          "modeling",
+          "investment-banking"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "polymarket",
+        "description": "Query Polymarket: markets, prices, orderbooks, history.",
+        "source": "official",
+        "identifier": "official/finance/polymarket",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "pptx-author",
+        "description": "Build PowerPoint decks headless with python-pptx.",
+        "source": "official",
+        "identifier": "official/finance/pptx-author",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "powerpoint",
+          "pptx",
+          "python-pptx",
+          "presentation",
+          "finance"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "stocks",
+        "description": "Stock quotes, history, search, compare, crypto via Yahoo.",
+        "source": "official",
+        "identifier": "official/finance/stocks",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Stocks",
+          "Finance",
+          "Market",
+          "Crypto",
+          "Investing"
+        ],
+        "category": "finance",
+        "installed": false
+      },
+      {
+        "name": "minecraft-modpack-server",
+        "description": "Host modded Minecraft servers (CurseForge, Modrinth).",
+        "source": "official",
+        "identifier": "official/gaming/minecraft-modpack-server",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [],
+        "category": "gaming",
+        "installed": false
+      },
+      {
+        "name": "pokemon-player",
+        "description": "Play Pokemon via headless emulator + RAM reads.",
+        "source": "official",
+        "identifier": "official/gaming/pokemon-player",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [],
+        "category": "gaming",
+        "installed": false
+      },
+      {
+        "name": "fitness-nutrition",
+        "description": "Workout planning, macros, and body metrics via wger/USDA.",
+        "source": "official",
+        "identifier": "official/health/fitness-nutrition",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "health",
+          "fitness",
+          "nutrition",
+          "gym",
+          "workout",
+          "diet",
+          "exercise"
+        ],
+        "category": "health",
+        "installed": false
+      },
+      {
+        "name": "neuroskill-bci",
+        "description": "Use live BCI cognitive and mood state from NeuroSkill.",
+        "source": "official",
+        "identifier": "official/health/neuroskill-bci",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "BCI",
+          "neurofeedback",
+          "health",
+          "focus",
+          "EEG",
+          "cognitive-state",
+          "biometrics",
+          "neuroskill"
+        ],
+        "category": "health",
+        "installed": false
+      },
+      {
+        "name": "fastmcp",
+        "description": "Build, test, and deploy Python MCP servers.",
+        "source": "official",
+        "identifier": "official/mcp/fastmcp",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "MCP",
+          "FastMCP",
+          "Python",
+          "Tools",
+          "Resources",
+          "Prompts",
+          "Deployment"
+        ],
+        "category": "mcp",
+        "installed": false
+      },
+      {
+        "name": "mcp-oauth-remote-gateway",
+        "description": "Manual OAuth for remote MCP servers on headless gateways.",
+        "source": "official",
+        "identifier": "official/mcp/mcp-oauth-remote-gateway",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "MCP",
+          "OAuth",
+          "PKCE",
+          "Remote-Deployment"
+        ],
+        "category": "mcp",
+        "installed": false
+      },
+      {
+        "name": "mcporter",
+        "description": "List, auth, and call MCP servers/tools from the terminal.",
+        "source": "official",
+        "identifier": "official/mcp/mcporter",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "MCP",
+          "Tools",
+          "API",
+          "Integrations",
+          "Interop"
+        ],
+        "category": "mcp",
+        "installed": false
+      },
+      {
+        "name": "gif-search",
+        "description": "Search/download GIFs from Tenor via curl + jq.",
+        "source": "official",
+        "identifier": "official/media/gif-search",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "GIF",
+          "Media",
+          "Search",
+          "Tenor",
+          "API"
+        ],
+        "category": "media",
+        "installed": false
+      },
+      {
+        "name": "songsee",
+        "description": "Audio spectrograms/features (mel, chroma, MFCC) via CLI.",
+        "source": "official",
+        "identifier": "official/media/songsee",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Audio",
+          "Visualization",
+          "Spectrogram",
+          "Music",
+          "Analysis"
+        ],
+        "category": "media",
+        "installed": false
+      },
+      {
+        "name": "accelerate",
+        "description": "Run PyTorch training across GPUs with minimal changes.",
+        "source": "official",
+        "identifier": "official/mlops/accelerate",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Distributed Training",
+          "HuggingFace",
+          "Accelerate",
+          "DeepSpeed",
+          "FSDP",
+          "Mixed Precision",
+          "PyTorch",
+          "DDP",
+          "Unified API",
+          "Simple"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "chroma",
+        "description": "Embedding database for RAG and semantic search.",
+        "source": "official",
+        "identifier": "official/mlops/chroma",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "RAG",
+          "Chroma",
+          "Vector Database",
+          "Embeddings",
+          "Semantic Search",
+          "Open Source",
+          "Self-Hosted",
+          "Document Retrieval",
+          "Metadata Filtering"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "evaluating-llms-harness",
+        "description": "lm-eval-harness: benchmark LLMs (MMLU, GSM8K, etc.).",
+        "source": "official",
+        "identifier": "official/mlops/evaluation/evaluating-llms-harness",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Evaluation",
+          "LM Evaluation Harness",
+          "Benchmarking",
+          "MMLU",
+          "HumanEval",
+          "GSM8K",
+          "EleutherAI",
+          "Model Quality",
+          "Academic Benchmarks",
+          "Industry Standard"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "faiss",
+        "description": "Fast vector similarity search at billion scale.",
+        "source": "official",
+        "identifier": "official/mlops/faiss",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "RAG",
+          "FAISS",
+          "Similarity Search",
+          "Vector Search",
+          "Facebook AI",
+          "GPU Acceleration",
+          "Billion-Scale",
+          "K-NN",
+          "HNSW",
+          "High Performance",
+          "Large Scale"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "flash-attention",
+        "description": "Speed up long-sequence transformer training and inference.",
+        "source": "official",
+        "identifier": "official/mlops/flash-attention",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Optimization",
+          "Flash Attention",
+          "Attention Optimization",
+          "Memory Efficiency",
+          "Speed Optimization",
+          "Long Context",
+          "PyTorch",
+          "SDPA",
+          "H100",
+          "FP8",
+          "Transformers"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "llama-cpp",
+        "description": "llama.cpp local GGUF inference + HF Hub model discovery.",
+        "source": "official",
+        "identifier": "official/mlops/inference/llama-cpp",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "llama.cpp",
+          "GGUF",
+          "Quantization",
+          "Hugging Face Hub",
+          "CPU Inference",
+          "Apple Silicon",
+          "Edge Deployment",
+          "AMD GPUs",
+          "Intel GPUs",
+          "NVIDIA",
+          "URL-first"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "serving-llms-vllm",
+        "description": "vLLM: high-throughput LLM serving, OpenAI API, quantization.",
+        "source": "official",
+        "identifier": "official/mlops/inference/serving-llms-vllm",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "vLLM",
+          "Inference Serving",
+          "PagedAttention",
+          "Continuous Batching",
+          "High Throughput",
+          "Production",
+          "OpenAI API",
+          "Quantization",
+          "Tensor Parallelism"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "lambda-labs",
+        "description": "On-demand GPU cloud instances for ML training.",
+        "source": "official",
+        "identifier": "official/mlops/lambda-labs",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Infrastructure",
+          "GPU Cloud",
+          "Training",
+          "Inference",
+          "Lambda Labs"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "modal",
+        "description": "Serverless GPU cloud for ML jobs and model APIs.",
+        "source": "official",
+        "identifier": "official/mlops/modal",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Infrastructure",
+          "Serverless",
+          "GPU",
+          "Cloud",
+          "Deployment",
+          "Modal"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "segment-anything-model",
+        "description": "SAM: zero-shot image segmentation via points, boxes, masks.",
+        "source": "official",
+        "identifier": "official/mlops/models/segment-anything-model",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Multimodal",
+          "Image Segmentation",
+          "Computer Vision",
+          "SAM",
+          "Zero-Shot"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "nemo-curator",
+        "description": "Curate LLM training data: dedupe, filter, PII redaction.",
+        "source": "official",
+        "identifier": "official/mlops/nemo-curator",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Data Processing",
+          "NeMo Curator",
+          "Data Curation",
+          "GPU Acceleration",
+          "Deduplication",
+          "Quality Filtering",
+          "NVIDIA",
+          "RAPIDS",
+          "PII Redaction",
+          "Multimodal",
+          "LLM Training Data"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "obliteratus",
+        "description": "OBLITERATUS: abliterate LLM refusals (diff-in-means).",
+        "source": "official",
+        "identifier": "official/mlops/obliteratus",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Abliteration",
+          "Uncensoring",
+          "Refusal-Removal",
+          "LLM",
+          "Weight-Projection",
+          "SVD",
+          "Mechanistic-Interpretability",
+          "HuggingFace",
+          "Model-Surgery"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "peft",
+        "description": "Fine-tune large LLMs with LoRA on limited GPU memory.",
+        "source": "official",
+        "identifier": "official/mlops/peft",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Fine-Tuning",
+          "PEFT",
+          "LoRA",
+          "QLoRA",
+          "Parameter-Efficient",
+          "Adapters",
+          "Low-Rank",
+          "Memory Optimization",
+          "Multi-Adapter"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "pytorch-fsdp",
+        "description": "Fully sharded data-parallel training for large models.",
+        "source": "official",
+        "identifier": "official/mlops/pytorch-fsdp",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Distributed Training",
+          "PyTorch",
+          "FSDP",
+          "Data Parallel",
+          "Sharding",
+          "Mixed Precision",
+          "CPU Offloading",
+          "FSDP2",
+          "Large-Scale Training"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "pytorch-lightning",
+        "description": "Clean training loops with built-in distributed support.",
+        "source": "official",
+        "identifier": "official/mlops/pytorch-lightning",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "PyTorch Lightning",
+          "Training Framework",
+          "Distributed Training",
+          "DDP",
+          "FSDP",
+          "DeepSpeed",
+          "High-Level API",
+          "Callbacks",
+          "Best Practices",
+          "Scalable"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "dspy",
+        "description": "DSPy: declarative LM programs, auto-optimize prompts, RAG.",
+        "source": "official",
+        "identifier": "official/mlops/research/dspy",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Prompt Engineering",
+          "DSPy",
+          "Declarative Programming",
+          "RAG",
+          "Agents",
+          "Prompt Optimization",
+          "LM Programming",
+          "Stanford NLP",
+          "Automatic Optimization",
+          "Modular AI"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "saelens",
+        "description": "Train sparse autoencoders to interpret model features.",
+        "source": "official",
+        "identifier": "official/mlops/saelens",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Sparse Autoencoders",
+          "SAE",
+          "Mechanistic Interpretability",
+          "Feature Discovery",
+          "Superposition"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "simpo",
+        "description": "Reference-free preference alignment, simpler than DPO.",
+        "source": "official",
+        "identifier": "official/mlops/simpo",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Post-Training",
+          "SimPO",
+          "Preference Optimization",
+          "Alignment",
+          "DPO Alternative",
+          "Reference-Free",
+          "LLM Alignment",
+          "Efficient Training"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "slime",
+        "description": "RL post-training for LLMs with Megatron and SGLang.",
+        "source": "official",
+        "identifier": "official/mlops/slime",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Reinforcement Learning",
+          "Megatron-LM",
+          "SGLang",
+          "GRPO",
+          "Post-Training",
+          "GLM"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "tensorrt-llm",
+        "description": "High-throughput LLM inference on NVIDIA GPUs.",
+        "source": "official",
+        "identifier": "official/mlops/tensorrt-llm",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Inference Serving",
+          "TensorRT-LLM",
+          "NVIDIA",
+          "Inference Optimization",
+          "High Throughput",
+          "Low Latency",
+          "Production",
+          "FP8",
+          "INT4",
+          "In-Flight Batching",
+          "Multi-GPU"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "torchtitan",
+        "description": "Pretrain LLMs at scale with PyTorch 4D parallelism.",
+        "source": "official",
+        "identifier": "official/mlops/torchtitan",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Model Architecture",
+          "Distributed Training",
+          "TorchTitan",
+          "FSDP2",
+          "Tensor Parallel",
+          "Pipeline Parallel",
+          "Context Parallel",
+          "Float8",
+          "Llama",
+          "Pretraining"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "axolotl",
+        "description": "Axolotl: YAML LLM fine-tuning (LoRA, DPO, GRPO).",
+        "source": "official",
+        "identifier": "official/mlops/training/axolotl",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Fine-Tuning",
+          "Axolotl",
+          "LLM",
+          "LoRA",
+          "QLoRA",
+          "DPO",
+          "KTO",
+          "ORPO",
+          "GRPO",
+          "YAML",
+          "HuggingFace",
+          "DeepSpeed",
+          "Multimodal"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "unsloth",
+        "description": "Unsloth: 2-5x faster LoRA/QLoRA fine-tuning, less VRAM.",
+        "source": "official",
+        "identifier": "official/mlops/training/unsloth",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Fine-Tuning",
+          "Unsloth",
+          "Fast Training",
+          "LoRA",
+          "QLoRA",
+          "Memory-Efficient",
+          "Optimization",
+          "Llama",
+          "Mistral",
+          "Gemma",
+          "Qwen"
+        ],
+        "category": "mlops",
+        "installed": false
+      },
+      {
+        "name": "stripe-link-cli",
+        "description": "Agent payments via Stripe Link — cards, SPT, approvals.",
+        "source": "official",
+        "identifier": "official/payments/stripe-link-cli",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Payments",
+          "Stripe",
+          "Link",
+          "Checkout",
+          "MPP"
+        ],
+        "category": "payments",
+        "installed": false
+      },
+      {
+        "name": "stripe-projects",
+        "description": "Provision SaaS services + sync creds via Stripe Projects.",
+        "source": "official",
+        "identifier": "official/payments/stripe-projects",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Payments",
+          "Stripe",
+          "Projects",
+          "Provisioning",
+          "Infrastructure"
+        ],
+        "category": "payments",
+        "installed": false
+      },
+      {
+        "name": "box",
+        "description": "Box manages cloud files, sharing, search, and metadata.",
+        "source": "official",
+        "identifier": "official/productivity/box",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Box",
+          "Productivity",
+          "Cloud Storage",
+          "Collaboration",
+          "Metadata",
+          "Content Extraction",
+          "CLI",
+          "SDK"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "canvas",
+        "description": "Fetch Canvas LMS courses and assignments via API token.",
+        "source": "official",
+        "identifier": "official/productivity/canvas",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Canvas",
+          "LMS",
+          "Education",
+          "Courses",
+          "Assignments"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "decision-questionnaire",
+        "description": "Turn an unanswerable decision into a questionnaire doc.",
+        "source": "official",
+        "identifier": "official/productivity/decision-questionnaire",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "questionnaire",
+          "decision",
+          "async",
+          "stakeholder",
+          "discovery",
+          "communication"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "here-now",
+        "description": "Publish sites to {slug}.here.now and store files in Drives.",
+        "source": "official",
+        "identifier": "official/productivity/here-now",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "here.now",
+          "herenow",
+          "publish",
+          "deploy",
+          "hosting",
+          "static-site",
+          "web",
+          "share",
+          "URL",
+          "drive",
+          "storage"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "live-dashboard",
+        "description": "Build self-updating dashboards from live sources.",
+        "source": "official",
+        "identifier": "official/productivity/live-dashboard",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "dashboards",
+          "monitoring",
+          "status",
+          "automation",
+          "reporting"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "memento-flashcards",
+        "description": "Spaced-repetition flashcards: create, review, quiz, export.",
+        "source": "official",
+        "identifier": "official/productivity/memento-flashcards",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Education",
+          "Flashcards",
+          "Spaced Repetition",
+          "Learning",
+          "Quiz",
+          "YouTube"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "property-listings",
+        "description": "Present property and rental listings as desktop cards.",
+        "source": "official",
+        "identifier": "official/productivity/property-listings",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "property",
+          "rental",
+          "real-estate",
+          "listings",
+          "desktop",
+          "cards"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "shop",
+        "description": "Shop catalog search, checkout, order tracking, returns.",
+        "source": "official",
+        "identifier": "official/productivity/shop",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Shopping",
+          "E-commerce",
+          "Shop",
+          "Products",
+          "Orders",
+          "Returns",
+          "Checkout",
+          "Reorder"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "siyuan",
+        "description": "Query and edit a SiYuan knowledge base via its API.",
+        "source": "official",
+        "identifier": "official/productivity/siyuan",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "SiYuan",
+          "Notes",
+          "Knowledge Base",
+          "PKM",
+          "API"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "telephony",
+        "description": "Provision Twilio numbers, SMS/MMS, and AI outbound calls.",
+        "source": "official",
+        "identifier": "official/productivity/telephony",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "telephony",
+          "phone",
+          "sms",
+          "mms",
+          "voice",
+          "twilio",
+          "bland.ai",
+          "vapi",
+          "calling",
+          "texting"
+        ],
+        "category": "productivity",
+        "installed": false
+      },
+      {
+        "name": "bioinformatics",
+        "description": "Gateway to 400+ genomics and computational biology skills.",
+        "source": "official",
+        "identifier": "official/research/bioinformatics",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "bioinformatics",
+          "genomics",
+          "sequencing",
+          "biology",
+          "research",
+          "science"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "blogwatcher",
+        "description": "Monitor blogs and RSS/Atom feeds via blogwatcher-cli tool.",
+        "source": "official",
+        "identifier": "official/research/blogwatcher",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "RSS",
+          "Blogs",
+          "Feed-Reader",
+          "Monitoring"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "darwinian-evolver",
+        "description": "Evolve prompts/regex/SQL/code with Imbue's evolution loop.",
+        "source": "official",
+        "identifier": "official/research/darwinian-evolver",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "evolution",
+          "optimization",
+          "prompt-engineering",
+          "research"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "domain-intel",
+        "description": "Passive recon of subdomains, SSL certs, WHOIS, and DNS.",
+        "source": "official",
+        "identifier": "official/research/domain-intel",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Domains",
+          "OSINT",
+          "DNS",
+          "Research"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "drug-discovery",
+        "description": "Drug discovery: ChEMBL search, drug-likeness, interactions.",
+        "source": "official",
+        "identifier": "official/research/drug-discovery",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "science",
+          "chemistry",
+          "pharmacology",
+          "research",
+          "health"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "gitnexus-explorer",
+        "description": "Serve an interactive codebase knowledge graph web UI.",
+        "source": "official",
+        "identifier": "official/research/gitnexus-explorer",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "gitnexus",
+          "code-intelligence",
+          "knowledge-graph",
+          "visualization"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "llm-wiki",
+        "description": "Karpathy's LLM Wiki: build/query interlinked markdown KB.",
+        "source": "official",
+        "identifier": "official/research/llm-wiki",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "wiki",
+          "knowledge-base",
+          "research",
+          "notes",
+          "markdown",
+          "rag-alternative"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "osint-investigation",
+        "description": "Follow the money via public records and sanctions data.",
+        "source": "official",
+        "identifier": "official/research/osint-investigation",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "osint",
+          "investigation",
+          "public-records",
+          "sec",
+          "sanctions",
+          "corporate-registry",
+          "property",
+          "courts",
+          "due-diligence",
+          "journalism"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "parallel-cli",
+        "description": "Agent-native web search, deep research, and enrichment.",
+        "source": "official",
+        "identifier": "official/research/parallel-cli",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Research",
+          "Web",
+          "Search",
+          "Deep-Research",
+          "Enrichment",
+          "CLI"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "qmd",
+        "description": "Hybrid local search over notes, docs, and transcripts.",
+        "source": "official",
+        "identifier": "official/research/qmd",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Search",
+          "Knowledge-Base",
+          "RAG",
+          "Notes",
+          "MCP",
+          "Local-AI"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "research-paper-writing",
+        "description": "Write ML papers for NeurIPS/ICML/ICLR: design→submit.",
+        "source": "official",
+        "identifier": "official/research/research-paper-writing",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Research",
+          "Paper Writing",
+          "Experiments",
+          "ML",
+          "AI",
+          "NeurIPS",
+          "ICML",
+          "ICLR",
+          "ACL",
+          "AAAI",
+          "COLM",
+          "LaTeX",
+          "Citations",
+          "Statistical Analysis"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "rss-feeds",
+        "description": "Read RSS, Atom, JSON feeds; discover feeds behind a page.",
+        "source": "official",
+        "identifier": "official/research/rss-feeds",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "RSS",
+          "Atom",
+          "Feeds",
+          "Monitoring",
+          "Research",
+          "Blogs",
+          "Releases"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "scrapling",
+        "description": "Scrape sites with stealth browsing and Cloudflare bypass.",
+        "source": "official",
+        "identifier": "official/research/scrapling",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Web Scraping",
+          "Browser",
+          "Cloudflare",
+          "Stealth",
+          "Crawling",
+          "Spider"
+        ],
+        "category": "research",
+        "installed": false
+      },
+      {
+        "name": "1password",
+        "description": "Set up op CLI, sign in, and read or inject secrets.",
+        "source": "official",
+        "identifier": "official/security/1password",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "security",
+          "secrets",
+          "1password",
+          "op",
+          "cli"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "godmode",
+        "description": "Jailbreak LLMs: Parseltongue, GODMODE, ULTRAPLINIAN.",
+        "source": "official",
+        "identifier": "official/security/godmode",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "jailbreak",
+          "red-teaming",
+          "G0DM0D3",
+          "Parseltongue",
+          "GODMODE",
+          "uncensoring",
+          "safety-bypass",
+          "prompt-engineering",
+          "L1B3RT4S"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "oss-forensics",
+        "description": "GitHub supply-chain forensics: recovery, IOCs, reporting.",
+        "source": "official",
+        "identifier": "official/security/oss-forensics",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Security",
+          "Forensics",
+          "GitHub",
+          "Supply-Chain"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "sherlock",
+        "description": "Find accounts for a username across 400+ platforms.",
+        "source": "official",
+        "identifier": "official/security/sherlock",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "osint",
+          "security",
+          "username",
+          "social-media",
+          "reconnaissance"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "unbroker",
+        "description": "Remove your info from data-broker sites, by name or phone.",
+        "source": "official",
+        "identifier": "official/security/unbroker",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "privacy",
+          "data-broker",
+          "opt-out",
+          "ccpa",
+          "gdpr",
+          "security",
+          "doxxing"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "web-pentest",
+        "description": "Authorized web pentest: recon, proof-based exploits, report.",
+        "source": "official",
+        "identifier": "official/security/web-pentest",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Security",
+          "Pentest",
+          "Web",
+          "Recon"
+        ],
+        "category": "security",
+        "installed": false
+      },
+      {
+        "name": "openhue",
+        "description": "Control Philips Hue lights, scenes, rooms via OpenHue CLI.",
+        "source": "official",
+        "identifier": "official/smart-home/openhue",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Smart-Home",
+          "Hue",
+          "Lights",
+          "IoT",
+          "Automation"
+        ],
+        "category": "smart-home",
+        "installed": false
+      },
+      {
+        "name": "reddit-reading",
+        "description": "Read Reddit: subreddits, search, threads, users. No browser.",
+        "source": "official",
+        "identifier": "official/social-media/reddit-reading",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Reddit",
+          "Social Media",
+          "Research",
+          "Discussions",
+          "Community"
+        ],
+        "category": "social-media",
+        "installed": false
+      },
+      {
+        "name": "ast-grep",
+        "description": "AST-aware structural code search and rewrite via ast-grep.",
+        "source": "official",
+        "identifier": "official/software-development/ast-grep",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "ast",
+          "codemod",
+          "refactoring",
+          "structural-search",
+          "code-search",
+          "rewrite",
+          "tree-sitter"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "code-wiki",
+        "description": "Generate wiki docs + Mermaid diagrams for any codebase.",
+        "source": "official",
+        "identifier": "official/software-development/code-wiki",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Documentation",
+          "Mermaid",
+          "Architecture",
+          "Diagrams",
+          "Wiki",
+          "Code-Analysis"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "grill-me",
+        "description": "Adversarial plan interview before implementation.",
+        "source": "official",
+        "identifier": "official/software-development/grill-me",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "planning",
+          "adversarial",
+          "interview",
+          "decision-tree",
+          "pre-implementation",
+          "review",
+          "alignment"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "hermes-agent-skill-authoring",
+        "description": "Author in-repo SKILL.md files: frontmatter and structure.",
+        "source": "official",
+        "identifier": "official/software-development/hermes-agent-skill-authoring",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "skills",
+          "authoring",
+          "hermes-agent",
+          "conventions",
+          "skill-md"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "inspecting-hermes-desktop-dom",
+        "description": "Read the live Hermes desktop DOM/CSS over CDP.",
+        "source": "official",
+        "identifier": "official/software-development/inspecting-hermes-desktop-dom",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "desktop",
+          "electron",
+          "cdp",
+          "dom",
+          "ui-verification",
+          "self-inspection"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "node-inspect-debugger",
+        "description": "Debug Node.js via --inspect + Chrome DevTools Protocol CLI.",
+        "source": "official",
+        "identifier": "official/software-development/node-inspect-debugger",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "debugging",
+          "nodejs",
+          "node-inspect",
+          "cdp",
+          "breakpoints",
+          "ui-tui"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "pr-lens",
+        "description": "Draw code changes as animated architecture/data-flow SVGs.",
+        "source": "official",
+        "identifier": "official/software-development/pr-lens",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "diagrams",
+          "pull-requests",
+          "code-review",
+          "svg"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "python-debugpy",
+        "description": "Debug Python: pdb REPL + debugpy remote (DAP).",
+        "source": "official",
+        "identifier": "official/software-development/python-debugpy",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "debugging",
+          "python",
+          "pdb",
+          "debugpy",
+          "breakpoints",
+          "dap",
+          "post-mortem"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "rest-graphql-debug",
+        "description": "Debug REST/GraphQL APIs: status codes, auth, schemas, repro.",
+        "source": "official",
+        "identifier": "official/software-development/rest-graphql-debug",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "api",
+          "rest",
+          "graphql",
+          "http",
+          "debugging",
+          "testing",
+          "curl",
+          "integration"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "subagent-driven-development",
+        "description": "Execute plans via delegate_task subagents (2-stage review).",
+        "source": "official",
+        "identifier": "official/software-development/subagent-driven-development",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "delegation",
+          "subagent",
+          "implementation",
+          "workflow",
+          "parallel"
+        ],
+        "category": "software-development",
+        "installed": false
+      },
+      {
+        "name": "cloudflare-temporary-deploy",
+        "description": "Deploy a Worker live, no account, via wrangler --temporary.",
+        "source": "official",
+        "identifier": "official/web-development/cloudflare-temporary-deploy",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "cloudflare",
+          "workers",
+          "wrangler",
+          "deploy",
+          "temporary",
+          "agent",
+          "serverless",
+          "web-development"
+        ],
+        "category": "web-development",
+        "installed": false
+      },
+      {
+        "name": "har-derived-api-client",
+        "description": "Record a site's XHR into a HAR, derive an HTTP client.",
+        "source": "official",
+        "identifier": "official/web-development/har-derived-api-client",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "Browser",
+          "HAR",
+          "API",
+          "Reverse-Engineering",
+          "Playwright"
+        ],
+        "category": "web-development",
+        "installed": false
+      },
+      {
+        "name": "page-agent",
+        "description": "Embed an in-page natural-language GUI copilot in web apps.",
+        "source": "official",
+        "identifier": "official/web-development/page-agent",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "web",
+          "javascript",
+          "agent",
+          "browser",
+          "gui",
+          "alibaba",
+          "embed",
+          "copilot",
+          "saas"
+        ],
+        "category": "web-development",
+        "installed": false
+      },
+      {
+        "name": "publish-site",
+        "description": "Versioned site deploys to GitHub/Cloudflare/Netlify Pages.",
+        "source": "official",
+        "identifier": "official/web-development/publish-site",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "publish",
+          "deploy",
+          "hosting",
+          "github-pages",
+          "cloudflare-pages",
+          "netlify",
+          "static-site",
+          "versioning",
+          "rollback",
+          "web-development"
+        ],
+        "category": "web-development",
+        "installed": false
+      },
+      {
+        "name": "scrollcraft",
+        "description": "Premium scroll-driven landing pages; scroll = timeline.",
+        "source": "official",
+        "identifier": "official/web-development/scrollcraft",
+        "trust_level": "builtin",
+        "repo": "NousResearch/hermes-agent",
+        "tags": [
+          "web-development",
+          "landing-page",
+          "scrollytelling",
+          "animation",
+          "design",
+          "frontend"
+        ],
+        "category": "web-development",
+        "installed": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "body": {
+    "profiles": [
+      {
+        "name": "default",
+        "is_default": true,
+        "model": "anthropic/claude-opus-4.6",
+        "provider": "auto",
+        "description": "",
+        "description_auto": false,
+        "skill_count": 44
+      }
+    ]
+  }
+}

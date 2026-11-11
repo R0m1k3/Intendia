@@ -34,6 +34,12 @@ import { ConfigStore } from './config.js';
 export { OPENROUTER_MODELS } from './config.js';
 import { SkillStore } from './skills.js';
 
+/**
+ * Recording the fake replays by default and the server tests rely on: the one made on a used
+ * instance (a session, a cron, a provider key). Newer recordings come from an empty container
+ * and are only checked for compatibility.
+ */
+export const REFERENCE_FIXTURES = 'hermes-0.23.0';
 export const FAKE_API_KEY = 'fake-api-key-000000000000';
 export const FAKE_DASH_TOKEN = 'fake-dashboard-token';
 
