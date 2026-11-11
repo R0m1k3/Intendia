@@ -26,8 +26,8 @@ on a reference Hermes 0.23.0, but Intendia has not been used on a live installat
 |---|---|
 | Base | Auth, instances, compatibility engine and State screen, Docker image |
 | Work | Workspaces (real folders), sessions, streamed chat with approvals and sub-agents |
-| Files | File explorer, previews, share links, `share_file` MCP tool for the agent |
-| Console | Crons, skills (hub with security scan), Hermes settings (form, YAML, history), agents, activity, kanban |
+| Files | File explorer per workspace and per instance (read-only), previews, share links, `share_file` MCP tool for the agent |
+| Console | Crons, skills (hub with security scan), Hermes settings (form, YAML, history), model providers (subscriptions, API keys, custom endpoints, Anthropic setup-token), agents, activity, kanban |
 
 | | |
 |---|---|
