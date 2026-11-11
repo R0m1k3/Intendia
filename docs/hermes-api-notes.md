@@ -177,6 +177,31 @@ Masking risks: secrets are found by key name, by section (`mcp_servers.*.headers
 shape (token prefixes, Telegram tokens, URL passwords, query values, webhook paths). A secret with an ordinary key and
 an ordinary look would stay visible; a new Hermes section holding secrets needs a rule.
 
+## Provider accounts and API keys (checked on 0.23.0, 2026-11-11)
+
+Kept per profile in the profile's `auth.json` (always pass `?profile=`), not in `config.yaml`.
+
+1. `GET /api/providers/oauth` lists the providers with an account: `{id, name, flow: device_code|external,
+   cli_command, docs_url, disconnectable, disconnect_hint, status: {logged_in, source_label, token_preview,
+   expires_at, …}}`. On 0.23.0: `nous`, `openai-codex`, `minimax-oauth`, `xai-oauth` are `device_code`; `qwen-oauth`,
+   `anthropic`, `claude-code` are `external` (CLI only: `start` answers 400 "uses an external CLI"). `token_preview`
+   (part of a token) and `source_label` (can be a path of the Hermes server) are never shown.
+2. Device-code login: `POST …/{id}/start` → `{session_id, user_code, verification_url, expires_in, poll_interval}`;
+   `GET …/{id}/poll/{session_id}` (needs the dashboard token, despite its docstring; `wait=` makes it a long-poll)
+   → `status: pending|approved|denied|expired|error|cancelled`, `error_message`, `model` (Nous may set the main model
+   in `config.yaml` when approved). Hermes saves the tokens as soon as the login is approved, polled or not.
+   `DELETE /api/providers/oauth/sessions/{id}` cancels and removes the session (a later poll is 404); an unknown
+   session answers 200 `{ok: false}`. Sessions live in the dashboard's memory (15 min, purged on the next `start`).
+   `DELETE /api/providers/oauth/{id}` disconnects (400 when not `disconnectable`).
+3. `GET /api/credentials/pool` → `{providers: [{provider, entries: [{index (1-based), id, label, auth_type, source,
+   last_status, token_preview, …}]}]}`. The pool also holds entries Hermes adds by itself: a key variable
+   (`source: env:NAME`) and OAuth logins (`auth_type` other than `api_key`). `POST {provider, api_key, label?}` adds a
+   `manual` key and answers `{ok, provider, count}`; on error the 400 detail is `str(exc)`, which may contain the
+   key. `DELETE /api/credentials/pool/{provider}/{index}` removes by index and also cleans the entry's source for
+   good (variable, OAuth file: `find_removal_step`): Intendia only removes `manual` keys, found by `id`.
+4. A key added to the pool makes its provider `authenticated` at once in `/api/model/options` of both the dashboard
+   and the API server, without restarting the gateway (checked with `deepseek`); removing it takes it out.
+
 ## Agents, kanban and sub-agents (checked on 0.23.0, phase 7, 2026-11-10)
 
 Profiles (agents):
