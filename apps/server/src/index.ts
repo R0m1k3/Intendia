@@ -10,7 +10,7 @@ import { InstanceStore } from './instances/store.js';
 import { createMcpApp } from './mcp/server.js';
 import { createServices } from './services.js';
 
-const VERSION = process.env.INTENDIA_VERSION ?? '0.0.1-dev';
+const VERSION = process.env.INTENDIA_VERSION ?? '0.0.2-dev';
 
 function checkWritable(dir: string, what: string): void {
   try {
