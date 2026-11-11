@@ -80,4 +80,16 @@ describe('recorded Hermes 0.23.0 responses', () => {
     }
     expect(TargetListSchema.parse(read('dash/GET_api_cron_delivery_targets.json')).targets[0]).toMatchObject({ id: 'local' });
   });
+
+  it('every recorded release parses with the connector schemas (lists may be empty)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { JobListSchema, normaliseJobs, TargetListSchema } = await import('../src/connectors/crons/index.js');
+    const { RECORDINGS } = await import('./helpers.js');
+    for (const { dir } of RECORDINGS) {
+      const read = (f: string) => JSON.parse(readFileSync(join(dir, f), 'utf8')).body;
+      for (const f of ['dash/GET_api_cron_jobs.json', 'api/GET_api_jobs.json']) expect(() => normaliseJobs(JobListSchema.parse(read(f)))).not.toThrow();
+      expect(TargetListSchema.parse(read('dash/GET_api_cron_delivery_targets.json')).targets.length).toBeGreaterThan(0);
+    }
+  });
 });

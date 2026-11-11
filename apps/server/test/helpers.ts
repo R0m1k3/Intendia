@@ -1,11 +1,16 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createFakeHermes, fakeFetch, fakeWebSocketFactory, FAKE_API_KEY, FAKE_DASH_TOKEN, type FakeOptions } from 'fake-hermes';
+import { createFakeHermes, fakeFetch, fakeWebSocketFactory, FAKE_API_KEY, FAKE_DASH_TOKEN, REFERENCE_FIXTURES, type FakeOptions } from 'fake-hermes';
 import { InstanceConfigSchema, type InstanceConfig } from '../src/config.js';
 import { HermesHttp } from '../src/hermes/http.js';
 
-export const FIXTURES = resolve(import.meta.dirname, '../../../fixtures/hermes-0.23.0');
+/** Recording the behaviour tests replay (it holds a session, a cron and a provider key). */
+export const FIXTURES = resolve(import.meta.dirname, '../../../fixtures', REFERENCE_FIXTURES);
+/** Every recorded Hermes release (`fixtures/hermes-<version>`), checked by the compatibility tests. */
+export const RECORDINGS = readdirSync(resolve(import.meta.dirname, '../../../fixtures'))
+  .filter((d) => d.startsWith('hermes-')).sort()
+  .map((d) => ({ version: d.slice('hermes-'.length), dir: resolve(import.meta.dirname, '../../../fixtures', d) }));
 
 export function fakeInstance(overrides: Partial<InstanceConfig> = {}): InstanceConfig {
   return InstanceConfigSchema.parse({
@@ -20,7 +25,7 @@ export function fakeInstance(overrides: Partial<InstanceConfig> = {}): InstanceC
   });
 }
 
-export function fakeHttp(opts: Omit<FakeOptions, 'fixturesDir'> = {}, inst = fakeInstance()) {
+export function fakeHttp(opts: Partial<FakeOptions> = {}, inst = fakeInstance()) {
   const fetchImpl = fakeFetch(createFakeHermes({ fixturesDir: FIXTURES, ...opts }));
   return { http: new HermesHttp(inst, fetchImpl), fetchImpl };
 }

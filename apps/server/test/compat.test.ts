@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { checkInstance } from '../src/compat/engine.js';
 import type { CompatReport, ModuleId } from '../src/connectors/types.js';
-import { fakeHttp, fakeInstance } from './helpers.js';
+import { fakeHttp, fakeInstance, RECORDINGS } from './helpers.js';
 
 const state = (r: CompatReport, id: ModuleId) => r.modules.find((m) => m.id === id)!;
 const states = (r: CompatReport) => Object.fromEntries(r.modules.map((m) => [m.id, m.state]));
 
-describe('compatibility engine (Hermes 0.23.0 recording)', () => {
-  it('reports every module complete on the recorded release', async () => {
-    const { report } = await checkInstance(fakeHttp().http);
-    expect(report.hermesVersion).toBe('0.23.0');
+describe.each(RECORDINGS)('compatibility engine on the Hermes $version recording', ({ version, dir }) => {
+  it('reports every module complete', async () => {
+    const { report } = await checkInstance(fakeHttp({ fixturesDir: dir }).http);
+    expect(report.hermesVersion).toBe(version);
     expect(report.dash.openapi).toBe(true);
     expect(states(report)).toEqual({
       health: 'full', chat: 'full', sessions: 'full', crons: 'full',
       skills: 'full', config: 'full', agents: 'full', kanban: 'full',
     });
   });
+});
+
+describe('compatibility engine (Hermes 0.23.0 recording)', () => {
 
   it('uses the dashboard skills list because /v1/skills is broken in 0.23.0', async () => {
     const { report } = await checkInstance(fakeHttp().http);

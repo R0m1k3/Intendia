@@ -2,6 +2,14 @@
 
 Observed on a reference install (official installer, isolated `HERMES_HOME`), recorded in `fixtures/hermes-0.23.0/`.
 
+## Hermes 0.23.1 (weekly CI recording, 2026-11-10)
+
+`fixtures/hermes-0.23.1/` comes from the official image in an empty container: every module is complete,
+nothing Intendia uses changed. New in the dashboard: `/api/gateway-connections/*` (remote gateways, OAuth, SSH)
+and `/api/relay/{connection_id}/{path}`, not used by Intendia. Config: `approvals.approvers` added; `honcho`,
+`sessions.cjk_fts` and `platform_toolsets.yuanbao` gone from the defaults. The other "shape changed" lines
+of the diff are empty lists (no session, no cron in that container).
+
 ## API server (8642)
 
 - `GET /v1/capabilities` returns `features` (flags) and `endpoints` (name → method + path) for runs, sessions,

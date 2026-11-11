@@ -273,4 +273,7 @@ sequenceDiagram
 
 1. The State screen (or the weekly CI issue) names the operation and the route.
 2. `pnpm probe record` against the new version, then `pnpm probe diff fixtures/hermes-<old> fixtures/hermes-<new>`.
-3. Fix the connector (new candidate route or schema field), commit the new fixtures; the tests replay them.
+3. Fix the connector (new candidate route or schema field), commit the new fixtures. The compatibility tests
+   (`compat.test.ts`, schemas in `crons-frame.test.ts`) run on every `fixtures/hermes-*`; the behaviour tests
+   and the fake's CLI replay `REFERENCE_FIXTURES` (`apps/fake-hermes/src/index.ts`), a recording made on a used
+   instance. CI recordings come from an empty container: move the reference only to a recording with data.
