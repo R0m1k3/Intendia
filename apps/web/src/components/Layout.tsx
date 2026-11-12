@@ -70,7 +70,7 @@ function EmbeddedLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <main className="h-dvh overflow-y-auto bg-sheet">
+    <main data-scroll-root className="h-dvh overflow-y-auto bg-sheet">
       <Outlet />
     </main>
   );
@@ -226,7 +226,7 @@ function FullLayout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto bg-sheet pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:h-[var(--card-h)] md:pb-0">
+      <main data-scroll-root className="min-w-0 flex-1 overflow-y-auto bg-sheet pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:h-[var(--card-h)] md:pb-0">
         <div className="enter">
           <Outlet />
         </div>

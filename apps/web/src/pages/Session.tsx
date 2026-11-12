@@ -1,9 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions/UndoBar';
 import { download, newKey, useCopyOps } from '../sessions/copies';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
 import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
@@ -25,6 +25,7 @@ import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
+import { useColumn, useOpenSession } from '../chat/column-context';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
 import { SessionFiles } from '../components/SessionFiles';
@@ -73,6 +74,11 @@ export function FullScreen() {
   );
 }
 
+/** In a column of the Chat page, the thread scrolls in its own element (its panel stays beside it, outside). */
+function Scroller({ inColumn, children }: { inColumn: boolean; children: ReactNode }) {
+  return inColumn ? <div data-scroll-root className="min-w-0 flex-1 overflow-y-auto">{children}</div> : <>{children}</>;
+}
+
 interface ActiveRun {
   id: string;
   /** seconds; null until the status is known */
@@ -98,7 +104,8 @@ export function SessionPage() {
 
 function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const qc = useQueryClient();
-  const navigate = useNavigate();
+  const col = useColumn();
+  const goTo = useOpenSession();
   const ws = useQuery({ queryKey: ['workspace', slug], queryFn: () => api.workspace(slug) });
   const inst = ws.data?.workspace.instanceId;
   const sess = useQuery({ queryKey: ['session', inst, sessionId], queryFn: () => api.session(inst!, sessionId), enabled: Boolean(inst) });
@@ -133,8 +140,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const inbox = useInbox();
   const sideOpen = panel || previewPath !== null;
   const { setPanelOpen } = inbox;
-  useEffect(() => { setPanelOpen(sideOpen); }, [sideOpen, setPanelOpen]);
-  useEffect(() => () => setPanelOpen(false), [setPanelOpen]);
+  useEffect(() => { setPanelOpen(sessionId, sideOpen); }, [sessionId, sideOpen, setPanelOpen]);
+  useEffect(() => () => setPanelOpen(sessionId, false), [sessionId, setPanelOpen]);
   const [linkCopied, setLinkCopied] = useState(false);
   const [runCount, setRunCount] = useState(0);
   /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
@@ -173,10 +180,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     }
   }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
-  useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
+  // (in the Chat page, only the active column: the others are not « the session opened last »)
+  const leading = !col || col.active;
+  useEffect(() => { if (leading) localStorage.setItem('intendia-last-workspace', slug); }, [slug, leading]);
   // the last session opened is the one the side chat (⌘J) shows
   const found = Boolean(sess.data);
-  useEffect(() => { if (inst && found) setSideSession(inst, { slug, id: sessionId }); }, [inst, found, slug, sessionId]);
+  useEffect(() => { if (inst && found && leading) setSideSession(inst, { slug, id: sessionId }); }, [inst, found, slug, sessionId, leading]);
   // in the side chat, the cursor goes to the message field
   useEffect(() => { if (EMBEDDED) composer.current?.focus(); }, [found]);
 
@@ -307,7 +316,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       await invalidateSessionLists(qc);
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
       void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-      if (archived) await navigate({ to: '/w/$slug', params: { slug } });
+      if (archived) goTo.leave(slug);
     },
   });
   const pin = useMutation({
@@ -358,7 +367,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     try {
       const { session } = await api.toProfile(inst, sessionId, profile, newKey());
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+      goTo.open(slug, session.id);
     } catch (err) {
       setError(err);
     }
@@ -367,7 +376,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     mutationFn: (key: string) => api.duplicateSession(inst!, sessionId, key),
     onSuccess: async ({ session }) => {
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+      goTo.open(slug, session.id);
     },
     onError: setError,
   });
@@ -378,7 +387,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       showUndo({ inst: inst!, ids: [sessionId], undoUntil, label: 'Session supprimée' });
       forgetSideSession(inst!, sessionId);
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      await navigate({ to: '/w/$slug', params: { slug } });
+      goTo.leave(slug);
     },
     onError: setError,
   });
@@ -406,7 +415,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             }
             undone = true;
             await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-            await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: original } });
+            goTo.open(slug, original, copy.id);
           },
         });
       }
@@ -423,7 +432,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       // « Annuler » clicked while the run was starting: the original is open, stay there
       if (undone) return;
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: copy.id } });
+      goTo.open(slug, copy.id);
     },
     onError: setError,
   });
@@ -529,7 +538,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         case 'new': {
           const { session } = await api.createSession(slug);
           await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-          await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+          goTo.open(slug, session.id);
           return true;
         }
         case 'clear': runRewrite('clear'); return true;
@@ -559,7 +568,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   // must not be read as the reader leaving the bottom. The page opens at the bottom.
   const bottom = useRef<HTMLDivElement>(null);
   const follow = useRef<FollowState>({ pinned: true, lastTop: 0, lastHeight: 0 });
-  const box = () => bottom.current?.closest('main') ?? null;
+  // the element that scrolls the thread: the page's <main>, or the column of the Chat page
+  const box = () => bottom.current?.closest<HTMLElement>('[data-scroll-root]') ?? null;
   // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
   const toEnd = (main: HTMLElement) => {
     main.scrollTop = main.scrollHeight;
@@ -623,9 +633,13 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     if (target) jumpTo(target.key);
   };
   const jumpRef = useRef(jump);
+  const inactive = useRef(false);
+  inactive.current = Boolean(col && !col.active);
   jumpRef.current = jump;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // several columns on the Chat page: the active one only
+      if (inactive.current) return;
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
       const t = e.target as HTMLElement | null;
       if (t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) {
@@ -643,6 +657,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, []);
 
   const title = sess.data?.session.title || 'Nouvelle session';
+  // the reading width, unless the column is one of several on screen
+  const narrow = !col || col.wide;
+  // the Chat page's tabs show what the column is doing
+  const waiting = Boolean(approval || clarify);
+  const report = col?.report;
+  useEffect(() => { report?.({ running, waiting, title }); }, [report, running, waiting, title]);
 
   // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
   // (during a run, the merged entries hide its stored messages behind the live ones)
@@ -702,8 +722,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
 
   return (
     <FilePaths.Provider value={filePaths}>
-    <div className="flex min-h-full">
-    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className={cx('flex min-w-0 flex-1 flex-col', EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
+    <div className={col ? 'flex h-full' : 'flex min-h-full'}>
+    <Scroller inColumn={Boolean(col)}>
+    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className={cx('flex min-w-0 flex-1 flex-col', col ? 'min-h-full' : EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
       <header ref={header} className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
         <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
           {!EMBEDDED && (
@@ -761,12 +782,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
-            {!sideOpen && !EMBEDDED && <FullScreen />}
+            {!sideOpen && !EMBEDDED && !col && <FullScreen />}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[748px] flex-1 px-4 py-7 md:px-6">
+      <div className={cx('mx-auto w-full flex-1 px-4 py-7 md:px-6', narrow && 'max-w-[748px]')}>
         <div className="mb-6 empty:hidden"><ChatNotice instanceId={inst} /></div>
         {history.isSuccess && entries.length === 0 && !running && !endNote && (
           <div className="py-16 text-center">
@@ -801,7 +822,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       </div>
 
       <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent pt-4">
-        <div className="relative mx-auto max-w-[796px] px-4 pb-4 md:px-6 md:pb-5">
+        <div className={cx('relative mx-auto px-4 pb-4 md:px-6 md:pb-5', narrow && 'max-w-[796px]')}>
           {items.length >= OUTLINE_MIN && (
             <div className="absolute bottom-full right-4 mb-1 md:right-6"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
           )}
@@ -854,9 +875,11 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         </div>
       </div>
     </DropZone>
+    </Scroller>
     {panel && (
       <aside className={cx(
-        'fixed inset-0 z-30 bg-sheet lg:sticky lg:top-0 lg:z-auto lg:h-[var(--content-h)] lg:shrink-0 lg:border-l lg:border-line/70',
+        'fixed inset-0 z-30 bg-sheet lg:z-auto lg:shrink-0 lg:border-l lg:border-line/70',
+        col ? 'lg:static lg:h-full' : 'lg:sticky lg:top-0 lg:h-[var(--content-h)]',
         previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]',
       )}>
         {side}
