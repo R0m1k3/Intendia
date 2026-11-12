@@ -123,6 +123,22 @@ Uploads are streamed up to `INTENDIA_UPLOAD_MAX_MB` (default and maximum 100, th
 
 Never expose port 3001: it is the MCP endpoint for the agents (next section).
 
+## 3a. MCP servers connected by OAuth (Configuration › MCP)
+
+Most servers of Hermes' MCP catalog (Notion, Linear, Airtable…) sign in by OAuth: the provider sends your browser
+back to a **return URL**. Hermes would use the address Intendia uses to reach its dashboard (`http://hermes:9119`),
+which your browser cannot open. Intendia picks the return URL in this order:
+
+- `mcp_servers.<name>.oauth.redirect_uri` already set in Hermes' config (and not Intendia's): kept as is;
+- `dashboard.public_url` set in Hermes' config: Hermes' own public callback;
+- `INTENDIA_PUBLIC_URL` set: Intendia writes `<INTENDIA_PUBLIC_URL>/x/mcp-oauth/<instance>/<name>/callback` as the
+  server's `redirect_uri` and passes the return on to the dashboard;
+- none: the connection is refused with « Définissez INTENDIA_PUBLIC_URL ».
+
+The return route is public (the provider's redirect carries no Intendia session). It only passes on a return for a
+connection Intendia started itself in the last 15 minutes (matched by its `state`), once, and is limited to
+10 requests per minute and per IP. Some providers (Asana…) need your own OAuth app: give it this return URL.
+
 ## 3b. The `share_file` tool (links for Telegram and crons)
 
 Intendia exposes one MCP tool to the agents, `share_file(path)`: it creates (or reuses) a **private** link

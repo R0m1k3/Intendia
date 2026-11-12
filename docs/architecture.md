@@ -404,6 +404,27 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - Configuration › Plugins (`config/Plugins.tsx`, `config/plugin-catalog.ts`): added plugins first, bundled ones folded;
   catalog search (accents ignored, official first) drawing 40 entries; long descriptions cut at 600 characters.
 
+## MCP catalog and OAuth
+
+- `src/hermes-config/mcp-catalog.ts` (`McpCatalogService`) on top of `ConfigService` (`mcpCatalogRaw`,
+  `installMcpCatalog`, `mcpOauthSettings`, `setMcpRedirect`, `mcpAuth`, `mcpFlow`, `mcpFlowCancel`; every write goes
+  through `write()`, source `mcp`). Routes `src/routes/mcp-catalog.ts`: `/x/i/:inst/config/mcp/catalog` (GET),
+  `POST /config/mcp/catalog/:name {env}` (declared names only, required ones filled, values never echoed nor kept),
+  `POST /config/mcp/:name/connect`, `GET|DELETE /config/mcp/flows/:id`.
+- Return URL: see `docs/install.md` (3a). In relay mode Intendia writes `oauth.redirect_uri` (`PUT /api/config`, merged
+  into the entry), starts the flow, reads `state` from the authorization URL and keeps `state → (instance, name)` in
+  memory 15 min. No `state` in the URL → the flow is cancelled and refused.
+- **Public route** `GET /x/mcp-oauth/:inst/:name/callback` (mounted with the login routes, before `requireAuth`):
+  `RateLimiter(10, 60 s)` on `auth.clientIp`; name checked, `state` plus `code` or `error` (≤ 2048 characters each);
+  a `state` that is not expected for this instance and name → 404 with no call to Hermes, so it is not an open relay;
+  an expected one is taken (once) and passed in a GET to the dashboard's public `/api/mcp/oauth/callback/<name>`
+  without token or cookie (`RequestOptions.anonymous`), 20 s. The answer is a fixed Intendia page
+  (`default-src 'none'`, `no-referrer`, `no-store`), never Hermes' HTML; only the outcome is logged, never code or
+  state.
+- Web: `config/McpCatalog.tsx` (search, form of the variables, Install), `config/McpConnect.tsx` (Connecter → link to
+  the authorization page in a new tab, flow followed every 2 s for 15 min, Annuler), used in the catalog and on each
+  `auth: oauth` server of `config/Mcp.tsx`, which also links to Suivi › Journaux (`file=mcp`).
+
 ## Configuration
 
 - `src/hermes-config/service.ts` (`ConfigService`) calls the `config` connector; `src/routes/config.ts` serves

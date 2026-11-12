@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDocument, stringify } from 'yaml';
+import { McpCatalogFake } from './mcp-catalog.js';
 import { ProviderStore } from './providers.js';
 
 // YAML 1.1 as PyYAML reads it: a float needs a digit (the library alone reads `.` as NaN)
@@ -89,6 +90,8 @@ export class ConfigStore {
   raw: string;
   /** Real values of the env variables set (the fake's .env). */
   readonly envValues = new Map<string, string>([['CUSTOM_KEY', FAKE_SECRETS.env], ['MCP_DEMO_API_KEY', FAKE_SECRETS.mcp]]);
+  /** MCP catalog and dashboard OAuth flows (mcp-catalog.ts). */
+  readonly mcpCatalog = new McpCatalogFake(() => this.file(), (o) => this.write(o), this.envValues);
   private readonly envFixture: Record<string, EnvEntry>;
   private readonly defaults: Obj;
   private readonly auxiliary: { tasks: Obj[]; main: Obj };
@@ -151,7 +154,7 @@ export class ConfigStore {
     const list = Object.entries(servers).map(([name, s]) => ({
       name, transport: s.url ? 'http' : 'stdio', url: s.url ?? null, command: s.command ?? null, args: s.args ?? [],
       env: Object.fromEntries(Object.entries((s.env ?? {}) as Obj).map(([k, v]) => [k, `«redacted:${String(v).slice(0, 4)}...»`])),
-      auth: s.headers ? 'header' : 'none', enabled: s.enabled !== false, tools: [], source: 'config', plugin: null,
+      auth: typeof s.auth === 'string' ? s.auth : s.headers ? 'header' : 'none', enabled: s.enabled !== false, tools: [], source: 'config', plugin: null,
     }));
     return [...list, { name: this.pluginMcpName, transport: 'http', url: 'https://plugin.example.test/mcp', command: null, args: [], env: {}, auth: 'none', enabled: true, tools: [], source: 'plugin', plugin: 'demo-plugin' }];
   }
@@ -219,6 +222,8 @@ export class ConfigStore {
     if (via !== 'dash') return null;
     const acc = this.providers.handle(method, path, query.profile ?? 'default', body);
     if (acc) return acc;
+    const cat = this.mcpCatalog.handle(method, path, query, body);
+    if (cat) return cat;
     const b = (body ?? {}) as Obj;
     if (path === '/api/config' && method === 'GET') {
       const out = query.include_defaults === 'false' ? this.file() : this.effective();
