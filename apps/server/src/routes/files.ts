@@ -4,7 +4,7 @@ import type { InstanceFileService } from '../files/instance-files.js';
 import type { FileService } from '../files/service.js';
 import { EXISTS_MAX } from '../files/service.js';
 import { normalizeRel } from '../files/paths.js';
-import { sendFile } from '../files/send.js';
+import { sendFile, sendZip } from '../files/send.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError } from '../workspaces/service.js';
 
@@ -38,7 +38,17 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
     return sendFile(c, file, file.name, { download: c.req.query('download') === '1' });
   });
 
+  r.get('/i/:inst/files/zip', async (c) => {
+    const z = await instanceFiles.zip(inst(c), c.req.query('path') ?? '');
+    return sendZip(z.body, z.name);
+  });
+
   const base = '/workspaces/:slug/files';
+
+  r.get(`${base}/zip`, async (c) => {
+    const z = await files.zip(slugOf(c), c.req.query('path') ?? '');
+    return sendZip(z.body, z.name);
+  });
 
   r.get(`${base}/tree`, async (c) => c.json(await files.list(slugOf(c), c.req.query('path') ?? '')));
 

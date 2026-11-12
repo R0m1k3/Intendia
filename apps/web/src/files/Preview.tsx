@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, ExternalLink, Link2, Pencil, Save, X } from 'lucide-react';
+import { ClipboardCopy, Download, ExternalLink, Link2, MessageSquarePlus, Pencil, Save, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
 import { Md } from '../chat/Thread';
@@ -40,8 +40,10 @@ export function ShareButton({ slug, path, compact = false }: { slug: string; pat
 
 /** Preview of one file: picks the viewer from the extension. Edit and share only in a workspace. */
 /** `startEditing`: open the editor as soon as the text is read (a file just created), then `onEditingStarted`. */
-export function Preview({ scope, path, onClose, startEditing, onEditingStarted }: {
+export function Preview({ scope, path, onClose, startEditing, onEditingStarted, onInsert }: {
   scope: FileScope; path: string; onClose?: () => void; startEditing?: boolean; onEditingStarted?: () => void;
+  /** Session page: « Insérer dans le message » with the file's agent path. */
+  onInsert?: (agentPath: string) => void;
 }) {
   const qc = useQueryClient();
   const slug = scope.workspace;
@@ -102,6 +104,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted }
   };
 
   const missing = listing.isSuccess && !entry;
+  const agentPath = listing.data?.agentRoot ? `${listing.data.agentRoot}/${path}` : null;
   const url = scope.raw(path);
 
   return (
@@ -125,6 +128,16 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted }
             <Pencil className="size-4" strokeWidth={1.5} /><span className="hidden text-[13px] sm:inline">Modifier</span>
           </Button>
         ))}
+        {entry && agentPath && onInsert && (
+          <button onClick={() => onInsert(agentPath)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Insérer dans le message" aria-label="Insérer dans le message">
+            <MessageSquarePlus className="size-4" strokeWidth={1.5} />
+          </button>
+        )}
+        {entry && agentPath && (
+          <button onClick={() => void copyText(agentPath, 'Chemin')} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Copier le chemin" aria-label="Copier le chemin">
+            <ClipboardCopy className="size-4" strokeWidth={1.5} />
+          </button>
+        )}
         {slug && entry && <ShareButton slug={slug} path={path} compact />}
         <a href={url} target="_blank" rel="noreferrer" className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Ouvrir dans un onglet" aria-label="Ouvrir">
           <ExternalLink className="size-4" strokeWidth={1.5} />

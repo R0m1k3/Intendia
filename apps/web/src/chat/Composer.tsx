@@ -3,6 +3,7 @@ import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, 
 import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
 import { clearDraft, loadDraft, onFlush, saveDraft } from './draft';
+import { insertAt } from './insert';
 import { PromptPicker } from './PromptPicker';
 import { matchCommands, matchSkills, parseCommand, type Command, type CommandName } from './commands';
 import type { QueueItem } from './queue';
@@ -15,6 +16,8 @@ export interface ComposerHandle {
   setText: (text: string) => void;
   /** Opens the prompts list (/prompt), filtered by the start of a title. */
   openPrompts: (filter?: string) => void;
+  /** Inserts a text (a file path) at the cursor, keeping the rest; at the end when the field never had the focus. */
+  insert: (text: string) => void;
 }
 
 /** Uploads one file; `agentPath` goes into the message, `url` shows the uploaded image, `path` = in the workspace. */
@@ -165,6 +168,7 @@ export function Composer({
     if (pastedText?.id === a.id) setPastedText(null);
   };
 
+  const hadFocus = useRef(false);
   /** Inserted at the cursor; an empty composer takes the text as is. */
   const insertText = (t: string) => {
     const el = ref.current;
@@ -187,6 +191,13 @@ export function Composer({
     focus: () => ref.current?.focus(),
     setText: (t: string) => { setText(t); ref.current?.focus(); },
     openPrompts: (filter = '') => { setPromptFilter(filter); setPromptsOpen(true); },
+    insert: (t: string) => {
+      const el = ref.current;
+      const [start, end] = el && hadFocus.current ? [el.selectionStart ?? text.length, el.selectionEnd ?? text.length] : [text.length, text.length];
+      const next = insertAt(text, start, end, t);
+      edit(next.value);
+      requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(next.caret, next.caret); });
+    },
   }));
 
   useEffect(() => {
@@ -396,6 +407,7 @@ export function Composer({
         value={text}
         disabled={disabled}
         onChange={(e) => edit(e.target.value)}
+        onFocus={() => { hadFocus.current = true; }}
         onPaste={paste}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;

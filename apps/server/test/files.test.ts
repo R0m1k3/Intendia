@@ -208,6 +208,37 @@ describe('files', () => {
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/sub/a.txt', to: 'nowhere/a.txt' })).status).toBe(404);
   });
 
+  it('zip: a folder as a stream, root named after the workspace, links left out, limits before any byte', async () => {
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const t = await setup();
+    mkdirSync(join(t.ws, 'files', 'Été 2026', 'vide'), { recursive: true });
+    writeFileSync(join(t.ws, 'files', 'Été 2026', 'r.md'), '# r');
+    const res = await t.rawRequest('GET', `${t.F}/zip?path=${t.q('files/Été 2026')}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/zip');
+    expect(res.headers.get('content-disposition')).toBe(`attachment; filename="_t_ 2026.zip"; filename*=UTF-8''${encodeURIComponent('Été 2026.zip')}`);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    expect(Object.keys(files).sort()).toEqual(['Été 2026/r.md', 'Été 2026/vide/']);
+    const root = await t.rawRequest('GET', `${t.F}/zip`);
+    expect(root.headers.get('content-disposition')).toContain('filename="dev.zip"');
+    const all = Object.keys(unzipSync(new Uint8Array(await root.arrayBuffer())));
+    expect(all).toContain('dev/files/sub/a.txt');
+    expect(all.some((n) => n.startsWith('dev/files/ok'))).toBe(false); // the link
+    expect((await t.rawRequest('GET', `${t.F}/zip?path=files/doc.pdf`)).status).toBe(400);
+    expect((await t.rawRequest('GET', `${t.F}/zip?path=nowhere`)).status).toBe(404);
+    expect(strFromU8(files['Été 2026/r.md']!)).toBe('# r');
+  });
+
+  it('zip: past 5 000 files → 413 before any byte', async () => {
+    const t = await setup();
+    mkdirSync(join(t.ws, 'files', 'beaucoup'));
+    for (let i = 0; i <= 5000; i++) writeFileSync(join(t.ws, 'files', 'beaucoup', `${i}.txt`), '');
+    const res = await t.request('GET', `${t.F}/zip?path=files/beaucoup`);
+    expect(res.status).toBe(413);
+    expect(res.json.error).toContain('trop gros pour un zip');
+  });
+
   it('new: an empty file or folder, never over an existing one, reserved names refused', async () => {
     const t = await setup();
     expect((await t.request('POST', `${t.F}/new`, { path: 'files/notes.md', kind: 'file' })).json).toEqual({ path: 'files/notes.md' });

@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Download, File, FileCode, FileImage, FileText, Folder, FolderSymlink, Link2Off, MoveRight, Trash2, type LucideIcon,
+  ClipboardCopy, Download, File, FileArchive, FileCode, FileImage, FileText, Folder, FolderSymlink, Link2Off, MessageSquarePlus, MoveRight, Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { api, type FileEntry } from '../api';
-import { cx, timeAgo } from '../components/ui';
+import { copyText, cx, timeAgo } from '../components/ui';
 import { fileKind, formatSize } from './paths';
 import { ShareButton } from './Preview';
 import type { FileScope } from './scope';
@@ -24,8 +25,11 @@ function iconOf(e: FileEntry): LucideIcon {
 
 const ICON_BTN = 'flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink';
 
-/** One folder's rows. `actions` adds download, share, move and delete (explorer of a workspace only). */
-export function FileRows({ scope, entries, selected, onOpen, actions = false, onError, onNotice }: {
+/**
+ * One folder's rows. Download (zip for a folder) and « Copier le chemin » (when `agentRoot` is known) everywhere;
+ * `actions` adds share, move and delete (explorer of a workspace only); `onInsert` adds « Insérer dans le message ».
+ */
+export function FileRows({ scope, entries, selected, onOpen, actions = false, onError, onNotice, agentRoot, onInsert }: {
   scope: FileScope;
   entries: FileEntry[];
   selected?: string | null;
@@ -34,6 +38,10 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
   onError?: (err: unknown) => void;
   /** A neutral note for the page (folder moved, some files left behind). */
   onNotice?: (text: string) => void;
+  /** Absolute root of the listed paths, as the agent sees it. */
+  agentRoot?: string;
+  /** Session page: puts the file's agent path in the message being written. */
+  onInsert?: (agentPath: string) => void;
 }) {
   const qc = useQueryClient();
   const slug = scope.workspace;
@@ -86,18 +94,32 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
               <span className="hidden w-20 shrink-0 text-right text-xs text-ink-faint sm:block">{isDirEntry(e) ? '' : formatSize(e.size)}</span>
               <span className="hidden w-24 shrink-0 text-right text-xs text-ink-faint md:block">{timeAgo(e.mtime)}</span>
             </button>
-            {actions && slug && (
-              <div className="flex shrink-0 items-center justify-end opacity-100 transition-opacity md:w-32 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-                {!isDirEntry(e) && !e.outside && (
-                  <>
-                    <a href={scope.raw(e.path, true)} className={ICON_BTN} title="Télécharger" aria-label={`Télécharger ${e.name}`}>
-                      <Download className="size-4" strokeWidth={1.5} />
-                    </a>
-                    <ShareButton slug={slug} path={e.path} compact />
-                  </>
+            {!e.outside && e.kind !== 'link' && (
+              <div className="flex shrink-0 items-center justify-end opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+                {isDirEntry(e) ? (
+                  <a href={scope.zip(e.path)} className={ICON_BTN} title="Télécharger (zip)" aria-label={`Télécharger ${e.name} (zip)`}>
+                    <FileArchive className="size-4" strokeWidth={1.5} />
+                  </a>
+                ) : (
+                  <a href={scope.raw(e.path, true)} className={ICON_BTN} title="Télécharger" aria-label={`Télécharger ${e.name}`}>
+                    <Download className="size-4" strokeWidth={1.5} />
+                  </a>
                 )}
-                {e.kind !== 'link' && (
+                {agentRoot && (
+                  <button className={ICON_BTN} title="Copier le chemin" aria-label={`Copier le chemin de ${e.name}`}
+                    onClick={() => void copyText(`${agentRoot}/${e.path}`, 'Chemin')}>
+                    <ClipboardCopy className="size-4" strokeWidth={1.5} />
+                  </button>
+                )}
+                {onInsert && agentRoot && !isDirEntry(e) && (
+                  <button className={ICON_BTN} title="Insérer dans le message" aria-label={`Insérer ${e.name} dans le message`}
+                    onClick={() => onInsert(`${agentRoot}/${e.path}`)}>
+                    <MessageSquarePlus className="size-4" strokeWidth={1.5} />
+                  </button>
+                )}
+                {actions && slug && (
                   <>
+                    {!isDirEntry(e) && <ShareButton slug={slug} path={e.path} compact />}
                     <button className={ICON_BTN} title="Renommer ou déplacer" aria-label={`Renommer ou déplacer ${e.name}`} onClick={() => void move(e)}>
                       <MoveRight className="size-4" strokeWidth={1.5} />
                     </button>

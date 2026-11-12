@@ -32,6 +32,19 @@ export function sendFile(
   return new Response(file.body, { status: 200, headers });
 }
 
+/** A zip built while it is sent (files/zip.ts): no length, never cached. */
+export function sendZip(body: ReadableStream<Uint8Array>, name: string): Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': disposition('attachment', name),
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** Small static error page for /f/* (no script, no external resource). */

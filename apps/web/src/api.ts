@@ -529,6 +529,8 @@ const instPath = (inst: string, sub: string, profile?: string, extra?: Record<st
   const q = new URLSearchParams({ ...(profile ? { profile } : {}), ...extra }).toString();
   return `/i/${enc(inst)}/${sub}${q ? `?${q}` : ''}`;
 };
+/** A folder listing; `agentRoot` = the listed root as the agent sees it (absolute). */
+export interface FileTree { path: string; entries: FileEntry[]; truncated: boolean; agentRoot?: string }
 const filesPath = (slug: string) => `/workspaces/${enc(slug)}/files`;
 
 export class ApiError extends Error {
@@ -629,9 +631,9 @@ export const api = {
   externalMessages: (inst: string, id: string, profile = 'default') =>
     call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
 
-  tree: (slug: string, path = '') => call<{ path: string; entries: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
+  tree: (slug: string, path = '') => call<FileTree>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
   instanceTree: (inst: string, path = '') =>
-    call<{ path: string; entries: FileEntry[]; truncated: boolean }>('GET', `/i/${enc(inst)}/files/tree?path=${enc(path)}`),
+    call<FileTree>('GET', `/i/${enc(inst)}/files/tree?path=${enc(path)}`),
   instanceSearchFiles: (inst: string, q: string) =>
     call<{ results: FileEntry[]; truncated: boolean }>('GET', `/i/${enc(inst)}/files/search?q=${enc(q)}`),
   searchFiles: (slug: string, q: string) => call<{ results: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/search?q=${enc(q)}`),
@@ -774,6 +776,10 @@ export const api = {
 /** URL of a file's content (preview, download); served with CSP sandbox (scripts allowed for an artefact). */
 export const rawUrl = (slug: string, path: string, download = false, artifact = false) =>
   `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}${artifact ? '&artefact=1' : ''}`;
+
+/** A folder as a zip (built while sent; `<folder>.zip`, `<slug>.zip` for the root). */
+export const zipUrl = (slug: string, path: string) => `/x${filesPath(slug)}/zip?path=${enc(path)}`;
+export const instanceZipUrl = (inst: string, path: string) => `/x/i/${enc(inst)}/files/zip?path=${enc(path)}`;
 
 /** URL of a file of an instance's file root (read only page « Fichiers »). */
 export const instanceRawUrl = (inst: string, path: string, download = false) =>

@@ -10,10 +10,10 @@ export const AGENTS_MD_MAX_BYTES = 65_536;
 export const FRAMING_MAX_BYTES = 4_096;
 
 export type WorkspaceFsCode =
-  | 'no_root' | 'unreachable' | 'unsupported' | 'exists' | 'too_large' | 'invalid' | 'outside' | 'not_found' | 'not_file';
+  | 'no_root' | 'unreachable' | 'unsupported' | 'exists' | 'too_large' | 'invalid' | 'outside' | 'not_found' | 'not_file' | 'busy';
 
 export const FS_ERROR_STATUS: Record<WorkspaceFsCode, 400 | 403 | 404 | 409 | 413 | 422 | 502> = {
-  no_root: 422, unreachable: 502, unsupported: 409, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400,
+  no_root: 422, unreachable: 502, unsupported: 409, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400, busy: 409,
 };
 
 export class WorkspaceFsError extends Error {

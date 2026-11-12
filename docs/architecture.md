@@ -188,6 +188,22 @@ demand from the State screen. State changes go to the webhook.
   `INTENDIA_UPLOAD_MAX_MB` per file. Sizes announced by zip and tar are checked before any write (413 `too_big`); a
   `.tgz` beyond a limit stops while writing (`partial`, files already written stay). One extraction at a time on the
   server (409 `busy`), 10 minutes at most, not tied to the browser request.
+- Zip of a folder: `GET …/files/zip?path=` (workspace) and `GET /x/i/:inst/files/zip?path=` (instance, names hidden by
+  Hermes left out): walked first (`walk`, links skipped, 5 000 files / 1 GiB → 413 before any byte), then built
+  while sent (`src/files/zip.ts`: fflate `Zip`, one file at a time with `idleGuard`, level 1 or stored for
+  already compressed types, back pressure on the reader); a file over 100 MiB or that cannot be read is listed in
+  `_erreurs.txt`. Two zips at a time on the server (409 `busy`), the place freed at the end, on error or when the
+  client leaves. `tree` answers carry `agentRoot` (the listed root as the agent sees it): « Copier le chemin ».
+- Session page: « Insérer dans le message » (`ComposerHandle.insert`, `chat/insert.ts`) on the panel's files and in
+  the preview; « Modifiés par l'agent » = `chat/written.ts`, from the stored `write_file` / `patch` calls only (V4A
+  `*** Update/Add/Delete/Move File:`), the history read again 1 s after such a call ends. Ctrl/⌘ P: the palette in
+  « files » mode (instance search, `fileTarget` → the workspace's page or the instance's).
+- Previews read in the browser (`apps/web/src/files/viewers/`, each loaded on demand), nothing from the file injected
+  as HTML: CSV/TSV (RFC 4180, `;` guessed for French exports, first 2 MiB and 1 000 rows), diff (coloured lines),
+  Word / Excel / PowerPoint (`office.ts`: zip read as a stream by fflate `Unzip` + `AsyncUnzipInflate`, only the XML
+  parts needed, real inflated bytes counted: 20 MiB per entry, 60 MiB in all, 20 MiB file; XML by `DOMParser`; one
+  sheet parsed at a time, 1 000 × 50 cells), Excalidraw (`excalidraw.ts`: elements checked — finite numbers, colours
+  `#hex`/names — then drawn as SVG by React).
 - Everything served from a workspace (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
   (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
   (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,

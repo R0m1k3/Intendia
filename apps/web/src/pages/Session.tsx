@@ -19,6 +19,7 @@ import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActio
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
 import { lastTodos } from '../chat/todos';
+import { writtenPaths } from '../chat/written';
 import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
@@ -41,6 +42,8 @@ import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { workspaceScope } from '../files/scope';
+
+const REREAD_TOOLS = new Set(['todo_list', 'write_file', 'patch']);
 import { useInbox } from '../sessions/InboxLayout';
 
 /** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
@@ -427,8 +430,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
 
   const messages = history.data?.messages ?? [];
   const todos = useMemo(() => lastTodos(messages), [messages]);
-  // todo_list finished during the run: Hermes stored its result first, the history is read again (last of a burst, 1 s later)
-  const doneTodoCalls = live?.entries.filter((e) => e.kind === 'tool' && e.tool === 'todo_list' && e.state !== 'running').length ?? 0;
+  // todo_list, write_file or patch finished during the run: Hermes stored the call first, the history is read again
+  // (task list, « Modifiés par l'agent »; last of a burst, 1 s later)
+  const doneTodoCalls = live?.entries.filter((e) => e.kind === 'tool' && REREAD_TOOLS.has(e.tool) && e.state !== 'running').length ?? 0;
   const seenTodoCalls = useRef(0);
   useEffect(() => {
     if (doneTodoCalls <= seenTodoCalls.current) { seenTodoCalls.current = doneTodoCalls; return; }
@@ -630,6 +634,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
 
   const title = sess.data?.session.title || 'Nouvelle session';
 
+  // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
+  // (during a run, the merged entries hide its stored messages behind the live ones)
+  const written = useMemo(() => writtenPaths(historyEntries(messages)), [messages]);
   // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
   const candidates = useMemo(() => {
     if (!mounts) return [];
@@ -640,8 +647,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     const cited = findPathCandidates(text, m).sort();
     // files joined to the user's messages come after, so they never push the agent's out of the 200 checked
     const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : []));
-    return [...new Set([...pages, ...cited, ...joined])];
-  }, [entries, mounts]);
+    return [...new Set([...pages, ...written.map((w) => w.path), ...cited, ...joined])];
+  }, [entries, mounts, written]);
   const exists = useQuery({
     queryKey: ['exists', slug, candidates.join('\n'), runCount],
     queryFn: () => api.filesExist(slug, candidates.slice(0, 200)),
@@ -660,6 +667,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     };
   }, [exists.data, exists.isFetching, slug, mounts]);
   const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);
+  const modified = useMemo(() => written.map((w) => ({ ...w, rel: w.op === 'delete' ? null : filePaths.found.get(w.path) ?? null })), [written, filePaths]);
+  const agentRoot = mounts?.files?.workspaceRoot ? `${mounts.files.workspaceRoot.replace(/\/+$/, '')}/${slug}` : undefined;
+  const insert = useCallback((path: string) => composer.current?.insert(path), []);
 
   const upload = useCallback<Upload>(async (file) => {
     const [done] = await uploadFiles(slug, 'inbox', [file]);
@@ -674,9 +684,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const addFiles = (f: File[]) => composer.current?.addFiles(f);
 
   const side = previewPath ? (
-    <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} />
+    <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} onInsert={insert} />
   ) : (
-    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)} />
+    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)}
+      agentRoot={agentRoot} onInsert={insert} modified={modified} />
   );
 
   return (
