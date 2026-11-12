@@ -243,7 +243,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', skillRoutes(deps.services.skills));
   priv.route('/', configRoutes(deps.services.config, deps.services.providers));
   priv.route('/', agentRoutes(deps.services.agents));
-  priv.route('/', activityRoutes(deps.services.activity));
+  priv.route('/', activityRoutes({ activity: deps.services.activity, workspaces: deps.services.workspaces, store: deps.store }));
   priv.route('/', monitorRoutes(deps.services.monitor));
   priv.route('/', memoryRoutes(deps.services.memory));
   priv.route('/', pluginRoutes(deps.services.plugins));

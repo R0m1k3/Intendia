@@ -10,6 +10,7 @@
  *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
  *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
  *   `approval.responded`, body `{choice}`)
+ * - "lent": 18 deltas 500 ms apart (≈ 9 s); "lent interminable": 120 (≈ 60 s, the Centre's steer tests).
  * - steer (POST /v1/runs/{id}/steer): taken while the run is `running` (else 409), `run.steered` + a user line
  *   `display_kind: "steer"`; with "perdu" in the run's message never delivered, back as `pending_steer` at the end
  * - "secours": the run is served by another model than the one asked (`runtime.model = fake/model-fallback`)
@@ -290,7 +291,8 @@ class Simulator {
         run.romanText = (run.romanText ?? '') + text;
       }
     } else if (slow) {
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0, n = /interminable/i.test(run.input) ? 120 : 18; i < n; i++) {
+        if (TERMINAL.has(run.status)) return;
         await sleep(step);
         this.push(run, { event: 'message.delta', delta: `${i + 1}… ` });
       }

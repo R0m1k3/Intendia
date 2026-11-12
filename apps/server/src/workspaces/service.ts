@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, notLike, or, sql } from 'drizzle-orm';
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
@@ -60,6 +60,23 @@ export interface SessionContext {
   /** Hermes profile serving the session: its own, else the workspace's default ("default" when none). */
   profile: string;
 }
+
+/** A run launched from Intendia that ended recently (Centre, « Terminé »). */
+export interface FinishedRun {
+  instance: string;
+  workspace: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  status: string;
+  startedAt: number;
+  endedAt: number;
+  costUsd: number | null;
+}
+
+const FINISHED_WINDOW_MS = 24 * 3600_000;
+const FINISHED_LIMIT = 50;
 
 export interface RecentRun {
   instanceId: string;
@@ -564,6 +581,28 @@ export class WorkspaceService {
         ...(opts.running ? [] : [ne(runStats.status, 'running')]),
       ))
       .orderBy(asc(runStats.startedAt)).all();
+  }
+
+  /**
+   * Runs ended in the last 24 h, most recent first (50 at most), of live sessions: one instance or all. Copies made by
+   * Dupliquer (`runId` with `@`) are left out, they did not run again.
+   */
+  finishedRuns(opts: { instanceId?: string; now?: number } = {}): FinishedRun[] {
+    const now = opts.now ?? Date.now();
+    return this.db.select({
+      instance: runStats.instanceId, workspace: sessionWorkspace.workspaceSlug, workspaceName: workspaces.name,
+      sessionId: runStats.sessionId, title: sessionWorkspace.title, runId: runStats.runId, status: runStats.status,
+      startedAt: runStats.startedAt, endedAt: runStats.endedAt, costUsd: runStats.costUsd,
+    }).from(runStats)
+      .innerJoin(sessionWorkspace, and(eq(sessionWorkspace.instanceId, runStats.instanceId), eq(sessionWorkspace.sessionId, runStats.sessionId)))
+      .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
+      .where(and(
+        ...(opts.instanceId !== undefined ? [eq(runStats.instanceId, opts.instanceId)] : []),
+        ne(runStats.status, 'running'), isNotNull(runStats.endedAt), gte(runStats.endedAt, now - FINISHED_WINDOW_MS),
+        notLike(runStats.runId, '%@%'), alive,
+      ))
+      .orderBy(desc(runStats.endedAt)).limit(FINISHED_LIMIT).all()
+      .map((r) => ({ ...r, endedAt: r.endedAt! }));
   }
 
   /** End of a run, written once: a concurrent settle that lost the race changes nothing. */
