@@ -1,7 +1,7 @@
 // Typed client for the Intendia server (/x/*). Mirrors apps/server/src/connectors/types.ts.
 
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git';
 
 export interface ResolvedOp {
   ok: boolean;
@@ -532,6 +532,34 @@ const instPath = (inst: string, sub: string, profile?: string, extra?: Record<st
 /** A folder listing; `agentRoot` = the listed root as the agent sees it (absolute). */
 export interface FileTree { path: string; entries: FileEntry[]; truncated: boolean; agentRoot?: string }
 const filesPath = (slug: string) => `/workspaces/${enc(slug)}/files`;
+const gitPath = (slug: string) => `/workspaces/${enc(slug)}/git`;
+
+export interface GitFile {
+  /** Relative to the repository; a folder not tracked yet ends with `/`. */
+  path: string;
+  /** M, A, D, R, C, U (conflict), ? (untracked). */
+  status: string;
+  staged: boolean;
+  /** null: unknown (Hermes' status lists 200 files at most). */
+  unstaged: boolean | null;
+  conflicted: boolean;
+  added: number;
+  removed: number;
+  dir: boolean;
+  sensitive: boolean;
+}
+export interface GitStatus {
+  repo: string;
+  branch: string | null;
+  defaultBranch: string | null;
+  detached: boolean;
+  ahead: number;
+  behind: number;
+  counts: { staged: number; unstaged: number; untracked: number; conflicted: number };
+  files: GitFile[];
+  truncated: boolean;
+}
+export type GitDiffWhich = 'staged' | 'unstaged' | 'all';
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly data?: unknown) {
@@ -632,6 +660,9 @@ export const api = {
     call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
 
   tree: (slug: string, path = '') => call<FileTree>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
+  gitLocate: (slug: string, path: string) => call<{ repo: string | null; outside: boolean }>('GET', `${gitPath(slug)}/locate?path=${enc(path)}`),
+  gitStatus: (slug: string, repo: string) => call<GitStatus>('GET', `${gitPath(slug)}?repo=${enc(repo)}`),
+  gitBranches: (slug: string, repo: string) => call<{ branches: { name: string; current: boolean }[] }>('GET', `${gitPath(slug)}/branches?repo=${enc(repo)}`),
   instanceTree: (inst: string, path = '') =>
     call<FileTree>('GET', `/i/${enc(inst)}/files/tree?path=${enc(path)}`),
   instanceSearchFiles: (inst: string, q: string) =>
@@ -776,6 +807,10 @@ export const api = {
 /** URL of a file's content (preview, download); served with CSP sandbox (scripts allowed for an artefact). */
 export const rawUrl = (slug: string, path: string, download = false, artifact = false) =>
   `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}${artifact ? '&artefact=1' : ''}`;
+
+/** Diff of one file of a repository, as text (read by DiffView). */
+export const gitDiffUrl = (slug: string, repo: string, file: string, which: GitDiffWhich) =>
+  `/x${gitPath(slug)}/diff?repo=${enc(repo)}&file=${enc(file)}&which=${which}`;
 
 /** A folder as a zip (built while sent; `<folder>.zip`, `<slug>.zip` for the root). */
 export const zipUrl = (slug: string, path: string) => `/x${filesPath(slug)}/zip?path=${enc(path)}`;

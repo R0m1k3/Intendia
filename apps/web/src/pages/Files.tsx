@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, File, FileArchive, Folder, Plus, Search, Upload, X } from 'lucide-react';
+import { ChevronRight, File, FileArchive, Folder, GitBranch, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, type FileEntry } from '../api';
 import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
 import { Menu } from '../components/Menu';
+import { useModuleAvailability } from '../components/ModuleNotice';
+import { GIT_REQUIRED } from '../git/GitFiles';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
 import { DropZone } from '../files/DropZone';
 import { FileRows, isDirEntry } from '../files/FileRows';
@@ -35,6 +37,10 @@ export function FilesPage() {
   const treeError = !dir && tree.error instanceof ApiError && tree.error.status === 404
     ? new Error(`Dossier introuvable chez ${instLabel ?? 'Hermes'} : copiez-le dans la racine des workspaces de cette instance, ou supprimez ce workspace.`)
     : tree.error;
+  // the repository holding this folder, when it starts in the workspace (never above it)
+  const gitOn = useModuleAvailability(ws.data?.workspace.instanceId, 'git', GIT_REQUIRED, []).available && Boolean(ws.data);
+  const gitRepo = useQuery({ queryKey: ['git-locate', slug, dir], queryFn: () => api.gitLocate(slug, dir), enabled: gitOn && !treeError, staleTime: 10_000, retry: false });
+  const repo = gitRepo.data?.repo ?? null;
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
@@ -96,6 +102,13 @@ export function FilesPage() {
         subtitle="Le dossier du workspace, partagé avec l’agent"
         action={
           <div className="flex items-center gap-2">
+            {repo !== null && (
+              <Link to="/w/$slug/git" params={{ slug }} search={{ repo }}
+                className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-paper"
+                title={`Dépôt git ${repo || slug}`}>
+                <GitBranch className="size-4" strokeWidth={1.5} />Git
+              </Link>
+            )}
             <input ref={input} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) void upload(f); }} />
             <Menu
               title="Nouveau" align="end"

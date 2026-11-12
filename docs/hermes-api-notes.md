@@ -316,6 +316,14 @@ Sub-agents and runs (API server):
   broken one, 409 for a non-empty folder without `recursive`, 400 on the root).
 - No rename or move, no stat route. `GET /api/fs/*` (files of the agent's machine) has no locked root: not used.
 
+## Git (read in the 0.23.0 source, `web_routers/git.py`, `web_git.py`; same routes in 0.23.1)
+- `GET /api/fs/git-root?path=` walks up to 50 parents looking for a `.git` entry (folder or file) and returns `{root}` (resolved) or null; it can leave the managed files root.
+- Every `/api/git/*` route takes an absolute `path`, resolved (links followed) but **not confined to the managed files root**, except `review/diff`, `file-diff` and `review/commit-context` (403 outside the root and for credential files). git runs with `path` as its working folder, hooks and fsmonitor off, global config ignored, no password helper; SSH in `BatchMode`; 30 s per command. Write errors: 400 with git's stderr in `detail`.
+- `status` → `{branch, defaultBranch, detached, ahead, behind, staged, unstaged, untracked, conflicted, changed, added, removed, files[≤200]: {path, staged, unstaged, untracked, conflicted}}` or null (counts = numbers of files; nothing says whether the branch has an upstream). `review/list?scope=uncommitted` → `{files: [{path, added, removed, status, staged}]}`, not cut; `staged` = index code set; git runs without `-uall`: an untracked folder is one `folder/` line.
+- `review/diff?file=&scope=uncommitted&staged=` (literal pathspec; `staged=false` on a file with no unstaged change gives a misleading all-add diff), `file-diff?file=` (worktree against HEAD), `branches` → `{branches: [{name, checkedOut, isDefault, isRemote, worktreePath}]}`, `review/commit-context` → `{diff (120 000 characters, credential files removed), recent: string}`.
+- Writes (POST, `{path, …}`): `review/stage|unstage {file?}` (`file` is a git **pathspec**: `*` matches; without `file`: `add -A` / `reset`), `review/revert {file?}` = `checkout HEAD -- f` + `clean -fd -- f`, errors ignored, **always `{ok: true}`**; `review/commit {message, push}` runs `add -A` first **when nothing is staged**; `review/push` (`push -u origin <branch>` without upstream); `branch/switch {branch}`. No pull, no fetch. `ship-info` / `create-pr` (gh) and `worktree/*` are not used.
+- `llm.oneshot` (dashboard WebSocket) has a `commit_message` template: `{template: 'commit_message', variables: {diff, recent_commits, avoid}}` (unknown template → 4031).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),
