@@ -12,7 +12,10 @@ export interface Column {
   /** alone on screen: the thread keeps its centred reading width */
   wide: boolean;
   activate(): void;
+  /** closed after archiving / deleting: the next column, else the workspace */
   close(): void;
+  /** « Fermer ce chat » (the run goes on): the next column, else the session list */
+  hide(): void;
   /** the column `from` (this one by default) now shows another session; navigates when that column is gone */
   replace(slug: string, id: string, from?: string): void;
   report(r: { running: boolean; waiting: boolean; title: string }): void;

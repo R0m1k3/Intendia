@@ -217,6 +217,7 @@ function ChatColumn({ col, active, layout, visible, spanAll, many, width, onFocu
     id: col.id, active, wide,
     activate: () => onFocus(col.id),
     close: () => onClose(col.id, col.slug),
+    hide: () => onClose(col.id),
     replace: (slug, id, from) => onReplace(from ?? col.id, { slug, id }),
     report: (r) => onReport(col.id, r),
   }), [col.id, col.slug, active, wide, onFocus, onClose, onReplace, onReport]);

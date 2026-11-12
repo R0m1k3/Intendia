@@ -162,6 +162,22 @@ describe('stopping a kanban worker', () => {
   });
 });
 
+describe('activity shared between readers', () => {
+  it('simultaneous reads share one computation; the next read computes again', async () => {
+    const t = await testApp({ stepMs: 200 });
+    const { base } = await session(t);
+    const runId = (await t.request('POST', `${base}/runs`, { input: 'lent' })).json.runId as string;
+    const before = runStatusCalls(t, runId);
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => t.request('GET', '/x/i/fake/activity')));
+    expect([a, b, c].map((r) => r.json.runs.length)).toEqual([1, 1, 1]);
+    expect(runStatusCalls(t, runId)).toBe(before + 1);
+    await t.request('GET', '/x/i/fake/activity');
+    expect(runStatusCalls(t, runId)).toBe(before + 2);
+    await t.request('POST', `${base}/runs/${runId}/stop`);
+    await waitRun(t, base, runId);
+  });
+});
+
 describe('activity per instance', () => {
   it('lists only the instance\'s runs; unknown instance → 404', async () => {
     const t = await testApp({ stepMs: 30, extra: [{ id: 'b', label: 'Bureau' }] });

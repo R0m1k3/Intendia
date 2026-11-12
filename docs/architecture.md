@@ -177,6 +177,11 @@ demand from the State screen. State changes go to the webhook.
   empty session in the active chat's workspace, else the last one used, else the instance's first
   (`chat/newSession.ts`), opens it right of the active column and redirects there; the message box gets the cursor.
   An empty session can still move to another workspace of its instance (« Changer de workspace », bulk `move`).
+- Closing a chat (✕ of its tab, or « Fermer ce chat » in its header) never stops its run; the session list puts
+  sessions whose agent works in an « En cours » group on top (`sessions/running.ts`): « En cours » from
+  `GET /x/i/:inst/activity` (simultaneous readers share one computation, `ActivityService.list`), « Attend votre
+  réponse » from `/x/approvals` (approvals and questions), both read every 5 s; a session not loaded gets a row built
+  from its run. A click reopens it and follows the run live.
 - The session list folds when several chats are visible (button « Afficher la liste », kept in `localStorage`).
 
 ## Files, share links and MCP

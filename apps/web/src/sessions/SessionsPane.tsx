@@ -10,6 +10,7 @@ import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
 import { sessionsCount } from './actions';
 import { groupByDay } from './days';
+import { runMarks, withRunning } from './running';
 import { SessionRow } from './SessionRow';
 import { SESSION_LIST_KEYS, showUndo } from './UndoBar';
 
@@ -55,6 +56,10 @@ export function SessionsPane({ openId, onBeside }: {
     enabled: searching && inst !== null, refetchOnWindowFocus: false,
   });
   const qc = useQueryClient();
+  // sessions whose agent works (or waits for the user): an « En cours » group on top (sessions/running.ts)
+  const activity = useQuery({ queryKey: ['activity', inst], queryFn: () => api.activity(inst!), enabled: inst !== null, refetchInterval: 5_000, staleTime: 0 });
+  const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: inst !== null, refetchInterval: 5_000 });
+  const marks = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
   const [cleanError, setCleanError] = useState<unknown>(null);
   const n = unused.data?.unused ?? 0;
@@ -77,7 +82,8 @@ export function SessionsPane({ openId, onBeside }: {
   };
   const active = searching ? found : list;
   const rows = active.data?.sessions ?? [];
-  const groups = groupByDay(rows);
+  const byDay = groupByDay(rows);
+  const groups = searching || !inst ? byDay : withRunning(byDay, marks, inst, source === 'all' || source === 'intendia');
   const partial = searching ? found.data?.partial ?? [] : [];
   const more = !searching && list.data !== undefined && list.data.sessions.length >= limit && limit < MAX;
   const note = 'px-3.5 py-2 text-xs';
@@ -118,7 +124,7 @@ export function SessionsPane({ openId, onBeside }: {
         <div key={g.label} role="group" aria-label={g.label}>
           <ListLabel>{g.label}</ListLabel>
           <ul className="flex flex-col gap-0.5">
-            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} />)}
+            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} run={s.instanceId === inst ? marks.get(s.id)?.state : undefined} />)}
           </ul>
         </div>
       ))}
