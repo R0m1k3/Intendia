@@ -158,3 +158,21 @@ describe('instances', () => {
     expect(t.store.get('fake')!.label).toBe(fakeInstance().label);
   });
 });
+
+describe('framing', () => {
+  it('lets the app frame its own pages (side chat) while API answers stay DENY', async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const web = tempDir();
+    mkdirSync(web, { recursive: true });
+    writeFileSync(join(web, 'index.html'), '<!doctype html><title>Intendia</title>');
+    const { app } = setup({ INTENDIA_WEB_DIR: web });
+    const page = await app.request('/w/demo/s/abc?embed=1');
+    expect(page.status).toBe(200);
+    expect(page.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+    expect(page.headers.get('content-security-policy')).toBe("frame-ancestors 'self'");
+    const apiRes = await app.request('/x/setup');
+    expect(apiRes.headers.get('x-frame-options')).toBe('DENY');
+    expect(apiRes.headers.get('content-security-policy')).toBeNull();
+  });
+});

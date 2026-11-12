@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LogOut, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LogOut, MessageSquareText, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,6 +9,9 @@ import { currentTab, navTarget, setTab, useCurrentInstance, useUrlInstance, type
 import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
 import { InstanceSwitcher } from './InstanceSwitcher';
+import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
+import { flushDrafts } from '../chat/draft';
+import { SideChat } from './SideChat';
 import { cx, Wordmark } from './ui';
 
 type NavGroup = 'top' | 'auto' | 'agent' | 'foot';
@@ -49,6 +52,33 @@ const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-li
 const GROUP = 'px-2.5 pb-1 pt-4 text-xs text-ink-faint';
 
 export function Layout() {
+  return EMBEDDED ? <EmbeddedLayout /> : <FullLayout />;
+}
+
+/** Inside the side chat's iframe: the page alone; ⌘J goes to the page around it. */
+function EmbeddedLayout() {
+  // the page saves this frame's draft before removing it (SideChat)
+  useEffect(() => { window.intendiaFlushDrafts = flushDrafts; }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isSideChatKey(e)) return;
+      e.preventDefault();
+      toggleFromFrame();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return (
+    <main className="h-dvh overflow-y-auto bg-sheet">
+      <Outlet />
+    </main>
+  );
+}
+
+/** A session open full size (Intendia's or an external one): the side chat has nothing to add there. */
+const SESSION_PAGE = /\/s\/[^/]+\/?$/;
+
+function FullLayout() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { id: inst, instances } = useCurrentInstance();
@@ -91,17 +121,37 @@ export function Layout() {
     before.current = null;
     if (el?.isConnected) requestAnimationFrame(() => el.focus());
   }, []);
+  // Ctrl/Cmd J: the side chat, except on a session's own page (one draft written at a time)
+  const onSession = SESSION_PAGE.test(pathname);
+  const [side, setSide] = useState(false);
+  const beforeSide = useRef<HTMLElement | null>(null);
+  const openSide = useCallback(() => {
+    beforeSide.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSide(true);
+  }, []);
+  const closeSide = useCallback(() => {
+    setSide(false);
+    const el = beforeSide.current;
+    beforeSide.current = null;
+    window.focus();
+    if (el?.isConnected) requestAnimationFrame(() => el.focus());
+  }, []);
+  useEffect(() => { if (onSession) setSide(false); }, [onSession]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         if (palette) closePalette();
         else openPalette();
+      } else if (isSideChatKey(e)) {
+        e.preventDefault();
+        if (side) closeSide();
+        else if (!onSession && inst) openSide();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [palette, openPalette, closePalette]);
+  }, [palette, openPalette, closePalette, side, onSession, inst, openSide, closeSide]);
 
   const logout = async () => {
     await api.logout();
@@ -131,8 +181,15 @@ export function Layout() {
   return (
     <div className="flex h-full flex-col md:flex-row">
       <aside className="hidden w-[232px] shrink-0 flex-col bg-paper px-2.5 pb-3 pt-3.5 md:flex">
-        <div className="px-2.5 pb-3.5 pt-0.5">
+        <div className="flex items-center justify-between pb-3.5 pl-2.5 pt-0.5">
           <Wordmark />
+          {!onSession && inst && (
+            <button type="button" onClick={side ? closeSide : openSide} aria-expanded={side}
+              aria-label="Chat latéral" title={`Chat latéral (${shortcutLabel().replace('K', 'J')})`}
+              className={cx('flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink', side && 'bg-raised text-ink')}>
+              <MessageSquareText className="size-4" strokeWidth={1.5} />
+            </button>
+          )}
         </div>
         <NewSessionButton />
         <InstanceSwitcher className="mt-2.5" />
@@ -169,9 +226,10 @@ export function Layout() {
         </div>
       </main>
 
+      {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} />}
       <Approvals />
-      <MobileNav version={version} inst={inst} onSearch={openPalette} current={current} />
+      <MobileNav version={version} inst={inst} onSearch={openPalette} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
   );
 }
@@ -185,7 +243,7 @@ function Count({ n, bad, label }: { n?: number; bad?: boolean; label?: string })
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
 const MOBILE_MAIN: string[] = ['home', 'workspaces', 'activity', 'agents'];
 
-function MobileNav({ current, onSearch, version, inst }: { current: string | null; onSearch: () => void; version?: string; inst: string | null }) {
+function MobileNav({ current, onSearch, onChat, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
@@ -204,6 +262,13 @@ function MobileNav({ current, onSearch, version, inst }: { current: string | nul
               <Search className="size-4" strokeWidth={1.5} />
               Rechercher
             </button>
+            {onChat && (
+              <button type="button" onClick={() => { setMore(false); onChat(); }}
+                className="col-span-3 flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft">
+                <MessageSquareText className="size-4" strokeWidth={1.5} />
+                Chat latéral
+              </button>
+            )}
             <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
             {rest.map((n) => (
               <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} rounded-lg ${current === n.key ? 'bg-raised font-medium text-ink' : 'text-ink-soft'}`}>

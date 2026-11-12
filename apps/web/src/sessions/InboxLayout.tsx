@@ -1,5 +1,6 @@
 import { Outlet, useParams } from '@tanstack/react-router';
 import { createContext, useContext, useMemo, useState } from 'react';
+import { EMBEDDED } from '../chat/embed';
 import { SplitView } from '../components/Panes';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { SessionsPane } from './SessionsPane';
@@ -28,6 +29,8 @@ export function InboxLayout() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [full, setFull] = useStoredFlag('intendia-inbox-full');
   const value = useMemo(() => ({ setPanelOpen, full, setFull }), [full, setFull]);
+  // the side chat's iframe (?embed=1) shows the session alone
+  if (EMBEDDED) return <InboxContext.Provider value={value}><Outlet /></InboxContext.Provider>;
   return (
     <InboxContext.Provider value={value}>
       <SplitView

@@ -242,6 +242,9 @@ export function createApp(deps: AppDeps) {
     app.use('/favicon.svg', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
     app.get('*', (c) => {
       if (c.req.path.startsWith('/x/') || c.req.path.startsWith('/f/')) return c.json({ error: 'not found' }, 404);
+      // the app's pages may be framed by the app itself (side chat, ⌘J); API and file responses keep their own rules
+      c.header('X-Frame-Options', 'SAMEORIGIN');
+      c.header('Content-Security-Policy', "frame-ancestors 'self'");
       return c.html(indexHtml);
     });
   }

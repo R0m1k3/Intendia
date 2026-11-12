@@ -6,6 +6,7 @@ import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
+import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
 import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
 import { sessionDraftKey } from '../chat/draft';
 import { ContextGauge } from '../chat/ContextGauge';
@@ -163,6 +164,11 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
   useEffect(() => { localStorage.setItem('intendia-last-workspace', slug); }, [slug]);
+  // the last session opened is the one the side chat (⌘J) shows
+  const found = Boolean(sess.data);
+  useEffect(() => { if (inst && found) setSideSession(inst, { slug, id: sessionId }); }, [inst, found, slug, sessionId]);
+  // in the side chat, the cursor goes to the message field
+  useEffect(() => { if (EMBEDDED) composer.current?.focus(); }, [found]);
 
   /** Run being followed, read by onEnd (once per run). */
   const endingRun = useRef<string | null>(null);
@@ -349,6 +355,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     mutationFn: () => api.deleteSession(inst!, sessionId),
     onSuccess: async ({ undoUntil }) => {
       showUndo({ inst: inst!, ids: [sessionId], undoUntil, label: 'Session supprimée' });
+      forgetSideSession(inst!, sessionId);
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
       await navigate({ to: '/w/$slug', params: { slug } });
     },
@@ -595,12 +602,14 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   return (
     <FilePaths.Provider value={filePaths}>
     <div className="flex min-h-full">
-    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-w-0 flex-1 flex-col md:min-h-[var(--content-h)]">
+    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className={cx('flex min-w-0 flex-1 flex-col', EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
       <header className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
         <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
-          <Link to="/" aria-label="Revenir à la liste" className={cx(ICON_BTN, 'border-transparent md:hidden')}>
-            <ArrowLeft className="size-4" strokeWidth={1.5} />
-          </Link>
+          {!EMBEDDED && (
+            <Link to="/" aria-label="Revenir à la liste" className={cx(ICON_BTN, 'border-transparent md:hidden')}>
+              <ArrowLeft className="size-4" strokeWidth={1.5} />
+            </Link>
+          )}
           <div className="min-w-0 flex-1">
             <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{title}</h2>
             <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">
@@ -612,7 +621,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button type="button" className={ICON_BTN} aria-label="Copier le lien de la session" title="Copier le lien de la session"
-              onClick={() => void copyText(window.location.href, 'Lien de la session').then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
+              onClick={() => void copyText(window.location.origin + window.location.pathname, 'Lien de la session').then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
             <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label="Fichiers de la session" title="Fichiers de la session"
@@ -647,7 +656,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
-            {!sideOpen && <FullScreen />}
+            {!sideOpen && !EMBEDDED && <FullScreen />}
           </div>
         </div>
       </header>

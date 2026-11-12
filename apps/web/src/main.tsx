@@ -9,6 +9,7 @@ import { currentTab, resolveCurrent, type InstancePage } from './instance/curren
 import { DialogHost } from './components/Dialog';
 import { pruneDrafts } from './chat/draft';
 import { UndoHost } from './sessions/UndoBar';
+import { syncSessions } from './sessions/sync';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
 import { LoginPage } from './pages/Login';
@@ -45,6 +46,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// the side chat's iframe and the page keep each other's sessions lists fresh
+syncSessions(queryClient);
 
 const rootRoute = createRootRoute({ component: Outlet });
 
