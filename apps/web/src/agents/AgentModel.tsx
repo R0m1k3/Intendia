@@ -13,7 +13,7 @@ export function AgentModelPicker({ inst, profile, model, provider, onPick, disab
   onPick: (choice: { model: string; provider: string } | null) => void;
   disabled?: boolean; noneLabel?: string; title?: string;
 }) {
-  const list = useQuery({ queryKey: ['chat-models', inst, profile], queryFn: () => api.chatModels(inst, profile), retry: false, staleTime: 60_000 });
+  const list = useQuery({ queryKey: ['agent-models', inst, profile], queryFn: () => api.agentModels(inst, profile), retry: false, staleTime: 60_000 });
   const current = { model, provider };
   const items: PickerItem[] = modelItems(list.data, current, () => {})
     // "Auto" is the session's setting: here, either "none" (creation) or nothing

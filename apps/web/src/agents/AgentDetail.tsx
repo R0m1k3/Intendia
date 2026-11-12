@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronDown, Pencil, Puzzle, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, Cpu, Pencil, Puzzle, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { api, ApiError, type AgentDetail as AgentData, type PublicInstance } from '../api';
 import { ask, askText } from '../components/Dialog';
@@ -20,13 +20,12 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
   const qc = useQueryClient();
   const [draft, setDraft] = useState<string | null>(null);
   const [none, setNone] = useState<string | null>(null);
-  // Hermes writes the proposal itself when the description is empty (never over an existing one)
+  // Hermes writes the proposal itself; offered only while the description is empty (never over the user's)
   const propose = useMutation({
     mutationFn: () => api.describeAgent(inst, name),
     onSuccess: async (r) => {
       if (!r.description) { setNone(r.reason ? `Aucune description proposée : ${r.reason}` : 'Aucune description proposée'); return; }
       setNone(null);
-      if (text) setDraft(r.description);
       await qc.invalidateQueries({ queryKey: ['agent', inst, name] });
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
     },
@@ -44,7 +43,7 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
       <div className="space-y-2">
       <div className="flex items-start gap-3">
         <p className={cx('min-w-0 flex-1 whitespace-pre-wrap text-[15px]', text ? 'text-ink' : 'text-ink-faint')}>{text || 'Pas de description'}</p>
-        {canPropose && (
+        {canPropose && !text && (
           <Button variant="ghost" className="h-8 px-2" onClick={() => propose.mutate()} disabled={propose.isPending} title="Proposée par le modèle auxiliaire d’Hermes (jusqu’à une minute)">
             <Sparkles className={ICON} strokeWidth={1.5} />{propose.isPending ? 'Proposition…' : 'Proposer'}
           </Button>
@@ -140,6 +139,7 @@ function AgentModel({ inst, name, x, editable }: { inst: string; name: string; x
       await qc.invalidateQueries({ queryKey: ['agent', inst, name] });
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['chat-models', inst, name] });
+      await qc.invalidateQueries({ queryKey: ['agent-models', inst, name] });
     },
   });
   return (
@@ -147,7 +147,15 @@ function AgentModel({ inst, name, x, editable }: { inst: string; name: string; x
       {editable ? (
         <AgentModelPicker inst={inst} profile={name} model={x.model} provider={x.provider} disabled={set.isPending}
           onPick={(c) => { if (c) set.mutate(c); }} />
-      ) : <span className="break-all">{x.model ?? '—'}</span>}
+      ) : (
+        <>
+          <span className="break-all">{x.model ?? '—'}</span>
+          <Link to="/i/$inst/config" params={{ inst }} search={{ profile: name, tab: 'modeles' }}
+            className="inline-flex items-center gap-1 font-sans text-xs text-ink-soft underline-offset-2 hover:text-ink hover:underline">
+            <Cpu className="size-3.5" strokeWidth={1.5} />Changer le modèle
+          </Link>
+        </>
+      )}
       <ErrorText error={set.error} />
     </span>
   );
@@ -261,7 +269,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
 
             {canRemove && (
               <section className="space-y-2 border-t border-line/70 pt-4" aria-label="Supprimer l’agent">
-                <Button onClick={() => void askRemove()} disabled={remove.isPending} className="text-bad">
+                <Button variant="danger" onClick={() => void askRemove()} disabled={remove.isPending}>
                   <Trash2 className={ICON} strokeWidth={1.5} />{remove.isPending ? 'Suppression…' : 'Supprimer l’agent'}
                 </Button>
                 {inUse ? (

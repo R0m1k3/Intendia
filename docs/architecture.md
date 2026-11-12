@@ -371,12 +371,29 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 
 - `src/agents/service.ts` (`AgentService`) calls the `agents` connector; `src/routes/agents.ts` serves
   `/x/i/:inst/agents` (list, create), `/agents/profiles` (names only, registered first: a profile may be called
-  `profiles`), `/agents/:name/detail` and `/agents/:name/description`.
+  `profiles`), `/agents/:name/detail`, `/description`, `/soul`, `/model`, `/describe` and `DELETE /agents/:name`.
 - An agent is a Hermes profile. `hasKey` says whether Intendia can chat with it (`default`: the instance key; the
-  others: `profileKeys[name]`). Creation sends only `name`, `description` and `clone_from`; the page then tells where
-  the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `POST /x/instances` for a `db` one). SOUL.md is shown
-  read-only, capped at 64 KiB and masked with `Masker.text`. Renaming is not offered (`PATCH /api/profiles/{name}`
-  renames).
+  others: `profileKeys[name]`). Creation sends `name`, `description`, `clone_from` (+ `clone_all` only with it),
+  `no_skills`, `soul`, `provider` + `model` (both or none); never `clone_channels` (two agents would fight over one
+  bot), `mcp_servers`, `hub_skills`, `keep_skills`. A refused model comes back as `modelError`, the agent stays. The
+  page then tells where the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `POST /x/instances` for a `db`
+  one). Renaming is not offered (`PATCH /api/profiles/{name}` renames).
+- SOUL.md is shown capped at 64 KiB and masked with `Masker.text`. It is edited as that masked text: `setSoul` reads
+  the current text again and puts the placeholders back with `Masker.restoreText` (400 `secret_placeholder` /
+  `secret_moved`); a SOUL.md over 64 KiB stays read-only (409 `too_long`: the editor never had all of it).
+- Default model: `PUT /api/profiles/{name}/model`, with the chat's picker fed by `chat-models?for=agent` (read on the
+  dashboard, so also for agents without a chat key). « Proposer » = `describe-auto {overwrite: false}`, shown only
+  while the description is empty.
+- Deletion: refused for `default` (409 `protected`) and for a profile Intendia uses (409 `in_use` with the
+  workspaces whose default it is and the number of sessions that chose it, `WorkspaceService.usesProfile`). The page
+  asks to type the name. After Hermes' `rmtree`, `presets.dropProfile` removes its pinned models and modes; a key left
+  in `INTENDIA_INSTANCES` is reported (`keyLeft`), Intendia does not edit the environment.
+- Gateway (`hermes-config/gateway.ts`, `GatewayService`, `/x/i/:inst/config/gateway/:action?profile=`, actions
+  `start|stop|restart`, `GET` = the action's log, masked): Hermes checks the multiplexer first, then (stop) the live
+  sessions, so a 409 on start or on a stop with `interrupt` is a multiplexer refusal (`multiplexed`) and a 409 on a
+  plain stop is `refused` (the page asks, then retries with `interrupt`). The agent page has the three buttons; the
+  State page lists the stopped gateways with « Démarrer » (read on the dashboard: it works with the API server down).
+  After an action the instance is checked again.
 - Activity and the agent page read the kanban workers through `KanbanService` (see Kanban below), and stop one
   there.
 - `src/agents/activity.ts` (`ActivityService`, `GET /x/i/:inst/activity`, one instance): Hermes has no run list, so the candidates are the

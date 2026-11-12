@@ -337,6 +337,20 @@ Sub-agents and runs (API server):
 - `GET /api/system/stats` (no profile): identity, `hostname`, CPU, memory, disk of the Hermes home, load, uptime,
   dashboard process; without psutil only identity and load. In a container: the host's values.
 
+## Gateway and profiles (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
+
+- `POST /api/gateway/start|stop?profile=` (`stop` takes `interrupt=true`) spawn `hermes -p X gateway start|stop` as
+  actions `gateway-start` / `gateway-stop` (`/api/actions/{name}/status`). 409 when the profile is served by the
+  multiplexer, then (stop) when sessions are live. On the reference bench a non-default profile is "parked" by stop
+  ("its bots and cron are stopped") and "served by the host gateway" again by start. In the Docker image a stopped
+  gateway stays down after a container restart; the API server of that profile is down with it.
+- `DELETE /api/profiles/{name}` = `rmtree` of the profile (waits ≤ 10 s for its gateway), `{ok, path}` or
+  `{settlement_pending, retry_command}`; no `?profile=` needed. `default` is refused.
+- `PUT /api/profiles/{name}/soul {content}`, `PUT /api/profiles/{name}/model {provider, model}` (400 when the
+  provider is not connected), `POST /api/profiles/{name}/describe-auto {overwrite}` → `{ok, reason, description}`
+  (auxiliary model; refuses over a user-written description). Create (`POST /api/profiles`) also takes `clone_all`,
+  `no_skills`, `soul`, `provider` + `model` (a refused model is `model_error`, the profile is created).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

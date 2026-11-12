@@ -214,3 +214,15 @@ describe('agents: administration (lot 8 B)', () => {
     expect((await t.request('DELETE', `${BASE}/lent`)).json).toEqual({ ok: true, keyLeft: false, pending: true });
   });
 });
+
+describe('agents: model list of any agent', () => {
+  it('chat-models?for=agent reads the models of a profile without chat key', async () => {
+    const t = await testApp();
+    await t.request('POST', BASE, { name: 'veille' });
+    expect((await t.request('GET', '/x/i/fake/chat-models?profile=veille')).status).toBe(400);
+    const res = await t.request('GET', '/x/i/fake/chat-models?profile=veille&for=agent');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.json.groups)).toBe(true);
+    expect((await t.request('GET', '/x/i/fake/chat-models?profile=..%2Fx&for=agent')).status).toBe(400);
+  });
+});

@@ -686,6 +686,8 @@ export const api = {
   clarify: (inst: string, id: string, runId: string, answer: string, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/clarify`, { answer, requestId }),
   chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
+  /** same list for an agent's default model: any agent, with or without a chat key */
+  agentModels: (inst: string, profile: string) => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}&for=agent`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
