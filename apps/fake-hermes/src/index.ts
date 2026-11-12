@@ -27,7 +27,9 @@
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
- * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first
+ * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
+ *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
+ * - "taches": two todo_list calls (the second with merge: true, 1.5 s later), each result = the full list
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
@@ -302,6 +304,7 @@ class Simulator {
     if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
+    if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
     await sleep(step);
     this.push(run, { event: 'message.delta', delta: 'Je regarde ' });
     await sleep(step);
@@ -338,6 +341,9 @@ class Simulator {
   /** "delegue" scenario: two sub-agents, the second one a child of the first. */
   private async playDelegate(run: SimRun, step: number) {
     const base = { task_count: 1, task_index: 0, model: 'fake/model-mini' };
+    const args = JSON.stringify({ goal: 'Lire les ventes de Frouard', context: 'Fichier ventes.csv' });
+    this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id: 'call_d1', type: 'function', function: { name: 'delegate_task', arguments: args } }] });
+    this.push(run, { event: 'tool.started', tool: 'delegate_task', preview: 'Lire les ventes de Frouard', call_id: 'call_d1' });
     this.push(run, { event: 'subagent.start', ...base, subagent_id: 'sa_1', depth: 1, goal: 'Lire les ventes de Frouard', preview: 'Lire les ventes de Frouard' });
     await sleep(step);
     this.push(run, { event: 'subagent.start', ...base, subagent_id: 'sa_2', parent_id: 'sa_1', depth: 2, goal: 'Calculer le total par rayon' });
@@ -351,8 +357,46 @@ class Simulator {
       event: 'subagent.complete', ...base, subagent_id: 'sa_1', depth: 1, status: 'completed',
       summary: 'Ventes de Frouard lues.', duration_seconds: 4.1, cost_usd: 0.0123, input_tokens: 2100, output_tokens: 180, tool_count: 3,
     });
+    // Hermes writes the tool result before the tool.completed event
+    const result = JSON.stringify({
+      results: [{ task_index: 0, status: 'completed', summary: 'Ventes de Frouard lues.', api_calls: 4, duration_seconds: 4.1, model: 'fake/model-mini', tokens: { input: 2100, output: 180 } }],
+      total_duration_seconds: 4.2,
+    });
+    this.addMessage(run.sessionId, 'tool', result, { tool_name: 'delegate_task' });
+    this.push(run, { event: 'tool.completed', tool: 'delegate_task', duration: 4.2, error: false, preview: result.slice(0, 500), call_id: 'call_d1' });
     await sleep(step);
     this.finish(run, 'Les deux sous-agents ont fini : 1 240 € de ventes à Frouard.');
+  }
+
+  /** "taches" scenario: the agent writes its task list, then updates it (merge) 1.5 s later. */
+  private async playTodos(run: SimRun, step: number) {
+    const write = async (n: number, args: object, todos: object[]) => {
+      const id = `call_t${n}`;
+      this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id, type: 'function', function: { name: 'todo_list', arguments: JSON.stringify(args) } }] });
+      this.push(run, { event: 'tool.started', tool: 'todo_list', preview: `${todos.length} tâches`, call_id: id });
+      await sleep(step);
+      const result = JSON.stringify({ todos, revision: n, summary: `${todos.length} tâches` });
+      this.addMessage(run.sessionId, 'tool', result, { tool_name: 'todo_list' });
+      this.push(run, { event: 'tool.completed', tool: 'todo_list', duration: 0.01, error: false, preview: result.slice(0, 500), call_id: id });
+    };
+    const first = [
+      { id: '1', content: 'Lire les ventes', status: 'in_progress' },
+      { id: '2', content: 'Comparer les magasins', status: 'pending' },
+      { id: '2a', content: 'Frouard contre Houdemont', status: 'pending', parent: '2' },
+      { id: '3', content: 'Écrire le résumé', status: 'pending' },
+    ];
+    await sleep(step);
+    await write(1, { todos: first }, first);
+    await sleep(1500);
+    const second = [
+      { id: '1', content: 'Lire les ventes', status: 'completed' },
+      { id: '2', content: 'Comparer les magasins', status: 'completed' },
+      { id: '2a', content: 'Frouard contre Houdemont', status: 'cancelled', parent: '2' },
+      { id: '3', content: 'Écrire le résumé', status: 'in_progress' },
+    ];
+    await write(2, { todos: second, merge: true }, second);
+    await sleep(1500);
+    this.finish(run, 'Le résumé est prêt : Frouard devant Houdemont.');
   }
 
   private finish(run: SimRun, output: string) {

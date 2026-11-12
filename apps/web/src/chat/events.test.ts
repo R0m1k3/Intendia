@@ -193,3 +193,75 @@ describe('sub-agents', () => {
     expect(withTrees([], [a, b]).length).toBe(2);
   });
 });
+
+describe('delegations and tool results in the history', () => {
+  const call = (id: number, ts: number, ...calls: [string, unknown][]) =>
+    msg(id, 'assistant', '', ts, { toolCalls: calls.map(([name, a]) => ({ name, arguments: JSON.stringify(a) })) });
+  const result = (id: number, ts: number, name: string, content: unknown) =>
+    msg(id, 'tool', typeof content === 'string' ? content : JSON.stringify(content), ts, { toolName: name });
+  const cards = (e: Entry[]) => e.filter((x): x is Extract<Entry, { kind: 'subagents' }> => x.kind === 'subagents');
+
+  it('turns a delegation and its result into sub-agent cards', () => {
+    const e = historyEntries([
+      msg(1, 'user', 'Délègue', 100),
+      call(2, 101, ['delegate_task', { goal: 'Lire les fichiers' }]),
+      result(3, 110, 'delegate_task', { results: [{ task_index: 0, status: 'completed', summary: 'Lu', duration_seconds: 8.5, model: 'm1', tokens: { input: 120, output: 40 } }] }),
+    ]);
+    expect(e.map((x) => x.kind)).toEqual(['user', 'subagents']);
+    const [node] = cards(e)[0]!.nodes;
+    expect(node).toMatchObject({ id: 'h2-0-0', depth: 1, goal: 'Lire les fichiers', status: 'completed', duration: 8.5, model: 'm1', inputTokens: 120, outputTokens: 40, summary: 'Lu', startedAt: 101 });
+  });
+
+  it('reads the goal of each task, a failure with its error', () => {
+    const e = historyEntries([
+      call(2, 101, ['delegate_task', { tasks: [{ goal: 'A' }, { goal: 'B' }] }]),
+      result(3, 110, 'delegate_task', { results: [{ task_index: 1, status: 'failed', error: 'Panne' }, { task_index: 0, summary: 'Fait' }] }),
+    ]);
+    expect(cards(e)[0]!.nodes.map((n) => [n.id, n.goal, n.status, n.summary])).toEqual([
+      ['h2-0-1', 'B', 'failed', 'Panne'], ['h2-0-0', 'A', 'completed', 'Fait'],
+    ]);
+  });
+
+  it('keeps the tool line for a cut result or a background delegation', () => {
+    for (const content of ['{"results": [{"task_ind', { status: 'started', delegation_id: 'd1' }, { results: [] }]) {
+      const e = historyEntries([call(2, 101, ['delegate_task', { goal: 'A' }]), result(3, 110, 'delegate_task', content)]);
+      expect(e.map((x) => x.kind)).toEqual(['tool']);
+      expect((e[0] as Extract<Entry, { kind: 'tool' }>).result).not.toBeNull();
+    }
+  });
+
+  it('gives each of two calls of a message its own result, in call order', () => {
+    const e = historyEntries([
+      call(2, 101, ['delegate_task', { goal: 'A' }], ['delegate_task', { goal: 'B' }]),
+      result(3, 110, 'delegate_task', { results: [{ task_index: 0, summary: 'pour A' }] }),
+      result(4, 111, 'delegate_task', { results: [{ task_index: 0, summary: 'pour B' }] }),
+    ]);
+    expect(cards(e).map((c) => [c.nodes[0]!.goal, c.nodes[0]!.summary])).toEqual([['A', 'pour A'], ['B', 'pour B']]);
+    const t = historyEntries([call(2, 101, ['terminal', { c: 1 }], ['terminal', { c: 2 }]), result(3, 110, 'terminal', 'un'), result(4, 111, 'terminal', 'deux')]);
+    expect(t.map((x) => (x as Extract<Entry, { kind: 'tool' }>).result)).toEqual(['un', 'deux']);
+  });
+
+  it('a call left without result does not take the result of a later call', () => {
+    const e = historyEntries([
+      call(2, 101, ['terminal', { c: 1 }]),
+      msg(3, 'user', 'Encore', 120),
+      call(4, 121, ['terminal', { c: 2 }]),
+      result(5, 122, 'terminal', 'deux'),
+    ]);
+    expect(e.filter((x) => x.kind === 'tool').map((x) => [x.key, (x as Extract<Entry, { kind: 'tool' }>).result])).toEqual([['h2-0', null], ['h4-0', 'deux']]);
+  });
+
+  it('a kept live tree replaces the history cards of its turn only', () => {
+    const history = historyEntries([
+      msg(1, 'user', 'Délègue', 100),
+      call(2, 101, ['delegate_task', { goal: 'A' }]),
+      result(3, 110, 'delegate_task', { results: [{ task_index: 0 }] }),
+      msg(4, 'assistant', 'Fini', 120),
+      msg(5, 'user', 'Encore', 130),
+      call(6, 131, ['delegate_task', { goal: 'B' }]),
+      result(7, 140, 'delegate_task', { results: [{ task_index: 0 }] }),
+    ]);
+    const live = { kind: 'subagents' as const, key: 'sa-run-3', nodes: [], ts: 102 };
+    expect(withTrees(history, [live]).map((x) => x.key)).toEqual(['h1', 'sa-run-3', 'h4', 'h5', 'h6-0']);
+  });
+});
