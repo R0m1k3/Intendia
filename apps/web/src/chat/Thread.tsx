@@ -304,17 +304,17 @@ function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: Th
         </div>
       );
     }
+    // the user's turn on the right, in a bubble; the agent's on the left (reading a conversation at a glance)
     return (
-      <div className="group flex gap-3" data-turn="user" data-key={t.key}>
-        <Avatar name={USER} agent={false} />
-        <div className="min-w-0 flex-1">
+      <div className="group flex justify-end" data-turn="user" data-key={t.key}>
+        <div className="flex min-w-0 max-w-[85%] flex-col items-end">
           <div className="flex min-w-0 items-center gap-1.5">
-            <Who name={USER} ts={t.entry.ts} seconds={Boolean(times)} />
-            {t.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
             {editable && <TurnButton label="Modifier le message" onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
+            {t.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
+            <Who name={USER} ts={t.entry.ts} seconds={Boolean(times)} />
           </div>
-          <div className="mt-0.5"><UserMessage text={t.entry.text} /></div>
-          {t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
+          <div className="mt-1 min-w-0 max-w-full rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5"><UserMessage text={t.entry.text} /></div>
+          {t.footers.length > 0 && <div className="mt-1 flex flex-col items-end">{t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
         </div>
       </div>
     );
