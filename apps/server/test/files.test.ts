@@ -198,17 +198,100 @@ describe('files', () => {
     expect((await cut.json()).error).toBe('Hermes injoignable');
   });
 
-  it('move: a file is copied then deleted, never overwrites; a folder cannot be moved', async () => {
+  it('move: a file is copied then deleted, never overwrites', async () => {
     const t = await setup();
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'files/sub/doc.pdf' })).status).toBe(200);
     expect(readFileSync(join(t.ws, 'files', 'sub', 'doc.pdf'), 'utf8')).toBe('%PDF-1.4');
     expect(existsSync(join(t.ws, 'files', 'doc.pdf'))).toBe(false);
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/sub/doc.pdf', to: 'files/sub/a.txt' })).status).toBe(409);
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files', to: 'files/x' })).status).toBe(400);
-    const dir = await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'files/sub2' });
-    expect(dir.status).toBe(409);
-    expect(dir.json.error).toBe('Hermes ne permet pas de déplacer un dossier');
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/sub/a.txt', to: 'nowhere/a.txt' })).status).toBe(404);
+  });
+
+  it('new: an empty file or folder, never over an existing one, reserved names refused', async () => {
+    const t = await setup();
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/notes.md', kind: 'file' })).json).toEqual({ path: 'files/notes.md' });
+    expect(readFileSync(join(t.ws, 'files', 'notes.md'), 'utf8')).toBe('');
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/rapports', kind: 'dir' })).status).toBe(201);
+    expect(existsSync(join(t.ws, 'files', 'rapports'))).toBe(true);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/notes.md', kind: 'file' })).status).toBe(409);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/rapports', kind: 'dir' })).status).toBe(409);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'nowhere/x.md', kind: 'file' })).status).toBe(404);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/doc.pdf/x.md', kind: 'file' })).status).toBe(404);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/auth.json', kind: 'file' })).status).toBe(400);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'files/..', kind: 'file' })).status).toBe(400);
+    rmSync(join(t.ws, 'inbox'), { recursive: true, force: true });
+    expect((await t.request('POST', `${t.F}/new`, { path: 'inbox', kind: 'dir' })).status).toBe(400);
+    expect((await t.request('POST', `${t.F}/new`, { path: 'x', kind: 'link' })).status).toBe(400);
+  });
+
+  it('move a folder: copied with its empty folders, source deleted, links of inner files follow', async () => {
+    const t = await setup();
+    mkdirSync(join(t.ws, 'files', 'sub', 'vide'));
+    writeFileSync(join(t.ws, 'files', 'sub', 'b.md'), 'bb');
+    const link = (await t.request('POST', `${t.F}/share`, { path: 'files/sub/b.md' })).json;
+    const res = await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'inbox/sub' });
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ path: 'inbox/sub' });
+    expect(readFileSync(join(t.ws, 'inbox', 'sub', 'a.txt'), 'utf8')).toBe('a');
+    expect(readFileSync(join(t.ws, 'inbox', 'sub', 'b.md'), 'utf8')).toBe('bb');
+    expect(existsSync(join(t.ws, 'inbox', 'sub', 'vide'))).toBe(true);
+    expect(existsSync(join(t.ws, 'files', 'sub'))).toBe(false);
+    expect((await t.request('GET', '/x/links')).json.links.find((l: any) => l.token === link.token).path).toBe('dev/inbox/sub/b.md');
+    mkdirSync(join(t.ws, 'files', 'autre'));
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'inbox/sub' })).status).toBe(409);
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'inbox/sub', to: 'inbox/sub/x' })).status).toBe(400);
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'inbox' })).status).toBe(400);
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'sessions' })).status).toBe(400);
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'AGENTS.md' })).status).toBe(400);
+  });
+
+  it('move a folder: a link inside → 403, too many files → 413, nothing written', async () => {
+    const t = await setup({ fileOpts: { moveMaxFiles: 2 } });
+    mkdirSync(join(t.ws, 'files', 'l'));
+    symlinkSync(join(t.ws, 'files', 'doc.pdf'), join(t.ws, 'files', 'l', 'x.pdf'));
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/l', to: 'inbox/l' })).status).toBe(403);
+    expect(existsSync(join(t.ws, 'inbox', 'l'))).toBe(false);
+    for (const n of ['b', 'c']) writeFileSync(join(t.ws, 'files', 'sub', `${n}.txt`), n);
+    const res = await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'inbox/sub' });
+    expect(res.status).toBe(413);
+    expect(res.json.error).toContain('trop gros pour être déplacé');
+    expect(existsSync(join(t.ws, 'inbox', 'sub'))).toBe(false);
+  });
+
+  it('move a folder: a file changed during the copy → 409, copy removed, source intact', async () => {
+    const t = await setup({ fileOpts: { afterCopy: async () => writeFileSync(join(ws, 'files', 'sub', 'a.txt'), 'changé') } });
+    const ws = t.ws;
+    const res = await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'inbox/sub' });
+    expect(res.status).toBe(409);
+    expect(res.json.error).toContain('a changé pendant le déplacement');
+    expect(existsSync(join(t.ws, 'inbox', 'sub'))).toBe(false);
+    expect(readFileSync(join(t.ws, 'files', 'sub', 'a.txt'), 'utf8')).toBe('changé');
+  });
+
+  it('move a folder: files Hermes hides or added after the check stay, their folder in leftover', async () => {
+    let added = false;
+    const t = await setup({ fileOpts: { afterCopy: async () => undefined } });
+    writeFileSync(join(t.ws, 'files', 'sub', '.env'), 'SECRET=1');
+    mkdirSync(join(t.ws, 'files', 'sub', 'deep'));
+    writeFileSync(join(t.ws, 'files', 'sub', 'deep', 'd.txt'), 'd');
+    const handle = t.fake.files.handle.bind(t.fake.files);
+    t.fake.files.handle = async (method, path, req, query) => {
+      // first delete of a file: a new file shows up in deep/
+      if (method === 'DELETE' && !added) {
+        added = true;
+        writeFileSync(join(t.ws, 'files', 'sub', 'deep', 'nouveau.txt'), 'n');
+      }
+      return handle(method, path, req, query);
+    };
+    const res = await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'inbox/sub' });
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ path: 'inbox/sub', leftover: ['files/sub/deep'] });
+    expect(readFileSync(join(t.ws, 'files', 'sub', '.env'), 'utf8')).toBe('SECRET=1');
+    expect(existsSync(join(t.ws, 'files', 'sub', 'deep', 'nouveau.txt'))).toBe(true);
+    expect(existsSync(join(t.ws, 'files', 'sub', 'a.txt'))).toBe(false);
+    expect(existsSync(join(t.ws, 'files', 'sub', 'deep', 'd.txt'))).toBe(false);
+    expect(readFileSync(join(t.ws, 'inbox', 'sub', 'deep', 'd.txt'), 'utf8')).toBe('d');
   });
 
   it('move: a source changed during the copy is kept, the copy removed, links untouched', async () => {

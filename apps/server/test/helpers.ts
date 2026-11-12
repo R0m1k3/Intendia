@@ -54,7 +54,7 @@ export function combineFetch(routes: { hosts: { api: string; dash: string }; fet
  */
 export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   instance?: Partial<InstanceConfig>; extra?: (Partial<InstanceConfig> & { ownFake?: boolean })[]; env?: Record<string, string>;
-  uploadTimeoutMs?: number;
+  uploadTimeoutMs?: number; fileOpts?: import('../src/files/service.js').FileServiceOpts;
 } = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
@@ -94,7 +94,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl, fakeWebSocketFactory(fake));
   await compat.check(inst.id);
   for (const e of extra) await compat.check(e.id);
-  const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs });
+  const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs, fileOpts: opts.fileOpts });
   const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
   const mcp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: 'test' });
 

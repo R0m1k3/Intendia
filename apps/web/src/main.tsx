@@ -93,6 +93,7 @@ const filesRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): FilesSearch => ({
     path: typeof s.path === 'string' && s.path ? s.path : undefined,
     f: typeof s.f === 'string' && s.f ? s.f : undefined,
+    edit: s.edit === 1 || s.edit === '1' ? 1 : undefined,
   }),
 });
 /** /liens (page removed): the share links are a tab of « Fichiers ». */

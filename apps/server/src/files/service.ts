@@ -9,6 +9,7 @@ import type { Workspace, WorkspaceService } from '../workspaces/service.js';
 import { mapLimit, type FileRoots, type FsEntry, type HermesFs } from './hermes-fs.js';
 import { ArchiveError, archiveKind, archiveStem, extractArchive, precheckArchive, type Skipped } from './archive.js';
 import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
+import { FILE_READ_MAX, idleGuard, MOVE_MAX_BYTES, MOVE_MAX_FILES, walk, type WalkResult } from './walk.js';
 
 export const LIST_MAX = 2000;
 export const SEARCH_VISIT_MAX = 20_000;
@@ -39,6 +40,14 @@ export interface FileEntry {
   mtime: number;
 }
 
+/** Test settings only. */
+export interface FileServiceOpts {
+  moveMaxFiles?: number;
+  moveMaxBytes?: number;
+  /** Called after a folder was copied, before the source is checked. */
+  afterCopy?: () => Promise<void>;
+}
+
 interface WsCtx {
   ws: Workspace;
   inst: InstanceConfig;
@@ -49,7 +58,20 @@ const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCas
 const join2 = (a: string, b: string) => (a ? `${a}/${b}` : b);
 const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const nameOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
+/** `b` under `a`, `a` itself when `b` is empty. */
+const under = (a: string, b: string) => (b ? `${a}/${b}` : a);
 const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
+
+function sameTree(a: WalkResult, b: WalkResult): boolean {
+  if (a.dirs.length !== b.dirs.length || a.files.length !== b.files.length) return false;
+  const dirs = new Set(a.dirs);
+  if (!b.dirs.every((d) => dirs.has(d))) return false;
+  const files = new Map(a.files.map((f) => [f.rel, f]));
+  return b.files.every((f) => {
+    const o = files.get(f.rel);
+    return !!o && o.size === f.size && o.mtimeMs === f.mtimeMs;
+  });
+}
 
 export function toFileEntry(e: FsEntry, rel: string): FileEntry {
   const path = join2(rel, e.name);
@@ -63,6 +85,7 @@ export class FileService {
     private readonly links: LinkService,
     private readonly roots: FileRoots,
     private readonly uploadMaxBytes: number,
+    private readonly opts: FileServiceOpts = {},
   ) {}
 
   private ctx(slug: string): WsCtx {
@@ -99,6 +122,26 @@ export class FileService {
   async search(slug: string, q: string): Promise<{ results: FileEntry[]; truncated: boolean }> {
     const c = this.ctx(slug);
     return searchTree(async (rel) => (await c.fs.list(this.vol(c, rel))).entries, q);
+  }
+
+  /**
+   * New empty file or folder. A name kept by Intendia at the root (inbox, sessions…) is refused even when that
+   * folder is missing; Hermes' mkdir accepts an existing folder, so the path is checked first.
+   */
+  async create(slug: string, relIn: string, kind: 'file' | 'dir'): Promise<{ path: string }> {
+    const c = this.ctx(slug);
+    const rel = normalizeRel(relIn);
+    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', `${rel} est un nom réservé à la racine du workspace`);
+    checkName(nameOf(rel));
+    const parent = parentOf(rel);
+    if (parent) {
+      const p = await c.fs.entry(this.vol(c, parent));
+      if (!p || !p.isDir || p.isLink) throw new WorkspaceFsError('not_found', `Dossier introuvable : ${parent}`);
+    }
+    if (await c.fs.entry(this.vol(c, rel))) throw new WorkspaceFsError('exists', `Existe déjà : ${rel}`);
+    if (kind === 'dir') await c.fs.mkdir(this.vol(c, rel));
+    else await c.fs.create(this.vol(c, rel), '', { overwrite: false });
+    return { path: rel };
   }
 
   /** A regular file to stream (raw view). */
@@ -227,22 +270,24 @@ export class FileService {
   }
 
   /**
-   * Moves a file inside the workspace, never overwriting: copy, then share links follow, then the source is
-   * deleted. Hermes cannot move a folder (409 `unsupported`).
+   * Moves a file or a folder inside the workspace, never overwriting: copy, then share links follow, then the source
+   * is deleted. Hermes cannot rename: a folder is copied file by file, then deleted without `recursive`, so a file
+   * Hermes does not list (keys, config) or one added or changed meanwhile stays where it was (`leftover`).
    */
-  async move(slug: string, fromIn: string, toIn: string): Promise<{ path: string }> {
+  async move(slug: string, fromIn: string, toIn: string): Promise<{ path: string; leftover?: string[] }> {
     const c = this.ctx(slug);
     const from = normalizeRel(fromIn);
     const to = normalizeRel(toIn);
     if (PROTECTED.has(from)) throw new WorkspaceFsError('invalid', `${from} ne peut pas être déplacé`);
+    if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', `${to} est un nom réservé à la racine du workspace`);
     if (to === from || to.startsWith(`${from}/`)) throw new WorkspaceFsError('invalid', 'Un dossier ne peut pas aller dans lui-même');
     checkName(nameOf(to));
     const src = await this.mustEntry(c, from);
     if (src.isLink) throw new WorkspaceFsError('outside', `${from} : c'est un lien symbolique ; Intendia ne le modifie pas`);
-    if (src.isDir) throw new WorkspaceFsError('unsupported', 'Hermes ne permet pas de déplacer un dossier');
     const parent = await c.fs.entry(this.vol(c, parentOf(to)));
     if (parentOf(to) && (!parent || !parent.isDir)) throw new WorkspaceFsError('not_found', `Dossier introuvable : ${parentOf(to)}`);
     if (await c.fs.entry(this.vol(c, to))) throw new WorkspaceFsError('exists', `Existe déjà : ${to}`);
+    if (src.isDir) return this.moveDir(c, from, to);
     const { body } = await c.fs.read(this.vol(c, from));
     await c.fs.create(this.vol(c, to), body, { overwrite: false });
     c.fs.forget(this.vol(c, parentOf(from)));
@@ -255,11 +300,97 @@ export class FileService {
     try {
       await c.fs.remove(this.vol(c, from), false);
     } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      throw new WorkspaceFsError(err instanceof WorkspaceFsError ? err.code : 'unreachable',
-        `Copié vers ${to}, mais ${from} n'a pas pu être supprimé (${why}) : le fichier est en double, les liens pointent sur la copie`);
+      throw this.leftAfterCopy(err, from, to, 'le fichier');
     }
     return { path: to };
+  }
+
+  private leftAfterCopy(err: unknown, from: string, to: string, what: string): WorkspaceFsError {
+    const why = err instanceof Error ? err.message : String(err);
+    return new WorkspaceFsError(err instanceof WorkspaceFsError ? err.code : 'unreachable',
+      `Copié vers ${to}, mais ${from} n'a pas pu être supprimé (${why}) : ${what} est en double, les liens pointent sur la copie`);
+  }
+
+  private walkDir(c: WsCtx, root: string): Promise<WalkResult> {
+    return walk(async (rel) => (await c.fs.list(this.vol(c, rel))).entries, root, {
+      maxFiles: this.opts.moveMaxFiles ?? MOVE_MAX_FILES,
+      maxBytes: this.opts.moveMaxBytes ?? MOVE_MAX_BYTES,
+      maxFileBytes: FILE_READ_MAX,
+      links: 'fail',
+      tooLarge: "Dossier trop gros pour être déplacé : Hermes ne sait pas renommer, demandez-le à l'agent",
+    });
+  }
+
+  private async moveDir(c: WsCtx, from: string, to: string): Promise<{ path: string; leftover?: string[] }> {
+    const before = await this.walkDir(c, from);
+    // copy: folders first (empty ones too), then the files one at a time; a failure drops the partial copy
+    try {
+      await c.fs.mkdir(this.vol(c, to));
+      for (const d of before.dirs) await c.fs.mkdir(this.vol(c, under(to, d)));
+      for (const f of before.files) {
+        const { body } = await c.fs.read(this.vol(c, under(from, f.rel)));
+        await c.fs.create(this.vol(c, under(to, f.rel)), idleGuard(body), { overwrite: false });
+      }
+      await this.opts.afterCopy?.();
+    } catch (err) {
+      await c.fs.remove(this.vol(c, to), true).catch(() => undefined);
+      throw err;
+    }
+    // the source must be as it was walked, otherwise nothing is moved
+    for (const d of ['', ...before.dirs]) c.fs.forget(this.vol(c, under(from, d)));
+    let after: WalkResult | null = null;
+    try {
+      after = await this.walkDir(c, from);
+    } catch {
+      after = null;
+    }
+    if (!after || !sameTree(before, after)) {
+      await c.fs.remove(this.vol(c, to), true).catch(() => undefined);
+      throw new WorkspaceFsError('exists', `${from} a changé pendant le déplacement : rien n'a été déplacé, réessayer`);
+    }
+    this.links.rewritePaths(c.inst.id, this.vol(c, from), this.vol(c, to));
+    // the source, never recursively: per folder, each copied file still as copied, then the folders, deepest first
+    const leftover = new Set<string>();
+    const byDir = new Map<string, typeof before.files>();
+    for (const f of before.files) {
+      const d = dirOf(f.rel);
+      byDir.set(d, [...(byDir.get(d) ?? []), f]);
+    }
+    try {
+      for (const [d, files] of byDir) {
+        const dir = under(from, d);
+        c.fs.forget(this.vol(c, dir));
+        const now = new Map((await c.fs.list(this.vol(c, dir))).entries.map((e) => [e.name, e]));
+        for (const f of files) {
+          const e = now.get(nameOf(f.rel));
+          if (!e || e.isLink || e.isDir || e.size !== f.size || e.mtimeMs !== f.mtimeMs) {
+            leftover.add(dir);
+            continue;
+          }
+          await c.fs.remove(this.vol(c, under(from, f.rel)), false);
+        }
+      }
+      const dirs = ['', ...before.dirs].sort((a, b) => b.split('/').length - a.split('/').length || b.length - a.length);
+      for (const d of dirs) {
+        const dir = under(from, d);
+        if ([...leftover].some((l) => l === dir || l.startsWith(`${dir}/`))) {
+          leftover.add(dir);
+          continue;
+        }
+        try {
+          await c.fs.remove(this.vol(c, dir), false);
+        } catch (err) {
+          // not empty: a file Hermes does not list, or added after the check
+          if (err instanceof WorkspaceFsError && err.code === 'exists') leftover.add(dir);
+          else throw err;
+        }
+      }
+    } catch (err) {
+      throw this.leftAfterCopy(err, from, to, 'une partie du dossier');
+    }
+    // only the deepest folders are reported (their parents stay because of them)
+    const kept = [...leftover].filter((l) => ![...leftover].some((o) => o !== l && o.startsWith(`${l}/`))).sort();
+    return kept.length ? { path: to, leftover: kept } : { path: to };
   }
 
   async remove(slug: string, relIn: string): Promise<void> {

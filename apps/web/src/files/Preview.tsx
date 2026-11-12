@@ -35,7 +35,10 @@ export function ShareButton({ slug, path, compact = false }: { slug: string; pat
 }
 
 /** Preview of one file: picks the viewer from the extension. Edit and share only in a workspace. */
-export function Preview({ scope, path, onClose }: { scope: FileScope; path: string; onClose?: () => void }) {
+/** `startEditing`: open the editor as soon as the text is read (a file just created), then `onEditingStarted`. */
+export function Preview({ scope, path, onClose, startEditing, onEditingStarted }: {
+  scope: FileScope; path: string; onClose?: () => void; startEditing?: boolean; onEditingStarted?: () => void;
+}) {
   const qc = useQueryClient();
   const slug = scope.workspace;
   const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
@@ -63,6 +66,17 @@ export function Preview({ scope, path, onClose }: { scope: FileScope; path: stri
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => { setEditing(false); setDraft(null); setBase(null); setSource(false); setError(null); }, [path]);
+  const canEdit = Boolean(slug && isText && entry && !tooBig);
+  useEffect(() => {
+    if (!startEditing || !entry) return;
+    if (canEdit && text.data !== undefined) {
+      setBase({ text: text.data, mtime: entry.mtime });
+      setSource(true);
+      setEditing(true);
+      onEditingStarted?.();
+    } else if (!canEdit) onEditingStarted?.(); // not editable here: the normal preview
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEditing, canEdit, entry, text.data]);
 
   const save = async () => {
     if (!slug || !base || draft === null) { setEditing(false); setBase(null); return; }

@@ -8,6 +8,7 @@ import { sendFile } from '../files/send.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError } from '../workspaces/service.js';
 
+const New = z.object({ path: z.string(), kind: z.enum(['file', 'dir']) });
 const Move = z.object({ from: z.string(), to: z.string() });
 const Text = z.object({ path: z.string(), text: z.string(), mtime: z.number() });
 const Exists = z.object({ paths: z.array(z.string().max(1024)).max(EXISTS_MAX) });
@@ -62,6 +63,11 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
   r.post(`${base}/extract`, async (c) => {
     const { path } = Extract.parse(await c.req.json());
     return c.json(await files.extract(slugOf(c), path), 201);
+  });
+
+  r.post(`${base}/new`, async (c) => {
+    const { path, kind } = New.parse(await c.req.json());
+    return c.json(await files.create(slugOf(c), path, kind), 201);
   });
 
   r.patch(`${base}/move`, async (c) => {

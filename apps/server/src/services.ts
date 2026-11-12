@@ -6,7 +6,7 @@ import { CronService } from './crons/service.js';
 import type { Db } from './db/index.js';
 import { FileRoots } from './files/hermes-fs.js';
 import { InstanceFileService } from './files/instance-files.js';
-import { FileService } from './files/service.js';
+import { FileService, type FileServiceOpts } from './files/service.js';
 import { ProvidersService } from './hermes-config/providers.js';
 import { ConfigService } from './hermes-config/service.js';
 import { McpLink } from './mcp/connect.js';
@@ -41,11 +41,13 @@ export interface Services {
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
 export function createServices(deps: {
   config: AppConfig; db: Db; store: InstanceStore; compat: CompatService; uploadTimeoutMs?: number;
+  /** Tests only. */
+  fileOpts?: FileServiceOpts;
 }): Services {
   const roots = new FileRoots(deps.compat, { uploadTimeoutMs: deps.uploadTimeoutMs });
   const workspaces = new WorkspaceService(deps.db, deps.store, roots);
   const links = new LinkService(deps.db, deps.store, deps.config, roots);
-  const files = new FileService(workspaces, links, roots, deps.config.uploadMaxBytes);
+  const files = new FileService(workspaces, links, roots, deps.config.uploadMaxBytes, deps.fileOpts);
   const instanceFiles = new InstanceFileService(deps.store, roots, workspaces);
   const crons = new CronService(deps.compat, workspaces, deps.store, roots);
   const skills = new SkillService(deps.compat, deps.store);
