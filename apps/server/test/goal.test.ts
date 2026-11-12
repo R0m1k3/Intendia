@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { runStats } from '../src/db/schema.js';
 import { goalBlock, readMarker, relaunchInput } from '../src/chat/goal.js';
 import { GoalRunner } from '../src/chat/goal-runner.js';
+import { GoalInactiveError, startRun } from '../src/chat/start-run.js';
 import { testApp, waitRun } from './helpers.js';
 
 type T = Awaited<ReturnType<typeof testApp>>;
@@ -239,6 +240,30 @@ describe('goal loop', () => {
     await runner().pass();
     const row = t.services.goals.get('fake', s.id);
     expect(row).toMatchObject({ status: 'paused', reason: 'gone' });
+  });
+
+  it('a relaunch never starts for a goal paused or removed meanwhile (Codex P1)', async () => {
+    const { t, s, base } = await setup();
+    await t.request('POST', `${base}/goal`, { text: 'objectif-9' });
+    await finish(t, base);
+    await t.request('POST', `${base}/goal/pause`, { reason: 'button' });
+    const ctx = t.services.workspaces.getSession('fake', s.id);
+    const n = t.fake.sim.runs.size;
+    await expect(startRun(t.services.runDeps, ctx, relaunchInput(1, 5), { forGoal: true })).rejects.toBeInstanceOf(GoalInactiveError);
+    await t.request('DELETE', `${base}/goal`);
+    await expect(startRun(t.services.runDeps, ctx, relaunchInput(1, 5), { forGoal: true })).rejects.toBeInstanceOf(GoalInactiveError);
+    expect(t.fake.sim.runs.size).toBe(n);
+  });
+
+  it('two creations at the same time: one goal, never deleted by the other (Codex P2)', async () => {
+    const { t, base } = await setup();
+    const [a, b] = await Promise.all([
+      t.request('POST', `${base}/goal`, { text: 'objectif-9 premier' }),
+      t.request('POST', `${base}/goal`, { text: 'objectif-9 second' }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const won = a.status === 200 ? 'objectif-9 premier' : 'objectif-9 second';
+    expect(await goal(t, base)).toMatchObject({ status: 'active', text: won });
   });
 
   it('a run Hermes forgot pauses « lost »', async () => {

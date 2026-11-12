@@ -32,6 +32,14 @@ export class RunBusyError extends Error {
   }
 }
 
+/** An automatic start (relaunch) whose goal is no longer active: nothing was started. */
+export class GoalInactiveError extends Error {
+  constructor() {
+    super('Objectif plus actif');
+    this.name = 'GoalInactiveError';
+  }
+}
+
 type Status = Awaited<ReturnType<typeof readRunStatus>>;
 
 const status = (deps: StartRunDeps, ctx: SessionContext, runId: string) => readRunStatus(deps.compat, ctx.instance.id, ctx.profile, runId);
@@ -117,7 +125,9 @@ export function handOverCost(deps: StartRunDeps, ctx: SessionContext, cost: Cost
  * lastRunId). Throws RunBusyError while a run goes on, RunExtrasError for an unknown skill.
  */
 export async function startRun(
-  deps: StartRunDeps, ctx: SessionContext, input: string, opts: { skills?: string[] } = {},
+  deps: StartRunDeps, ctx: SessionContext, input: string,
+  /** forGoal: an automatic relaunch, started only while the goal is still active (re-read under the run lock) */
+  opts: { skills?: string[]; forGoal?: boolean } = {},
 ): Promise<{ runId: string; session: PublicSession; notice?: string }> {
   const { workspaces } = deps;
   const key = runKey(ctx.instance.id, ctx.session.id);
@@ -135,6 +145,8 @@ export async function startRun(
       last = await status(deps, fresh, lastRunId);
     }
     if (last && last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) throw new RunBusyError();
+    // paused or removed while the caller waited on Hermes: no relaunch
+    if (opts.forGoal && deps.goals.get(fresh.instance.id, fresh.session.id)?.status !== 'active') throw new GoalInactiveError();
     const { model, modelProvider, effort } = fresh.session;
     // skills first: an unknown one stops the send before the run (400), the personality never does
     const extra = opts.skills?.length ? await skillBlocks(deps.skills, fresh, [...new Set(opts.skills)]) : [];

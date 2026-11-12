@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { isRunActive } from '../chat/history.js';
 import { relaunchInput, type Goal } from '../chat/goal.js';
-import { RunBusyError, RunExtrasError, startRun, type StartRunDeps } from '../chat/start-run.js';
+import { GoalInactiveError, RunBusyError, RunExtrasError, startRun, type StartRunDeps } from '../chat/start-run.js';
 import { sessionParams } from './workspaces.js';
 
 const Budget = z.number().min(0.01).max(100).nullable();
@@ -26,6 +26,8 @@ const BUDGET_REQUIRED = { error: 'Avec « Sans confirmation », un budget est ob
 export function goalRoutes(deps: StartRunDeps): Hono {
   const { goals, workspaces } = deps;
   const r = new Hono();
+  // goal creations under way (`<inst>/<session>`): a second one at the same time is refused, never overwrites it
+  const creating = new Set<string>();
   const ctxOf = (c: Parameters<typeof sessionParams>[0]) => {
     const { inst, id } = sessionParams(c);
     return workspaces.getSession(inst, id);
@@ -47,18 +49,26 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     const inst = ctx.instance.id;
     const id = ctx.session.id;
     if (body.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);
-    if (goals.get(inst, id)?.status === 'active') return c.json({ error: 'Cette session a déjà un objectif en cours', code: 'goal_exists' }, 409);
-    if (await isRunActive(deps.compat, ctx)) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
-    // the last run (finished) is not decided on: only the goal's own runs are
-    goals.create({ instanceId: inst, sessionId: id, text: body.text, mode: body.mode, maxRelaunches: body.maxRelaunches, budgetUsd: body.budgetUsd, handledRunId: ctx.session.lastRunId });
+    const key = `${inst}/${id}`;
+    if (creating.has(key)) return c.json({ error: 'Un objectif est déjà en cours de création', code: 'busy' }, 409);
+    creating.add(key);
     try {
-      const started = await startRun(deps, ctx, body.text);
-      return c.json({ ...started, goal: view(goals.get(inst, id), started.runId) });
-    } catch (err) {
-      goals.remove(inst, id);
-      if (err instanceof RunBusyError) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
-      if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
-      throw err;
+      if (goals.get(inst, id)?.status === 'active') return c.json({ error: 'Cette session a déjà un objectif en cours', code: 'goal_exists' }, 409);
+      if (await isRunActive(deps.compat, ctx)) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
+      // the last run (finished) is not decided on: only the goal's own runs are
+      const made = goals.create({ instanceId: inst, sessionId: id, text: body.text, mode: body.mode, maxRelaunches: body.maxRelaunches, budgetUsd: body.budgetUsd, handledRunId: ctx.session.lastRunId });
+      try {
+        const started = await startRun(deps, ctx, body.text);
+        return c.json({ ...started, goal: view(goals.get(inst, id), started.runId) });
+      } catch (err) {
+        // only the goal this request wrote (not one written since)
+        if (goals.get(inst, id)?.createdAt === made.createdAt) goals.remove(inst, id);
+        if (err instanceof RunBusyError) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
+        if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
+        throw err;
+      }
+    } finally {
+      creating.delete(key);
     }
   });
 
@@ -97,11 +107,11 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     if (!running) {
       const fresh = goals.get(inst, id)!;
       try {
-        await startRun(deps, ctx, relaunchInput(fresh.relaunches + 1, fresh.maxRelaunches));
+        await startRun(deps, ctx, relaunchInput(fresh.relaunches + 1, fresh.maxRelaunches), { forGoal: true });
         goals.countRelaunch(inst, id);
       } catch (err) {
-        // a send got there first: the goal stays active and the loop takes that run's end
-        if (!(err instanceof RunBusyError)) {
+        // a send got there first: the goal stays active and the loop takes that run's end; paused again meanwhile: none
+        if (!(err instanceof RunBusyError) && !(err instanceof GoalInactiveError)) {
           goals.pauseIfActive(inst, id, 'start_failed', { detail: (err as Error).message });
           throw err;
         }
