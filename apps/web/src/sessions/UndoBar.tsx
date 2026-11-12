@@ -8,7 +8,8 @@ import { Button } from '../components/ui';
  * "Session supprimée · Annuler" banner. The server keeps a deleted session for its undo window (`undoUntil`);
  * `showUndo()` (from any page) shows the banner, the <UndoHost/> mounted once at the root draws it.
  */
-export interface Undo { inst: string; ids: string[]; undoUntil: number; label: string }
+/** `run`: what "Annuler" does (default: restore the deleted `ids`). */
+export interface Undo { inst: string; ids: string[]; undoUntil: number; label: string; run?: () => Promise<unknown> }
 
 let push: ((u: Undo) => void) | null = null;
 
@@ -39,10 +40,12 @@ export function UndoHost() {
   const restore = async () => {
     setState('busy');
     try {
-      await api.restoreSessions(undo.inst, undo.ids);
+      await (undo.run ? undo.run() : api.restoreSessions(undo.inst, undo.ids));
       setUndo(null);
     } catch (err) {
-      setState(err instanceof ApiError && err.status === 409 ? 'late' : 'error');
+      // a reply that does not stop: the server's message, and the button stays
+      const late = err instanceof ApiError && err.status === 409 && (err.data as { code?: string } | undefined)?.code !== 'run_active';
+      setState(late ? 'late' : 'error');
       setMessage((err as Error).message);
     }
     await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
@@ -52,7 +55,7 @@ export function UndoHost() {
     <div role="status" data-undo className="enter fixed inset-x-0 bottom-20 z-[60] flex justify-center px-3 md:bottom-6">
       <div className="flex items-center gap-3 rounded-xl border border-line bg-ink px-4 py-2 text-sm text-paper shadow-[0_12px_32px_rgb(22_24_27/0.25)]">
         <span>{state === 'late' ? 'Trop tard : la suppression est faite' : state === 'error' ? message : undo.label}</span>
-        {(state === 'idle' || state === 'busy') && (
+        {(state === 'idle' || state === 'busy' || state === 'error') && (
           <Button variant="ghost" className="h-8 px-3 text-paper hover:bg-paper/10 hover:text-paper" onClick={() => void restore()} disabled={state === 'busy'}>
             Annuler
           </Button>
