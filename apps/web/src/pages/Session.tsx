@@ -6,7 +6,8 @@ import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
-import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
+import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
+import { sessionDraftKey } from '../chat/draft';
 import { ContextGauge } from '../chat/ContextGauge';
 import { estimateTokens } from '../chat/estimate';
 import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
@@ -408,6 +409,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       title: undefined,
       usage: undefined,
       stop: running ? undefined : 'Aucun travail en cours',
+      prompt: undefined,
     } satisfies Record<CommandName, string | undefined>)[c.name];
     return disabled ? { ...c, disabled } : c;
   });
@@ -433,6 +435,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           return true;
         case 'usage': setUsageOpen(true); void usage.refetch(); return true;
         case 'stop': await stop(); return true;
+        case 'prompt': composer.current?.openPrompts(arg); return true;
       }
     } catch (err) {
       setError(err);
@@ -503,7 +506,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const upload = useCallback<Upload>(async (file) => {
     const [done] = await uploadFiles(slug, 'inbox', [file]);
     void qc.invalidateQueries({ queryKey: ['tree', slug] });
-    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path) };
+    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path), path: done!.path };
+  }, [slug, qc]);
+  const extract = useCallback<ExtractArchive>(async (path) => {
+    const r = await api.extractArchive(slug, path);
+    void qc.invalidateQueries({ queryKey: ['tree', slug] });
+    return r;
   }, [slug, qc]);
   const addFiles = (f: File[]) => composer.current?.addFiles(f);
 
@@ -602,6 +610,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <Composer
             ref={composer}
             upload={upload}
+            extract={extract}
+            prompts
+            draftKey={inst ? sessionDraftKey(inst, sessionId) : undefined}
             onSend={(t) => { setUsageOpen(false); return send(t); }}
             onStop={stop}
             commands={commands}

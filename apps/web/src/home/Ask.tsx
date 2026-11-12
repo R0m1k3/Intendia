@@ -3,7 +3,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { Folder } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, rawUrl, type Workspace } from '../api';
-import { Composer, type ComposerHandle, type Upload } from '../chat/Composer';
+import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
+import { homeDraftKey } from '../chat/draft';
 import { useChatAvailability } from '../components/ChatNotice';
 import { Picker } from '../components/Menu';
 import { ErrorText } from '../components/ui';
@@ -56,8 +57,9 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
 
   const upload = useCallback<Upload>(async (file) => {
     const [done] = await uploadFiles(slug, 'inbox', [file]);
-    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path) };
+    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path), path: done!.path };
   }, [slug]);
+  const extract = useCallback<ExtractArchive>((path) => api.extractArchive(slug, path), [slug]);
   // the files are already in this workspace's inbox/: the workspace stays while there are attachments
   const [attached, setAttached] = useState(0);
 
@@ -70,6 +72,9 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
         running={false}
         disabled={!chat.available}
         upload={upload}
+        extract={extract}
+        prompts
+        draftKey={homeDraftKey}
         onAttachmentsChange={setAttached}
         placeholder="Demander quelque chose à Hermes…"
         hint="Entrée pour envoyer · une nouvelle session est créée"

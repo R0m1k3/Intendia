@@ -113,3 +113,12 @@ export const compatReports = sqliteTable('compat_reports', {
   reportJson: text('report_json').notNull(),
   createdAt: integer('created_at').notNull(),
 });
+
+export const prompts = sqliteTable('prompts', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

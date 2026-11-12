@@ -1,6 +1,9 @@
-import { ArrowUp, CornerDownRight, FileText, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, CornerDownRight, FileText, FolderArchive, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
+import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
+import { clearDraft, loadDraft, saveDraft } from './draft';
+import { PromptPicker } from './PromptPicker';
 import { matchCommands, parseCommand, type Command, type CommandName } from './commands';
 import type { QueueItem } from './queue';
 
@@ -10,10 +13,18 @@ export interface ComposerHandle {
   focus: () => void;
   /** Replaces the text being written (a message given back after "Annuler le dernier échange"). */
   setText: (text: string) => void;
+  /** Opens the prompts list (/prompt), filtered by the start of a title. */
+  openPrompts: (filter?: string) => void;
 }
 
-/** Uploads one file; `agentPath` goes into the message, `url` shows the uploaded image. */
-export type Upload = (file: File) => Promise<{ agentPath: string; url: string }>;
+/** Uploads one file; `agentPath` goes into the message, `url` shows the uploaded image, `path` = in the workspace. */
+export type Upload = (file: File) => Promise<{ agentPath: string; url: string; path: string }>;
+/** Unpacks an uploaded archive next to it (workspace path). */
+export type ExtractArchive = (path: string) => Promise<ExtractResult>;
+
+/** A pasted text longer than this becomes a .txt attachment. */
+export const LONG_PASTE = 4000;
+export const isArchive = (name: string) => /.\.(zip|tar|tgz|tar\.gz)$/i.test(name);
 
 interface Attachment {
   id: number;
@@ -24,6 +35,8 @@ interface Attachment {
   agentPath: string | null;
   state: 'pending' | 'done' | 'failed';
   error?: string;
+  /** under the name: « Décompression… », « 12 fichiers dans inbox/x/ », why the archive stayed packed */
+  note?: string;
 }
 
 let nextId = 1;
@@ -42,8 +55,13 @@ let nextId = 1;
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
-  queue, onQueue, onSteer, steerDisabled, commands, onCommand,
+  queue, onQueue, onSteer, steerDisabled, commands, onCommand, draftKey, extract, prompts,
 }: {
+  /** localStorage key of the draft (chat/draft.ts); none = not kept */
+  draftKey?: string;
+  extract?: ExtractArchive;
+  /** the « Prompts » button (saved prompts) */
+  prompts?: boolean;
   onSend: (text: string) => Promise<boolean>;
   /** messages waiting for the end of the run; `paused`: why they wait for « Reprendre » */
   queue?: { items: QueueItem[]; paused: string | null; onRemove: (id: string) => void; onResume: () => void };
@@ -72,6 +90,10 @@ export function Composer({
   const [pick, setPick] = useState(0);
   const [closedFor, setClosedFor] = useState<string | null>(null);
   const [commandNote, setCommandNote] = useState<string | null>(null);
+  // a long paste made into a file: « Remettre en texte » until the next send
+  const [pastedText, setPastedText] = useState<{ id: number; text: string } | null>(null);
+  const [promptsOpen, setPromptsOpen] = useState(false);
+  const [promptFilter, setPromptFilter] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   // object URLs still alive, freed when the tile goes, the upload ends or the composer unmounts
@@ -80,9 +102,25 @@ export function Composer({
   useEffect(() => () => { for (const u of blobs.current) URL.revokeObjectURL(u); blobs.current.clear(); }, []);
   useEffect(() => { onAttachmentsChange?.(files.length); }, [files.length, onAttachmentsChange]);
 
+  // draft: read when the key comes (the session page may give another text just after: it wins), written 400 ms
+  // after the last key stroke and when the composer goes
+  const latest = useRef({ key: draftKey, text });
+  latest.current = { key: draftKey, text };
+  useEffect(() => {
+    if (draftKey) setText(loadDraft(draftKey));
+    // only a text is saved here: before the loaded draft is rendered (StrictMode runs this twice), the text is still
+    // empty and must not erase it; clearing goes through the timer below and the send
+    return () => { const l = latest.current; if (l.key && l.text.trim()) saveDraft(l.key, l.text); };
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftKey) return;
+    const id = setTimeout(() => saveDraft(draftKey, text), 400);
+    return () => clearTimeout(id);
+  }, [draftKey, text]);
+
   const patch = (id: number, p: Partial<Attachment>) => setFiles((list) => list.map((a) => (a.id === id ? { ...a, ...p } : a)));
-  const addFiles = (added: File[]) => {
-    if (!upload || disabled || !added.length) return;
+  const addFiles = (added: File[]): number[] => {
+    if (!upload || disabled || !added.length) return [];
     const tiles = added.map((f) => {
       const image = f.type.startsWith('image/');
       const preview = image ? URL.createObjectURL(f) : null;
@@ -96,16 +134,49 @@ export function Composer({
         try {
           const done = await upload(file);
           free(tile.preview);
-          patch(tile.id, { state: 'done', agentPath: done.agentPath, preview: tile.image ? done.url : null });
+          const preview = tile.image ? done.url : null;
+          if (extract && isArchive(file.name)) {
+            patch(tile.id, { preview, note: 'Décompression…' });
+            patch(tile.id, await unpack(done, extract));
+          } else {
+            patch(tile.id, { state: 'done', agentPath: done.agentPath, preview });
+          }
         } catch (err) {
           patch(tile.id, { state: 'failed', error: err instanceof Error ? err.message : String(err) });
         }
       }
     })();
+    return tiles.map((t) => t.tile.id);
   };
-  const remove = (a: Attachment) => { free(a.preview); setFiles((list) => list.filter((x) => x.id !== a.id)); };
+  const remove = (a: Attachment) => {
+    free(a.preview);
+    setFiles((list) => list.filter((x) => x.id !== a.id));
+    if (pastedText?.id === a.id) setPastedText(null);
+  };
 
-  useImperativeHandle(handle, () => ({ addFiles, focus: () => ref.current?.focus(), setText: (t: string) => { setText(t); ref.current?.focus(); } }));
+  /** Inserted at the cursor; an empty composer takes the text as is. */
+  const insertText = (t: string) => {
+    const el = ref.current;
+    if (!text.trim() || !el) { edit(t); el?.focus(); return; }
+    const at = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? at;
+    edit(text.slice(0, at) + t + text.slice(end));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(at + t.length, at + t.length); });
+  };
+  const unpaste = () => {
+    if (!pastedText) return;
+    const tile = files.find((a) => a.id === pastedText.id);
+    if (tile) remove(tile);
+    setPastedText(null);
+    insertText(pastedText.text);
+  };
+
+  useImperativeHandle(handle, () => ({
+    addFiles: (f: File[]) => { addFiles(f); },
+    focus: () => ref.current?.focus(),
+    setText: (t: string) => { setText(t); ref.current?.focus(); },
+    openPrompts: (filter = '') => { setPromptFilter(filter); setPromptsOpen(true); },
+  }));
 
   useEffect(() => {
     const el = ref.current;
@@ -117,7 +188,14 @@ export function Composer({
   const paste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     if (!upload || disabled) return;
     const pasted = Array.from(e.clipboardData.files);
-    if (!pasted.length) return;
+    if (!pasted.length) {
+      const t = e.clipboardData.getData('text/plain');
+      if (t.length <= LONG_PASTE) return;
+      e.preventDefault();
+      const [id] = addFiles([new File([t], pastedTextName(), { type: 'text/plain' })]);
+      if (id !== undefined) setPastedText({ id, text: t });
+      return;
+    }
     e.preventDefault();
     addFiles(pasted.map((f, i) => new File([f], pastedName(f, i, pasted.length), { type: f.type })));
   };
@@ -135,8 +213,10 @@ export function Composer({
     setSending(false);
     if (ok) {
       setText((t) => (t === sentText ? '' : t));
+      if (draftKey && latest.current.text === sentText) clearDraft(draftKey);
       for (const a of files) free(a.preview);
       setFiles((all) => all.filter((a) => !sent.has(a.id)));
+      setPastedText(null);
     }
   };
   const send = async () => {
@@ -223,6 +303,12 @@ export function Composer({
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
         </ul>
       )}
+      {pastedText && files.some((a) => a.id === pastedText.id) && (
+        <p data-long-paste className="px-1.5 pb-1 text-[12px] text-ink-soft">
+          Texte collé joint en fichier ({pastedText.text.length.toLocaleString('fr-FR')} caractères) ·{' '}
+          <button type="button" onClick={unpaste} className="font-medium text-accent hover:underline">Remettre en texte</button>
+        </p>
+      )}
       {menu && (
         <ul role="listbox" aria-label="Commandes" data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
           {menu.map((c) => (
@@ -290,6 +376,12 @@ export function Composer({
             </button>
           </>
         )}
+        {prompts && (
+          <PromptPicker
+            open={promptsOpen} onOpenChange={(o) => { setPromptsOpen(o); if (!o) setPromptFilter(''); }}
+            filter={promptFilter} text={text} disabled={disabled} onInsert={insertText}
+          />
+        )}
         <div className="hidden min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint md:block">{hint}</div>
         <div className="flex min-w-0 flex-1 justify-end md:flex-none">{options}</div>
         {running && onSteer && (
@@ -344,8 +436,11 @@ function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
         <img src={a.preview} alt={a.name} className={cx('size-16 rounded-lg border object-cover', failed ? 'border-bad' : 'border-line')} />
       ) : (
         <span className={cx('file-chip h-9', failed && '!border-bad')}>
-          <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />
-          <span>{a.name}</span>
+          {a.note ? <FolderArchive className="size-3.5 shrink-0" strokeWidth={1.5} /> : <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />}
+          <span className="min-w-0">
+            <span className="block truncate">{a.name}</span>
+            {a.note && <span data-archive-note className="block truncate text-[11px] text-ink-faint">{a.note}</span>}
+          </span>
         </span>
       )}
       {a.state === 'pending' && (
@@ -363,12 +458,31 @@ function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
   );
 }
 
+/** After the upload of an archive: the tile points at the folder made from it, or stays the archive (with why). */
+async function unpack(done: { agentPath: string; path: string }, extract: ExtractArchive): Promise<Partial<Attachment>> {
+  try {
+    const r = await extract(done.path);
+    const agentPath = done.agentPath.slice(0, done.agentPath.length - done.path.length) + r.folder;
+    const n = r.count === 1 ? '1 fichier' : `${r.count} fichiers`;
+    const extra = [r.skipped.length ? `${r.skipped.length} ignorés` : '', r.partial ? 'incomplet' : ''].filter(Boolean).join(', ');
+    return { state: 'done', agentPath, note: `${n} dans ${r.folder}/${extra ? ` (${extra})` : ''}` };
+  } catch (err) {
+    return { state: 'done', agentPath: done.agentPath, note: `Non décompressée : ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+const stamp = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+};
+
+/** collage-2026-11-12-143205.txt */
+export const pastedTextName = () => `collage-${stamp()}.txt`;
+
 /** collage-2026-11-10-143205.png (-2, -3… when several files come in one paste); keeps real file names. */
 function pastedName(f: File, i: number, count: number): string {
   if (f.name && !/^image\.(png|jpe?g|gif|webp)$/i.test(f.name)) return f.name;
   const ext = (f.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'png';
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-  return `collage-${stamp}${count > 1 ? `-${i + 1}` : ''}.${ext}`;
+  return `collage-${stamp()}${count > 1 ? `-${i + 1}` : ''}.${ext}`;
 }

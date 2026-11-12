@@ -8,8 +8,11 @@ import { cx } from './ui';
  * relative to the animated `.enter` container (it has a transform), not to the screen. Closed by Escape (focus back
  * on the button), a click outside or a resize; on opening, focus goes to the checked item, else the first item.
  */
-export function Popover({ trigger, title, placement = 'above', align = 'start', width = 320, disabled, triggerClass, children }: {
+export function Popover({ trigger, title, placement = 'above', align = 'start', width = 320, disabled, triggerClass, children, open: shown, onOpenChange }: {
   trigger: ReactNode;
+  /** controlled: opened from elsewhere (a command); otherwise the button opens it */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   /** Accessible name of the button and of the panel. */
   title: string;
   placement?: 'above' | 'below';
@@ -20,7 +23,9 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
   triggerClass?: string;
   children: (close: () => void) => ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [inner, setInner] = useState(false);
+  const open = shown ?? inner;
+  const setOpen = (v: boolean) => { if (shown === undefined) setInner(v); onOpenChange?.(v); };
   const btn = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<React.CSSProperties | null>(null);

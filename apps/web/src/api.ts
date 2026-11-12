@@ -96,6 +96,10 @@ export interface RunStat {
   /** False while Hermes may still write the cost (re-read for COST_SETTLE_MS after the end). */
   costFinal: boolean;
 }
+export type PromptKind = 'prompt' | 'personality';
+export interface Prompt { id: string; kind: PromptKind; title: string; body: string; createdAt: number; updatedAt: number }
+export interface ExtractResult { folder: string; count: number; skipped: { path: string; reason: string }[]; partial: boolean }
+
 export interface Session {
   id: string;
   instanceId: string;
@@ -572,6 +576,11 @@ export const api = {
     call<RewriteResult>('POST', `${sessionPath(inst, id)}/rewrite`, body),
   revertRewrite: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/revert`),
   /** Title by the auxiliary model of Hermes (409 unsupported / busy, 503 no_model). */
+  prompts: (kind: PromptKind = 'prompt') => call<{ prompts: Prompt[] }>('GET', `/prompts?kind=${kind}`),
+  createPrompt: (input: { title: string; body: string; kind?: PromptKind }) => call<{ prompt: Prompt }>('POST', '/prompts', input),
+  updatePrompt: (id: string, patch: { title?: string; body?: string }) => call<{ prompt: Prompt }>('PATCH', `/prompts/${enc(id)}`, patch),
+  deletePrompt: (id: string) => call<{ ok: true }>('DELETE', `/prompts/${enc(id)}`),
+  extractArchive: (slug: string, path: string) => call<ExtractResult>('POST', `/workspaces/${enc(slug)}/files/extract`, { path }),
   generateTitle: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/title/generate`),
   duplicateSession: (inst: string, id: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/duplicate`, { key }),
   exportUrl: (inst: string, id: string, format: 'md' | 'html' | 'json') => `/x${sessionPath(inst, id)}/export?format=${format}`,

@@ -134,6 +134,10 @@ demand from the State screen. State changes go to the webhook.
   dashboard WebSocket (`src/hermes/gateway-ws.ts`), used when the compatibility check found it (`report.socket`,
   shown on the État page); otherwise the page estimates (`chat/estimate.ts`, « ≈ »). The reply footer shows an
   approximate rate (output tokens over the whole run) and « (secours) » when the served model differs from the one asked.
+- Composer comfort: the text being written is kept by the browser only (`localStorage`, `intendia-draft:<inst>:<session>`
+  or `intendia-draft:home`, dropped after 30 days, `apps/web/src/chat/draft.ts`); saved prompts live in the `prompts`
+  table (`kind` `prompt` | `personality`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
+  a `collage-<date>.txt` attachment.
 
 ## Files, share links and MCP
 
@@ -151,6 +155,14 @@ demand from the State screen. State changes go to the webhook.
   links rewritten, then delete of the source; folders cannot be moved, text save with an mtime check, batch `exists`
   with one listing per folder). No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
   422 `no_root`.
+- Archives joined in the chat (`.zip`, `.tar`, `.tar.gz`, `.tgz`): `POST …/files/extract {path}` reads the archive
+  back from Hermes (at most `INTENDIA_UPLOAD_MAX_MB`) and writes each file through the same `mkdir` / `upload-stream`
+  calls into `<folder>/<name without extension>/` (` (2)`… when taken). `src/files/archive.ts`: zip by `fflate`
+  (`Unzip`, file by file), tar read by hand (ustar, GNU long names, pax `path`), gzip by `fflate`. Paths with `..`,
+  absolute paths, links, special files and names hidden by Hermes are skipped and listed; 2 000 files, 500 MB in all,
+  `INTENDIA_UPLOAD_MAX_MB` per file. Sizes announced by zip and tar are checked before any write (413 `too_big`); a
+  `.tgz` beyond a limit stops while writing (`partial`, files already written stay). One extraction at a time on the
+  server (409 `busy`), 10 minutes at most, not tied to the browser request.
 - Everything served from a workspace (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
   (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
   (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,
