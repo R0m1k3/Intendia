@@ -626,7 +626,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             )}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
             hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
-              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne · / pour les commandes'}
+              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes'}
           />
           {usageOpen && (
             <div data-usage-line className="mt-2 flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-[12px] text-ink-soft">
