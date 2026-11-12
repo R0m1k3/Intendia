@@ -172,8 +172,13 @@ demand from the State screen. State changes go to the webhook.
   backslash, absolute path), `checkName`, `toVolumePath` (agent absolute path under the root → volume path).
 - Hermes is the only source: `src/files/service.ts` asks it on each request (tree, search breadth first 4 folders at a
   time and bounded in entries, results and 5 s, raw, upload in a stream with `overwrite=false`, move of a file = copy,
-  links rewritten, then delete of the source; folders cannot be moved, text save with an mtime check, batch `exists`
-  with one listing per folder). No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
+  links rewritten, then delete of the source; text save with an mtime check, batch `exists` with one listing per
+  folder; `POST …/files/new {path, kind}` = empty file or folder, never over an existing entry, reserved root names
+  refused). A folder move (Hermes cannot rename) walks the source (`src/files/walk.ts`: links → 403, 500 files /
+  200 MiB / 100 MiB per file → 413), copies folders then files (`idleGuard`: 30 s without a byte → 502), walks again
+  (any change → copy removed, 409), rewrites links, then deletes the source **without** `recursive`: a file changed
+  since the copy, a file Hermes does not list (`.env`…) or one added meanwhile stays, and its folder is returned in
+  `leftover`. No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
   422 `no_root`.
 - Archives joined in the chat (`.zip`, `.tar`, `.tar.gz`, `.tgz`): `POST …/files/extract {path}` reads the archive
   back from Hermes (at most `INTENDIA_UPLOAD_MAX_MB`) and writes each file through the same `mkdir` / `upload-stream`

@@ -635,7 +635,8 @@ export const api = {
   instanceSearchFiles: (inst: string, q: string) =>
     call<{ results: FileEntry[]; truncated: boolean }>('GET', `/i/${enc(inst)}/files/search?q=${enc(q)}`),
   searchFiles: (slug: string, q: string) => call<{ results: FileEntry[]; truncated: boolean }>('GET', `${filesPath(slug)}/search?q=${enc(q)}`),
-  moveFile: (slug: string, from: string, to: string) => call<{ path: string }>('PATCH', `${filesPath(slug)}/move`, { from, to }),
+  moveFile: (slug: string, from: string, to: string) => call<{ path: string; leftover?: string[] }>('PATCH', `${filesPath(slug)}/move`, { from, to }),
+  createEntry: (slug: string, path: string, kind: 'file' | 'dir') => call<{ path: string }>('POST', `${filesPath(slug)}/new`, { path, kind }),
   deleteFile: (slug: string, path: string) => call<{ ok: true }>('DELETE', `${filesPath(slug)}?path=${enc(path)}`),
   saveText: (slug: string, path: string, text: string, mtime: number) => call<{ mtime: number }>('PUT', `${filesPath(slug)}/text`, { path, text, mtime }),
   filesExist: (slug: string, paths: string[]) =>

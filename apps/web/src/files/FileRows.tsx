@@ -25,13 +25,15 @@ function iconOf(e: FileEntry): LucideIcon {
 const ICON_BTN = 'flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink';
 
 /** One folder's rows. `actions` adds download, share, move and delete (explorer of a workspace only). */
-export function FileRows({ scope, entries, selected, onOpen, actions = false, onError }: {
+export function FileRows({ scope, entries, selected, onOpen, actions = false, onError, onNotice }: {
   scope: FileScope;
   entries: FileEntry[];
   selected?: string | null;
   onOpen: (e: FileEntry) => void;
   actions?: boolean;
   onError?: (err: unknown) => void;
+  /** A neutral note for the page (folder moved, some files left behind). */
+  onNotice?: (text: string) => void;
 }) {
   const qc = useQueryClient();
   const slug = scope.workspace;
@@ -40,8 +42,15 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
   const move = async (e: FileEntry) => {
     const to = await askText({ title: `Renommer ou déplacer ${e.name}`, label: 'Nouveau chemin (relatif au workspace)', value: e.path, confirmLabel: 'Renommer' });
     if (!to || to === e.path || !slug) return;
+    if (e.kind === 'dir' && !(await ask({
+      title: `Déplacer le dossier ${e.path} et tout son contenu ?`,
+      message: 'Évitez pendant qu’une session de ce workspace travaille.', confirmLabel: 'Déplacer',
+    }))) return;
     try {
-      await api.moveFile(slug, e.path, to);
+      const res = await api.moveFile(slug, e.path, to);
+      if (res.leftover?.length) {
+        onNotice?.(`Déplacé. Restent dans ${res.leftover.join(', ')} des fichiers qu’Hermes ne montre pas (clés, configuration) ou ajoutés ou modifiés pendant le déplacement : ils n’ont pas été supprimés.`);
+      }
       await refresh();
       void qc.invalidateQueries({ queryKey: ['links'] });
     } catch (err) {

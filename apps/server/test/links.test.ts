@@ -96,10 +96,9 @@ describe('share links', () => {
     const t = await setup();
     const inA = await t.share('files/a_b/r.md');
     const inX = await t.share('files/axb/r.md');
-    // folders cannot be moved (Hermes has no route): the file moves alone
-    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b', to: 'files/c' })).status).toBe(409);
-    mkdirSync(join(t.ws, 'files', 'c'));
-    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b/r.md', to: 'files/c/s.md' })).status).toBe(200);
+    // a folder moves with its links; files/axb shares the prefix but not the folder
+    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/a_b', to: 'files/c' })).status).toBe(200);
+    expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/c/r.md', to: 'files/c/s.md' })).status).toBe(200);
     // a failed move (target exists) changes no link
     expect((await t.request('PATCH', '/x/workspaces/dev/files/move', { from: 'files/c/s.md', to: 'files/axb/r.md' })).status).toBe(409);
     const list = (await t.request('GET', '/x/links')).json.links;

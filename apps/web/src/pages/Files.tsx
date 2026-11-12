@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, Search, Upload, X } from 'lucide-react';
+import { ChevronRight, File, Folder, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, type FileEntry } from '../api';
+import { askText } from '../components/Dialog';
 import { PageHeader } from '../components/Layout';
+import { Menu } from '../components/Menu';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
 import { DropZone } from '../files/DropZone';
 import { FileRows, isDirEntry } from '../files/FileRows';
@@ -14,6 +16,8 @@ import { workspaceScope } from '../files/scope';
 export interface FilesSearch {
   path?: string;
   f?: string;
+  /** 1: open the file in the editor (just created). */
+  edit?: 1;
 }
 
 export function FilesPage() {
@@ -36,10 +40,29 @@ export function FilesPage() {
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
   const found = useQuery({ queryKey: ['file-search', slug, debounced], queryFn: () => api.searchFiles(slug, debounced), enabled: debounced.length > 0 });
   const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  const go = (s: FilesSearch) => navigate({ to: '/w/$slug/fichiers', params: { slug }, search: s });
+  const go = (s: FilesSearch, replace = false) => navigate({ to: '/w/$slug/fichiers', params: { slug }, search: s, replace });
+
+  const create = async (kind: 'file' | 'dir') => {
+    const name = await askText({
+      title: kind === 'file' ? 'Nouveau fichier' : 'Nouveau dossier',
+      label: `Nom (dans ${dir ? `${dir}/` : 'la racine du workspace'})`,
+      value: kind === 'file' ? 'notes.md' : '', confirmLabel: 'Créer',
+    });
+    if (!name?.trim()) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const { path } = await api.createEntry(slug, dir ? `${dir}/${name.trim()}` : name.trim(), kind);
+      await qc.invalidateQueries({ queryKey: ['tree', slug] });
+      if (kind === 'file') void go({ path: dir || undefined, f: path, edit: 1 });
+    } catch (err) {
+      setError(err);
+    }
+  };
   const onOpen = (e: FileEntry) => {
     if (isDirEntry(e)) {
       setQ('');
@@ -74,6 +97,15 @@ export function FilesPage() {
         action={
           <div className="flex items-center gap-2">
             <input ref={input} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) void upload(f); }} />
+            <Menu
+              title="Nouveau" align="end"
+              trigger={<><Plus className="size-4" strokeWidth={1.5} />Nouveau</>}
+              triggerClass="inline-flex h-[34px] items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-paper"
+              items={[
+                { label: 'Fichier', icon: <File className="size-4" strokeWidth={1.5} />, onSelect: () => void create('file') },
+                { label: 'Dossier', icon: <Folder className="size-4" strokeWidth={1.5} />, onSelect: () => void create('dir') },
+              ]}
+            />
             <Button variant="primary" onClick={() => input.current?.click()} disabled={uploading}>
               <Upload className="size-4" strokeWidth={1.5} />{uploading ? 'Envoi…' : 'Déposer'}
             </Button>
@@ -109,9 +141,15 @@ export function FilesPage() {
             }
           >
             <div className="px-4 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
+            {notice && (
+              <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
+                <span className="flex-1">{notice}</span>
+                <button onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label="Fermer la note"><X className="size-4" strokeWidth={1.5} /></button>
+              </p>
+            )}
             {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
             {entries.length > 0 ? (
-              <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} />
+              <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} />
             ) : (tree.isSuccess && !debounced) ? (
               <div className="px-4 py-12 text-center">
                 <p className="text-sm font-medium">Aucun fichier ici</p>
@@ -123,7 +161,8 @@ export function FilesPage() {
         </DropZone>
         {open && (
           <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:overflow-hidden lg:rounded-xl lg:border lg:border-line">
-            <Preview scope={workspaceScope(slug)} path={open} onClose={() => void go({ path: dir || undefined })} />
+            <Preview scope={workspaceScope(slug)} path={open} onClose={() => void go({ path: dir || undefined })}
+              startEditing={search.edit === 1} onEditingStarted={() => void go({ path: dir || undefined, f: open }, true)} />
           </section>
         )}
       </div>
