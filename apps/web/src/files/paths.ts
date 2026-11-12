@@ -30,7 +30,9 @@ export function findPathCandidates(text: string, m: MountInfo): string[] {
   return [...found];
 }
 
-export type FileKind = 'image' | 'pdf' | 'markdown' | 'html' | 'svg' | 'audio' | 'video' | 'text' | 'other';
+export type FileKind =
+  | 'image' | 'pdf' | 'markdown' | 'html' | 'svg' | 'audio' | 'video'
+  | 'csv' | 'diff' | 'docx' | 'xlsx' | 'pptx' | 'excalidraw' | 'text' | 'other';
 
 const KINDS: [FileKind, RegExp][] = [
   ['svg', /\.svg$/i],
@@ -40,12 +42,21 @@ const KINDS: [FileKind, RegExp][] = [
   ['html', /\.html?$/i],
   ['audio', /\.(mp3|wav|ogg|m4a|flac)$/i],
   ['video', /\.(mp4|webm|mov)$/i],
-  ['text', /(\.(txt|log|csv|tsv|json|jsonl|ya?ml|toml|ini|xml|css|m?[jt]sx?|cjs|py|sh|rs|go|java|c|h|cpp|rb|php|sql|env)$)|(^|\/)(readme|license|makefile|dockerfile)$/i],
+  ['csv', /\.(csv|tsv)$/i],
+  ['diff', /\.(diff|patch)$/i],
+  ['docx', /\.docx$/i],
+  ['xlsx', /\.xlsx$/i],
+  ['pptx', /\.pptx$/i],
+  ['excalidraw', /\.excalidraw$/i],
+  ['text', /(\.(txt|log|json|jsonl|ya?ml|toml|ini|xml|css|m?[jt]sx?|cjs|py|sh|rs|go|java|c|h|cpp|rb|php|sql|env)$)|(^|\/)(readme|license|makefile|dockerfile)$/i],
 ];
 
 export function fileKind(name: string): FileKind {
   return KINDS.find(([, re]) => re.test(name))?.[0] ?? 'other';
 }
+
+/** Read as text (preview and « Modifier »). */
+export const isText = (kind: FileKind) => kind === 'text' || kind === 'markdown' || kind === 'csv' || kind === 'diff';
 
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
