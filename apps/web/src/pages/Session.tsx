@@ -208,6 +208,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       qc.invalidateQueries({ queryKey: ['run', inst, sessionId] }),
       invalidateSessionLists(qc),
     ]);
+    // the session list's « En cours » mark goes at once; not awaited: the activity read waits on kanban workers
+    void qc.invalidateQueries({ queryKey: ['activity', inst] });
+    void qc.invalidateQueries({ queryKey: ['approvals'] });
     setActive(null);
     setRunCount((n) => n + 1);
     void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
@@ -810,6 +813,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
+            {col && (
+              <button type="button" className={ICON_BTN} aria-label="Fermer ce chat" title="Fermer ce chat (le travail continue)" onClick={col.hide}>
+                <X className="size-4" strokeWidth={1.5} />
+              </button>
+            )}
             {!sideOpen && !EMBEDDED && !col && <FullScreen />}
           </div>
         </div>

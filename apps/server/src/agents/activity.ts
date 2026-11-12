@@ -126,9 +126,24 @@ export class ActivityService {
     return this.running(now, undefined, fail, { onlyAutoApprove: true, limit: AUTO_APPROVE_CANDIDATES });
   }
 
-  /** Runs in progress and kanban workers of one instance. */
-  async list(instanceId: string, now = Date.now()): Promise<Activity> {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+  /** The computation in progress per instance: simultaneous readers (several tabs and lists) share it. */
+  private listing = new Map<string, Promise<Activity>>();
+
+  /**
+   * Runs in progress and kanban workers of one instance. Requests arriving while one is being computed get its result;
+   * nothing is kept after it (a run seen finished must leave the list at once). Finished runs are never asked again
+   * (`done`), so each computation only reads the statuses of runs still going.
+   */
+  list(instanceId: string, now = Date.now()): Promise<Activity> {
+    if (!this.store.get(instanceId)) return Promise.reject(new NotFoundError(`Instance inconnue : ${instanceId}`));
+    const going = this.listing.get(instanceId);
+    if (going) return going;
+    const result = this.computeList(instanceId, now).finally(() => { this.listing.delete(instanceId); });
+    this.listing.set(instanceId, result);
+    return result;
+  }
+
+  private async computeList(instanceId: string, now: number): Promise<Activity> {
     const errors: Activity['errors'] = [];
     const fail = (instance: string, err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);

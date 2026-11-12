@@ -1,7 +1,8 @@
 import { Columns2 } from 'lucide-react';
 import type { RecentSession } from '../api';
+import type { RunState } from './running';
 import { ListItemBody, ListLink } from '../components/Panes';
-import { Tag } from '../components/ui';
+import { cx, Tag } from '../components/ui';
 import { sourceLabel } from '../home/labels';
 import { splitMarks } from './marks';
 
@@ -22,8 +23,21 @@ export function Snippet({ text }: { text: string }) {
   );
 }
 
-/** One session of the inbox column: title, time, workspace or search hit, source tag; highlighted when open. */
-export function SessionRow({ s, open, onBeside }: { s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void }) {
+/** Where the agent stands, in place of the time: working (pulsing) or waiting for the user. */
+function RunBadge({ run }: { run: RunState }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-ink">
+      <span className={run === 'waiting' ? 'size-2 rounded-full bg-bad' : 'size-2 animate-pulse rounded-full bg-accent'} />
+      {run === 'waiting' ? 'Attend votre réponse' : 'En cours'}
+    </span>
+  );
+}
+
+/**
+ * One session of the inbox column: title, time, workspace or search hit, source tag; highlighted when open, tinted
+ * with the agent's state while it works (`run`).
+ */
+export function SessionRow({ s, open, onBeside, run }: { s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void; run?: RunState }) {
   const link: { to: string; params: Record<string, string> } = s.kind === 'intendia' && s.workspace
     ? { to: '/w/$slug/s/$sessionId', params: { slug: s.workspace, sessionId: s.id } }
     : { to: '/i/$inst/p/$profile/s/$sessionId', params: { inst: s.instanceId, profile: s.profile, sessionId: s.id } };
@@ -31,12 +45,12 @@ export function SessionRow({ s, open, onBeside }: { s: RecentSession; open: bool
   const ws = s.kind === 'intendia' ? s.workspace : null;
   const beside = onBeside && ws ? () => onBeside(ws, s.id) : null;
   return (
-    <li data-recent={s.source ?? 'hermes'} className={beside ? 'group relative' : undefined}>
+    <li data-recent={s.source ?? 'hermes'} data-run={run} className={cx(beside && 'group relative', run && !open && 'rounded-[10px] bg-accent-soft/40')}>
       <ListLink link={link} selected={open}
         onClick={beside ? (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); beside(); } } : undefined}>
         <ListItemBody
           title={s.title}
-          meta={when(s.at)}
+          meta={run ? <RunBadge run={run} /> : when(s.at)}
           sub={s.snippet ? <Snippet text={s.snippet} /> : s.sub}
           tag={<Tag className={open ? 'bg-sheet' : undefined}>{sourceLabel(s.source).toLowerCase()}</Tag>}
         />
