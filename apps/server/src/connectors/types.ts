@@ -78,4 +78,13 @@ export interface CompatReport {
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
   socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean };
+  /**
+   * Operations known to this version of Intendia but absent from the report (`module.op`), set on a report saved by
+   * an older version until the next full check. Never stored.
+   */
+  unchecked?: string[];
+  /** Last full check of this instance failed (short message); cleared by the next success. Never stored. */
+  checkError?: string;
+  /** A full check of this instance is running (only in `/x/compat`). */
+  checking?: boolean;
 }
