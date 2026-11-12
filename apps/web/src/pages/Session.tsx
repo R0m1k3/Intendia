@@ -186,7 +186,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
     else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
-    if (tree) setTrees((t) => [...t, tree]);
+    // a truncated replay may lack earlier delegations: the history's cards (all of them) win then
+    if (tree && !state.truncated) setTrees((t) => [...t, tree]);
     const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
