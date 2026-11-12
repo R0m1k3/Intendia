@@ -157,6 +157,12 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.delete('/i/:inst/config/custom-providers/:slug', async (c) =>
     c.json(await config.removeCustomProvider(inst(c), profileOf(c), param(c, 'slug', SLUG_RE))));
 
+  r.get('/i/:inst/config/model-info', async (c) => c.json(await config.modelInfo(inst(c), profileOf(c))));
+  r.get('/i/:inst/config/recommended-model', async (c) => {
+    const provider = c.req.query('provider') ?? '';
+    if (!PROVIDER_RE.test(provider)) throw new ValidationError('provider invalide');
+    return c.json(await config.recommendedModel(inst(c), profileOf(c), provider));
+  });
   r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
   r.post('/i/:inst/config/models', async (c) => {
     const body = ModelBody.parse(await c.req.json());

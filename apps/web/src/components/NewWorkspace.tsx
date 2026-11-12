@@ -10,12 +10,14 @@ export function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
 }
 
-export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
+/** `instanceId` (first-run step): that instance instead of the sidebar's; `onCreated` replaces the navigation. */
+export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: () => void; instanceId?: string; onCreated?: (slug: string) => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   // created on the current instance (the sidebar's choice)
-  const { id: currentId, instance: current, instances: list } = useCurrentInstance();
-  const inst = currentId ?? '';
+  const { id: currentId, instance: currentInst, instances: list } = useCurrentInstance();
+  const inst = instanceId ?? currentId ?? '';
+  const current = instanceId ? list.find((i) => i.id === instanceId) ?? null : currentInst;
   const root = current?.files?.workspaceRoot ?? null;
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -33,7 +35,8 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
     try {
       const { workspace } = await api.createWorkspace({ slug, name: name.trim(), instanceId: inst, profile });
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
-      await navigate({ to: '/w/$slug', params: { slug: workspace.slug } });
+      if (onCreated) onCreated(workspace.slug);
+      else await navigate({ to: '/w/$slug', params: { slug: workspace.slug } });
     } catch (err) {
       setError(err);
     } finally {

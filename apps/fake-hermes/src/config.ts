@@ -123,6 +123,12 @@ export class ConfigStore {
     this.modelOptions = fixture(fixturesDir, 'GET_api_model_options.json');
   }
 
+  /** First-run bench: no main model (`model.default` empty, like a fresh Hermes). */
+  clearModel(): void {
+    const file = this.file();
+    this.write({ ...file, model: { ...(isObj(file.model) ? file.model : {}), default: '', provider: 'auto' } });
+  }
+
   setRaw(text: string): void {
     this.raw = text;
   }
@@ -308,6 +314,13 @@ export class ConfigStore {
       const model = this.file().model as Obj | string | undefined;
       const m = isObj(model) ? model : { default: model };
       return json({ model: String(m.default ?? ''), provider: String(m.provider ?? 'auto'), auto_context_length: 1000000, config_context_length: 0, effective_context_length: 1000000, capabilities: {} });
+    }
+    if (path === '/api/model/recommended-default' && method === 'GET') {
+      // like Hermes: the first model of an authenticated provider (its curated pick), "" when it is not known
+      const slug = String(query.provider ?? '').trim().toLowerCase();
+      const row = this.modelOptionsFor(query.profile ?? 'default').providers.find((p) => p.slug === slug && p.authenticated);
+      const models = Array.isArray(row?.models) ? (row.models as string[]) : [];
+      return json({ provider: slug, model: models[0] ?? '', free_tier: null });
     }
     if (path === '/api/model/auxiliary' && method === 'GET') {
       // like Hermes: the tasks live in the file (`auxiliary.<task>.provider/model`), so a raw restore puts them back too

@@ -506,3 +506,31 @@ describe('config: models declared per provider (chat models)', () => {
     expect(dashCalls(t, 'PUT', '/api/config').length).toBe(puts);
   });
 });
+
+describe('config: first run (lot 9 D)', () => {
+  const C = '/x/i/fake/config';
+  it('model-info reads only model/info: the model, or null on a fresh Hermes', async () => {
+    const t = await testApp();
+    const before = t.fake.requests.length;
+    const r = await t.request('GET', `${C}/model-info?profile=default`);
+    expect(r.status).toBe(200);
+    expect(r.json.model).toBe('anthropic/claude-opus-4.6');
+    expect(t.fake.requests.slice(before).map((x) => x.path)).toEqual(['/api/model/info']);
+    const fresh = await testApp({ noModel: true });
+    expect((await fresh.request('GET', `${C}/model-info?profile=default`)).json).toEqual({ model: null, provider: 'auto' });
+  });
+
+  it('recommended-model: Hermes’ pick, "" → null, provider required, 409 when the op is missing', async () => {
+    const t = await testApp();
+    const r = await t.request('GET', `${C}/recommended-model?profile=default&provider=openrouter`);
+    expect(r.status).toBe(200);
+    expect(r.json.provider).toBe('openrouter');
+    expect(typeof r.json.model).toBe('string');
+    expect((await t.request('GET', `${C}/recommended-model?profile=default&provider=inconnu`)).json).toEqual({ provider: 'inconnu', model: null });
+    expect((await t.request('GET', `${C}/recommended-model?profile=default`)).status).toBe(400);
+    expect((await t.request('GET', `${C}/recommended-model?profile=default&provider=a%20b`)).status).toBe(400);
+    const mod = t.compat.get('fake')!.modules.find((x) => x.id === 'config')!;
+    mod.ops.recommendedModel = { ...mod.ops.recommendedModel!, ok: false };
+    expect((await t.request('GET', `${C}/recommended-model?profile=default&provider=openrouter`)).status).toBe(409);
+  });
+});

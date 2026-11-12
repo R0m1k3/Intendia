@@ -980,6 +980,11 @@ export const api = {
   restoreConfig: (inst: string, profile: string, id: number, version: string) =>
     call<WriteResult>('POST', instPath(inst, `config/versions/${id}/restore`, profile), { version }),
   configModels: (inst: string, profile: string) => call<ConfigModels>('GET', instPath(inst, 'config/models', profile)),
+  /** main model only (never writes): the home page's « finish the setup » notice */
+  modelInfo: (inst: string, profile = 'default') => call<{ model: string | null; provider: string | null }>('GET', instPath(inst, 'config/model-info', profile)),
+  /** Hermes' pick for a provider (may write discovered models of custom endpoints, like the model selectors) */
+  recommendedModel: (inst: string, provider: string, profile = 'default') =>
+    call<{ provider: string; model: string | null }>('GET', instPath(inst, 'config/recommended-model', profile, { provider })),
   changeProviderModels: (inst: string, profile: string, body: { provider: string; add?: string; remove?: string }) =>
     call<{ declared: string[] }>('POST', instPath(inst, 'config/provider-models', profile), body),
   /** Several auxiliary tasks in one write, all or nothing. */

@@ -19,9 +19,22 @@ export function HomePage() {
   const list = instances.data?.instances ?? [];
   const ws = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === id);
   const focused = useCallback(() => { void navigate({ to: '/', search: {}, replace: true }); }, [navigate]);
+  // no main model on the current instance: the setup was skipped (model/info only: never writes; error → nothing)
+  const info = useQuery({ queryKey: ['model-info', id], queryFn: () => api.modelInfo(id!), enabled: Boolean(id), retry: false, staleTime: 60_000 });
 
   return (
     <div data-home className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] flex-col md:min-h-[var(--content-h)]">
+      {id && info.isSuccess && !info.data.model && (
+        <div className="px-4 pt-4 md:px-8" data-finish-setup>
+          <div className="mx-auto flex max-w-[920px] flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 px-4 py-3 text-sm">
+            <span className="min-w-0 flex-1">L’agent{instance && list.length > 1 ? ` de ${instance.label}` : ''} n’a pas de modèle principal : il ne pourra pas répondre.</span>
+            <Link to="/installation/fournisseur" search={{ inst: id }}
+              className="inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
+              Terminer l’installation
+            </Link>
+          </div>
+        </div>
+      )}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 text-center">
         {instances.isSuccess && list.length === 0 ? (
           <Panel>

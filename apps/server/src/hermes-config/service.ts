@@ -5,7 +5,7 @@ import type { CompatService } from '../compat/service.js';
 import { GatewayService } from './gateway.js';
 import {
   AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema, McpCatalogSchema, McpFlowSchema,
-  McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, mcpTokenEnv,
+  McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, RecommendedModelSchema, mcpTokenEnv,
   configModule,
 } from '../connectors/config/index.js';
 import { callOp, HermesError, hermesDetail, type CallOptions } from '../connectors/runtime.js';
@@ -497,6 +497,18 @@ export class ConfigService {
       auxiliary: aux.tasks.map((t) => ({ task: t.task, label: t.label ?? null, provider: t.provider ?? 'auto', model: t.model ?? '' })),
       version: raw === null ? null : versionOf(raw),
     };
+  }
+
+  /** Main model only (`model/info`, which never writes): the home page's « finish the setup » notice. */
+  async modelInfo(instanceId: string, profile: string): Promise<{ model: string | null; provider: string | null }> {
+    const info = ModelInfoSchema.parse(await this.call<unknown>(this.ctx(instanceId, profile), 'modelInfo'));
+    return { model: info.model || null, provider: info.provider || null };
+  }
+
+  /** Hermes' pick for a provider just connected (first-run); `""` → null. */
+  async recommendedModel(instanceId: string, profile: string, provider: string): Promise<{ provider: string; model: string | null }> {
+    const res = RecommendedModelSchema.parse(await this.call<unknown>(this.ctx(instanceId, profile), 'recommendedModel', { query: { provider } }));
+    return { provider: res.provider || provider, model: res.model || null };
   }
 
   /** Declared models of every provider entry of the file, null when Hermes does not give the file. */

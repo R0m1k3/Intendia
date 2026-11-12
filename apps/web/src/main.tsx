@@ -14,6 +14,10 @@ import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
 import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
+import type { StepSearch } from './setup/Frame';
+import { ModelStep } from './setup/ModelStep';
+import { ProviderStep } from './setup/ProviderStep';
+import { WorkspaceStep } from './setup/WorkspaceStep';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
 import { CentrePage } from './pages/Centre';
@@ -62,6 +66,16 @@ const rootRoute = createRootRoute({ component: Outlet });
 
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connexion', component: LoginPage });
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation', component: SetupPage });
+/** First-run steps after the instance (lot 9 D): full pages like /installation, signed in, `?inst=` the instance to set up. */
+const stepGuard = async () => {
+  const s = await queryClient.fetchQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 0 });
+  if (s.needsPassword) throw redirect({ to: '/installation' });
+  if (!s.authenticated) throw redirect({ to: '/connexion' });
+};
+const stepSearch = (s: Record<string, unknown>): StepSearch => (typeof s.inst === 'string' && s.inst ? { inst: s.inst } : {});
+const providerStepRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation/fournisseur', component: ProviderStep, beforeLoad: stepGuard, validateSearch: stepSearch });
+const modelStepRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation/modele', component: ModelStep, beforeLoad: stepGuard, validateSearch: stepSearch });
+const workspaceStepRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation/workspace', component: WorkspaceStep, beforeLoad: stepGuard, validateSearch: stepSearch });
 
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -247,7 +261,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 
