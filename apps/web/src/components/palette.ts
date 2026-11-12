@@ -18,7 +18,7 @@ const GROUP_LABEL: Record<PaletteGroupId, string> = {
 };
 
 export const ACTIONS: PaletteItem[] = [
-  { id: 'a:new-session', label: 'Nouvelle session', target: { to: '/', search: { nouvelle: 1 } } },
+  { id: 'a:new-session', label: 'Nouvelle session', target: { to: '/chat/nouvelle' } },
   { id: 'a:new-workspace', label: 'Nouveau workspace', target: { to: '/w' } },
   { id: 'a:files', label: 'Ouvrir un fichier…', mode: 'files' },
 ];
