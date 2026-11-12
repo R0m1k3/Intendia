@@ -83,7 +83,8 @@ export async function sessionStats(instance: InstanceConfig, sessionId: string, 
 
 /** `llm.oneshot`: one call to the auxiliary model of a task (titles…), without session or tools. Answer `{text}`. */
 export async function oneshot(
-  instance: InstanceConfig, params: { instructions: string; input: string; task: string; max_tokens?: number; profile?: string },
+  instance: InstanceConfig,
+  params: ({ instructions: string; input: string } | { template: string; variables: Record<string, string> }) & { task: string; max_tokens?: number; profile?: string },
   opts?: { factory?: WsFactory; timeoutMs?: number },
 ): Promise<string> {
   const res = await callGatewaySocket(instance, 'llm.oneshot', params, opts);

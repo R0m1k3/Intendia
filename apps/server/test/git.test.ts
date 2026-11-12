@@ -210,3 +210,165 @@ describe('branches', () => {
     expect(res.json.branches).toEqual([{ name: 'zeta', current: true }, { name: 'alpha', current: false }, { name: 'main', current: false }]);
   });
 });
+
+describe('writes', () => {
+  const staged = (r: string) => git(r, 'diff', '--cached', '--name-only').split('\n').filter(Boolean);
+
+  it('stage and unstage one file; a credential file is refused', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    writeFileSync(join(r, '.env'), 'S=1\n');
+    expect((await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'a.txt' })).json).toEqual({ unstaged: [] });
+    expect(staged(r)).toEqual(['a.txt']);
+    expect((await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: '.env' })).status).toBe(403);
+    expect((await t.request('POST', `${t.G}/unstage`, { repo: 'projet', file: 'a.txt' })).status).toBe(200);
+    expect(staged(r)).toEqual([]);
+  });
+
+  it('a folder or everything staged: credential files inside are unstaged again and named', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    mkdirSync(join(r, 'neuf'));
+    writeFileSync(join(r, 'neuf', 'x.txt'), 'x\n');
+    writeFileSync(join(r, 'neuf', '.env'), 'S=1\n');
+    const res = await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'neuf/' });
+    expect(res.json).toEqual({ unstaged: ['neuf/.env'] });
+    expect(staged(r)).toEqual(['neuf/x.txt']);
+    writeFileSync(join(r, 'b.txt'), 'b bis\n');
+    writeFileSync(join(r, 'google_token.json'), '{}');
+    const all = await t.request('POST', `${t.G}/stage`, { repo: 'projet' });
+    expect(all.json.unstaged.sort()).toEqual(['google_token.json', 'neuf/.env']);
+    expect(staged(r).sort()).toEqual(['b.txt', 'neuf/x.txt']);
+  });
+
+  it('a credential file staged before (by the agent) is left alone, but the commit is refused', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, '.env'), 'S=1\n');
+    git(r, 'add', '-f', '.env');
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    expect((await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'a.txt' })).json).toEqual({ unstaged: [] });
+    const res = await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: 'essai', push: false });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('staged_sensitive');
+    expect(git(r, 'log', '--format=%s')).not.toContain('essai');
+  });
+
+  it('revert: a modified file, an untracked one, a new staged one; never a folder nor without file', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    writeFileSync(join(r, 'c.txt'), 'neuf\n');
+    writeFileSync(join(r, 'n.txt'), 'nouveau indexé\n');
+    git(r, 'add', 'n.txt');
+    mkdirSync(join(r, 'd'));
+    writeFileSync(join(r, 'd', '.env'), 'S=1\n');
+    writeFileSync(join(r, 'd', 'y.txt'), 'y\n');
+    for (const file of ['a.txt', 'c.txt', 'n.txt']) expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet', file })).status, file).toBe(200);
+    expect(git(r, 'status', '--porcelain')).toBe('?? d/\n');
+    for (const file of ['d', 'd/', 'absent.txt']) expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet', file })).status, file).toBe(400);
+    expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet' })).status).toBe(400);
+    expect(git(r, 'status', '--porcelain', '--untracked-files=all')).toContain('d/.env');
+  });
+
+  it('a revert Hermes did not do is reported', async () => {
+    const t = await setup({ git: { revertNoop: true } });
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    const res = await t.request('POST', `${t.G}/revert`, { repo: 'projet', file: 'a.txt' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('git_failed');
+  });
+
+  it('commit: refused without anything staged (Hermes would stage all), then commit + push in two calls', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    const remote = join(tempDir(), 'remote.git');
+    git(t.root, 'init', '-q', '--bare', remote);
+    git(r, 'remote', 'add', 'origin', remote);
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    const none = await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: 'rien', push: false });
+    expect(none.json.code).toBe('nothing_staged');
+    expect(t.fake.git.calls.some((c) => c.path === '/api/git/review/commit')).toBe(false);
+    expect((await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: '   ', push: false })).status).toBe(400);
+    await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'a.txt' });
+    const res = await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: 'feat: a', push: true });
+    expect(res.json).toEqual({ committed: true });
+    const commit = t.fake.git.calls.find((c) => c.path === '/api/git/review/commit');
+    expect(commit?.body?.push).toBe(false);
+    expect(t.fake.git.calls.some((c) => c.path === '/api/git/review/push')).toBe(true);
+    expect(git(remote, 'log', '--format=%s', 'main')).toContain('feat: a');
+    expect((await t.request('GET', `${t.G}?repo=projet`)).json.ahead).toBe(0);
+  });
+
+  it('a failed push keeps the commit and says why', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    git(r, 'add', 'a.txt');
+    const res = await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: 'sans remote', push: true });
+    expect(res.json.committed).toBe(true);
+    expect(res.json.pushError).toMatch(/origin/);
+    const push = await t.request('POST', `${t.G}/push`, { repo: 'projet' });
+    expect(push.status).toBe(409);
+    expect(push.json.code).toBe('git_failed');
+  });
+
+  it('one action at a time per repository', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    writeFileSync(join(r, 'b.txt'), 'changé\n');
+    const res = await Promise.all([
+      t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'a.txt' }),
+      t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'b.txt' }),
+    ]);
+    expect(res.map((x) => x.status).sort()).toEqual([200, 409]);
+  });
+
+  it('switch to a local branch only', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    git(r, 'branch', 'essai');
+    expect((await t.request('POST', `${t.G}/switch`, { repo: 'projet', branch: 'inconnue' })).status).toBe(400);
+    expect((await t.request('POST', `${t.G}/switch`, { repo: 'projet', branch: 'essai' })).json).toEqual({ branch: 'essai' });
+    expect(git(r, 'branch', '--show-current').trim()).toBe('essai');
+  });
+
+  it('message by AI from the staged diff, another one with avoid; unsupported without llm.oneshot', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    expect((await t.request('POST', `${t.G}/message`, { repo: 'projet' })).json.code).toBe('nothing_staged');
+    git(r, 'add', 'a.txt');
+    const m = await t.request('POST', `${t.G}/message`, { repo: 'projet' });
+    expect(m.json).toEqual({ message: 'feat: modifie a.txt' });
+    expect((await t.request('POST', `${t.G}/message`, { repo: 'projet', avoid: m.json.message })).json).toEqual({ message: 'chore: retouche a.txt' });
+    const off = await setup({ oneshot: 'off' });
+    repo(join(off.ws, 'projet'));
+    const res = await off.request('POST', `${off.G}/message`, { repo: 'projet' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('unsupported');
+  });
+});
+
+describe('cleanMessage', () => {
+  it('drops a fence and wrapping quotes', async () => {
+    const { cleanMessage } = await import('../src/git/service.js');
+    expect(cleanMessage('```\nfeat: x\n\ncorps\n```')).toBe('feat: x\n\ncorps');
+    expect(cleanMessage('« fix: y »')).toBe('fix: y');
+  });
+});
+
+describe('writes in a repository at the workspace root', () => {
+  it('stage a folder: the credential file inside is unstaged again', async () => {
+    const t = await setup();
+    repo(t.ws);
+    mkdirSync(join(t.ws, 'neuf'));
+    writeFileSync(join(t.ws, 'neuf', 'x.txt'), 'x\n');
+    writeFileSync(join(t.ws, 'neuf', '.env'), 'S=1\n');
+    expect((await t.request('POST', `${t.G}/stage`, { repo: '', file: 'neuf/' })).json).toEqual({ unstaged: ['neuf/.env'] });
+    expect((await t.request('POST', `${t.G}/revert`, { repo: '', file: 'a.txt' })).status).toBe(400);
+  });
+});

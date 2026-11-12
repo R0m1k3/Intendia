@@ -263,6 +263,12 @@ The Git page of a workspace (`/w/$slug/git?repo=`) goes through the dashboard's 
 - a repository starting above the workspace (the files root itself, say) is refused; the Files page only shows its « Git » button for a repository inside the workspace;
 - file paths go to git as pathspecs: `* ? [ ]` and a leading `:` are refused; credential files (`hiddenByHermes`, aligned on Hermes' list) never get a diff.
 
+Write guards (Hermes' own routes would do worse):
+- staging a folder not tracked yet, or everything, can stage a credential file neither git's list nor Hermes' file list shows: after each staging, Intendia reads the list again and unstages every credential file this action staged, and names it;
+- a commit is refused when nothing is staged (Hermes would then run `add -A`) and while a credential file is staged; « puis pousser » is a separate push call, so a failed push keeps the commit;
+- revert only takes the exact path of a listed file (never a folder: `git clean -fd` would also delete hidden credential files; never a rename), unstages a new file first, and reads the list again since Hermes always answers ok;
+- one write at a time per repository (409 `busy`). The agent can still work in the same repository between Intendia's check and Hermes' action: accepted (it has a terminal on the host).
+
 Accepted limit: the repository's own configuration (`.git/config`, written by the agent) can still make git act outside the folder (`core.worktree`…); the agent already has a terminal on the host, Intendia only bounds what the browser can aim at.
 
 The fake runs the real `git` (`apps/fake-hermes/src/git.ts`, without confinement, like Hermes): the only way to test that Intendia bounds paths and to test staging and commits.
