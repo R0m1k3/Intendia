@@ -11,6 +11,7 @@ import { FileRows, isDirEntry } from '../files/FileRows';
 import { workspaceScope } from '../files/scope';
 import { newKey, useCopyOps } from '../sessions/copies';
 import { SessionSelectList } from '../sessions/Selection';
+import { invalidateSessionLists } from '../sessions/UndoBar';
 import { OtherSessions } from './OtherSessions';
 
 const ROWS = 8;
@@ -33,7 +34,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   const create = useMutation({
     mutationFn: () => api.createSession(slug),
     onSuccess: async ({ session }) => {
-      await qc.invalidateQueries({ queryKey: ['sessions'] });
+      await invalidateSessionLists(qc);
       void qc.invalidateQueries({ queryKey: ['workspaces'] }); // session counters
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
     },
@@ -56,7 +57,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
       return api.importSession(slug, parsed, newKey());
     },
     onSuccess: async ({ session }) => {
-      await qc.invalidateQueries({ queryKey: ['sessions'] });
+      await invalidateSessionLists(qc);
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
     },

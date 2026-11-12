@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
 import { embedUrl, flushFrame, forgetSideSession, setSideSession, sideSession, TOGGLE, type SideSession } from '../chat/embed';
 import { shortcutLabel } from './CommandPalette';
+import { invalidateSessionLists } from '../sessions/UndoBar';
 import { Button } from './ui';
 
 interface Ws { slug: string; name: string }
@@ -47,7 +48,7 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
       const s = { slug, id: session.id };
       setSideSession(inst, s);
       setShown(s);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void invalidateSessionLists(qc);
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

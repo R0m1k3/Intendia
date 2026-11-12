@@ -9,6 +9,7 @@ import { useChatAvailability } from '../components/ChatNotice';
 import { Picker } from '../components/Menu';
 import { ErrorText } from '../components/ui';
 import { uploadFiles } from '../files/upload';
+import { invalidateSessionLists } from '../sessions/UndoBar';
 import { setHandoff } from './handoff';
 
 const LAST = 'intendia-last-workspace';
@@ -40,7 +41,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
     setError(null);
     try {
       const { session } = await api.createSession(ws.slug);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void invalidateSessionLists(qc);
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
       const res = await api.send(ws.instanceId, session.id, text);
       setHandoff({ inst: ws.instanceId, sessionId: session.id, runId: res.runId, text, ts: Date.now() / 1000 });

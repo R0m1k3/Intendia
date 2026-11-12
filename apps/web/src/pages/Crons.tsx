@@ -169,6 +169,9 @@ export function CronsPage() {
   const a = useModuleAvailability(inst, 'crons', REQUIRED, OPTIONAL);
   const crons = useQuery({ queryKey: ['crons', inst], queryFn: () => api.crons(inst).then((r) => r.crons), enabled: a.available });
   const [editing, setEditing] = useState<Cron | 'new' | null>(null);
+  // another instance chosen while editing: the form belonged to the previous one, close it
+  const [editingInst, setEditingInst] = useState(inst);
+  if (editingInst !== inst) { setEditingInst(inst); setEditing(null); }
   const [text, setText] = useState('');
   // follow-ups and their outcome live here, above the list and the detail: changing the selection keeps them
   const [follows, setFollows] = useState<Record<string, { cron: Cron; snap: FollowSnapshot }>>({});
@@ -241,7 +244,7 @@ export function CronsPage() {
           }} />
       ))}
       {editing ? (
-        <CronEditor key={editing === 'new' ? 'new' : cronKey(editing)} instanceId={inst} cron={editing === 'new' ? null : editing} offset={offset}
+        <CronEditor key={`${inst}:${editing === 'new' ? 'new' : cronKey(editing)}`} instanceId={inst} cron={editing === 'new' ? null : editing} offset={offset}
           onClose={() => setEditing(null)} onSaved={(c) => { if (c && editing === 'new') select(c); }} />
       ) : (
         <>

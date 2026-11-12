@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, ApiError } from '../api';
@@ -19,6 +20,11 @@ export function showUndo(u: Undo): void {
 
 /** Query keys of the session lists, refreshed after a deletion or a restore. */
 export const SESSION_LIST_KEYS = [['sessions'], ['sessions-recent'], ['sessions-list'], ['sessions-search'], ['sessions-cleanup'], ['workspaces']] as const;
+
+/** Every list that shows sessions (workspace lists, the inbox column, its search, the sidebar counters). */
+export function invalidateSessionLists(qc: QueryClient): Promise<unknown> {
+  return Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+}
 
 export function UndoHost() {
   const qc = useQueryClient();
