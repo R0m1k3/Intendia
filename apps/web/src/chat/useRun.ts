@@ -33,6 +33,8 @@ const deps = (d: Partial<FollowDeps> = {}): FollowDeps => ({
  * live place is asked again each time. A place found: the state starts over from the seed, as a new EventSource
  * replays the run from its start. The end of a deferred run is told from its status (status, error, reorientation
  * not delivered); its text comes with the history.
+ * Reorientations written meanwhile have no text in that replay (`run.steered` only): each one is put back where the
+ * replay reaches a `run.steered`, in the order they were written.
  *
  * `local(ev)` folds an event made by the page into the run (a reorientation: Hermes' `run.steered` has no text), so
  * what the agent streams next comes after it.
@@ -53,6 +55,10 @@ export function followRun(o: {
   let es: EventSource | null = null;
   let release: (() => void) | null = null;
   let timer: unknown = null;
+  /** local events of this run, in order (a replay from the start loses their text) */
+  const locals: RunEvent[] = [];
+  /** those to put back at the next `run.steered` of the replay */
+  let replay: RunEvent[] = [];
 
   const emit = () => o.onState(current, deferred);
   const end = () => {
@@ -73,6 +79,7 @@ export function followRun(o: {
     }
     deferred = false;
     current = initialRun(o.run.seed);
+    replay = [...locals];
     emit();
     const source = new d.EventSource(runEventsUrl(o.inst, o.sessionId, o.run.id), { withCredentials: true });
     es = source;
@@ -85,6 +92,7 @@ export function followRun(o: {
       }
       if (typeof ev?.event !== 'string') return;
       current = reduceEvent(current, ev);
+      if (ev.event === 'run.steered' && replay.length) current = reduceEvent(current, replay.shift()!);
       emit();
       if (isTerminal(current.status)) end();
     };
@@ -114,6 +122,7 @@ export function followRun(o: {
   return {
     local: (ev) => {
       if (stopped || isTerminal(current.status)) return;
+      locals.push(ev);
       current = reduceEvent(current, ev);
       emit();
     },

@@ -90,6 +90,22 @@ describe('followRun', () => {
     expect(last.status).toBe('queued');
   });
 
+  it('puts the reorientations written while polling back where the replay acknowledges them', async () => {
+    const h = harness({ places: 0 });
+    h.f.local({ event: 'intendia.steer', seq: 1, text: 'plus vite' } as never);
+    h.f.local({ event: 'intendia.steer', seq: 2, text: 'en français' } as never);
+    h.setFree(1);
+    await h.tick();
+    const src = FakeSource.all[0]!;
+    src.send({ event: 'message.delta', delta: 'Avant. ' });
+    src.send({ event: 'run.steered' });
+    src.send({ event: 'message.delta', delta: 'Après.' });
+    src.send({ event: 'run.steered' });
+    src.send({ event: 'run.steered' });
+    const texts = h.states.at(-1)![0].entries.map((e) => ('text' in e ? e.text : e.kind));
+    expect(texts).toEqual(['bonjour', 'Avant. ', 'plus vite', 'Après.', 'en français']);
+  });
+
   it('stop while polling cancels the timer and holds no place', async () => {
     const h = harness({ places: 0 });
     h.f.stop();
