@@ -4,6 +4,14 @@ import { mimeOf } from './mime.js';
 /** Headers of every response that carries content from a workspace (agent-written HTML/SVG included). */
 export const FILE_CSP = "sandbox; frame-ancestors 'self'";
 
+/**
+ * HTML page written by the agent and shown in the thread (`::artefact`): its scripts run, in an opaque origin
+ * (no allow-same-origin: no cookie, no /x/), with no network (default-src 'none'), no popups, forms or top navigation;
+ * sent only to a frame of the app, whose own CSP (frame-src 'self') blocks a navigation of the frame to another site.
+ */
+export const ARTIFACT_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+  + "img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'";
+
 export function disposition(kind: 'inline' | 'attachment', name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
@@ -11,11 +19,11 @@ export function disposition(kind: 'inline' | 'attachment', name: string): string
 
 /** Relays a regular file read from Hermes (files/hermes-fs.ts), with Intendia's own headers. */
 export function sendFile(
-  _c: Context, file: { body: ReadableStream<Uint8Array>; size: number | null }, name: string, opts: { download?: boolean } = {},
+  _c: Context, file: { body: ReadableStream<Uint8Array>; size: number | null }, name: string, opts: { download?: boolean; artifact?: boolean } = {},
 ): Response {
   const headers: Record<string, string> = {
     'Content-Type': mimeOf(name),
-    'Content-Security-Policy': FILE_CSP,
+    'Content-Security-Policy': opts.artifact && !opts.download && /\.html?$/i.test(name) ? ARTIFACT_CSP : FILE_CSP,
     'X-Frame-Options': 'SAMEORIGIN',
     'Cache-Control': 'private, no-store',
     'Content-Disposition': disposition(opts.download ? 'attachment' : 'inline', name),

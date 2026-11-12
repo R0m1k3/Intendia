@@ -7,6 +7,8 @@ export interface FilePathsValue {
   found: Map<string, string>;
   open: (path: string) => void;
   slug: string;
+  /** First lookup of the paths still running (an artefact not found yet is not « introuvable »). */
+  pending: boolean;
   /** The workspace root as the agent sees it; null until the instances are loaded. */
   mounts: MountInfo | null;
 }

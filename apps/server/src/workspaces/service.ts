@@ -573,12 +573,13 @@ export class WorkspaceService {
   }
 
   /** Framing lines shared by chat runs and crons; `folder` is relative to the workspace. */
-  framingLines(ws: Workspace, folder: string): { workdir: string; store: string; share: string } {
+  framingLines(ws: Workspace, folder: string): { workdir: string; store: string; share: string; artifact: string } {
     const path = this.agentPath(ws);
     return {
       workdir: `Dossier de travail : ${path}/`,
       store: `Range chaque fichier que tu produis dans ${path}/${folder}/.`,
       share: "Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.",
+      artifact: `Pour montrer une page HTML dans la conversation, écris-la dans ${path}/${folder}/, autonome (CSS et JS dans le fichier, aucune ressource externe), puis écris seule sur une ligne : ::artefact <chemin complet>`,
     };
   }
 
@@ -607,6 +608,7 @@ export class WorkspaceService {
       lines.workdir,
       lines.store,
       lines.share,
+      lines.artifact,
       `Consignes du projet (${path}/AGENTS.md) :`,
       text,
     ].join('\n');

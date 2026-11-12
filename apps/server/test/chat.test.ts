@@ -31,7 +31,7 @@ describe('sending a message', () => {
     expect(body.instructions).toContain(`Dossier de travail : ${t.root}/dev/`);
     expect(body.instructions).toContain(`Range chaque fichier que tu produis dans ${t.root}/dev/sessions/${s.id}/.`);
     expect(body.instructions).toContain('Réponds en français.');
-    expect(body.instructions).toContain("Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.\nConsignes du projet (");
+    expect(body.instructions).toContain(`Si l'outil share_file est disponible, appelle-le pour chaque fichier livré avec son chemin complet et donne le lien renvoyé.\nPour montrer une page HTML dans la conversation, écris-la dans ${t.root}/dev/sessions/${s.id}/, autonome (CSS et JS dans le fichier, aucune ressource externe), puis écris seule sur une ligne : ::artefact <chemin complet>\nConsignes du projet (`);
     expect(body.instructions).toContain(`(suite tronquée : lis ${t.root}/dev/AGENTS.md en entier avant de commencer)`);
     expect(body.instructions).not.toContain('�');
     const after = (await t.request('GET', base)).json.session;
