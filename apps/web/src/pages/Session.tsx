@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions/UndoBar';
@@ -17,6 +17,7 @@ import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushH
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
+import { artifactPaths } from '../chat/artifacts';
 import { lastTodos } from '../chat/todos';
 import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
@@ -634,25 +635,30 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     if (!mounts) return [];
     const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : e.kind === 'subagents' ? e.nodes.map((n) => n.summary ?? '').join('\n') : '')).join('\n');
     const m = { root: mounts.files?.workspaceRoot ?? null };
+    // artefacts first: never cut by the 200 checked
+    const pages = entries.flatMap((e) => (e.kind === 'assistant' ? artifactPaths(e.text) : []));
     const cited = findPathCandidates(text, m).sort();
     // files joined to the user's messages come after, so they never push the agent's out of the 200 checked
-    const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : [])).filter((f) => !cited.includes(f));
-    return [...cited, ...new Set(joined)];
+    const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : []));
+    return [...new Set([...pages, ...cited, ...joined])];
   }, [entries, mounts]);
   const exists = useQuery({
     queryKey: ['exists', slug, candidates.join('\n'), runCount],
     queryFn: () => api.filesExist(slug, candidates.slice(0, 200)),
     enabled: candidates.length > 0,
     staleTime: 60_000,
+    // the chips and artefacts already found stay while a new set of paths is checked
+    placeholderData: keepPreviousData,
   });
   const filePaths = useMemo<FilePathsValue>(() => {
     const found = new Map<string, string>();
     for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
     return {
       found, open: (path) => { setPreviewPath(path); setPanel(true); }, slug,
+      pending: exists.isFetching && !exists.data,
       mounts: mounts ? { root: mounts.files?.workspaceRoot ?? null } : null,
     };
-  }, [exists.data, slug, mounts]);
+  }, [exists.data, exists.isFetching, slug, mounts]);
   const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);
 
   const upload = useCallback<Upload>(async (file) => {

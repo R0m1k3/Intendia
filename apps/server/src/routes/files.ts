@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { InstanceFileService } from '../files/instance-files.js';
 import type { FileService } from '../files/service.js';
 import { EXISTS_MAX } from '../files/service.js';
+import { normalizeRel } from '../files/paths.js';
 import { sendFile } from '../files/send.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError } from '../workspaces/service.js';
@@ -43,8 +44,11 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
   r.get(`${base}/search`, async (c) => c.json(await files.search(slugOf(c), (c.req.query('q') ?? '').slice(0, 200))));
 
   r.get(`${base}/raw`, async (c) => {
-    const file = await files.read(slugOf(c), c.req.query('path') ?? '', c.req.raw.signal);
-    return sendFile(c, file, file.name, { download: c.req.query('download') === '1' });
+    const path = c.req.query('path') ?? '';
+    const file = await files.read(slugOf(c), path, c.req.raw.signal);
+    // scripts only for a page under sessions/ (where the agent puts what it makes), never for an upload in inbox/
+    const artifact = c.req.query('artefact') === '1' && normalizeRel(path).startsWith('sessions/');
+    return sendFile(c, file, file.name, { download: c.req.query('download') === '1', artifact });
   });
 
   r.put(`${base}/upload`, async (c) => {

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { FILE_CSP } from '../src/files/send.js';
 import { tempDir, testApp } from './helpers.js';
 
 async function setup(opts: Parameters<typeof testApp>[0] = {}) {
@@ -265,6 +266,24 @@ describe('files', () => {
     expect(readFileSync(join(t.ws, md.path), 'utf8')).toBe('# R2');
     expect((await t.request('PUT', `${t.F}/text`, { path: md.path, text: '# R3', mtime: md.mtime - 5000 })).status).toBe(409);
     expect((await t.request('PUT', `${t.F}/text`, { path: md.path, text: 'x'.repeat(1024 * 1024 + 1), mtime: ok.json.mtime })).status).toBe(413);
+  });
+
+  it('raw with artefact=1: scripts without network only for an HTML page under sessions/', async () => {
+    const t = await setup();
+    mkdirSync(join(t.ws, 'sessions', 's1'), { recursive: true });
+    for (const f of ['sessions/s1/page.html', 'sessions/s1/page.HTM', 'sessions/s1/notes.txt', 'inbox/page.html']) writeFileSync(join(t.ws, f), '<p>x</p>');
+    const csp = async (q: string) => (await t.rawRequest('GET', `${t.F}/raw?${q}`)).headers.get('content-security-policy');
+    for (const p of ['sessions/s1/page.html', 'sessions/s1/page.HTM', './sessions//s1/page.html']) {
+      const v = await csp(`path=${t.q(p)}&artefact=1`);
+      expect(v, p).toContain('sandbox allow-scripts;');
+      expect(v, p).toContain("default-src 'none'");
+      expect(v, p).not.toContain('allow-same-origin');
+    }
+    expect(await csp(`path=${t.q('sessions/s1/page.html')}`)).toBe(FILE_CSP);
+    expect(await csp(`path=${t.q('sessions/s1/page.html')}&artefact=1&download=1`)).toBe(FILE_CSP);
+    expect(await csp(`path=${t.q('sessions/s1/notes.txt')}&artefact=1`)).toBe(FILE_CSP);
+    expect(await csp(`path=${t.q('inbox/page.html')}&artefact=1`)).toBe(FILE_CSP);
+    expect((await t.rawRequest('GET', `${t.F}/raw?path=${t.q('sessions/../inbox/page.html')}&artefact=1`)).status).toBe(400);
   });
 
   it('raw: sandbox, framing by Intendia only, type from the extension, download', async () => {

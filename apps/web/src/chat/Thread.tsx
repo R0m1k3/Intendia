@@ -10,6 +10,8 @@ import { baseName, fileKind } from '../files/paths';
 import { rehypePaths } from '../files/rehypePaths';
 import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
+import { Artifact } from './Artifact';
+import { splitArtifacts } from './artifacts';
 import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
 import { duration, Subagents } from './Subagents';
@@ -141,7 +143,9 @@ function PartView({ p }: { p: Part }) {
 function PartBody({ p }: { p: Exclude<Part, { kind: 'steps' }> }) {
   switch (p.kind) {
     case 'assistant':
-      return <Md text={p.text} />;
+      // while it is typed, the path of an artefact line may be incomplete
+      if (p.streaming) return <Md text={p.text} />;
+      return <>{splitArtifacts(p.text).map((x, i) => (x.kind === 'md' ? <Md key={i} text={x.text} /> : <Artifact key={i} path={x.path} />))}</>;
     case 'reasoning':
       return (
         <details className="text-[13px] text-ink-faint">

@@ -770,9 +770,9 @@ export const api = {
   restartStatus: (inst: string, profile: string) => call<RestartStatus>('GET', instPath(inst, 'config/gateway/restart', profile)),
 };
 
-/** URL of a file's content (preview, download); served with CSP sandbox. */
-export const rawUrl = (slug: string, path: string, download = false) =>
-  `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
+/** URL of a file's content (preview, download); served with CSP sandbox (scripts allowed for an artefact). */
+export const rawUrl = (slug: string, path: string, download = false, artifact = false) =>
+  `/x${filesPath(slug)}/raw?path=${enc(path)}${download ? '&download=1' : ''}${artifact ? '&artefact=1' : ''}`;
 
 /** URL of a file of an instance's file root (read only page « Fichiers »). */
 export const instanceRawUrl = (inst: string, path: string, download = false) =>
