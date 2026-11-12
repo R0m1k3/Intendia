@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { api, ApiError, SESSION_SOURCES, type SessionSource } from './api';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
+import { pruneDrafts } from './chat/draft';
 import { UndoHost } from './sessions/UndoBar';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
@@ -149,6 +150,9 @@ const router = createRouter({
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
 }
+
+// drafts of the composer older than 30 days
+pruneDrafts();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

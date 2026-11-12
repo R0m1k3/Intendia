@@ -155,6 +155,33 @@ describe('files', () => {
     expect(readFileSync(join(t.ws, 'inbox', 'collage.png'), 'utf8')).toBe('png');
   });
 
+  it('extract: zip unpacked next to it in a free folder, hidden names skipped, one at a time, sizes', async () => {
+    const t = await setup({ env: { INTENDIA_UPLOAD_MAX_MB: '1' } });
+    const { zipSync } = await import('fflate');
+    const enc = new TextEncoder();
+    const zip = zipSync({ 'notes/a.md': enc.encode('# A'), 'b.txt': enc.encode('B'), '.env': enc.encode('SECRET=1'), '../x': enc.encode('x') });
+    mkdirSync(join(t.ws, 'inbox', 'Lot'), { recursive: true });
+    writeFileSync(join(t.ws, 'inbox', 'Lot.zip'), zip);
+    const ex = (path: string) => t.request('POST', `${t.F}/extract`, { path });
+    const [a, b] = await Promise.all([ex('inbox/Lot.zip'), ex('inbox/Lot.zip')]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    const ok = a.status === 201 ? a : b;
+    expect((a.status === 409 ? a : b).json.code).toBe('busy');
+    expect(ok.json).toMatchObject({ folder: 'inbox/Lot (2)', count: 2, partial: false });
+    expect(ok.json.skipped.map((s: any) => s.reason).sort()).toEqual(['chemin hors du dossier', 'nom caché par Hermes']);
+    expect(readFileSync(join(t.ws, 'inbox', 'Lot (2)', 'notes', 'a.md'), 'utf8')).toBe('# A');
+    expect(existsSync(join(t.ws, 'inbox', 'Lot (2)', '.env'))).toBe(false);
+    expect((await ex('inbox/Lot.zip')).json.folder).toBe('inbox/Lot (3)');
+
+    writeFileSync(join(t.ws, 'inbox', 'faux.zip'), 'pas une archive');
+    expect(await ex('inbox/faux.zip')).toMatchObject({ status: 400, json: { code: 'invalid_archive' } });
+    expect((await ex('inbox/doc.pdf')).status).toBe(400);
+    expect((await ex('inbox/absent.zip')).status).toBe(404);
+    writeFileSync(join(t.ws, 'inbox', 'gros.zip'), zipSync({ 'big.bin': new Uint8Array(1024 * 1024 + 1) }));
+    expect(await ex('inbox/gros.zip')).toMatchObject({ status: 413, json: { code: 'too_big' } });
+    expect(existsSync(join(t.ws, 'inbox', 'gros'))).toBe(false);
+  });
+
   it('INTENDIA_UPLOAD_MAX_MB is capped at 100 (Hermes refuses more)', async () => {
     await expect(testApp({ env: { INTENDIA_UPLOAD_MAX_MB: '200' } })).rejects.toThrow(/INTENDIA_UPLOAD_MAX_MB/);
   });

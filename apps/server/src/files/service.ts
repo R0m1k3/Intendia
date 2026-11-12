@@ -7,7 +7,8 @@ import { LinkService } from '../links/service.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import type { Workspace, WorkspaceService } from '../workspaces/service.js';
 import { mapLimit, type FileRoots, type FsEntry, type HermesFs } from './hermes-fs.js';
-import { checkName, normalizeRel, toVolumePath } from './paths.js';
+import { ArchiveError, archiveKind, archiveStem, extractArchive, precheckArchive, type Skipped } from './archive.js';
+import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
 
 export const LIST_MAX = 2000;
 export const SEARCH_VISIT_MAX = 20_000;
@@ -15,6 +16,11 @@ export const SEARCH_RESULTS_MAX = 200;
 export const SEARCH_MAX_MS = 5_000;
 export const TEXT_MAX_BYTES = 1024 * 1024;
 export const EXISTS_MAX = 200;
+export const EXTRACT_MAX_ENTRIES = 2000;
+export const EXTRACT_MAX_TOTAL = 500 * 1024 * 1024;
+export const EXTRACT_MAX_MS = 10 * 60_000;
+/** one extraction at a time on the server (memory: the archive plus one file) */
+let extracting = false;
 const PARALLEL = 4;
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
 const PROTECTED = new Set(['files', 'inbox', 'sessions', 'AGENTS.md']);
@@ -43,6 +49,7 @@ const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCas
 const join2 = (a: string, b: string) => (a ? `${a}/${b}` : b);
 const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const nameOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
+const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 
 export function toFileEntry(e: FsEntry, rel: string): FileEntry {
   const path = join2(rel, e.name);
@@ -140,6 +147,83 @@ export class FileService {
       throw err;
     }
     return { path: rel, agentPath: this.agentPath(c, rel) };
+  }
+
+  /**
+   * Unpacks an archive of the workspace (.zip, .tar, .tar.gz, .tgz) into <its folder>/<name without extension>/
+   * (" (2)"… when taken). One extraction at a time on the server; it goes on when the browser drops the request,
+   * for at most EXTRACT_MAX_MS (then stops: files already written stay, `partial`).
+   */
+  async extract(slug: string, relIn: string): Promise<{ folder: string; count: number; skipped: Skipped[]; partial: boolean }> {
+    const c = this.ctx(slug);
+    const rel = normalizeRel(relIn);
+    const name = nameOf(rel);
+    const kind = archiveKind(name);
+    if (!kind) throw new ArchiveError('invalid', 'Ce fichier n’est pas une archive .zip, .tar, .tar.gz ou .tgz');
+    if (extracting) throw new ArchiveError('busy', 'Une autre archive est en cours de décompression, réessayez dans un instant');
+    extracting = true;
+    try {
+      const started = Date.now();
+      const bytes = await this.readBytes(c, rel);
+      const limits = { maxEntries: EXTRACT_MAX_ENTRIES, maxTotal: EXTRACT_MAX_TOTAL, maxFile: this.uploadMaxBytes };
+      precheckArchive(bytes, kind, limits);
+      const dir = dirOf(rel);
+      const taken = new Set((await this.listOrCreate(c, dir)).map((e) => e.name));
+      const stem = checkName(archiveStem(name).trim() || 'archive');
+      let folder = '';
+      for (let n = 1; n <= 99 && !folder; n++) {
+        const candidate = n === 1 ? stem : `${stem} (${n})`;
+        if (!taken.has(candidate)) folder = join2(dir, candidate);
+      }
+      if (!folder) throw new WorkspaceFsError('exists', `Trop de dossiers nommés ${stem}`);
+      await c.fs.mkdir(this.vol(c, folder));
+      const made = new Set<string>([folder]);
+      const res = await extractArchive(bytes, kind, limits, async (path, data) => {
+        const target = join2(folder, path);
+        const vol = this.vol(c, target);
+        if (hiddenByHermes(vol)) return { path, reason: 'nom caché par Hermes' };
+        const parent = dirOf(target);
+        if (!made.has(parent)) {
+          await c.fs.mkdir(this.vol(c, parent));
+          for (let p = parent; p && p !== folder && !made.has(p); p = dirOf(p)) made.add(p);
+        }
+        try {
+          await c.fs.create(vol, data, { overwrite: false });
+        } catch (err) {
+          if (err instanceof WorkspaceFsError && (err.code === 'exists' || err.code === 'invalid')) return { path, reason: err.code === 'exists' ? 'en double dans l’archive' : 'nom refusé' };
+          throw err;
+        }
+        return 'written';
+      }, () => Date.now() - started > EXTRACT_MAX_MS);
+      if (res.partial) console.warn(`[files] extraction partielle de ${slug}/${rel} : ${res.count} fichiers écrits`);
+      return { folder, ...res };
+    } finally {
+      extracting = false;
+    }
+  }
+
+  /** A whole file in memory, at most uploadMaxBytes. */
+  private async readBytes(c: WsCtx, rel: string): Promise<Uint8Array> {
+    const { body, size } = await c.fs.read(this.vol(c, rel));
+    const tooLarge = () => new ArchiveError('too_big', `Archive de plus de ${Math.round(this.uploadMaxBytes / 1024 / 1024)} Mo`);
+    if (size !== null && size > this.uploadMaxBytes) {
+      await body.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const reader = body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > this.uploadMaxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+    return new Uint8Array(Buffer.concat(chunks));
   }
 
   /**

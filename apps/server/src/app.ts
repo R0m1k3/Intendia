@@ -22,6 +22,9 @@ import { sessionCopyRoutes } from './routes/session-copies.js';
 import { CopyError } from './sessions/copy.js';
 import { TitleError } from './sessions/title-ai.js';
 import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
+import { PromptService } from './prompts/service.js';
+import { promptRoutes } from './routes/prompts.js';
+import { ARCHIVE_CODE, ARCHIVE_STATUS, ArchiveError } from './files/archive.js';
 import { cronRoutes } from './routes/crons.js';
 import { skillRoutes } from './routes/skills.js';
 import { agentRoutes } from './routes/agents.js';
@@ -85,6 +88,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof CopyError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof TitleError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
+    if (err instanceof ArchiveError) return c.json({ error: err.message, code: ARCHIVE_CODE[err.code] }, ARCHIVE_STATUS[err.code]);
     if (err instanceof WorkspaceFsError) {
       return c.json({ error: err.message, code: err.code }, FS_ERROR_STATUS[err.code]);
     }
@@ -218,6 +222,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', sessionCopyRoutes({ ...deps, workspaces }));
   priv.route('/', fileRoutes(files, deps.services.instanceFiles));
   priv.route('/', linkRoutes(links));
+  priv.route('/', promptRoutes(new PromptService(deps.db)));
   priv.route('/', cronRoutes(deps.services.crons));
   priv.route('/', skillRoutes(deps.services.skills));
   priv.route('/', configRoutes(deps.services.config, deps.services.providers));

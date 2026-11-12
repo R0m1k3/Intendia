@@ -5,7 +5,7 @@ const list: Command[] = COMMANDS.map((c) => (c.name === 'stop' ? { ...c, disable
 
 describe('slash commands', () => {
   it('menu while the name is typed, filtered by prefix', () => {
-    expect(matchCommands('/', list)?.map((c) => c.name)).toEqual(['new', 'clear', 'undo', 'retry', 'branch', 'title', 'usage', 'stop']);
+    expect(matchCommands('/', list)?.map((c) => c.name)).toEqual(['new', 'clear', 'undo', 'retry', 'branch', 'title', 'usage', 'stop', 'prompt']);
     expect(matchCommands('/U', list)?.map((c) => c.name)).toEqual(['undo', 'usage']);
     expect(matchCommands('/title ', list)).toBeNull();
     expect(matchCommands('/xyz', list)).toBeNull();

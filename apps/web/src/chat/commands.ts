@@ -2,7 +2,7 @@
 // sent to the agent. Only the commands the page can run now are offered (`disabled` gives the reason otherwise); any
 // other text starting with « / » is an ordinary message.
 
-export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop';
+export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt';
 
 export interface Command {
   name: CommandName;
@@ -22,6 +22,7 @@ export const COMMANDS: { name: CommandName; args?: string; label: string }[] = [
   { name: 'title', args: '[nom]', label: 'Renommer (sans nom : titre par l’IA)' },
   { name: 'usage', label: 'Contexte et forfait utilisés' },
   { name: 'stop', label: 'Arrêter l’agent' },
+  { name: 'prompt', args: '[titre]', label: 'Insérer un prompt enregistré' },
 ];
 
 /** Commands offered while the name is typed: text = « / » then letters only (no space yet). Null = no menu. */
@@ -40,7 +41,7 @@ export function parseCommand(text: string, list: Command[]): { command: Command;
   const command = list.find((c) => c.name === m[1]!.toLowerCase());
   if (!command) return null;
   const arg = (m[2] ?? '').trim();
-  // only /title takes an argument: « /stop maintenant » is a message
+  // only /title and /prompt take an argument: « /stop maintenant » is a message
   if (arg && !command.args) return null;
   return { command, arg };
 }
