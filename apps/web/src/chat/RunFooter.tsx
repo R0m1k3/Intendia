@@ -55,6 +55,8 @@ export function RunFooter({ r }: { r: RunStat }) {
   if (rate !== null) items.push(`≈ ${rate} jetons/s`);
   const share = cacheShare(r);
   if (share !== null) items.push(`Cache ${formatShare(share)}`);
+  // « Sans confirmation »: what Intendia approved by itself
+  if (r.autoApproved) items.push(r.autoApproved === 1 ? '1 approbation automatique' : `${r.autoApproved} approbations automatiques`);
   const st = STATUS[r.status];
   if (!items.length && !st) return null;
   return (

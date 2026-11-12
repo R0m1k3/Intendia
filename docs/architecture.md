@@ -82,9 +82,24 @@ demand from the State screen. State changes go to the webhook.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`<workspace root>/<slug>`), the session
-  folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`.
-- Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
+  folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`; then, for that run only, the skills asked by
+  `/use` (12 000 characters each, else their start and a pointer to `skill_view`; unknown → 400 `skill_not_found`
+  before the run), and on every run the session's personality (`hermes:<name>` from the profile's `personalities` /
+  `agent.personalities`, or `intendia:<id>` from the `prompts` table; missing → left out, `notice` in the answer).
+- **Profile of a session**: a workspace has a *default* profile; a session may use another profile of the same
+  instance (`session_workspace.profile`, NULL = the workspace's). Every query reading a session's profile takes
+  `coalesce(session_workspace.profile, workspaces.profile)` (lists, search, purge, recent runs → approvals, activity,
+  « Sans confirmation »). A session never sent changes profile by `PATCH`; one with a history is copied
+  (`POST …/to-profile {profile, key}`, the original stays). Move, « Continuer dans Intendia » and attached crons keep
+  using the workspace's default profile.
+- Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the session's profile and
   calls Hermes through `/p/<profile>/` with that profile's key.
+- « Sans confirmation » (`session_workspace.auto_approve`): Hermes has no per-session switch reachable by HTTP, so
+  `src/sessions/auto-approve.ts` answers `once` to the approvals of those sessions' runs, one pass every 2 s over the
+  runs `ActivityService` follows (24 h window, 200 sessions); counted in `run_stats.auto_approved`, logged. Questions
+  of the agent (clarify) are never answered. Copies keep it only when they replace the session (edit, retry, undo).
+- Pinned models and modes (model + effort + personality, never the profile) per agent: `settings`
+  `model_pins:<inst>:<profile>` (20) and `run_modes:<inst>:<profile>` (30), `GET|PUT /x/i/:inst/model-pins|modes`.
 - Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
   The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
   becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
@@ -97,7 +112,7 @@ demand from the State screen. State changes go to the webhook.
   is `/?nouvelle=1`, which puts the cursor in that box.
 - Sessions of every source, per instance: `GET /x/i/:inst/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
   (`src/sessions/recent.ts`) merges the Intendia sessions of the instance's workspaces (filtered before the limit)
-  with the Hermes sessions of that instance only (`default` and the workspace profiles that have a key; 3 s per
+  with the Hermes sessions of that instance only (`default` and the workspace and session profiles that have a key; 3 s per
   call, errors listed, not fatal). Unknown instance → 404. The source is
   filtered on the server: `intendia` reads the database only, `telegram`/`cron` ask Hermes for that source only. The
   home page shows 7 lines; the Sessions page (`/sessions`, `pages/Sessions.tsx`) groups them by day (browser time)

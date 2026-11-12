@@ -95,7 +95,12 @@ export interface RunStat {
   costRuns: number;
   /** False while Hermes may still write the cost (re-read for COST_SETTLE_MS after the end). */
   costFinal: boolean;
+  /** approvals Intendia gave by itself (« Sans confirmation ») */
+  autoApproved?: number;
 }
+export interface PersonalityItem { value: string; label: string; source: 'hermes' | 'intendia' }
+export interface ModelPin { provider: string | null; model: string }
+export interface RunMode { id: string; name: string; model: string | null; provider: string | null; effort: Effort | null; personality: string | null }
 export type PromptKind = 'prompt' | 'personality';
 export interface Prompt { id: string; kind: PromptKind; title: string; body: string; createdAt: number; updatedAt: number }
 export interface ExtractResult { folder: string; count: number; skipped: { path: string; reason: string }[]; partial: boolean }
@@ -120,6 +125,12 @@ export interface Session {
   copiedFrom: string | null;
   /** The session this one replaced (edit, retry, undo, clear), restorable for 10 s. */
   replacesId: string | null;
+  /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
+  personality?: string | null;
+  /** « Sans confirmation »: Intendia approves the actions of its runs */
+  autoApprove?: boolean;
+  /** profile chosen for this session (null = the workspace's) */
+  profile?: string | null;
 }
 /** A truncated copy: `before` = Hermes row id of the user message to cut before, 0 = nothing kept, null = all. */
 export interface RewriteResult { session: Session; replaced?: string; undoUntil?: number | null }
@@ -564,7 +575,10 @@ export const api = {
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
-  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null }) =>
+  updateSession: (inst: string, id: string, patch: {
+    title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null;
+    personality?: string | null; autoApprove?: boolean; profile?: string | null;
+  }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
   /** Hidden at once, deleted at Hermes after `undoUntil` unless restored. */
   deleteSession: (inst: string, id: string) => call<{ ok: true; undoUntil: number }>('DELETE', sessionPath(inst, id)),
@@ -590,7 +604,14 @@ export const api = {
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
-  send: (inst: string, id: string, input: string) => call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, { input }),
+  send: (inst: string, id: string, input: string, skills?: string[]) =>
+    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
+  personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),
+  modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
+  setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
+  modes: (inst: string, profile: string) => call<{ modes: RunMode[] }>('GET', instPath(inst, `modes?profile=${enc(profile)}`)),
+  setModes: (inst: string, profile: string, modes: RunMode[]) => call<{ modes: RunMode[] }>('PUT', instPath(inst, `modes?profile=${enc(profile)}`), { modes }),
+  toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),
   sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
   runStatus: (inst: string, id: string, runId: string) => call<RunStatus>('GET', `${sessionPath(inst, id)}/runs/${enc(runId)}`),
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),

@@ -356,6 +356,16 @@ export class ConfigService {
     });
   }
 
+  /**
+   * Personalities of the profile's config, merged as Hermes does: `personalities`, then
+   * `agent.personalities`, which wins on a same name. A value is a text or {system_prompt, tone, style}.
+   */
+  async personalities(instanceId: string, profile: string): Promise<Record<string, unknown>> {
+    const cfg = await this.call<Record<string, unknown>>(this.ctx(instanceId, profile), 'get');
+    const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
+    return { ...obj(cfg.personalities), ...obj(obj(cfg.agent).personalities) };
+  }
+
   // ---------------------------------------------------------------- form
 
   async form(instanceId: string, profile: string): Promise<PublicConfig> {

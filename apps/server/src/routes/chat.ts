@@ -15,13 +15,25 @@ import { ModelInfoSchema } from '../connectors/config/index.js';
 import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
 import { toUsage } from '../chat/usage.js';
 import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from '../chat/history.js';
+import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
+import { presets, Modes, Pins } from '../chat/presets.js';
+import { PromptService } from '../prompts/service.js';
+import { listPersonalities } from '../sessions/personalities.js';
+import { personalityBlock, RunExtrasError, skillBlocks, SKILLS_MAX } from '../sessions/run-extras.js';
+import { profileOf } from './skills.js';
 
 export { toChatMessages, type ChatMessage } from '../chat/history.js';
+export { controlBody } from '../chat/approve.js';
 
 const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
 const OTHER_PAGE = 50;
 
-const SendBody = z.object({ input: z.string().min(1).max(100_000) });
+const SendBody = z.object({
+  input: z.string().min(1).max(100_000),
+  /** `/use <skill>`: put in the instructions of this run only */
+  // same names as the skills routes (`category/name` for same-tier duplicates), never a `..` segment
+  skills: z.array(z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/).refine((n) => !n.split('/').includes('..'))).max(SKILLS_MAX).optional(),
+});
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
 const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
@@ -34,31 +46,6 @@ function sseError(status: number, message: string): Response {
   return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, message })}`, {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
-}
-
-const CONTROL_ERRORS = {
-  no_pending: 'Plus rien n’attend votre réponse',
-  ambiguous: 'Plusieurs demandes en attente : rechargez la page',
-} as const;
-
-/**
- * Body of an answer to an approval (or a question) of a run. With the gateway session authority (Hermes 0.23: the
- * status has an integer `execution_generation`), Hermes wants exactly `{request_id, execution_generation, choice}`
- * (`answer` for a question), the id being one of `pending_controls`: the page's id when it is listed, else the only
- * one of that kind. Without it (API server without authority), `{choice, request_id?}` as before.
- */
-export function controlBody(
-  kind: 'approval' | 'clarify', raw: unknown, requestId: string | null, value: string,
-): { body: Record<string, unknown> } | { code: keyof typeof CONTROL_ERRORS } {
-  const field = kind === 'approval' ? 'choice' : 'answer';
-  const parsed = RunStatusSchema.safeParse(raw);
-  const generation = parsed.success ? parsed.data.execution_generation : null;
-  if (typeof generation !== 'number') return { body: { [field]: value, ...(requestId ? { request_id: requestId } : {}) } };
-  const pending = (parsed.success ? parsed.data.pending_controls : []).filter((p) => p.kind === kind && p.prompt_id);
-  // an id that is no longer pending is refused: never answer another prompt than the one the page showed
-  const chosen = requestId ? pending.find((p) => p.prompt_id === requestId) : pending.length === 1 ? pending[0] : undefined;
-  if (!chosen) return { code: pending.length && !requestId ? 'ambiguous' : 'no_pending' };
-  return { body: { request_id: chosen.prompt_id, execution_generation: chosen.execution_generation ?? generation, [field]: value } };
 }
 
 export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
@@ -160,11 +147,34 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return fresh;
   };
 
+  const prompts = new PromptService(deps.db);
+  const instOf = (c: { req: { param: (k: string) => string | undefined } }) => {
+    const id = c.req.param('inst') ?? '';
+    if (!deps.store.get(id)) throw new NotFoundError(`Instance inconnue : ${id}`);
+    return id;
+  };
+
+  r.get('/i/:inst/personalities', async (c) => c.json(await listPersonalities(deps.services.config, prompts, instOf(c), profileOf(c))));
+  r.get('/i/:inst/model-pins', (c) => c.json({ pins: presets.pins(deps.db, instOf(c), profileOf(c)) }));
+  r.put('/i/:inst/model-pins', async (c) => {
+    const inst = instOf(c);
+    const pins = Pins.parse((await c.req.json()).pins);
+    presets.setPins(deps.db, inst, profileOf(c), pins);
+    return c.json({ pins });
+  });
+  r.get('/i/:inst/modes', (c) => c.json({ modes: presets.modes(deps.db, instOf(c), profileOf(c)) }));
+  r.put('/i/:inst/modes', async (c) => {
+    const inst = instOf(c);
+    const modes = Modes.parse((await c.req.json()).modes);
+    presets.setModes(deps.db, inst, profileOf(c), modes);
+    return c.json({ modes });
+  });
+
   const publicRun = (r: RunStatRow) => ({
     runId: r.runId, status: r.status, requestedModel: r.requestedModel, requestedEffort: r.requestedEffort,
     servedModel: r.servedModel, startedAt: r.startedAt, endedAt: r.endedAt,
     inputTokens: r.inputTokens, outputTokens: r.outputTokens, cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWriteTokens,
-    costUsd: r.costUsd, costRuns: r.costRuns, costFinal: r.costFinal,
+    costUsd: r.costUsd, costRuns: r.costRuns, costFinal: r.costFinal, autoApproved: r.autoApproved,
   });
 
   const instanceProfile = (instanceId: string, profile: string | undefined): string => {
@@ -190,7 +200,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   const starting = startingRuns;
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
-    const { input } = SendBody.parse(await c.req.json());
+    const { input, skills: asked } = SendBody.parse(await c.req.json());
     const key = runKey(ctx.instance.id, ctx.session.id);
     if (starting.has(key)) return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
     starting.add(key);
@@ -209,7 +219,16 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
       }
       const { model, modelProvider, effort } = fresh.session;
-      const instructions = await workspaces.instructionsFor(fresh);
+      // skills first: an unknown one stops the send before the run (400), the personality never does
+      let extra: string[];
+      try {
+        extra = asked?.length ? await skillBlocks(deps.services.skills, fresh, [...new Set(asked)]) : [];
+      } catch (err) {
+        if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
+        throw err;
+      }
+      const persona = await personalityBlock(deps.services.config, prompts, fresh);
+      const instructions = [await workspaces.instructionsFor(fresh), ...extra, ...(persona.block ? [persona.block] : [])].join('\n\n');
       const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
         profile: ctx.profile,
         body: {
@@ -225,7 +244,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         requestedModel: model, requestedEffort: effort, startedAt: Date.now(), ...handOverCost(fresh, cost),
       });
       const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
-      return c.json({ runId: created.run_id, session });
+      return c.json({ runId: created.run_id, session, ...(persona.notice ? { notice: persona.notice } : {}) });
     } finally {
       starting.delete(key);
     }
@@ -272,11 +291,12 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
     const { choice, requestId } = ApprovalBody.parse(await c.req.json());
-    const s = await status(ctx, runId);
-    if (s.status === 'unknown') return c.json({ error: 'Ce run est terminé', code: 'run_gone' }, 409);
-    const built = controlBody('approval', s.raw, requestId ?? null, choice);
-    if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
-    return c.json(await callOp(http(ctx), report(ctx), 'chat', 'approval', { params: { run_id: runId }, profile: ctx.profile, body: built.body }));
+    try {
+      return c.json(await answerApproval(compat, ctx, runId, choice, requestId ?? null));
+    } catch (err) {
+      if (err instanceof ApproveError) return c.json({ error: err.message, code: err.code }, 409);
+      throw err;
+    }
   });
 
   /** Answer to a question of the agent; Hermes allows it with its gateway session authority only. */

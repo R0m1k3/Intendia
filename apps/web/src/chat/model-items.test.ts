@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatModelList } from '../api';
-import { currentValue, decodeChoice, encodeChoice, modelItems } from './model-items';
+import { currentValue, decodeChoice, encodeChoice, modeOf, modelItems } from './model-items';
 import { pickerGroups } from '../components/Menu';
 
 const noop = () => {};
@@ -56,5 +56,22 @@ describe('picker groups', () => {
     const items = modelItems(l, { model: null, provider: null }, noop);
     expect(items.filter((i) => 'heading' in i).every((i) => 'heading' in i && i.collapsible)).toBe(true);
     expect(pickerGroups(items)).toEqual([-1, -1, 1, 1, -1, 4, -1]);
+  });
+
+  it('modes first, then Auto, the pinned group (also in its own group), pin and mode actions', () => {
+    const modes = [{ id: 'm1', name: 'Rapide', model: 'b', provider: 'openrouter', effort: 'low' as const, personality: null }];
+    const pins = [{ provider: 'anthropic', model: 'c' }];
+    const items = modelItems(LIST, { model: 'c', provider: 'anthropic' }, noop, { modes, pins, togglePin: noop, saveMode: noop, removeMode: noop });
+    expect(items.map((i) => ('heading' in i ? `# ${i.heading}` : i.label))).toEqual([
+      '# Modes', 'Rapide', 'Auto · claude-opus-4.6', '# Épinglés', 'c', '# OpenRouter', 'a', 'b', '# Anthropic', 'c',
+      'Retirer des épinglés', 'Enregistrer le réglage actuel comme mode…', 'Retirer un mode…', 'Gérer les modèles…',
+    ]);
+    const mode = items[1]!;
+    expect('value' in mode && modeOf(mode.value)).toBe('m1');
+    const pinned = items[4]!;
+    expect('value' in pinned && decodeChoice(pinned.value)).toEqual({ model: 'c', provider: 'anthropic' });
+    const values = items.filter((i) => 'value' in i).map((i) => (i as { value: string | null }).value);
+    expect(new Set(values).size).toBe(values.length);
+    expect(modelItems(LIST, { model: 'a', provider: 'openrouter' }, noop, { pins, togglePin: noop }).some((i) => 'label' in i && i.label === 'Épingler ce modèle')).toBe(true);
   });
 });

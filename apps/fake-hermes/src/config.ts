@@ -71,6 +71,12 @@ providers:
     api_key: \${CUSTOM_KEY}
 notes:
   webhook: https://hooks.slack.com/services/T0/B0/${FAKE_SECRETS.hook}
+personalities:
+  brief: Réponds en trois phrases au plus.
+  formel:
+    system_prompt: Tu es un assistant formel.
+    tone: courtois
+    style: phrases complètes
 `;
 
 interface EnvEntry { is_set: boolean; redacted_value: string | null; [k: string]: unknown }

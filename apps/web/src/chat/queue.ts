@@ -3,7 +3,8 @@
  * (`sessionStorage`, per instance and session): a reload keeps them, closing the tab loses them (the page warns).
  * `paused`: why the queue waits for « Reprendre » (a run that failed, a reorientation not delivered…), null = flows.
  */
-export interface QueueItem { id: string; text: string }
+/** `skills`: asked by `/use` with the message, sent with it */
+export interface QueueItem { id: string; text: string; skills?: string[] }
 export interface Queue { items: QueueItem[]; paused: string | null }
 
 export const EMPTY_QUEUE: Queue = { items: [], paused: null };
@@ -16,6 +17,7 @@ export function loadQueue(inst: string, sessionId: string, store: Storage = sess
     const raw = JSON.parse(store.getItem(keyOf(inst, sessionId)) ?? 'null') as Partial<Queue> | null;
     const items = Array.isArray(raw?.items)
       ? raw.items.filter((i): i is QueueItem => typeof i?.id === 'string' && typeof i?.text === 'string' && i.text.trim() !== '')
+        .map((i) => (Array.isArray(i.skills) && i.skills.every((x) => typeof x === 'string') ? i : { id: i.id, text: i.text }))
       : [];
     return { items, paused: items.length && typeof raw?.paused === 'string' ? raw.paused : null };
   } catch {
@@ -32,8 +34,9 @@ export function saveQueue(inst: string, sessionId: string, q: Queue, store: Stor
   }
 }
 
-export const enqueue = (q: Queue, text: string): Queue => ({ ...q, items: [...q.items, { id: newId(), text }] });
-export const pushHead = (q: Queue, text: string): Queue => ({ ...q, items: [{ id: newId(), text }, ...q.items] });
+const item = (text: string, skills?: string[]): QueueItem => ({ id: newId(), text, ...(skills?.length ? { skills } : {}) });
+export const enqueue = (q: Queue, text: string, skills?: string[]): Queue => ({ ...q, items: [...q.items, item(text, skills)] });
+export const pushHead = (q: Queue, text: string, skills?: string[]): Queue => ({ ...q, items: [item(text, skills), ...q.items] });
 export const dropItem = (q: Queue, id: string): Queue => {
   const items = q.items.filter((i) => i.id !== id);
   return { items, paused: items.length ? q.paused : null };

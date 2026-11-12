@@ -2,7 +2,7 @@
 // sent to the agent. Only the commands the page can run now are offered (`disabled` gives the reason otherwise); any
 // other text starting with « / » is an ordinary message.
 
-export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt';
+export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt' | 'use';
 
 export interface Command {
   name: CommandName;
@@ -23,6 +23,7 @@ export const COMMANDS: { name: CommandName; args?: string; label: string }[] = [
   { name: 'usage', label: 'Contexte et forfait utilisés' },
   { name: 'stop', label: 'Arrêter l’agent' },
   { name: 'prompt', args: '[titre]', label: 'Insérer un prompt enregistré' },
+  { name: 'use', args: '<skill>', label: 'Utiliser un skill pour ce message' },
 ];
 
 /** Commands offered while the name is typed: text = « / » then letters only (no space yet). Null = no menu. */
@@ -41,7 +42,16 @@ export function parseCommand(text: string, list: Command[]): { command: Command;
   const command = list.find((c) => c.name === m[1]!.toLowerCase());
   if (!command) return null;
   const arg = (m[2] ?? '').trim();
-  // only /title and /prompt take an argument: « /stop maintenant » is a message
+  // only the commands with `args` take one: « /stop maintenant » is a message
   if (arg && !command.args) return null;
   return { command, arg };
+}
+
+/** Skills offered after « /use » (second level of the menu), filtered by the start of the name; null = no menu. */
+export function matchSkills(text: string, names: string[], max = 8): string[] | null {
+  const m = /^\/use\s+(\S*)$/i.exec(text);
+  if (!m) return null;
+  const typed = m[1]!.toLowerCase();
+  const found = names.filter((n) => n.toLowerCase().startsWith(typed)).slice(0, max);
+  return found.length ? found : null;
 }

@@ -117,11 +117,15 @@ export class RecentService {
     private readonly workspaces: WorkspaceService,
   ) {}
 
-  /** Profiles read on an instance: default plus those of its workspaces (with a key). */
+  /** Profiles read on an instance: default plus those of its workspaces and of its sessions (with a key). */
   private profiles(instanceId: string): string[] {
     const inst = this.store.get(instanceId);
     const all = this.workspaces.listWorkspaces();
-    return [...new Set(['default', ...all.filter((w) => w.instanceId === instanceId && w.profile && inst?.profileKeys[w.profile]).map((w) => w.profile!)])];
+    const used = [
+      ...all.filter((w) => w.instanceId === instanceId && w.profile).map((w) => w.profile!),
+      ...this.workspaces.sessionProfiles(instanceId),
+    ];
+    return [...new Set(['default', ...used.filter((p) => inst?.profileKeys[p])])];
   }
 
   private instance(instanceId: string) {

@@ -27,6 +27,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   sessionStats: process.env.FAKE_SESSION_STATS === 'on',
   // FAKE_ONESHOT=off|no_model: `llm.oneshot` absent, or without a model for titles
   oneshot: process.env.FAKE_ONESHOT === 'off' ? 'off' : process.env.FAKE_ONESHOT === 'no_model' ? 'no_model' : 'ok',
+  // FAKE_PROFILE_KEYS='{"<profil>":"<clé>"}': keys of the API server of other profiles (/p/<profil>/...)
+  profileKeys: process.env.FAKE_PROFILE_KEYS ? JSON.parse(process.env.FAKE_PROFILE_KEYS) : undefined,
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);

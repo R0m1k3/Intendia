@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -63,6 +63,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const ws = useQuery({ queryKey: ['workspace', slug], queryFn: () => api.workspace(slug) });
   const inst = ws.data?.workspace.instanceId;
   const sess = useQuery({ queryKey: ['session', inst, sessionId], queryFn: () => api.session(inst!, sessionId), enabled: Boolean(inst) });
+  // activated skills of the session's agent, offered by /use
+  const agentProfile = sess.data?.profile ?? 'default';
+  const skillList = useQuery({ queryKey: ['skills', inst, agentProfile], queryFn: () => api.skills(inst!, agentProfile).then((r) => r.skills), enabled: Boolean(inst && sess.data), staleTime: 60_000 });
+  const skillNames = useMemo(() => (skillList.data ?? []).filter((x) => x.enabled !== false).map((x) => x.name), [skillList.data]);
+  // why the last run went without its personality (shown under the composer until the next send)
+  const [notice, setNotice] = useState<string | null>(null);
   const [active, setActive] = useState<ActiveRun | null>(null);
   const history = useQuery({
     queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
@@ -150,14 +156,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
   const [live, localEvent] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
 
-  const send = async (text: string): Promise<boolean> => (await launch(text)) === null;
+  const send = async (text: string, skills?: string[]): Promise<boolean> => (await launch(text, skills)) === null;
   /** Starts a run; the error, or null once started. */
-  const launch = async (text: string): Promise<unknown> => {
+  const launch = async (text: string, skills?: string[]): Promise<unknown> => {
     if (!inst) return new Error('Instance inconnue');
     setError(null);
     setOutcome(null);
     try {
-      const res = await api.send(inst, sessionId, text);
+      const res = await api.send(inst, sessionId, text, skills);
+      setNotice(res.notice ?? null);
       const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
       setActive({ id: res.runId, createdAt: status?.createdAt ?? null, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
@@ -177,10 +184,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     const [head, rest] = takeHead(queue);
     if (!head) return;
     setQueue(rest);
-    void launch(head.text).then((err) => {
+    void launch(head.text, head.skills).then((err) => {
       if (err === null) return;
       const reason = err instanceof ApiError && err.status === 409 ? 'un autre onglet a lancé un travail' : 'l’envoi a échoué';
-      setQueue((q) => pauseQueue(pushHead(q, head.text), reason));
+      setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills), reason));
     });
   }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -251,9 +258,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   });
   /** Model / effort of the next messages (also remembered as the workspace's last choice). */
   const setOptions = useMutation({
-    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null }) => api.updateSession(inst!, sessionId, patch),
-    onSuccess: (res) => {
+    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null; personality?: string | null; autoApprove?: boolean; profile?: string | null }) =>
+      api.updateSession(inst!, sessionId, patch),
+    onSuccess: (res, patch) => {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
+      // another agent: the effective profile (models, modes, personalities, skills) is read again
+      if (patch.profile !== undefined) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
       void qc.invalidateQueries({ queryKey: ['workspace', slug] });
     },
     onError: setError,
@@ -267,6 +277,31 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     },
     onError: setError,
   });
+  // « Sans confirmation »: Intendia approves every action of the agent in this session
+  const setAutoApprove = async (on: boolean) => {
+    if (on && !(await ask({
+      title: 'Travailler sans confirmation ?', danger: true, confirmLabel: 'Activer',
+      message: 'L’agent exécutera ses commandes et ses écritures sans vous demander votre accord, dans cette session seulement, tant que ce réglage reste actif. Les questions qu’il vous pose attendent toujours votre réponse.',
+    }))) return;
+    setOptions.mutate({ autoApprove: on });
+  };
+  // another agent: a session never sent changes agent; one with messages is copied there (the original stays)
+  const changeProfile = async (profile: string) => {
+    const s = sess.data?.session;
+    if (!s || !inst) return;
+    if (!s.lastRunId && !s.copiedFrom) { setOptions.mutate({ profile }); return; }
+    if (!(await ask({
+      title: `Continuer avec l’agent ${profile} ?`, confirmLabel: 'Copier la conversation',
+      message: `La conversation est copiée chez l’agent ${profile}, dans ce workspace ; cette session reste telle quelle.${s.autoApprove ? ' « Sans confirmation » repart désactivé.' : ''}`,
+    }))) return;
+    try {
+      const { session } = await api.toProfile(inst, sessionId, profile, newKey());
+      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+    } catch (err) {
+      setError(err);
+    }
+  };
   const duplicate = useMutation({
     mutationFn: (key: string) => api.duplicateSession(inst!, sessionId, key),
     onSuccess: async ({ session }) => {
@@ -410,6 +445,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       usage: undefined,
       stop: running ? undefined : 'Aucun travail en cours',
       prompt: undefined,
+      use: skillNames.length ? undefined : 'Aucun skill activé pour cet agent',
     } satisfies Record<CommandName, string | undefined>)[c.name];
     return disabled ? { ...c, disabled } : c;
   });
@@ -436,6 +472,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         case 'usage': setUsageOpen(true); void usage.refetch(); return true;
         case 'stop': await stop(); return true;
         case 'prompt': composer.current?.openPrompts(arg); return true;
+        case 'use': return true; // handled by the composer (a pill)
       }
     } catch (err) {
       setError(err);
@@ -566,6 +603,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                 ...(sentOnce && canCopy ? [{ label: 'Annuler le dernier échange', icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
                 ...(sentOnce && canCopy ? [{ label: 'Vider la conversation', icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !canRewrite, onSelect: () => runRewrite('clear') }] : []),
                 ...(sentOnce && canTitleAi ? [{ label: 'Titre par l’IA', icon: <Sparkles className="size-4" strokeWidth={1.5} />, disabled: titleAi.isPending, onSelect: () => titleAi.mutate() }] : []),
+                sess.data?.session.autoApprove
+                  ? { label: 'Redemander les accords', icon: <ShieldCheck className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(false) }
+                  : { label: 'Sans confirmation…', icon: <ShieldOff className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(true) },
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
@@ -613,13 +653,16 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             extract={extract}
             prompts
             draftKey={inst ? sessionDraftKey(inst, sessionId) : undefined}
-            onSend={(t) => { setUsageOpen(false); return send(t); }}
+            onSend={(t, sk) => { setUsageOpen(false); return send(t, sk); }}
+            skillNames={skillNames}
+            notice={notice}
+            autoApprove={sess.data?.session.autoApprove ? { onOff: () => void setAutoApprove(false) } : null}
             onStop={stop}
             commands={commands}
             onCommand={onCommand}
             running={running}
             disabled={!chat.available || !inst}
-            onQueue={(text) => setQueue((q) => enqueue(q, text))}
+            onQueue={(text, sk) => setQueue((q) => enqueue(q, text, sk))}
             onSteer={steer}
             steerDisabled={steerDisabled}
             queue={{
@@ -631,6 +674,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
                 model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
+                personality={sess.data.session.personality ?? null} onProfile={(p) => void changeProfile(p)}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
                 onChange={(patch) => setOptions.mutate(patch)}
               />
