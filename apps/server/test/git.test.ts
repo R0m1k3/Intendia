@@ -144,6 +144,25 @@ describe('status', () => {
   });
 });
 
+describe('repository at the workspace root', () => {
+  it('status, diff and a credential file flagged, with paths relative to the root', async () => {
+    const t = await setup();
+    repo(t.ws);
+    writeFileSync(join(t.ws, 'a.txt'), 'changé\n');
+    writeFileSync(join(t.ws, '.env'), 'S=1\n');
+    writeFileSync(join(t.ws, 'nom\\bizarre.txt'), 'x\n');
+    const res = await t.request('GET', `${t.G}?repo=`);
+    expect(res.status).toBe(200);
+    const by = Object.fromEntries(res.json.files.map((f: any) => [f.path, f]));
+    expect(by['a.txt']).toMatchObject({ sensitive: false, unstaged: true });
+    expect(by['.env']).toMatchObject({ sensitive: true });
+    expect(Object.keys(by)).toContain('nom\\bizarre.txt');
+    const d = await t.raw('GET', `${t.G}/diff?repo=&file=a.txt&which=unstaged`);
+    expect(await d.text()).toContain('+changé');
+    expect((await t.request('GET', `${t.G}/diff?repo=&file=.env&which=all`)).status).toBe(403);
+  });
+});
+
 describe('diff', () => {
   it('staged, unstaged and all, as text', async () => {
     const t = await setup();
