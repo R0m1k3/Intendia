@@ -366,6 +366,24 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - `AgentService.profiles` (`/x/i/:inst/agents/profiles`) feeds the agent selectors: dashboard profiles, else
   `default` plus the profiles that have an API server key.
 
+## Mémoire (built-in memory and learning graph)
+
+- `src/memory/service.ts` (`MemoryService`) calls the `memory` connector; `src/routes/memory.ts` serves
+  `/x/i/:inst/memory` (overview), `/memory/entry?id=` (GET, DELETE) and `PUT /memory/entry`, all per profile.
+- The list comes from `GET /api/learning/graph` (memory cards of MEMORY.md and USER.md, learned skills, links); the
+  full text from `GET /api/learning/node`. Titles, excerpts and texts are masked (`Masker.text`); an edit puts the
+  secrets back from the entry read again (`restoreText`). An empty edit is refused (« utilisez Supprimer »).
+- Ids are `memory:<memory|profile>:<index>:<fingerprint>`: Hermes finds the entry by its text, so an entry changed by
+  the agent since the list was read is « stale » (409 `stale`, the page reloads the list); an edit past the file's
+  limit is 400 `over_budget` with Hermes' message. After a save the page reopens the entry of the same slot
+  (`memory:<source>:<index>`), whose fingerprint changed.
+- Fill: size in bytes (`GET /api/memory`) against `memory.memory_char_limit` / `user_char_limit` of the profile config
+  (2200 / 1375 by default), labelled « environ » (Hermes counts characters). No route adds an entry: the page says to
+  ask the agent in a chat. An external provider (`active`) is shown, its memories are not.
+- Page `/i/$inst/memoire` (`pages/Memory.tsx`, `memory/Entries.tsx`, `memory/Learned.tsx`): tabs Mémoire and Appris
+  (learned skills, the skills and memories linked to them, a link to the Skills page). No server cache; 15 s in the
+  browser.
+
 ## Configuration
 
 - `src/hermes-config/service.ts` (`ConfigService`) calls the `config` connector; `src/routes/config.ts` serves

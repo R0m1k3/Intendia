@@ -1,7 +1,7 @@
 // Typed client for the Intendia server (/x/*). Mirrors apps/server/src/connectors/types.ts.
 
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor' | 'memory';
 
 export interface ResolvedOp {
   ok: boolean;
@@ -351,6 +351,28 @@ export interface Skill {
   provenance: string | null;
   usage: number;
   locked: boolean;
+}
+export type MemorySource = 'memory' | 'profile';
+export interface MemoryEntry {
+  id: string;
+  /** memory = MEMORY.md (notes of the agent), profile = USER.md (what it knows of the user) */
+  source: MemorySource;
+  title: string;
+  excerpt: string;
+  timestamp: number | null;
+  skills: string[];
+}
+export interface LearnedSkill {
+  name: string; category: string | null; useCount: number; state: string | null; pinned: boolean; createdBy: string | null;
+  related: string[]; memories: string[];
+}
+export interface MemoryUsage { bytes: number; limit: number }
+export interface MemoryOverview {
+  active: string | null;
+  usage: { memory: MemoryUsage | null; user: MemoryUsage | null };
+  entries: MemoryEntry[];
+  skills: LearnedSkill[];
+  stats: { skills: number; links: number; isolatedPct: number | null };
 }
 export interface Toolset {
   name: string;
@@ -847,6 +869,10 @@ export const api = {
   lockSkill: (inst: string, profile: string, name: string, locked: boolean) =>
     call<{ skill: Skill }>('PUT', instPath(inst, 'skills/lock', profile), { name, locked }),
   archiveSkill: (inst: string, profile: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `skills/${enc(name)}`, profile)),
+  memory: (inst: string, profile: string) => call<MemoryOverview>('GET', instPath(inst, 'memory', profile)),
+  memoryEntry: (inst: string, profile: string, id: string) => call<{ id: string; content: string }>('GET', instPath(inst, 'memory/entry', profile, { id })),
+  putMemoryEntry: (inst: string, profile: string, id: string, content: string) => call<{ ok: true }>('PUT', instPath(inst, 'memory/entry', profile), { id, content }),
+  deleteMemoryEntry: (inst: string, profile: string, id: string) => call<{ ok: true }>('DELETE', instPath(inst, 'memory/entry', profile, { id })),
   toolsets: (inst: string, profile: string) => call<{ toolsets: Toolset[] }>('GET', instPath(inst, 'skills/toolsets', profile)),
   hubOfficial: (inst: string, profile: string) => call<{ results: HubResult[]; timedOut: string[] }>('GET', instPath(inst, 'skills/hub/official', profile)),
   hubSearch: (inst: string, profile: string, q: string) =>
