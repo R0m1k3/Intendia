@@ -125,6 +125,18 @@ describe('extractArchive', () => {
     await expect(run(gzipSync(tar([['a', 'a'.repeat(6000)]])), 'tgz')).rejects.toMatchObject({ code: 'too_big' });
   });
 
+  it('tar: totals checked before any write; skipped or metadata entries bounded', async () => {
+    const many = tar([['a', 'a'.repeat(4000)], ['b', 'b'.repeat(4000)], ['c', 'c'.repeat(4000)]]);
+    const written: string[] = [];
+    await expect(extractArchive(many, 'tar', LIMITS, async (p) => { written.push(p); return 'written'; })).rejects.toMatchObject({ code: 'too_big' });
+    await expect(extractArchive(tar([['a', 'a'], ['b', 'b']]), 'tar', { ...LIMITS, maxEntries: 1 }, async (p) => { written.push(p); return 'written'; })).rejects.toMatchObject({ code: 'too_big' });
+    expect(written).toEqual([]);
+    // a special file with a big payload is read through, never kept, and counts in the total
+    await expect(run(gzipSync(tar([['fifo', 'x'.repeat(12_000), '6']])), 'tgz')).rejects.toMatchObject({ code: 'too_big' });
+    expect((await run(gzipSync(tar([['fifo', 'x'.repeat(3000), '6'], ['a', 'a']])), 'tgz')).files).toEqual({ a: 'a' });
+    await expect(run(gzipSync(tar([['././@LongLink', 'n'.repeat(70 * 1024), 'L'], ['a', 'a']])), 'tgz', { ...LIMITS, maxTotal: 1e6 })).rejects.toMatchObject({ code: 'invalid' });
+  });
+
   it('cut or broken archives are invalid; a stop asked stops at the next file', async () => {
     const t = tar([['a.txt', 'a'.repeat(1000)]]);
     await expect(run(t.subarray(0, 700), 'tar')).rejects.toMatchObject({ code: 'invalid' });

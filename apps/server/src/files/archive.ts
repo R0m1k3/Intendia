@@ -245,6 +245,8 @@ function parseHeader(b: Uint8Array): Header | null {
   return { name: prefix ? `${prefix}/${name}` : name, type: t === '\0' ? '0' : t, size: num(b, 124, 12) };
 }
 
+/** GNU long name or pax header: a few hundred bytes in practice. */
+const META_MAX = 64 * 1024;
 const padOf = (size: number) => (BLOCK - (size % BLOCK)) % BLOCK;
 const isFile = (type: string) => type === '0' || type === '7';
 const KIND_REASON: Record<string, string> = { '1': 'lien', '2': 'lien symbolique', '3': 'fichier spécial', '4': 'fichier spécial', '6': 'fichier spécial' };
@@ -255,7 +257,7 @@ function precheckTar(bytes: Uint8Array, limits: ArchiveLimits): void {
   let total = 0;
   for (let off = 0; off + BLOCK <= bytes.length;) {
     const h = parseHeader(bytes.subarray(off, off + BLOCK));
-    if (!h) return;
+    if (!h) break;
     if (isFile(h.type)) {
       files += 1;
       total += h.size;
@@ -287,9 +289,11 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
   let longName: string | null = null;
   let pax: string | null = null;
 
+  // every payload byte read, kept or not: a skipped entry must not make the reader run without end
+  let seen = 0;
   const finish = () => {
     const c = cur!;
-    const data = concat(c.chunks, c.h.size);
+    const data = c.keep ? concat(c.chunks, c.h.size) : new Uint8Array(0);
     if (c.keep === 'name') longName = field(data, 0, data.length);
     else if (c.keep === 'pax') pax = paxPath(data);
     else if (c.keep === 'file' && c.path) queue.push({ path: c.path, data });
@@ -301,8 +305,10 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
     let keep: 'file' | 'name' | 'pax' | null = null;
     let path: string | null = null;
     let reason: string | null = null;
-    if (h.type === 'L') keep = 'name';
-    else if (h.type === 'x') keep = 'pax';
+    if (h.type === 'L' || h.type === 'x') {
+      if (h.size > META_MAX) throw new ArchiveError('invalid', 'En-tête d’archive tar trop long');
+      keep = h.type === 'L' ? 'name' : 'pax';
+    }
     else {
       const name = pax ?? longName ?? h.name;
       pax = null;
@@ -326,6 +332,8 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
     while (i < chunk.length && !ended) {
       if (cur) {
         const take = Math.min(cur.left, chunk.length - i);
+        seen += take;
+        if (seen > limits.maxTotal) throw tooBig('Archive trop grosse une fois décompressée');
         if (cur.keep) cur.chunks.push(chunk.slice(i, i + take));
         cur.left -= take;
         i += take;
