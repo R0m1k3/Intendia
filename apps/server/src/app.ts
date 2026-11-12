@@ -19,6 +19,7 @@ import { gitRoutes } from './routes/git.js';
 import { GitError } from './git/service.js';
 import { AdminError } from './admin-error.js';
 import { SecretError } from './hermes-config/mask.js';
+import { memoryRoutes } from './routes/memory.js';
 import { monitorRoutes } from './routes/monitor.js';
 import { linkRoutes, publicLinkRoute } from './routes/links.js';
 import type { Services } from './services.js';
@@ -238,6 +239,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', agentRoutes(deps.services.agents));
   priv.route('/', activityRoutes(deps.services.activity));
   priv.route('/', monitorRoutes(deps.services.monitor));
+  priv.route('/', memoryRoutes(deps.services.memory));
   priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);
