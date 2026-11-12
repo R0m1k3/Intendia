@@ -18,7 +18,7 @@ export const FAKE_MCP_CATALOG = [
   { name: 'docs-libres', description: 'Documentation publique, sans compte.', source: 'javascript:alert(1)', auth_type: 'none', url: 'https://docs.example.test/mcp', env: [], post_install: '' },
 ];
 
-interface Flow { id: string; name: string; status: 'authorization_required' | 'approved' | 'error'; state: string; redirect: string; error: string | null }
+interface Flow { id: string; name: string; status: 'starting' | 'authorization_required' | 'approved' | 'error'; state: string; redirect: string; error: string | null }
 
 export class McpCatalogFake {
   private readonly flows = new Map<string, Flow>();
@@ -74,12 +74,13 @@ export class McpCatalogFake {
       if (!cfg) return json({ detail: `Server '${name}' not found` }, 404);
       if (!cfg.url) return json({ detail: 'stdio servers authenticate via env keys, not OAuth' }, 400);
       if (cfg.headers && cfg.auth !== 'oauth') return json({ detail: 'This server uses header/API-key auth, not OAuth' }, 400);
-      if ([...this.flows.values()].some((f) => f.name === name && f.status === 'authorization_required')) {
+      if ([...this.flows.values()].some((f) => f.name === name && (f.status === 'authorization_required' || f.status === 'starting'))) {
         return json({ detail: `MCP OAuth for '${name}' is already in progress` }, 409);
       }
       const oauth = isObj(cfg.oauth) ? cfg.oauth : {};
       const f: Flow = {
-        id: randomBytes(18).toString('base64url'), name, status: 'authorization_required', state: randomBytes(16).toString('base64url'),
+        // a name with "lent": Hermes answers before it has the authorization URL (given at the next poll)
+        id: randomBytes(18).toString('base64url'), name, status: name.includes('lent') ? 'starting' : 'authorization_required', state: randomBytes(16).toString('base64url'),
         redirect: typeof oauth.redirect_uri === 'string' ? oauth.redirect_uri : `http://fake-dash/api/mcp/oauth/callback/${encodeURIComponent(name)}`, error: null,
       };
       this.flows.set(f.id, f);
@@ -90,6 +91,7 @@ export class McpCatalogFake {
       const f = this.flows.get(decodeURIComponent(flow[1]!));
       if (method === 'GET') {
         if (!f) return json({ detail: 'OAuth flow not found or expired' }, 404);
+        if (f.status === 'starting') f.status = 'authorization_required';
         return json({ ...this.snapshot(f), tools: f.status === 'approved' ? [{ name: `${f.name}_search` }] : [] });
       }
       if (method === 'DELETE') {

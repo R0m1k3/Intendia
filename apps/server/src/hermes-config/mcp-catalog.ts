@@ -49,6 +49,8 @@ const https = (v: string | null | undefined) => (v && /^https:\/\//i.test(v) ? v
  */
 export class McpCatalogService {
   private readonly expected = new Map<string, Expected>();
+  /** Relay flows whose state is not read yet (flow id → instance and server). */
+  private readonly relayFlows = new Map<string, Expected>();
 
   constructor(private readonly config: ConfigService, private readonly compat: CompatService, private readonly publicUrl: string | undefined) {}
 
@@ -103,6 +105,7 @@ export class McpCatalogService {
   private prune(): void {
     const now = Date.now();
     for (const [k, v] of this.expected) if (now - v.at > FLOW_TTL_MS) this.expected.delete(k);
+    for (const [k, v] of this.relayFlows) if (now - v.at > FLOW_TTL_MS) this.relayFlows.delete(k);
   }
 
   /** Starts the OAuth connection of an MCP server; the browser opens `authorizationUrl`, then follows the flow. */
@@ -121,21 +124,36 @@ export class McpCatalogService {
       if (s.redirectUri !== ours) await this.config.setMcpRedirect(instanceId, profile, name, ours!);
     }
     const f = await this.config.mcpAuth(instanceId, profile, name);
-    if (mode === 'relay' && f.authorization_url) {
-      let state: string | null = null;
-      try { state = new URL(f.authorization_url).searchParams.get('state'); } catch { state = null; }
-      if (!state) {
-        await this.config.mcpFlowCancel(instanceId, profile, f.flow_id).catch(() => undefined);
-        throw new AdminError('refused', 'Le fournisseur n’a pas donné de paramètre state : Intendia ne peut pas relayer ce retour');
-      }
+    if (mode === 'relay') {
+      // Hermes may answer `starting` before it has the authorization URL: the state is then read when polling gives it
       this.prune();
-      this.expected.set(state, { instanceId, name, at: Date.now() });
+      this.relayFlows.set(f.flow_id, { instanceId, name, at: Date.now() });
+      await this.expect(instanceId, profile, f);
     }
     return { flow: this.toFlow(f), mode };
   }
 
+  /**
+   * Once a relay flow has its authorization URL, its state is expected (15 min from the start of the flow). A URL
+   * without state cannot be relayed: the flow is cancelled and refused.
+   */
+  private async expect(instanceId: string, profile: string, f: McpFlow): Promise<void> {
+    const pending = this.relayFlows.get(f.flow_id);
+    if (!pending || pending.instanceId !== instanceId || !f.authorization_url) return;
+    this.relayFlows.delete(f.flow_id);
+    let state: string | null = null;
+    try { state = new URL(f.authorization_url).searchParams.get('state'); } catch { state = null; }
+    if (!state) {
+      await this.config.mcpFlowCancel(instanceId, profile, f.flow_id).catch(() => undefined);
+      throw new AdminError('refused', 'Le fournisseur n’a pas donné de paramètre state : Intendia ne peut pas relayer ce retour');
+    }
+    this.expected.set(state, pending);
+  }
+
   async flow(instanceId: string, profile: string, id: string): Promise<PublicMcpFlow> {
-    return this.toFlow(await this.config.mcpFlow(instanceId, profile, id));
+    const f = await this.config.mcpFlow(instanceId, profile, id);
+    await this.expect(instanceId, profile, f);
+    return this.toFlow(f);
   }
 
   async cancel(instanceId: string, profile: string, id: string): Promise<{ ok: true }> {

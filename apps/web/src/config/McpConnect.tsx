@@ -38,6 +38,8 @@ export function McpConnect({ inst, profile, name, onApproved }: { inst: string; 
   const cancel = useMutation({ mutationFn: () => api.cancelMcpFlow(inst, profile, started!.id), onSuccess: () => setStarted(null) });
   const status = flow.data?.status ?? (started ? 'authorization_required' : undefined);
   const waiting = started !== null && !flowDone(status);
+  // Hermes may give the authorization URL only at a later poll
+  const authUrl = flow.data?.authorizationUrl ?? started?.url ?? null;
   const expired = started !== null && Date.now() - started.at > FLOW_MAX_MS && waiting;
 
   return (
@@ -49,8 +51,8 @@ export function McpConnect({ inst, profile, name, onApproved }: { inst: string; 
       )}
       {waiting && started && (
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
-          {started.url ? (
-            <a href={started.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-accent-strong bg-accent px-3 font-medium text-on-accent hover:bg-accent-strong" data-authorize>
+          {authUrl ? (
+            <a href={authUrl} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-accent-strong bg-accent px-3 font-medium text-on-accent hover:bg-accent-strong" data-authorize>
               <ExternalLink className={ICON} strokeWidth={1.5} />Ouvrir la page d’autorisation
             </a>
           ) : <span className="text-ink-soft">Hermes prépare la page d’autorisation…</span>}

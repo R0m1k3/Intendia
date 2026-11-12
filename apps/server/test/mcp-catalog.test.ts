@@ -93,6 +93,19 @@ describe('mcp oauth', () => {
     expect(f.json).toMatchObject({ status: 'approved', tools: ['notes-cloud_search'] });
   });
 
+  it('expects the state of a flow whose authorization URL comes at a later poll', async () => {
+    const t = await testApp({ env: { INTENDIA_PUBLIC_URL: PUBLIC } });
+    expect((await t.request('POST', C, { name: 'lent-oauth', url: 'https://mcp.lent.example.test/mcp' })).status).toBe(201);
+    const res = await t.request('POST', `${C}/lent-oauth/connect`);
+    expect(res.json).toMatchObject({ mode: 'relay', flow: { status: 'starting', authorizationUrl: null } });
+    const f = await t.request('GET', `${C}/flows/${res.json.flow.id}`);
+    expect(f.json.status).toBe('authorization_required');
+    const state = stateOf(f.json.authorizationUrl);
+    expect((await page(t, `/x/mcp-oauth/fake/lent-oauth/callback?code=c&state=${state}`)).status).toBe(200);
+    expect(callbacks(t)).toHaveLength(1);
+    expect((await t.request('GET', `${C}/flows/${res.json.flow.id}`)).json.status).toBe('approved');
+  });
+
   it('keeps a redirect_uri set by hand: no relay', async () => {
     const t = await testApp({ env: { INTENDIA_PUBLIC_URL: PUBLIC } });
     await t.request('POST', `${C}/catalog/notes-cloud`, { env: {} });
