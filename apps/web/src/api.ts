@@ -136,8 +136,36 @@ export interface Session {
 export interface RewriteResult { session: Session; replaced?: string; undoUntil?: number | null }
 export type BulkAction = 'archive' | 'unarchive' | 'pin' | 'unpin' | 'delete' | 'move';
 export interface BulkResult { id: string; ok: boolean; error?: string }
+/** Delivery of background sub-agents, read by the server from Hermes' text (chat/delegation.ts). */
+export interface DelegationInfo {
+  id: string | null;
+  tasks: number | null;
+  completed: number | null;
+  failed: number | null;
+  durationSeconds: number | null;
+  /** base 0: early failure notice of one task */
+  failedTask: number | null;
+  /** base 0; index null = the single task of a single-child delivery */
+  taskStatuses: { index: number | null; status: string }[];
+  allFailed: boolean;
+}
+/** Session of a sub-agent at Hermes (live tracking of a background one). Times in seconds. */
+export interface SubagentChild {
+  id: string;
+  /** first 60 characters of its goal (Hermes' preview) */
+  goal: string;
+  /** the goal was cut by Hermes */
+  cut: boolean;
+  startedAt: number | null;
+  endedAt: number | null;
+  endReason: string | null;
+  lastActive: number | null;
+  toolCalls: number | null;
+  apiCalls: number | null;
+}
 export interface ChatMessage {
   id: number;
+  /** user, assistant, tool, or delegation (result of background sub-agents, never a message of the user) */
   role: string;
   content: string;
   toolName: string | null;
@@ -146,6 +174,8 @@ export interface ChatMessage {
   timestamp: number | null;
   /** given to the agent during a run (reorientation) */
   steer?: true;
+  /** role delegation */
+  delegation?: DelegationInfo;
 }
 export interface RunStatus {
   status: string;
@@ -757,6 +787,7 @@ export const api = {
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
   send: (inst: string, id: string, input: string, skills?: string[]) =>
     call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
   personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),

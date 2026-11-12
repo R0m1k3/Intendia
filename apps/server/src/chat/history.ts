@@ -2,6 +2,7 @@ import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { CompatService } from '../compat/service.js';
 import type { SessionContext } from '../workspaces/service.js';
+import { delegationInfo, type DelegationInfo } from './delegation.js';
 
 // Messages and run status of an Intendia session, shared by the chat routes, the session actions and exports.
 
@@ -14,6 +15,8 @@ export interface RawMessage {
   timestamp?: number | null;
   /** "steer": a text given to the agent during a run (POST /v1/runs/{id}/steer) */
   display_kind?: string | null;
+  /** not served by the API server of Hermes 0.23; read when a later version does */
+  display_metadata?: unknown;
 }
 
 export interface ChatMessage {
@@ -25,6 +28,8 @@ export interface ChatMessage {
   timestamp: number | null;
   /** given to the agent during a run (reorientation); only when true */
   steer?: true;
+  /** role `delegation`: the delivery of background sub-agents (Hermes' `async_delegation_complete` row) */
+  delegation?: DelegationInfo;
 }
 
 function text(content: unknown): string {
@@ -43,16 +48,25 @@ function toolCalls(raw: unknown): ChatMessage['toolCalls'] {
   });
 }
 
-/** Hermes messages → oldest first, without session_meta. */
+/**
+ * Hermes messages → oldest first, without session_meta nor `hidden` rows (muted notices, compression handoffs).
+ * A delivery of background sub-agents becomes Intendia's own role `delegation` (never a message of the user).
+ */
 export function toChatMessages(data: RawMessage[]): ChatMessage[] {
   return data
-    .filter((m) => m.role !== 'session_meta')
+    .filter((m) => m.role !== 'session_meta' && m.display_kind !== 'hidden')
     .sort((a, b) => a.id - b.id)
-    .map((m) => ({
-      id: m.id, role: m.role, content: text(m.content), toolName: m.tool_name ?? null,
-      toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
-      ...(m.display_kind === 'steer' ? { steer: true as const } : {}),
-    }));
+    .map((m): ChatMessage => {
+      const content = text(m.content);
+      if (m.display_kind === 'async_delegation_complete') {
+        return { id: m.id, role: 'delegation', content, toolName: null, toolCalls: [], timestamp: m.timestamp ?? null, delegation: delegationInfo(m.display_metadata, content) };
+      }
+      return {
+        id: m.id, role: m.role, content, toolName: m.tool_name ?? null,
+        toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
+        ...(m.display_kind === 'steer' ? { steer: true as const } : {}),
+      };
+    });
 }
 
 export interface RawStatus {

@@ -62,3 +62,17 @@ describe('outline', () => {
     expect(outline(entries).map((i) => i.key)).toEqual(userTurns);
   });
 });
+
+describe('toTurns with a delivery of background sub-agents', () => {
+  const delivery = (key: string): Entry => ({
+    kind: 'delegation', key, text: '[ASYNC DELEGATION COMPLETE — d]', summary: '1 sous-agent terminé', ts: 5,
+    info: { id: 'd', tasks: 1, completed: 1, failed: 0, durationSeconds: null, failedTask: null, taskStatuses: [], allFailed: false },
+  });
+  it('its own turn, splitting the agent entries around it; not a question', () => {
+    const footers = new Map([['h9', [stat('r1')]]]);
+    const t = toTurns([user('u1'), said('a1'), delivery('h9'), said('a2')], footers);
+    expect(t.map((x) => [x.kind, x.key])).toEqual([['user', 'u1'], ['agent', 'a1'], ['delegation', 'h9'], ['agent', 'a2']]);
+    expect(t[2]!.footers.map((f) => f.runId)).toEqual(['r1']);
+    expect(outline([user('u1'), said('a1'), delivery('h9')]).map((o) => o.key)).toEqual(['u1']);
+  });
+});

@@ -57,8 +57,8 @@ export function cutBefore(exported: Exported, before: number | null): { exported
   const rows = exported.messages as Row[];
   const at = rows.findIndex((m) => m.id === before);
   const m = at >= 0 ? rows[at]! : null;
-  if (!m || m.role !== 'user' || flag(m.active) === false || m.display_kind === 'steer') {
-    throw new CopyError('cut_not_found', 'Ce message ne peut plus servir de point de départ (compressé, retiré ou réorientation)', 409);
+  if (!m || m.role !== 'user' || flag(m.active) === false || m.display_kind === 'steer' || m.display_kind === 'async_delegation_complete') {
+    throw new CopyError('cut_not_found', 'Ce message ne peut plus servir de point de départ (compressé, retiré, réorientation ou résultat de sous-agents)', 409);
   }
   return { exported: { ...exported, messages: exported.messages.slice(0, at) }, cutTs: typeof m.timestamp === 'number' ? m.timestamp : null };
 }

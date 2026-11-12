@@ -11,6 +11,7 @@ export function agentName(profile: string, instanceLabel: string): string {
 function who(m: ChatMessage, agent: string): string | null {
   if (m.role === 'user') return 'Vous';
   if (m.role === 'assistant') return agent;
+  if (m.role === 'delegation') return 'Sous-agents (résultat)';
   if (m.role === 'tool') return `Outil ${m.toolName ?? ''}`.trim();
   return null; // system and the like are not part of the conversation
 }

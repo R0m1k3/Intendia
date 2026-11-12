@@ -12,6 +12,7 @@ import { sessionDraftKey } from '../chat/draft';
 import { ContextGauge } from '../chat/ContextGauge';
 import { estimateTokens } from '../chat/estimate';
 import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
+import { applyDeliveries, attachChildren, delegationState, pollDelay } from '../chat/deliveries';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
@@ -120,7 +121,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
     enabled: Boolean(inst), refetchOnWindowFocus: false,
     // Hermes writes costs late: the last reply's cost is re-read until the server freezes it
-    refetchInterval: (q) => (!active && costSettling(q.state.data?.runs) ? COST_POLL_MS : false),
+    refetchInterval: (q) => {
+      if (active) return false;
+      if (costSettling(q.state.data?.runs)) return COST_POLL_MS;
+      // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at most)
+      return pollDelay(delegationState(q.state.data?.messages ?? []), Date.now() / 1000);
+    },
   });
   const lastRunId = sess.data?.session.lastRunId ?? null;
   const lastRun = useQuery({
@@ -462,7 +468,17 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const t = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
     return () => clearTimeout(t);
   }, [doneTodoCalls, qc, inst, sessionId]);
-  const entries: Entry[] = withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees);
+  const delegations = useMemo(() => delegationState(messages), [messages]);
+  // sessions of the background sub-agents (last activity, tools, end), re-read at the same pace as the history
+  const children = useQuery({
+    queryKey: ['session-subagents', inst, sessionId], queryFn: () => api.sessionSubagents(inst!, sessionId),
+    enabled: Boolean(inst) && delegations.open.size > 0, retry: false, refetchOnWindowFocus: false,
+    refetchInterval: () => pollDelay(delegations, Date.now() / 1000),
+  });
+  const entries: Entry[] = attachChildren(applyDeliveries(
+    withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees),
+    delegations, Boolean(active),
+  ), delegations.open.size > 0 ? children.data?.children ?? [] : []);
   const lastStatus = lastRun.data;
   // an empty session (« Nouvelle session », or one never used): the cursor goes to its message box, once
   const focusedEmpty = useRef<string | null>(null);
@@ -845,7 +861,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} />
+        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries />
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && deferred && (
           <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.</p>

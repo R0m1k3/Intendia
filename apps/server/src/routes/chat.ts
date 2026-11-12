@@ -16,6 +16,7 @@ import { ModelInfoSchema } from '../connectors/config/index.js';
 import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
 import { toUsage } from '../chat/usage.js';
 import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from '../chat/history.js';
+import { listChildren } from '../chat/subagents.js';
 import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
 import { presets, Modes, Pins } from '../chat/presets.js';
 import { PromptService } from '../prompts/service.js';
@@ -195,6 +196,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     await settle(ctx, { known: h });
     return c.json({ messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun) });
   });
+
+  // sessions of the session's sub-agents (live tracking of background ones)
+  r.get('/sessions/:inst/:id/subagents', async (c) => c.json({ children: await listChildren(compat, ctxOf(c)) }));
 
   // one run creation at a time per session: two tabs could otherwise both pass the "no run in progress"
   // check and start two runs, the second overwriting the first in lastRunId

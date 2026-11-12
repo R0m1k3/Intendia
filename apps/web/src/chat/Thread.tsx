@@ -14,6 +14,7 @@ import { Artifact } from './Artifact';
 import { splitArtifacts } from './artifacts';
 import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
+import { Delivery } from './Delivery';
 import { duration, Subagents } from './Subagents';
 import type { Stamp } from './timeline';
 
@@ -27,6 +28,8 @@ export function clock(ts: number | null, seconds = false): string {
 
 /** « Afficher les heures »: stamps of the entries by key (chat/timeline.ts); null = normal display. */
 const Times = createContext<Map<string, Stamp> | null>(null);
+/** This page re-reads the session while sub-agents work in the background (their result shows up by itself). */
+const LiveDeliveries = createContext(false);
 
 /** « 14:03:27 · +12 s » for an entry, or null (times off, entry without a time). */
 function useStamp(key: string): string | null {
@@ -156,8 +159,13 @@ function PartBody({ p }: { p: Exclude<Part, { kind: 'steps' }> }) {
     case 'note':
       return <p className={cx('text-xs', p.tone === 'bad' ? 'text-bad' : 'text-ink-faint')}>{p.text}</p>;
     case 'subagents':
-      return <Subagents nodes={p.nodes} />;
+      return <SubagentsPart p={p} />;
   }
+}
+
+function SubagentsPart({ p }: { p: Extract<Part, { kind: 'subagents' }> }) {
+  const live = useContext(LiveDeliveries);
+  return <Subagents nodes={p.nodes} openSince={p.openSince} live={live} />;
 }
 
 function CopyReply({ text }: { text: string }) {
@@ -294,6 +302,7 @@ function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel:
 function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: ThreadActions }) {
   const [editing, setEditing] = useState(false);
   const times = useContext(Times);
+  if (t.kind === 'delegation') return <Delivery entry={t.entry} clock={clock(t.entry.ts, Boolean(times))} footers={t.footers} />;
   if (t.kind === 'user') {
     const editable = Boolean(actions?.canEdit(t.key));
     if (editing && actions) {
@@ -357,17 +366,21 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent, actions, times }: {
+export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false }: {
   entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions;
+  /** the page re-reads the session while sub-agents work in the background */
+  liveDeliveries?: boolean;
   /** « Afficher les heures » (chat/timeline.ts); absent = normal display */
   times?: Map<string, Stamp>;
 }) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   return (
     <Times.Provider value={times ?? null}>
-      <div className="space-y-7">
-        {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
-      </div>
+      <LiveDeliveries.Provider value={liveDeliveries}>
+        <div className="space-y-7">
+          {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
+        </div>
+      </LiveDeliveries.Provider>
     </Times.Provider>
   );
 }

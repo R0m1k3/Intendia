@@ -3,10 +3,12 @@ import type { Entry } from './events';
 
 export type ToolEntry = Extract<Entry, { kind: 'tool' }>;
 /** One piece of an agent turn: an entry, or consecutive tool calls grouped in a "N étapes" card. */
-export type Part = Exclude<Entry, { kind: 'tool' | 'user' }> | { kind: 'steps'; key: string; tools: ToolEntry[] };
+export type Part = Exclude<Entry, { kind: 'tool' | 'user' | 'delegation' }> | { kind: 'steps'; key: string; tools: ToolEntry[] };
 
 export type Turn =
   | { kind: 'user'; key: string; entry: Extract<Entry, { kind: 'user' }>; footers: RunStat[] }
+  /** result of background sub-agents: its own turn (neither the user's nor part of an agent turn) */
+  | { kind: 'delegation'; key: string; entry: Extract<Entry, { kind: 'delegation' }>; footers: RunStat[] }
   | {
     kind: 'agent'; key: string; ts: number | null; parts: Part[]; footers: RunStat[];
     /** Markdown of the turn's replies (the "Copier" button), blank line between them. */
@@ -25,6 +27,10 @@ export function toTurns(entries: Entry[], footers?: Map<string, RunStat[]>): Tur
     const lines = footers?.get(e.key) ?? [];
     if (e.kind === 'user') {
       turns.push({ kind: 'user', key: e.key, entry: e, footers: [...lines] });
+      continue;
+    }
+    if (e.kind === 'delegation') {
+      turns.push({ kind: 'delegation', key: e.key, entry: e, footers: [...lines] });
       continue;
     }
     let turn = turns.at(-1);
