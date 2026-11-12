@@ -51,6 +51,14 @@ describe('replaceIn', () => {
     expect(x.widths).toEqual({ b2: 420 });
     expect(replaceIn(chat(['a', 'b'], 'a'), 'b', c('b2'))!.active).toBe('a');
   });
+  it('follows a session moved to another workspace, in place', () => {
+    const x = replaceIn(chat(['a', 'b'], 'a', { widths: { b: 420 } }), 'b', c('b', 'pro'))!;
+    expect(x.open).toEqual([c('a'), c('b', 'pro')]);
+    expect(x.active).toBe('a');
+    expect(x.widths).toEqual({ b: 420 });
+    const same = chat(['a']);
+    expect(replaceIn(same, 'a', c('a'))).toBe(same);
+  });
   it('null when the column is gone; an already open target is made active, the column kept', () => {
     expect(replaceIn(chat(['a']), 'z', c('n'))).toBeNull();
     const x = replaceIn(chat(['a', 'b'], 'a'), 'a', c('b'))!;
