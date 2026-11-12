@@ -59,7 +59,7 @@ export function ExternalSessionPage() {
             <ArrowLeft className="size-4" strokeWidth={1.5} />
           </Link>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold leading-snug">{known?.title ?? 'Session externe'}</h2>
+            <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{known?.title ?? 'Session externe'}</h2>
             <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{meta}</p>
           </div>
           {canCopy && (

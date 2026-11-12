@@ -206,7 +206,7 @@ function UserMessage({ text }: { text: string }) {
   const split = useMemo(() => (paths?.mounts ? splitAttachments(text, paths.mounts) : { text, files: [] }), [text, paths?.mounts]);
   return (
     <>
-      {split.text && <p className="text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{split.text}</p>}
+      {split.text && <p data-user-text className="text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{split.text}</p>}
       {split.files.length > 0 && (
         <div className={cx('flex flex-wrap gap-2', split.text && 'mt-2')} data-joined>
           {split.files.map((f) => <Joined key={f} written={f} />)}

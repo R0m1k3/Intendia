@@ -602,7 +602,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             <ArrowLeft className="size-4" strokeWidth={1.5} />
           </Link>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold leading-snug">{title}</h2>
+            <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{title}</h2>
             <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">
               {[mounts?.label, null, sess.data?.profile ?? 'default', sess.data?.session.model ? shortModel(sess.data.session.model) : null, sess.data ? when(sess.data.session.createdAt) : null]
                 .map((part, i) => (i === 1
