@@ -179,7 +179,10 @@ export class SkillService {
     return skill;
   }
 
-  /** New skill: Intendia writes the front matter (name, description escaped as YAML) above the body. */
+  /**
+   * New skill: Intendia writes the front matter (name, description escaped as YAML) above the body. YAML 1.1 like
+   * Hermes' PyYAML: `on`, `yes`, `no`, a date… are quoted, else Hermes would read a boolean or a date.
+   */
   async create(instanceId: string, profile: string, input: { name: string; category?: string; description: string; body: string }): Promise<PublicSkill> {
     const description = input.description.trim();
     if (!SKILL_NAME_RE.test(input.name)) throw new ValidationError('Nom de skill invalide : minuscules, chiffres, . _ - (64 caractères au plus)');
@@ -188,7 +191,7 @@ export class SkillService {
       throw new ValidationError(`Description d’une ligne, ${DESCRIPTION_MAX} caractères au plus`);
     }
     if (!input.body.trim()) throw new ValidationError('Le corps du skill est vide');
-    const content = `---\n${stringify({ name: input.name, description }).trimEnd()}\n---\n\n${input.body.trim()}\n`;
+    const content = `---\n${stringify({ name: input.name, description }, { version: '1.1' }).trimEnd()}\n---\n\n${input.body.trim()}\n`;
     if (content.length > SKILL_MAX) throw new ValidationError(`SKILL.md trop long (${SKILL_MAX} caractères au plus)`);
     await this.writeOp(instanceId, 'create', { profile, body: { name: input.name, content, ...(input.category ? { category: input.category } : {}) } });
     const skill = (await this.list(instanceId, profile)).find((s) => s.name === input.name);

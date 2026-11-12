@@ -19,6 +19,15 @@ describe('skills: write (lot 8 C)', () => {
     expect(sent.content).toBe("---\nname: rapport-hebdo\ndescription: \"Rédige le rapport: hebdomadaire\"\n---\n\n# Rapport\n\nFais le point.\n");
   });
 
+  it('quotes YAML 1.1 words (Hermes reads the front matter with PyYAML)', async () => {
+    const t = await testApp();
+    for (const [name, description] of [['on', 'yes'], ['no', '2026-11-12']]) {
+      expect((await create(t, { name, description })).status).toBe(201);
+      const sent = dashCalls(t, 'POST', '/api/skills').at(-1)!.body as { content: string };
+      expect(sent.content.startsWith(`---\nname: "${name}"\ndescription: "${description}"\n---\n`)).toBe(true);
+    }
+  });
+
   it('refuses a long description, a bad name, an empty body before Hermes', async () => {
     const t = await testApp();
     expect((await create(t, { description: 'x'.repeat(61) })).status).toBe(400);
