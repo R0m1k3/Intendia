@@ -77,5 +77,5 @@ export interface CompatReport {
    */
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
-  socket?: { sessionStats: boolean; note: string };
+  socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean };
 }

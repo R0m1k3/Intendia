@@ -20,6 +20,7 @@ import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { sessionCopyRoutes } from './routes/session-copies.js';
 import { CopyError } from './sessions/copy.js';
+import { TitleError } from './sessions/title-ai.js';
 import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
 import { cronRoutes } from './routes/crons.js';
 import { skillRoutes } from './routes/skills.js';
@@ -82,6 +83,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof DeclarativeError) return c.json({ error: err.message, code: 'declarative' }, 409);
     if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
     if (err instanceof CopyError) return c.json({ error: err.message, code: err.code }, err.status);
+    if (err instanceof TitleError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof WorkspaceFsError) {
       return c.json({ error: err.message, code: err.code }, FS_ERROR_STATUS[err.code]);

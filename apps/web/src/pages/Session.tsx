@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, Trash2, Undo2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,6 +26,8 @@ import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
 import { setDraft, setHandoff, takeDraft, takeHandoff } from '../home/handoff';
 import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/history-actions';
+import { COMMANDS, type Command, type CommandName } from '../chat/commands';
+import { formatTokens } from '../chat/format';
 import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
@@ -255,7 +257,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     },
     onError: setError,
   });
-  const { canCopy, canExportJson } = useCopyOps(inst);
+  const { canCopy, canExportJson, canTitleAi } = useCopyOps(inst);
+  const titleAi = useMutation({
+    mutationFn: () => api.generateTitle(inst!, sessionId),
+    onSuccess: (res) => {
+      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: setError,
+  });
   const duplicate = useMutation({
     mutationFn: (key: string) => api.duplicateSession(inst!, sessionId, key),
     onSuccess: async ({ session }) => {
@@ -381,6 +391,54 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     enabled: Boolean(inst), staleTime: 60_000, refetchOnWindowFocus: false,
   });
   const estimate = estimateTokens(entries);
+  // « /usage »: a line under the composer, closed by × or the next message
+  const [usageOpen, setUsageOpen] = useState(false);
+
+  // slash commands of the composer: the same actions as the menu and the thread, with the reason when not possible
+  const rewriteWhy = !sentOnce ? 'La conversation est vide' : running ? 'L’agent travaille' : queued > 0 ? 'Des messages attendent dans la file'
+    : !canCopy ? 'Indisponible sur cette instance' : rewrite.isPending ? 'Une action est en cours' : undefined;
+  const branchKey = lastTurn ?? undefined;
+  const commands: Command[] = COMMANDS.map((c) => {
+    const disabled = ({
+      new: undefined,
+      clear: rewriteWhy,
+      undo: rewriteWhy ?? (last ? undefined : 'Le dernier message n’est pas enregistré'),
+      retry: rewriteWhy ?? (last && lastTurn ? undefined : 'Aucune réponse à relancer'),
+      branch: rewriteWhy ?? (branchKey && cutFor(entries, 'branch', branchKey) !== undefined ? undefined : 'Aucune réponse pour la branche'),
+      title: undefined,
+      usage: undefined,
+      stop: running ? undefined : 'Aucun travail en cours',
+    } satisfies Record<CommandName, string | undefined>)[c.name];
+    return disabled ? { ...c, disabled } : c;
+  });
+  const onCommand = async (name: CommandName, arg: string): Promise<boolean> => {
+    setError(null);
+    try {
+      switch (name) {
+        case 'new': {
+          const { session } = await api.createSession(slug);
+          await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+          await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+          return true;
+        }
+        case 'clear': runRewrite('clear'); return true;
+        case 'undo': runRewrite('undo', undefined, last?.text); return true;
+        case 'retry': runRewrite('retry', undefined, last?.text); return true;
+        case 'branch': runRewrite('branch', branchKey); return true;
+        case 'title':
+          if (arg) await rename.mutateAsync(arg);
+          else if (!canTitleAi) { setError(new Error('Titre par l’IA indisponible sur cette instance : /title suivi du nom renomme la session')); return false; }
+          else if (!sentOnce) { setError(new Error('La conversation est vide : rien pour faire un titre')); return false; }
+          else await titleAi.mutateAsync();
+          return true;
+        case 'usage': setUsageOpen(true); void usage.refetch(); return true;
+        case 'stop': await stop(); return true;
+      }
+    } catch (err) {
+      setError(err);
+      return false;
+    }
+  };
 
   // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
   // scrolled up. `measure` (chat/follow.ts) judges from the scroll position, measured on each scroll event and again
@@ -498,7 +556,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                   ...(canExportJson ? [{ label: 'Exporter en JSON', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
                 ] : []),
                 ...(sentOnce && canCopy ? [{ label: 'Annuler le dernier échange', icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
-                ...(sentOnce ? [{ label: 'Vider la conversation', icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !historyFree, onSelect: () => runRewrite('clear') }] : []),
+                ...(sentOnce && canCopy ? [{ label: 'Vider la conversation', icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !canRewrite, onSelect: () => runRewrite('clear') }] : []),
+                ...(sentOnce && canTitleAi ? [{ label: 'Titre par l’IA', icon: <Sparkles className="size-4" strokeWidth={1.5} />, disabled: titleAi.isPending, onSelect: () => titleAi.mutate() }] : []),
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
@@ -543,8 +602,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <Composer
             ref={composer}
             upload={upload}
-            onSend={send}
+            onSend={(t) => { setUsageOpen(false); return send(t); }}
             onStop={stop}
+            commands={commands}
+            onCommand={onCommand}
             running={running}
             disabled={!chat.available || !inst}
             onQueue={(text) => setQueue((q) => enqueue(q, text))}
@@ -565,8 +626,16 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
             )}
             placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
             hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
-              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée pour envoyer · Maj+Entrée pour aller à la ligne'}
+              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes'}
           />
+          {usageOpen && (
+            <div data-usage-line className="mt-2 flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-[12px] text-ink-soft">
+              <p className="min-w-0 flex-1">{usageText(usage.data, estimate, usage.isFetching)}</p>
+              <button type="button" onClick={() => setUsageOpen(false)} aria-label="Fermer" className="text-ink-faint hover:text-ink">
+                <X className="size-3.5" strokeWidth={2} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </DropZone>
@@ -581,4 +650,17 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     </div>
     </FilePaths.Provider>
   );
+}
+
+/** Text of « /usage »: the context (counted by Hermes or estimated) and the plan quota when the gateway gives it. */
+function usageText(usage: Awaited<ReturnType<typeof api.sessionUsage>> | undefined, estimate: number, fetching: boolean): string {
+  if (!usage && fetching) return 'Lecture de l’utilisation…';
+  const exact = usage?.exact ?? null;
+  const max = exact?.max ?? usage?.max ?? null;
+  const used = exact?.used ?? estimate;
+  const context = `Contexte : ${exact ? '' : '≈ '}${formatTokens(used)}${max ? ` sur ${formatTokens(max)} jetons (${Math.round((used / max) * 100)} %)` : ' jetons (taille du modèle inconnue)'}`
+    + (exact ? ', compté par Hermes' : ', estimé à partir du fil');
+  const q = usage?.quota;
+  const quota = q ? ` · ${q.label ?? 'Forfait'} : ${Math.round(q.usedPercent)} % utilisés${q.resetsAt ? `, remise à zéro ${new Date(q.resetsAt).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}` : '';
+  return context + quota;
 }

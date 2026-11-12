@@ -26,7 +26,7 @@ export interface CompatReport {
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
-  socket?: { sessionStats: boolean; note: string };
+  socket?: { sessionStats: boolean; oneshot?: boolean; note: string };
 }
 /** Composer gauge: `max` = context size of the model; `exact`/`quota` from the dashboard WebSocket only. */
 export interface SessionUsage {
@@ -571,6 +571,8 @@ export const api = {
   rewriteSession: (inst: string, id: string, body: { key: string; before: number | null; mode: 'replace' | 'branch' }) =>
     call<RewriteResult>('POST', `${sessionPath(inst, id)}/rewrite`, body),
   revertRewrite: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/revert`),
+  /** Title by the auxiliary model of Hermes (409 unsupported / busy, 503 no_model). */
+  generateTitle: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/title/generate`),
   duplicateSession: (inst: string, id: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/duplicate`, { key }),
   exportUrl: (inst: string, id: string, format: 'md' | 'html' | 'json') => `/x${sessionPath(inst, id)}/export?format=${format}`,
   importSession: (slug: string, file: unknown, key: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions/import`, { key, file }),

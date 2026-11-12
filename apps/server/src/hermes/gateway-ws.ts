@@ -81,6 +81,33 @@ export async function sessionStats(instance: InstanceConfig, sessionId: string, 
   return SessionStatsSchema.parse(await callGatewaySocket(instance, 'session.stats', { session_id: sessionId }, opts) ?? {});
 }
 
+/** `llm.oneshot`: one call to the auxiliary model of a task (titles…), without session or tools. Answer `{text}`. */
+export async function oneshot(
+  instance: InstanceConfig, params: { instructions: string; input: string; task: string; max_tokens?: number; profile?: string },
+  opts?: { factory?: WsFactory; timeoutMs?: number },
+): Promise<string> {
+  const res = await callGatewaySocket(instance, 'llm.oneshot', params, opts);
+  const text = res && typeof res === 'object' && typeof (res as { text?: unknown }).text === 'string' ? (res as { text: string }).text : null;
+  if (text === null) throw new GatewaySocketError(null, 'Réponse de llm.oneshot illisible');
+  return text;
+}
+
+/**
+ * The WebSocket methods Intendia uses, each checked on its own: `session.stats` (see probeSessionStats) and
+ * `llm.oneshot` (called without parameters: 4030 = present, -32601 = absent, no answer = absent).
+ */
+export async function probeSocket(instance: InstanceConfig, opts?: { factory?: WsFactory; timeoutMs?: number }): Promise<{ sessionStats: boolean; oneshot: boolean; note: string }> {
+  const stats = await probeSessionStats(instance, opts);
+  let one = false;
+  try {
+    await callGatewaySocket(instance, 'llm.oneshot', {}, opts);
+    one = true;
+  } catch (err) {
+    one = (err as GatewaySocketError).code !== null && (err as GatewaySocketError).code !== -32601;
+  }
+  return { ...stats, oneshot: one };
+}
+
 /**
  * Does `session.stats` exist on this dashboard? Only when the dashboard runs inside the gateway; a standalone
  * dashboard (the usual setup) answers -32601. Any JSON-RPC answer other than -32601 (even "session not found") = yes.
