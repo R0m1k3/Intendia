@@ -63,6 +63,18 @@ describe('Centre: finished runs', () => {
     expect((await t.request('GET', '/x/activity/finished?instance=inconnue')).status).toBe(404);
   });
 
+  it('records the end of a run nobody followed when the activity sees it finished', async () => {
+    const t = await testApp({ stepMs: 5 });
+    const a = await session(t, 'dev', 'fake');
+    const runId = (await t.request('POST', `/x/sessions/fake/${a.id}/runs`, { input: 'Bonjour' })).json.runId as string;
+    expect((await t.request('GET', '/x/activity/finished')).json.runs).toEqual([]);
+    await new Promise((r) => setTimeout(r, 400));
+    await t.request('GET', '/x/i/fake/activity');
+    const runs = (await t.request('GET', '/x/activity/finished')).json.runs;
+    expect(runs).toMatchObject([{ runId, sessionId: a.id, status: 'completed' }]);
+    expect(runs[0].endedAt).toBeGreaterThanOrEqual(runs[0].startedAt);
+  });
+
   it('gives 50 rows at most', async () => {
     const t = await testApp();
     const a = await session(t, 'dev', 'fake');

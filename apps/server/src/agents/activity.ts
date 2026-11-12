@@ -1,5 +1,6 @@
 import type { CompatService } from '../compat/service.js';
 import { RunStatusSchema, TERMINAL_STATUSES, type PendingControl } from '../connectors/chat/index.js';
+import { finishFields } from '../chat/run-stats.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
@@ -102,8 +103,13 @@ export class ActivityService {
         const raw = await callOp<unknown>(this.compat.http(c.instanceId), this.compat.get(c.instanceId), 'chat', 'runStatus', {
           params: { run_id: c.runId }, profile: c.profile, timeoutMs: TIMEOUT_MS,
         });
-        const { status, pending_controls: controls } = RunStatusSchema.parse(raw);
+        const parsed = RunStatusSchema.parse(raw);
+        const { status, pending_controls: controls } = parsed;
         if (TERMINAL_STATUSES.includes(status) || status === 'unknown') {
+          // its end is recorded here too (once): a run nobody followed in its chat still reaches « Terminé »
+          if (status !== 'unknown') {
+            this.workspaces.finishRunStat(c.instanceId, c.runId, { ...finishFields(parsed, now), hermesSessionId: parsed.session_id ?? c.sessionId });
+          }
           this.markDone(key);
           return null;
         }
@@ -113,7 +119,10 @@ export class ActivityService {
         };
       } catch (err) {
         // Hermes keeps runs in memory: a 404 means it restarted, the run is over
-        if (err instanceof HermesError && err.kind === 'http' && err.detail.status === 404) this.markDone(key);
+        if (err instanceof HermesError && err.kind === 'http' && err.detail.status === 404) {
+          this.workspaces.finishRunStat(c.instanceId, c.runId, { status: 'unknown', endedAt: now, hermesSessionId: null });
+          this.markDone(key);
+        }
         else fail(c.instanceId, err);
         return null;
       }

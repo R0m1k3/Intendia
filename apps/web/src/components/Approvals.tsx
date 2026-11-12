@@ -24,9 +24,8 @@ export function Approvals() {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const notified = useRef(new Set<string>());
   const all = list.data?.approvals ?? [];
-  // the Centre lists them already, answered in its « Vous attend » group
   const onCentre = useRouterState({ select: (st) => st.location.pathname === CENTRE_PATH });
-  const shown = onCentre ? [] : visibleApprovals(all, { openSession: sessionId, hidden });
+  const shown = visibleApprovals(all, { openSession: sessionId, hidden });
 
   useEffect(() => {
     if (!canNotify() || Notification.permission !== 'granted') return;
@@ -38,7 +37,8 @@ export function Approvals() {
     }
   }, [shown]);
 
-  if (shown.length === 0) return null;
+  // on the Centre, no window in place (its « Vous attend » group has them), the browser notification above stays
+  if (shown.length === 0 || onCentre) return null;
   const hide = (key: string) => setHidden((h) => new Set(h).add(key));
   return createPortal(
     <div aria-live="polite"
