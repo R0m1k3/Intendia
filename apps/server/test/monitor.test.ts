@@ -59,6 +59,20 @@ describe('monitor: logs', () => {
     expect(text).toContain('…/config.yaml');
   });
 
+  it('forgets the cached config secrets after a config write', async () => {
+    const t = await testApp();
+    const before = await t.services.config.knownSecrets('fake', 'default');
+    expect(before).toContain(FAKE_SECRETS.plain);
+    const raw = (await t.request('GET', '/x/i/fake/config/raw')).json;
+    const yaml = `${raw.yaml as string}\n# relu\n`;
+    const saved = await t.request('PUT', '/x/i/fake/config/raw', { yaml, version: raw.version });
+    expect(saved.status).toBe(200);
+    // the cache was dropped: the next read goes back to Hermes
+    const calls = t.fake.requests.filter((r) => r.via === 'dash' && r.method === 'GET' && r.path === '/api/config/raw').length;
+    await t.services.config.knownSecrets('fake', 'default');
+    expect(t.fake.requests.filter((r) => r.via === 'dash' && r.method === 'GET' && r.path === '/api/config/raw').length).toBe(calls + 1);
+  });
+
   it('filters by level, component and search', async () => {
     const t = await testApp();
     const err = (await t.request('GET', `${M}/logs?file=agent&level=ERROR&lines=100`)).json;

@@ -11,10 +11,19 @@ const GAP = 2;
 /** "2026-11-12" → "12/11". */
 const short = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
 
-/** Every day of the period, the missing ones at 0 (Hermes leaves out days without sessions). */
+/** Local calendar day "YYYY-MM-DD". */
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * Every day of the period ending today, the missing ones at 0 (Hermes leaves out days without sessions). The end is
+ * today, or the last returned day when Hermes' clock is already on the next day.
+ */
 export function fillDays(daily: UsageDay[], days: number, today = new Date()): UsageDay[] {
   const byDay = new Map(daily.map((d) => [d.day, d]));
-  const last = daily.at(-1)?.day ? new Date(`${daily.at(-1)!.day}T12:00:00Z`) : today;
+  const lastDay = daily.map((d) => d.day).sort().at(-1);
+  const todayDay = localDay(today);
+  const end = lastDay && lastDay > todayDay ? lastDay : todayDay;
+  const last = new Date(`${end}T12:00:00Z`);
   const out: UsageDay[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const day = new Date(last.getTime() - i * 86_400_000).toISOString().slice(0, 10);
