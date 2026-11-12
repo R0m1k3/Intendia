@@ -4,10 +4,14 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
 import { Md } from '../chat/Thread';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
-import { baseName, fileKind, formatSize } from './paths';
+import { baseName, fileKind, formatSize, isText as isTextKind } from './paths';
 import type { FileScope } from './scope';
 
 const CodeView = lazy(() => import('./CodeView'));
+const CsvView = lazy(() => import('./viewers/CsvView'));
+const DiffView = lazy(() => import('./viewers/DiffView'));
+const OfficeView = lazy(() => import('./viewers/OfficeView'));
+const ExcalidrawView = lazy(() => import('./viewers/ExcalidrawView'));
 const TEXT_MAX = 1024 * 1024;
 
 /** Absolute URL of a share link (the server gives a path when INTENDIA_PUBLIC_URL is not set). */
@@ -46,7 +50,9 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted }
   const listing = useQuery({ queryKey: [...scope.key, parent], queryFn: () => scope.tree(parent) });
   const entry = listing.data?.entries.find((e) => e.path === path);
   const kind = fileKind(name);
-  const isText = kind === 'text' || kind === 'markdown';
+  const isText = isTextKind(kind);
+  /** Shown rendered by default, with a « Source » switch (Markdown, CSV, diff). */
+  const rendered = kind === 'markdown' || kind === 'csv' || kind === 'diff';
   const tooBig = (entry?.size ?? 0) > TEXT_MAX;
   const text = useQuery({
     queryKey: ['file-text', ...(slug ? [slug] : scope.key), path, entry?.mtime],
@@ -132,9 +138,9 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted }
           </button>
         )}
       </header>
-      {kind === 'markdown' && !editing && text.data !== undefined && (
+      {rendered && !editing && entry && (kind !== 'markdown' || text.data !== undefined) && (
         <div className="flex gap-1 border-b border-line px-4 py-1.5 text-xs">
-          {(['Rendu', 'Source'] as const).map((l) => (
+          {([kind === 'csv' ? 'Tableau' : 'Rendu', 'Source'] as const).map((l) => (
             <button key={l} onClick={() => setSource(l === 'Source')}
               className={cx('rounded-md px-2 py-1', (l === 'Source') === source ? 'bg-raised text-ink' : 'text-ink-faint hover:text-ink')}>{l}</button>
           ))}
@@ -155,6 +161,14 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted }
           <div className="p-6"><audio src={url} controls className="w-full" /></div>
         ) : kind === 'video' ? (
           <div className="p-4"><video src={url} controls className="max-h-[75vh] w-full" /></div>
+        ) : (kind === 'csv' || kind === 'diff') && !source && !editing ? (
+          <Suspense fallback={null}>
+            {kind === 'csv' ? <CsvView url={url} name={name} version={entry.mtime} /> : <DiffView url={url} version={entry.mtime} />}
+          </Suspense>
+        ) : kind === 'docx' || kind === 'xlsx' || kind === 'pptx' ? (
+          <Suspense fallback={null}><OfficeView url={url} kind={kind} version={entry.mtime} /></Suspense>
+        ) : kind === 'excalidraw' ? (
+          <Suspense fallback={null}><ExcalidrawView url={url} version={entry.mtime} /></Suspense>
         ) : isText && !tooBig ? (
           text.data === undefined ? null : kind === 'markdown' && !source && !editing ? (
             <div className="px-6 py-5"><Md text={text.data} /></div>

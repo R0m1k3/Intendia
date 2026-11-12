@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileKind, findPathCandidates } from './paths';
+import { fileKind, findPathCandidates, isText, type FileKind } from './paths';
 
 const m = { root: '/opt/data/workspace' };
 
@@ -37,5 +37,8 @@ describe('fileKind', () => {
     expect(fileKind('a.ts')).toBe('text');
     expect(fileKind('Dockerfile')).toBe('text');
     expect(fileKind('a.bin')).toBe('other');
+    expect(['a.csv', 'a.TSV', 'a.diff', 'a.patch', 'a.docx', 'a.xlsx', 'a.pptx', 'a.excalidraw'].map(fileKind))
+      .toEqual(['csv', 'csv', 'diff', 'diff', 'docx', 'xlsx', 'pptx', 'excalidraw']);
+    expect(['csv', 'diff', 'text', 'markdown', 'docx', 'excalidraw'].map((k) => isText(k as FileKind))).toEqual([true, true, true, true, false, false]);
   });
 });
