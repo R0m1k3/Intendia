@@ -7,6 +7,7 @@ import { callOp } from '../connectors/runtime.js';
 import { ExportSchema } from '../connectors/sessions/index.js';
 import { copyId, copyPayload, CopyError, exportSession, importCopy, type Exported } from '../sessions/copy.js';
 import { agentName, attachmentHeader, toHtml, toMarkdown } from '../sessions/export.js';
+import { revertRewrite, rewriteSession, RunActiveError } from '../sessions/rewrite.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { RUN_ACTIVE, SESSION_ID_RE, sessionParams } from './workspaces.js';
@@ -16,6 +17,8 @@ const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, 'clé invalide');
 const DuplicateBody = z.object({ key: Key });
 const ContinueBody = z.object({ key: Key, profile: z.string().max(64).default('default'), workspace: z.string().regex(SLUG_RE) });
 const ImportBody = z.object({ key: Key, file: z.unknown() });
+/** `before`: row id of the user message to cut before; 0 = keep nothing (clear); null = keep everything. */
+const RewriteBody = z.object({ key: Key, before: z.number().int().nonnegative().nullable(), mode: z.enum(['replace', 'branch']) });
 
 export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -61,6 +64,30 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     });
     if (!idle) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
     return c.json({ session: out!.session }, created ? 201 : 200);
+  });
+
+  // edit, retry, undo, clear (replace) and branch: a truncated copy
+  r.post('/sessions/:inst/:id/rewrite', async (c) => {
+    const { inst, id } = sessionParams(c);
+    const body = RewriteBody.parse(await c.req.json());
+    try {
+      const res = await rewriteSession(deps, inst, id, body);
+      const { created, ...out } = res;
+      return c.json(out, created ? 201 : 200);
+    } catch (err) {
+      if (err instanceof RunActiveError) return c.json({ error: err.message, code: 'run_active' }, 409);
+      throw err;
+    }
+  });
+
+  r.post('/sessions/:inst/:id/revert', async (c) => {
+    const { inst, id } = sessionParams(c);
+    try {
+      return c.json({ session: await revertRewrite(deps, inst, id) });
+    } catch (err) {
+      if (err instanceof RunActiveError) return c.json({ error: err.message, code: 'run_active' }, 409);
+      throw err;
+    }
   });
 
   r.post('/i/:inst/external/:id/continue', async (c) => {

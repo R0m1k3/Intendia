@@ -7,6 +7,8 @@ export interface ComposerHandle {
   /** Adds files as attachments (uploaded at once, one tile each); used by paste, the paperclip and the drop zones. */
   addFiles: (files: File[]) => void;
   focus: () => void;
+  /** Replaces the text being written (a message given back after "Annuler le dernier échange"). */
+  setText: (text: string) => void;
 }
 
 /** Uploads one file; `agentPath` goes into the message, `url` shows the uploaded image. */
@@ -94,7 +96,7 @@ export function Composer({
   };
   const remove = (a: Attachment) => { free(a.preview); setFiles((list) => list.filter((x) => x.id !== a.id)); };
 
-  useImperativeHandle(handle, () => ({ addFiles, focus: () => ref.current?.focus() }));
+  useImperativeHandle(handle, () => ({ addFiles, focus: () => ref.current?.focus(), setText: (t: string) => { setText(t); ref.current?.focus(); } }));
 
   useEffect(() => {
     const el = ref.current;

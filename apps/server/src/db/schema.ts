@@ -52,6 +52,8 @@ export const sessionWorkspace = sqliteTable(
     deletedAt: integer('deleted_at'),
     /** Copy of another Hermes session (its id) or "import:<key>": exists at Hermes without a run from Intendia. */
     copiedFrom: text('copied_from'),
+    /** The session this one replaced (edit, retry, undo, clear): deleted with the undo window. */
+    replacesId: text('replaces_id'),
     /** Taken by the purger: next attempt (lease, then retry after a failure). */
     purgeAfter: integer('purge_after'),
   },

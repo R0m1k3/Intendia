@@ -1,5 +1,5 @@
 import { thinkingState } from './thinking';
-import { Check, ChevronDown, ChevronRight, Copy, FileText, Loader2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -192,13 +192,67 @@ function UserMessage({ text }: { text: string }) {
   );
 }
 
-function TurnView({ t, agent }: { t: Turn; agent?: string }) {
+/**
+ * History actions of the thread (session page); absent while a run goes on or messages wait in the queue. Each
+ * replaces the session by a truncated copy, except the branch (a new session next to it).
+ */
+export interface ThreadActions {
+  canEdit: (key: string) => boolean;
+  edit: (key: string, text: string) => void;
+  /** Agent turn offering "Réessayer" (the last one, after a stored user message), or null. */
+  retryTurn: string | null;
+  retry: () => void;
+  canBranch: (turnKey: string) => boolean;
+  branch: (turnKey: string) => void;
+  busy: boolean;
+}
+
+const TURN_BUTTON = 'flex size-7 items-center justify-center rounded-md text-ink-faint transition-[color,background-color,opacity] hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40 [@media(hover:hover)]:opacity-0';
+
+function TurnButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+  return <button type="button" title={label} aria-label={label} className={TURN_BUTTON} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+
+/** The text of a user message edited in place; "Envoyer" restarts the conversation from there. */
+function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel: () => void; onSend: (t: string) => void; busy: boolean }) {
+  const [value, setValue] = useState(text);
+  const ok = value.trim().length > 0 && value !== text;
+  return (
+    <div className="w-full max-w-[85%] md:max-w-[80%]" data-edit-message>
+      <textarea
+        aria-label="Modifier le message" autoFocus value={value} onChange={(e) => setValue(e.target.value)} rows={Math.min(8, Math.max(2, value.split('\n').length))}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && !e.shiftKey && ok && !busy) { e.preventDefault(); onSend(value); }
+        }}
+        className="w-full resize-y rounded-2xl border border-line bg-sheet px-4 py-2.5 text-sm outline-none focus:border-accent"
+      />
+      <p className="mt-1 text-[11px] text-ink-faint">La suite de la conversation sera retirée (Annuler pendant 10 s ; « Créer une branche » d’abord pour la garder).</p>
+      <div className="mt-2 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>Annuler</Button>
+        <Button onClick={() => onSend(value)} disabled={!ok || busy}>Envoyer</Button>
+      </div>
+    </div>
+  );
+}
+
+function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: ThreadActions }) {
+  const [editing, setEditing] = useState(false);
   if (t.kind === 'user') {
+    const editable = Boolean(actions?.canEdit(t.key));
+    if (editing && actions) {
+      return (
+        <div className="flex flex-col items-end" data-turn="user">
+          <EditMessage text={t.entry.text} busy={actions.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); actions.edit(t.key, v); }} />
+        </div>
+      );
+    }
     return (
-      <div className="flex flex-col items-end" data-turn="user">
+      <div className="group flex flex-col items-end" data-turn="user">
         <UserMessage text={t.entry.text} />
-        {(t.entry.ts !== null || t.entry.steer) && (
-          <span className="mt-1 text-[11px] text-ink-faint">
+        {(t.entry.ts !== null || t.entry.steer || editable) && (
+          <span className="mt-1 flex items-center gap-1 text-[11px] text-ink-faint">
+            {editable && <TurnButton label="Modifier le message" onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
             {t.entry.steer && <span data-steer className="font-medium text-accent" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
             {t.entry.steer && t.entry.ts !== null && ' · '}
             {t.entry.ts !== null && clock(t.entry.ts)}
@@ -213,10 +267,18 @@ function TurnView({ t, agent }: { t: Turn; agent?: string }) {
       <AgentHeader ts={t.ts} name={agent} />
       <div className={cx('mt-2 space-y-3', AGENT_INDENT)}>
         {t.parts.map((p) => <PartView key={p.key} p={p} />)}
-        {(t.footers.length > 0 || (t.text && !t.streaming)) && (
+        {(t.footers.length > 0 || (t.text && !t.streaming) || actions) && (
           <div className="space-y-0.5">
             {t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
-            {t.text && !t.streaming && <CopyReply text={t.text} />}
+            <div className="flex items-center gap-0.5">
+              {t.text && !t.streaming && <CopyReply text={t.text} />}
+              {actions && actions.retryTurn === t.key && (
+                <TurnButton label="Réessayer" onClick={actions.retry} disabled={actions.busy}><RotateCcw className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              )}
+              {actions?.canBranch(t.key) && (
+                <TurnButton label="Créer une branche" onClick={() => actions.branch(t.key)} disabled={actions.busy}><GitBranch className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -238,11 +300,11 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent }: { entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string }) {
+export function Thread({ entries, footers, agent, actions }: { entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions }) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   return (
     <div className="space-y-6">
-      {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} />)}
+      {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
     </div>
   );
 }

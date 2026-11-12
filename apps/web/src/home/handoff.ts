@@ -10,6 +10,24 @@ export function setHandoff(h: Handoff): void {
   pending = h;
 }
 
+/**
+ * Text to put in the composer of a session page about to open (undo of the last exchange, a send that failed after
+ * a replacement). In memory only, read once.
+ */
+export interface Draft { inst: string; sessionId: string; text: string; error?: string }
+let draft: Draft | null = null;
+
+export function setDraft(d: Draft): void {
+  draft = d;
+}
+
+export function takeDraft(inst: string, sessionId: string): Draft | null {
+  const d = draft;
+  if (!d || d.inst !== inst || d.sessionId !== sessionId) return null;
+  draft = null;
+  return d;
+}
+
 /** The message of this run, read once. */
 export function takeHandoff(inst: string, sessionId: string, runId: string): Handoff | null {
   const h = pending;

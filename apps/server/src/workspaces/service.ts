@@ -29,6 +29,8 @@ export interface PublicSession {
   pinned: boolean;
   /** Copy of another Hermes session (its id) or "import:<key>": exists at Hermes even without a run from Intendia. */
   copiedFrom: string | null;
+  /** The session this one replaced (edit, retry, undo, clear), restorable during its undo window. */
+  replacesId: string | null;
 }
 
 /** Undo window of a deletion: the session stays at Hermes and can be restored until it is over. */
@@ -84,7 +86,7 @@ function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
     lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
-    pinned: r.pinned, copiedFrom: r.copiedFrom,
+    pinned: r.pinned, copiedFrom: r.copiedFrom, replacesId: r.replacesId,
   };
 }
 
@@ -280,6 +282,69 @@ export class WorkspaceService {
     const row = this.db.select().from(sessionWorkspace)
       .where(and(eq(sessionWorkspace.workspaceSlug, slug), eq(sessionWorkspace.sessionId, id), alive)).get();
     return row ? toPublic(row) : null;
+  }
+
+  /** The row of `id` on the instance, alive or deleted (null once dropped by the purger). */
+  rowOf(instanceId: string, id: string): SessionRow | null {
+    return this.db.select().from(sessionWorkspace)
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, id))).get() ?? null;
+  }
+
+  /**
+   * Rows of a truncated copy, in one transaction: the new session (its options from the original), the cost lines
+   * of the replies it keeps (`run_id@newId`, frozen), and with `replaces` the original hidden with the undo window.
+   */
+  async replaceRows(o: {
+    slug: string; instanceId: string; newId: string; from: PublicSession; title: string | null; copiedFrom: string | null;
+    replaces: boolean; keepRunsBefore: number | null | 'all'; now?: number;
+  }): Promise<{ session: PublicSession; undoUntil: number | null }> {
+    try {
+      await createSessionDir(this.roots.fs(o.instanceId), o.slug, o.newId);
+    } catch (err) {
+      console.warn(`[intendia] session folder ${o.slug}/sessions/${o.newId} not created: ${(err as Error).message}`);
+    }
+    const now = o.now ?? Date.now();
+    const f = o.from;
+    const runs = o.keepRunsBefore === null ? [] : this.runStats(o.instanceId, f.id)
+      .filter((r) => r.endedAt !== null && (o.keepRunsBefore === 'all' || r.endedAt < (o.keepRunsBefore as number)));
+    this.db.transaction((tx) => {
+      tx.insert(sessionWorkspace).values({
+        sessionId: o.newId, instanceId: o.instanceId, workspaceSlug: o.slug, title: o.title ? titleFrom(o.title) : null, archived: false,
+        createdAt: now, lastActiveAt: now, model: f.model, modelProvider: f.model ? f.modelProvider : null, effort: f.effort,
+        pinned: f.pinned, copiedFrom: o.copiedFrom, replacesId: o.replaces ? f.id : null,
+      }).run();
+      for (const r of runs) {
+        tx.insert(runStats).values({ ...r, runId: `${r.runId}@${o.newId}`, sessionId: o.newId, hermesSessionId: o.newId, costFinal: true })
+          .onConflictDoNothing().run();
+      }
+      if (o.replaces) {
+        tx.update(sessionWorkspace).set({ deletedAt: now })
+          .where(and(eq(sessionWorkspace.instanceId, o.instanceId), eq(sessionWorkspace.sessionId, f.id), alive)).run();
+      }
+    });
+    return { session: this.getSession(o.instanceId, o.newId).session, undoUntil: o.replaces ? now + UNDO_MS : null };
+  }
+
+  /**
+   * Start of an undo of a replacement: pushes the original's undo window to `now` when it is still open (the purger
+   * then leaves it alone while the copy's run stops). False = too late.
+   */
+  holdWindow(instanceId: string, id: string, now = Date.now()): boolean {
+    const res = this.db.update(sessionWorkspace).set({ deletedAt: now })
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, id), gt(sessionWorkspace.deletedAt, now - UNDO_MS))).run();
+    return res.changes > 0;
+  }
+
+  /** Undo of a replacement, in one transaction: the original back, the copy hidden (purged at Hermes later). */
+  swapBack(instanceId: string, originalId: string, copyId: string, now = Date.now()): boolean {
+    return this.db.transaction((tx) => {
+      const back = tx.update(sessionWorkspace).set({ deletedAt: null })
+        .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, originalId), gt(sessionWorkspace.deletedAt, now - UNDO_MS))).run();
+      if (!back.changes) return false;
+      tx.update(sessionWorkspace).set({ deletedAt: now })
+        .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, copyId), alive)).run();
+      return true;
+    });
   }
 
   /**

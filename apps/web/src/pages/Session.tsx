@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Link2, PanelRight, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, Trash2, Undo2 } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,7 +13,7 @@ import { agentName, costSettling, COST_POLL_MS, placeRunStats } from '../chat/fo
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
-import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread } from '../chat/Thread';
+import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
@@ -24,7 +24,8 @@ import { findPathCandidates } from '../files/paths';
 import { splitAttachments } from '../chat/attachments';
 import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
-import { takeHandoff } from '../home/handoff';
+import { setDraft, setHandoff, takeDraft, takeHandoff } from '../home/handoff';
+import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/history-actions';
 import { Menu } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
@@ -274,6 +275,56 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     onError: setError,
   });
 
+  // edit, retry, undo, clear (the session replaced by a truncated copy, « Annuler » for 10 s) and branch
+  const rewrite = useMutation({
+    mutationFn: async (a: { action: HistoryAction; before: number | null; text?: string }) => ({
+      a, res: await api.rewriteSession(inst!, sessionId, { key: newKey(), before: a.before, mode: a.action === 'branch' ? 'branch' : 'replace' }),
+    }),
+    onSuccess: async ({ a, res }) => {
+      const copy = res.session;
+      if ((a.action === 'edit' || a.action === 'retry') && a.text) {
+        try {
+          const sent = await api.send(inst!, copy.id, a.text);
+          setHandoff({ inst: inst!, sessionId: copy.id, runId: sent.runId, text: a.text, ts: Date.now() / 1000 });
+        } catch (err) {
+          // the copy is made: the text waits in its composer, with the reason
+          setDraft({ inst: inst!, sessionId: copy.id, text: a.text, error: (err as Error).message });
+        }
+      }
+      if (a.action === 'undo' && a.text) setDraft({ inst: inst!, sessionId: copy.id, text: a.text });
+      if (a.action !== 'branch' && res.undoUntil) {
+        const original = sessionId;
+        showUndo({
+          inst: inst!, ids: [], undoUntil: res.undoUntil, label: ACTION_LABEL[a.action],
+          run: async () => {
+            try {
+              await api.revertRewrite(inst!, copy.id);
+            } catch (err) {
+              // a first answer lost: the original may be back already
+              const back = err instanceof ApiError && err.status === 409 && await api.session(inst!, original).then(() => true, () => false);
+              if (!back) throw err;
+            }
+            await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+            await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: original } });
+          },
+        });
+      }
+      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
+      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: copy.id } });
+    },
+    onError: setError,
+  });
+  // text given back by « Annuler le dernier échange », or a send refused after a replacement: once, into the composer
+  const draftRead = useRef(false);
+  useEffect(() => {
+    if (!inst || draftRead.current) return;
+    draftRead.current = true;
+    const d = takeDraft(inst, sessionId);
+    if (!d) return;
+    composer.current?.setText(d.text);
+    if (d.error) setError(new Error(d.error));
+  }, [inst, sessionId]);
+
   const messages = history.data?.messages ?? [];
   const entries: Entry[] = withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees);
   const lastStatus = lastRun.data;
@@ -298,6 +349,27 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const running = Boolean(active);
   /** The session exists at Hermes (sent once, or a copy): it has something to copy and export. */
   const sentOnce = Boolean(sess.data?.session.lastRunId || sess.data?.session.copiedFrom);
+  // history actions: not during a run, nor with messages waiting (they would stay on the replaced session)
+  const historyFree = !running && queued === 0 && sentOnce && !rewrite.isPending;
+  const canRewrite = historyFree && canCopy;
+  const last = lastUser(entries);
+  const lastTurn = (() => {
+    for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.kind === 'user' && !(entries[i] as { steer?: boolean }).steer) return entries[i + 1]?.key ?? null;
+    return null;
+  })();
+  const runRewrite = (action: HistoryAction, key?: string, text?: string) => {
+    const before = cutFor(entries, action, key);
+    if (before !== undefined) rewrite.mutate({ action, before, text });
+  };
+  const threadActions: ThreadActions | undefined = canRewrite ? {
+    canEdit: (key) => cutFor(entries, 'edit', key) !== undefined,
+    edit: (key, text) => runRewrite('edit', key, text),
+    retryTurn: last && lastTurn ? lastTurn : null,
+    retry: () => runRewrite('retry', undefined, last?.text),
+    canBranch: (key) => cutFor(entries, 'branch', key) !== undefined,
+    branch: (key) => runRewrite('branch', key),
+    busy: rewrite.isPending,
+  } : undefined;
   // context gauge: read on opening and after each run
   const usage = useQuery({
     queryKey: ['usage', inst, sessionId, runCount], queryFn: () => api.sessionUsage(inst!, sessionId),
@@ -420,6 +492,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                   { label: 'Exporter en HTML', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
                   ...(canExportJson ? [{ label: 'Exporter en JSON', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
                 ] : []),
+                ...(sentOnce && canCopy ? [{ label: 'Annuler le dernier échange', icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
+                ...(sentOnce ? [{ label: 'Vider la conversation', icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !historyFree, onSelect: () => runRewrite('clear') }] : []),
                 { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
@@ -439,7 +513,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} />
+        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} />
         {running && !live?.approval && !live?.clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>

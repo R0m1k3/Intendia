@@ -114,7 +114,11 @@ export interface Session {
   pinned: boolean;
   /** Copy of another session (its id) or "import:<key>". */
   copiedFrom: string | null;
+  /** The session this one replaced (edit, retry, undo, clear), restorable for 10 s. */
+  replacesId: string | null;
 }
+/** A truncated copy: `before` = Hermes row id of the user message to cut before, 0 = nothing kept, null = all. */
+export interface RewriteResult { session: Session; replaced?: string; undoUntil?: number | null }
 export type BulkAction = 'archive' | 'unarchive' | 'pin' | 'unpin' | 'delete' | 'move';
 export interface BulkResult { id: string; ok: boolean; error?: string }
 export interface ChatMessage {
@@ -564,6 +568,9 @@ export const api = {
     call<{ results: BulkResult[]; undoUntil?: number }>('POST', `/i/${enc(inst)}/sessions/bulk`, { ids, action, ...(workspace ? { workspace } : {}) }),
   restoreSessions: (inst: string, ids: string[]) => call<{ restored: string[] }>('POST', `/i/${enc(inst)}/sessions/restore`, { ids }),
   /** `key`: made once per action (a retry gives the same copy). */
+  rewriteSession: (inst: string, id: string, body: { key: string; before: number | null; mode: 'replace' | 'branch' }) =>
+    call<RewriteResult>('POST', `${sessionPath(inst, id)}/rewrite`, body),
+  revertRewrite: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/revert`),
   duplicateSession: (inst: string, id: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/duplicate`, { key }),
   exportUrl: (inst: string, id: string, format: 'md' | 'html' | 'json') => `/x${sessionPath(inst, id)}/export?format=${format}`,
   importSession: (slug: string, file: unknown, key: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions/import`, { key, file }),

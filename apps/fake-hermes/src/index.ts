@@ -224,6 +224,8 @@ class Simulator {
     const slow = /lent/i.test(run.input);
     const step = slow ? 500 : this.stepMs;
     await sleep(step);
+    // stopped before it started
+    if (TERMINAL.has(run.status)) return;
     run.status = 'running';
     this.push(run, { event: 'run.started' });
     if (/roman/i.test(run.input)) {
@@ -244,6 +246,7 @@ class Simulator {
       }
     }
     if (/approval/i.test(run.input)) {
+      if (TERMINAL.has(run.status)) return;
       run.status = 'waiting_for_approval';
       const authority = this.controls === 'authority';
       const question = { command: 'rm -rf build/', description: 'Supprimer le dossier build', choices: ['once', 'session', 'always', 'deny'] };
@@ -253,6 +256,8 @@ class Simulator {
         this.push(run, { event: 'approval.request', ...prompt });
       });
       run.approval = null;
+      // stopped while it waited: stays cancelled
+      if (TERMINAL.has(run.status)) return;
       run.status = 'running';
       this.push(run, authority
         ? { event: 'approval.settled', prompt_id: 'apr_1', execution_generation: 1 }

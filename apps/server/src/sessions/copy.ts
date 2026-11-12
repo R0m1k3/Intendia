@@ -19,7 +19,7 @@ export const MAX_MESSAGES = 10_000;
 const MESSAGE_IDS = ['id', 'session_id', 'message_uid', 'absorbed_message_uids', 'tool_call_uid', 'tool_call_uids', 'platform_message_id'];
 
 export class CopyError extends Error {
-  constructor(readonly code: 'empty' | 'too_many' | 'invalid' | 'refused' | 'busy', message: string, readonly status: 400 | 404 | 409 | 413 | 502 | 503) {
+  constructor(readonly code: 'empty' | 'too_many' | 'invalid' | 'refused' | 'busy' | 'cut_not_found' | 'reverted' | 'too_late', message: string, readonly status: 400 | 404 | 409 | 413 | 502 | 503) {
     super(message);
     this.name = 'CopyError';
   }
@@ -44,6 +44,22 @@ function textOf(content: unknown): string | null {
     return parts.length ? parts.join('') : null;
   }
   return null;
+}
+
+/**
+ * The export cut strictly before the message of row id `before` (a live `user` message, not a reorientation), or
+ * whole with null, or emptied with 0; `cutTs` = that message's time in seconds (null when unknown or not cut).
+ */
+export function cutBefore(exported: Exported, before: number | null): { exported: Exported; cutTs: number | null } {
+  if (before === null) return { exported, cutTs: null };
+  if (before === 0) return { exported: { ...exported, messages: [] }, cutTs: null };
+  const rows = exported.messages as Row[];
+  const at = rows.findIndex((m) => m.id === before);
+  const m = at >= 0 ? rows[at]! : null;
+  if (!m || m.role !== 'user' || flag(m.active) === false || m.display_kind === 'steer') {
+    throw new CopyError('cut_not_found', 'Ce message ne peut plus servir de point de départ (compressé, retiré ou réorientation)', 409);
+  }
+  return { exported: { ...exported, messages: exported.messages.slice(0, at) }, cutTs: typeof m.timestamp === 'number' ? m.timestamp : null };
 }
 
 /**
