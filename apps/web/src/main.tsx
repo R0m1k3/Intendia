@@ -27,7 +27,8 @@ import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { GitPage, type GitSearch } from './pages/Git';
 import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
-import { SessionPage } from './pages/Session';
+import { ChatPage } from './chat/ChatPage';
+import { loadChat } from './chat/columns';
 import { InboxLayout } from './sessions/InboxLayout';
 import { parseCronKey } from './components/selection';
 import { WorkspacePage } from './pages/Workspace';
@@ -106,7 +107,22 @@ const gitRoute = createRoute({
 });
 /** /liens (page removed): the share links are a tab of « Fichiers ». */
 const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', beforeLoad: () => { throw redirect({ to: '/files', search: { tab: 'liens' } } as never); } });
-const sessionRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
+/** A session = the Chat page (its columns: chat/ChatPage.tsx); `?avec=` = the other chats of a copied link. */
+const sessionRoute = createRoute({
+  getParentRoute: () => inboxRoute, path: '/w/$slug/s/$sessionId', component: ChatPage,
+  validateSearch: (s: Record<string, unknown>): { avec?: string } => ({ avec: typeof s.avec === 'string' && s.avec ? s.avec : undefined }),
+});
+/** « Chat » of the sidebar: this tab's active chat of the current instance, else the sessions. */
+const chatRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/chat',
+  beforeLoad: () => {
+    const inst = currentTab();
+    const c = inst ? loadChat(inst) : null;
+    const active = c?.open.find((x) => x.id === c.active);
+    if (active) throw redirect({ to: '/w/$slug/s/$sessionId', params: { slug: active.slug, sessionId: active.id } } as never);
+    throw redirect({ to: '/' });
+  },
+});
 /** Entry of an instance page (bookmarks, old links): the current instance of this tab, else the first. */
 async function toCurrent(page: InstancePage, search?: object): Promise<never> {
   const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
@@ -169,7 +185,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

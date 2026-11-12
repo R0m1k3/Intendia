@@ -1,13 +1,15 @@
-import { Outlet, useParams } from '@tanstack/react-router';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { Outlet, useNavigate, useParams } from '@tanstack/react-router';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { EMBEDDED } from '../chat/embed';
 import { SplitView } from '../components/Panes';
 import { useStoredFlag } from '../components/useStoredFlag';
+import { openBeside, updateChat, useChat, withPanel } from '../chat/columns';
+import { useCurrentInstance } from '../instance/current';
 import { SessionsPane } from './SessionsPane';
 
 interface Inbox {
-  /** The session page has its files panel or a preview open: the list column steps aside. */
-  setPanelOpen: (open: boolean) => void;
+  /** A session (page or column) has its files panel or a preview open: the list column steps aside while one has. */
+  setPanelOpen: (id: string, open: boolean) => void;
   /** "Plein écran": the list column hidden by hand on session pages (kept in this browser). */
   full: boolean;
   setFull: (v: boolean) => void;
@@ -24,11 +26,28 @@ export function useInbox(): Inbox {
  * mounted from one session to the next, so its search, filter, length and scroll are kept.
  */
 export function InboxLayout() {
-  const params = useParams({ strict: false }) as { sessionId?: string };
+  const params = useParams({ strict: false }) as { sessionId?: string; slug?: string };
   const inSession = Boolean(params.sessionId);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [full, setFull] = useStoredFlag('intendia-inbox-full');
-  const value = useMemo(() => ({ setPanelOpen, full, setFull }), [full, setFull]);
+  // an Intendia session = the Chat page (chat/ChatPage.tsx): the list stays beside it unless folded
+  const inChat = inSession && Boolean(params.slug);
+  const { id: inst } = useCurrentInstance();
+  const navigate = useNavigate();
+  const onBeside = useCallback((slug: string, id: string) => {
+    if (!inst) return;
+    updateChat(inst, (c) => openBeside(c, { slug, id }));
+    void navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: id } });
+  }, [inst, navigate]);
+  const [panels, setPanels] = useState<ReadonlySet<string>>(() => new Set());
+  const setPanelOpen = useCallback((id: string, open: boolean) => setPanels((p) => withPanel(p, id, open)), []);
+  const panelOpen = panels.size > 0;
+  const [folded, setFolded] = useStoredFlag('intendia-inbox-full');
+  // several chats side by side need the width: the list folds by itself, and shows only when asked (its own flag)
+  const chat = useChat(inChat ? inst : null);
+  const multi = inChat && chat.layout !== 'one' && chat.open.length > 1;
+  const [listInMulti, setListInMulti] = useStoredFlag('intendia-chat-list');
+  const full = multi ? !listInMulti : folded;
+  const setFull = useCallback((v: boolean) => (multi ? setListInMulti(!v) : setFolded(v)), [multi, setListInMulti, setFolded]);
+  const value = useMemo(() => ({ setPanelOpen, full, setFull }), [setPanelOpen, full, setFull]);
   // the side chat's iframe (?embed=1) shows the session alone
   if (EMBEDDED) return <InboxContext.Provider value={value}><Outlet /></InboxContext.Provider>;
   return (
@@ -37,8 +56,8 @@ export function InboxLayout() {
         label="Sessions"
         selected={inSession}
         phoneBoth={!inSession}
-        listHidden={inSession ? (full || panelOpen ? true : 'narrow') : false}
-        list={<SessionsPane openId={params.sessionId ?? null} />}
+        listHidden={inSession ? (full || panelOpen ? true : inChat ? false : 'narrow') : false}
+        list={<SessionsPane openId={params.sessionId ?? null} onBeside={inChat ? onBeside : undefined} />}
       >
         <Outlet />
       </SplitView>

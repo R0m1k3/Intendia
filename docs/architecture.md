@@ -159,6 +159,22 @@ demand from the State screen. State changes go to the webhook.
   table (`kind` `prompt` | `personality`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
   a `collage-<date>.txt` attachment.
 
+### Chat page
+
+- A click on a session opens the Chat page (`/w/:slug/s/:id`, `web/src/chat/ChatPage.tsx`): tabs, layouts « Un seul »,
+  « Colonnes », « Grille », at most 4 chats (`MAX`, a fifth replaces the active one). « À côté » or Ctrl/Cmd+click in
+  the list opens a column right of the active one. Columns are kept per instance and per browser tab
+  (`sessionStorage` `intendia-chat:<inst>`, copied to `localStorage` for new tabs, `chat/columns.ts`); the address
+  names the active one. « Copier le lien » adds `?avec=slug:id,…`, which replaces the tab's columns once opened, then
+  leaves the address. A session is never in two columns. On a phone, one chat at a time with the tabs above.
+- Each column renders the session page itself (`SessionView`) inside a `ColumnContext` (`chat/column-context.ts`):
+  actions that open another session (agent change, copy, rewrite, undo, `/new`) change the column; archive or delete
+  closes it. Hidden columns stay mounted (`inert`), so their scroll and draft survive a layout change.
+- Live follow: at most 3 run streams per tab (`chat/streams.ts`, a browser keeps 6 HTTP/1.1 connections per host);
+  other runs are polled every 3 s (`followRun` in `chat/useRun.ts`, « Suivi en différé »), their approvals and
+  questions read from `GET /x/approvals`.
+- The session list folds when several chats are visible (button « Afficher la liste », kept in `localStorage`).
+
 ## Files, share links and MCP
 
 - **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector

@@ -442,7 +442,9 @@ export function Composer({
       />
       {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}
       {notice && <p role="status" data-run-notice className="px-2 pb-1 text-[12px] text-warn">{notice}</p>}
-      <div className="flex items-center gap-1">
+      {/* sized by the composer, not the window: a Chat column can be narrow on a wide screen */}
+      <div className="@container">
+      <div className="flex flex-wrap items-center gap-1 @2xl:flex-nowrap">
         {leading}
         {upload && (
           <>
@@ -465,8 +467,9 @@ export function Composer({
             filter={promptFilter} text={text} disabled={disabled} onInsert={insertText}
           />
         )}
-        <div className="hidden min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint md:block">{hint}</div>
-        <div className="flex min-w-0 flex-1 justify-end md:flex-none">{options}</div>
+        <div className="min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint">{hint}</div>
+        {/* narrow: the options get their own line above the buttons, the hint stays on the buttons' line */}
+        <div data-composer-options className="order-first flex min-w-0 basis-full overflow-x-auto [scrollbar-width:none] @2xl:order-none @2xl:basis-auto @2xl:flex-none">{options}</div>
         {running && onSteer && (
           <button type="button" onClick={() => void steer()} disabled={!canSteer} aria-label="Réorienter"
             title={steerBlock ?? 'Réorienter : donner ce texte à l’agent tout de suite, après ses outils en cours'}
@@ -503,6 +506,7 @@ export function Composer({
             <ArrowUp className="size-4" strokeWidth={1.75} />
           </button>
         )}
+      </div>
       </div>
     </div>
   );

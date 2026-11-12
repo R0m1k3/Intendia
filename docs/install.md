@@ -88,6 +88,9 @@ browser. To declare instances in the environment instead, use `INTENDIA_INSTANCE
 ## 3. Reverse proxy
 
 Point your proxy at `intendia:3000`. Chat answers are streamed (SSE): disable response buffering.
+Serve Intendia over HTTPS with HTTP/2 (the default of the three proxies below): over HTTP/1.1 a browser opens only six
+connections per site, and every chat followed live on the Chat page holds one (Intendia follows at most three live per tab,
+the others every few seconds).
 
 **Nginx Proxy Manager**: proxy host to `intendia` port `3000`, "Websockets support" on, and in *Advanced*:
 
