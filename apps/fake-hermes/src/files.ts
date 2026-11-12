@@ -12,7 +12,11 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 export const MANAGED_FILE_MAX_BYTES = 100 * 1024 * 1024;
 
-const SENSITIVE_FILES = new Set(['auth.json', 'auth.lock', 'credentials', 'config.yaml', '.git-credentials']);
+const SENSITIVE_FILES = new Set([
+  'auth.json', 'auth.lock', 'credentials', 'config.yaml', '.git-credentials',
+  '.anthropic_oauth.json', 'google_token.json', 'google_oauth_pending.json', 'google_oauth.json', 'webhook_subscriptions.json',
+  'bws_cache.json', 'bws_cache.enc.json', 'op_cache.json', 'photon-sidecar.json',
+]);
 const SENSITIVE_DIRS = new Set(['mcp-tokens', 'pairing']);
 
 function sensitiveName(name: string): boolean {

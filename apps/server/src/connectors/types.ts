@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { Method, Via } from '../hermes/http.js';
 
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'files';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'files' | 'git';
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
 
 /**

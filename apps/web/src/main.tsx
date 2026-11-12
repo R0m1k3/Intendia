@@ -25,6 +25,7 @@ import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
+import { GitPage, type GitSearch } from './pages/Git';
 import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
 import { SessionPage } from './pages/Session';
 import { InboxLayout } from './sessions/InboxLayout';
@@ -96,6 +97,13 @@ const filesRoute = createRoute({
     edit: s.edit === 1 || s.edit === '1' ? 1 : undefined,
   }),
 });
+const gitRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/w/$slug/git', component: GitPage,
+  validateSearch: (s: Record<string, unknown>): GitSearch => ({
+    repo: typeof s.repo === 'string' ? s.repo : '',
+    f: typeof s.f === 'string' && s.f ? s.f : undefined,
+  }),
+});
 /** /liens (page removed): the share links are a tab of « Fichiers ». */
 const linksRoute = createRoute({ getParentRoute: () => appRoute, path: '/liens', beforeLoad: () => { throw redirect({ to: '/files', search: { tab: 'liens' } } as never); } });
 const sessionRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/w/$slug/s/$sessionId', component: SessionPage });
@@ -161,7 +169,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

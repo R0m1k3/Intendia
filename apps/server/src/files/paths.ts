@@ -25,7 +25,11 @@ export function normalizeRel(rel: string, opts: { allowRoot?: boolean } = {}): s
 }
 
 /** A single file or folder name (upload, rename target segment). */
-const HIDDEN_FILES = new Set(['auth.json', 'auth.lock', 'credentials', 'config.yaml', '.git-credentials']);
+const HIDDEN_FILES = new Set([
+  'auth.json', 'auth.lock', 'credentials', 'config.yaml', '.git-credentials',
+  '.anthropic_oauth.json', 'google_token.json', 'google_oauth_pending.json', 'google_oauth.json', 'webhook_subscriptions.json',
+  'bws_cache.json', 'bws_cache.enc.json', 'op_cache.json', 'photon-sidecar.json',
+]);
 const HIDDEN_DIRS = new Set(['mcp-tokens', 'pairing']);
 
 /** Names Hermes never lists nor downloads (credentials): a file written there could not be seen again. */
