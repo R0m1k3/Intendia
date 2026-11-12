@@ -56,3 +56,16 @@ export function stepsLabel(tools: ToolEntry[]): string {
   const s = tools.reduce((sum, t) => sum + (t.duration ?? 0), 0);
   return `${n} · ${s.toLocaleString('fr-FR', { maximumFractionDigits: s < 10 ? 1 : 0 })} s`;
 }
+
+export interface OutlineItem { key: string; text: string; ts: number | null }
+
+/**
+ * The user's questions in thread order (reorientations are not questions), for « Plan » and the ↑ ↓ jumps. A key is
+ * the entry's, which is also the key of its `user` turn in toTurns (and of the element `[data-key]` of the thread).
+ */
+export function outline(entries: Entry[]): OutlineItem[] {
+  return entries.filter((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer).map((e) => {
+    const flat = e.text.replace(/\s+/g, ' ').trim();
+    return { key: e.key, text: flat.length > 80 ? `${flat.slice(0, 80).trimEnd()}…` : flat, ts: e.ts };
+  });
+}

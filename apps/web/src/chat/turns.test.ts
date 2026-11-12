@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunStat } from '../api';
 import type { Entry } from './events';
-import { stepsLabel, toTurns, type ToolEntry } from './turns';
+import { outline, stepsLabel, toTurns, type ToolEntry } from './turns';
 
 const user = (key: string, ts = 1): Entry => ({ kind: 'user', key, text: key, ts });
 const said = (key: string, ts: number | null = 2, streaming = false): Entry => ({ kind: 'assistant', key, text: `texte ${key}`, ts, streaming });
@@ -42,5 +42,23 @@ describe('stepsLabel', () => {
     expect(stepsLabel([tool('a', 2), tool('b', null)])).toBe('2 étapes');
     expect(stepsLabel([tool('a', 2.25), tool('b', 1)])).toBe('2 étapes · 3,3 s');
     expect(stepsLabel([tool('a', 12), tool('b', 1)])).toBe('2 étapes · 13 s');
+  });
+});
+
+describe('outline', () => {
+  it('questions only, one line, cut at 80 characters with « … », keys of the user turns', () => {
+    const long = 'x'.repeat(90);
+    const entries: Entry[] = [
+      { kind: 'user', key: 'h1', text: 'Première\nquestion', ts: 10 },
+      { kind: 'assistant', key: 'h2', text: 'ok', ts: 11 },
+      { kind: 'user', key: 's3', text: 'réorientation', ts: 12, steer: true },
+      { kind: 'user', key: 'h4', text: long, ts: null },
+    ];
+    expect(outline(entries)).toEqual([
+      { key: 'h1', text: 'Première question', ts: 10 },
+      { key: 'h4', text: `${'x'.repeat(80)}…`, ts: null },
+    ]);
+    const userTurns = toTurns(entries).filter((t) => t.kind === 'user' && !t.entry.steer).map((t) => t.key);
+    expect(outline(entries).map((i) => i.key)).toEqual(userTurns);
   });
 });

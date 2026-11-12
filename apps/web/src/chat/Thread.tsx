@@ -1,6 +1,6 @@
 import { thinkingState } from './thinking';
 import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { rawUrl, type ApprovalChoice, type RunStat } from '../api';
@@ -12,14 +12,31 @@ import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
 import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
-import { Subagents } from './Subagents';
+import { duration, Subagents } from './Subagents';
+import type { Stamp } from './timeline';
 
 /** How the user is named in the thread. */
 const USER = 'Vous';
 
-export function clock(ts: number | null): string {
+export function clock(ts: number | null, seconds = false): string {
   if (!ts) return '';
-  return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}) });
+}
+
+/** « Afficher les heures »: stamps of the entries by key (chat/timeline.ts); null = normal display. */
+const Times = createContext<Map<string, Stamp> | null>(null);
+
+/** « 14:03:27 · +12 s » for an entry, or null (times off, entry without a time). */
+function useStamp(key: string): string | null {
+  const times = useContext(Times);
+  const s = times?.get(key);
+  if (!s) return null;
+  return `${clock(s.ts, true)}${s.gap !== null ? ` · +${duration(s.gap)}` : ''}`;
+}
+
+function StampLine({ k }: { k: string }) {
+  const text = useStamp(k);
+  return text ? <p className="font-mono text-[11px] text-ink-faint" data-stamp>{text}</p> : null;
 }
 
 /**
@@ -67,6 +84,7 @@ function StepIcon({ state }: { state: ToolEntry['state'] }) {
 function Step({ e }: { e: ToolEntry }) {
   const [open, setOpen] = useState(false);
   const hasResult = Boolean(e.result);
+  const stamp = useStamp(e.key);
   return (
     <li>
       <button
@@ -75,6 +93,7 @@ function Step({ e }: { e: ToolEntry }) {
         aria-expanded={hasResult ? open : undefined}
         className={cx('flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-[3px] text-left font-mono text-xs', hasResult && 'hover:bg-raised')}
       >
+        {stamp && <span className="shrink-0 font-mono text-[11px] text-ink-faint" data-stamp>{stamp}</span>}
         <StepIcon state={e.state} />
         <span className="shrink-0 font-mono text-ink">{e.tool}</span>
         <span className="min-w-0 truncate text-ink-faint">{e.preview}</span>
@@ -92,9 +111,13 @@ function Step({ e }: { e: ToolEntry }) {
   );
 }
 
-/** Consecutive tool calls of a reply: open at first while one runs or when there are 3 or fewer, then only by click. */
+/**
+ * Consecutive tool calls of a reply: open at first while one runs or when there are 3 or fewer (or the times are
+ * shown: the card is created again when they are turned on), then only by click.
+ */
 function Steps({ tools }: { tools: ToolEntry[] }) {
-  const [open, setOpen] = useState(() => tools.length <= 3 || tools.some((t) => t.state === 'running'));
+  const times = useContext(Times) !== null;
+  const [open, setOpen] = useState(() => times || tools.length <= 3 || tools.some((t) => t.state === 'running'));
   return (
     <div className="rounded-lg bg-paper px-1.5 py-1.5 text-ink-soft" data-steps>
       <button
@@ -110,9 +133,13 @@ function Steps({ tools }: { tools: ToolEntry[] }) {
 }
 
 function PartView({ p }: { p: Part }) {
+  const times = useContext(Times) !== null;
+  if (p.kind === 'steps') return <Steps key={times ? `${p.key}:t` : p.key} tools={p.tools} />;
+  return <>{times && <StampLine k={p.key} />}<PartBody p={p} /></>;
+}
+
+function PartBody({ p }: { p: Exclude<Part, { kind: 'steps' }> }) {
   switch (p.kind) {
-    case 'steps':
-      return <Steps tools={p.tools} />;
     case 'assistant':
       return <Md text={p.text} />;
     case 'reasoning':
@@ -155,11 +182,11 @@ export function Avatar({ name, agent }: { name: string; agent: boolean }) {
 }
 
 /** Name of a turn and its time (mono), beside the avatar. */
-function Who({ name, ts, extra }: { name: string; ts: number | null; extra?: string }) {
+function Who({ name, ts, extra, seconds = false }: { name: string; ts: number | null; extra?: string; seconds?: boolean }) {
   return (
     <span className="flex min-w-0 items-baseline gap-1.5 text-[13.5px]">
       <span className="truncate font-semibold">{name}</span>
-      {(ts !== null || extra) && <span className="shrink-0 font-mono text-[11.5px] text-ink-faint">{[clock(ts), extra].filter(Boolean).join(' · ')}</span>}
+      {(ts !== null || extra) && <span className="shrink-0 font-mono text-[11.5px] text-ink-faint">{[clock(ts, seconds), extra].filter(Boolean).join(' · ')}</span>}
     </span>
   );
 }
@@ -262,22 +289,23 @@ function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel:
 
 function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: ThreadActions }) {
   const [editing, setEditing] = useState(false);
+  const times = useContext(Times);
   if (t.kind === 'user') {
     const editable = Boolean(actions?.canEdit(t.key));
     if (editing && actions) {
       return (
-        <div className="flex gap-3" data-turn="user">
+        <div className="flex gap-3" data-turn="user" data-key={t.key}>
           <Avatar name={USER} agent={false} />
           <EditMessage text={t.entry.text} busy={actions.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); actions.edit(t.key, v); }} />
         </div>
       );
     }
     return (
-      <div className="group flex gap-3" data-turn="user">
+      <div className="group flex gap-3" data-turn="user" data-key={t.key}>
         <Avatar name={USER} agent={false} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <Who name={USER} ts={t.entry.ts} />
+            <Who name={USER} ts={t.entry.ts} seconds={Boolean(times)} />
             {t.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
             {editable && <TurnButton label="Modifier le message" onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
           </div>
@@ -288,7 +316,7 @@ function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: Th
     );
   }
   return (
-    <div data-turn="agent" className="group">
+    <div data-turn="agent" data-key={t.key} className="group rounded-lg">
       <AgentHeader ts={t.ts} name={agent} />
       <div className={cx('mt-1.5 space-y-2.5 text-[15px]', AGENT_INDENT)}>
         {t.parts.map((p) => <PartView key={p.key} p={p} />)}
@@ -325,12 +353,18 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent, actions }: { entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions }) {
+export function Thread({ entries, footers, agent, actions, times }: {
+  entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions;
+  /** « Afficher les heures » (chat/timeline.ts); absent = normal display */
+  times?: Map<string, Stamp>;
+}) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   return (
-    <div className="space-y-7">
-      {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
-    </div>
+    <Times.Provider value={times ?? null}>
+      <div className="space-y-7">
+        {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
+      </div>
+    </Times.Provider>
   );
 }
 
