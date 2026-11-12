@@ -203,7 +203,7 @@ function FieldRow({ path, field, original, value, text, error, disabled, onText,
         )}
         {(kind === 'number' || kind === 'text') && (
           <Input id={id} type={kind === 'number' ? 'text' : 'text'} inputMode={kind === 'number' ? 'decimal' : undefined} disabled={disabled}
-            className="font-mono text-[12.5px]" value={text ?? toText(kind, value)} placeholder={original == null ? '(non défini)' : undefined}
+            className="font-mono text-[12.5px]" value={text ?? toText(kind, value)} placeholder={item?.nullable ? 'pas de limite' : original == null ? '(non défini)' : undefined}
             onChange={(e) => onText(path, kind, e.target.value, original)} />
         )}
         {kind === 'lines' && (

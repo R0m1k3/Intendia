@@ -439,6 +439,23 @@ Sub-agents and runs (API server):
   (`last_active`, `tool_call_count`, `api_call_count`, `ended_at`, `end_reason`, `preview` = first 60 characters +
   `...`); without `include_children` they are hidden. No HTTP route gives more progress.
 
+## Guardrails, run control (read in the 0.23.0 source, 2026-11-12; the Garde-fous tab is tied to these names)
+
+- No pause of a run, and **no token or cost limit per run**. Run control on the API server: `steer` (text given
+  after the current tool batch, 409 when the run is not `running`), `stop`, `approval`, `clarify`.
+- `agent.run_budget_seconds` (None = off): at 80 % a one-time « wrap up » note is added to a tool result; no hard
+  stop. `agent.max_turns` (None = unlimited) and `agent.budget_warning_ratio` (warning before `max_turns`). The
+  schema types these None-default keys `string`: Intendia sends a number, or `null` to go back to « no limit ».
+- `tool_loop_guardrails`: `warnings_enabled` (true), `hard_stop_enabled` (false), `non_interactive_hard_stop_enabled`
+  (true), `warn_after.*` and `hard_stop_after.{exact_failure,same_tool_failure,idempotent_no_progress}`,
+  `loop_caps.{max_web_searches,max_subagents}` (always on, 0 = off). « Attended » platforms (`cli`, `tui`, `desktop`,
+  `acp`, `subagent`, `api_server`: `agent/tool_guardrails.py:86`) only hard-stop with `hard_stop_enabled`; cron and
+  kanban sessions hard-stop by default.
+- `delegation.max_concurrent_children` (10) and `delegation.max_spawn_depth` (1) are read again at each call;
+  `agent.*` and `tool_loop_guardrails` are fixed when a session's agent is built (the gateway keeps it 1 h idle).
+  `kanban.max_in_progress` (None = from RAM, 2 to 8) and `kanban.max_in_progress_per_profile`: next dispatcher pass
+  (`kanban.dispatch_interval_seconds`, 60).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),
