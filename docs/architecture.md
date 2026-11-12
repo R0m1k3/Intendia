@@ -159,6 +159,26 @@ demand from the State screen. State changes go to the webhook.
   table (`kind` `prompt` | `personality`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
   a `collage-<date>.txt` attachment.
 
+### Session goal (`/goal`)
+Hermes' own `/goal` does not run for API server sessions (its relaunch goes to a queue nothing reads), so Intendia
+keeps the goal itself (`session_goals`, `apps/server/src/chat/goal.ts`, routes `/x/sessions/:inst/:id/goal`):
+- While the goal is `active`, a block is added to the instructions of every run: the goal, and the two end lines
+  `OBJECTIF ATTEINT` / `OBJECTIF BLOQUÉ : <raison>` the agent must write. No auxiliary judge.
+- `GoalRunner` (`chat/goal-runner.ts`, every 3 s, one pass at a time, on the server: it goes on with every tab closed)
+  decides once per finished last run: the end line of the run's `output` → done or paused `blocked`; `failed`,
+  `cancelled`, a run Hermes forgot → paused; relaunch cap, budget (sum of `run_stats` costs since `cost_since`, checked
+  between turns, so up to two turns late), a run with a frozen unknown cost → paused; click mode → paused; else a
+  relaunch (`[Intendia] Relance automatique n/max : …`, refused when typed by the user, shown as a quiet line).
+- Every run starts through `startRun` (`chat/start-run.ts`), shared with the send route: one run at a time per session
+  (`startingRuns`). Goal writes are single conditional statements (pause only an active goal, the counter after a
+  successful start): no other lock.
+- The user writing pauses it: a message (before its run starts, so it goes without the block), a reorientation, a
+  message put in the browser queue. « Reprendre » renews a spent slice (counter, cost) and relaunches at once when no
+  run goes on. « Sans confirmation » requires a budget. The goal follows a replacing copy (Modifier, Réessayer) and
+  its undo; a deleted session pauses it (`gone`).
+- The page re-reads the goal every 3 s while active; a new `lastRunId` makes it re-read the session and follow the
+  relaunch live.
+
 ### Chat page
 
 - A click on a session opens the Chat page (`/w/:slug/s/:id`, `web/src/chat/ChatPage.tsx`): tabs, layouts « Un seul »,

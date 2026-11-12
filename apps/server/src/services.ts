@@ -24,6 +24,10 @@ import { SessionPurger } from './sessions/purge.js';
 import { AutoApprover } from './sessions/auto-approve.js';
 import { SkillService } from './skills/service.js';
 import { WorkspaceService } from './workspaces/service.js';
+import { GoalStore } from './chat/goal.js';
+import { GoalRunner } from './chat/goal-runner.js';
+import type { StartRunDeps } from './chat/start-run.js';
+import { PromptService } from './prompts/service.js';
 
 export interface Services {
   roots: FileRoots;
@@ -48,6 +52,10 @@ export interface Services {
   memory: MemoryService;
   plugins: PluginService;
   mcpCatalog: McpCatalogService;
+  goals: GoalStore;
+  /** what starting a run needs (send route, goal routes, goal loop) */
+  runDeps: StartRunDeps;
+  goalRunner: GoalRunner;
 }
 
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
@@ -70,5 +78,7 @@ export function createServices(deps: {
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
   const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
-  return { roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
+  const goals = new GoalStore(deps.db);
+  const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, config, prompts: new PromptService(deps.db), goals };
+  return { goals, runDeps, goalRunner: new GoalRunner(runDeps), roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }

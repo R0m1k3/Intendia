@@ -5,7 +5,7 @@ const list: Command[] = COMMANDS.map((c) => (c.name === 'stop' ? { ...c, disable
 
 describe('slash commands', () => {
   it('menu while the name is typed, filtered by prefix', () => {
-    expect(matchCommands('/', list)?.map((c) => c.name)).toEqual(['new', 'clear', 'undo', 'retry', 'branch', 'title', 'usage', 'stop', 'prompt', 'use']);
+    expect(matchCommands('/', list)?.map((c) => c.name)).toEqual(['new', 'clear', 'undo', 'retry', 'branch', 'title', 'usage', 'stop', 'prompt', 'use', 'goal']);
     expect(matchCommands('/U', list)?.map((c) => c.name)).toEqual(['undo', 'usage', 'use']);
     expect(matchCommands('/title ', list)).toBeNull();
     expect(matchCommands('/xyz', list)).toBeNull();
@@ -31,7 +31,8 @@ describe('slash commands', () => {
   });
 
   it('anything else is a message', () => {
-    expect(parseCommand('/goal finir le rapport', list)).toBeNull();
+    expect(parseCommand('/plan finir le rapport', list)).toBeNull();
+    expect(parseCommand('/goal finir le rapport', list)).toMatchObject({ command: { name: 'goal' }, arg: 'finir le rapport' });
     expect(parseCommand('/stop maintenant', list)).toBeNull();
     expect(parseCommand('/usr/bin/env', list)).toBeNull();
     expect(parseCommand('Bonjour', list)).toBeNull();

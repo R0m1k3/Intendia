@@ -1,3 +1,4 @@
+import { goalRoutes } from './routes/goal.js';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { existsSync, readFileSync } from 'node:fs';
@@ -234,6 +235,7 @@ export function createApp(deps: AppDeps) {
   const { workspaces, files, links } = deps.services;
   priv.route('/', workspaceRoutes({ ...deps, workspaces }));
   priv.route('/', chatRoutes({ ...deps, workspaces }));
+  priv.route('/', goalRoutes(deps.services.runDeps));
   priv.route('/', sessionCopyRoutes({ ...deps, workspaces }));
   priv.route('/', fileRoutes(files, deps.services.instanceFiles));
   priv.route('/', gitRoutes(deps.services.git));

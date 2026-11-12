@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne
 import type { InstanceConfig } from '../config.js';
 import type { Db } from '../db/index.js';
 import { runStats, sessionWorkspace, workspaces } from '../db/schema.js';
+import { moveGoalStatement } from '../chat/goal.js';
 import type { FinishFields } from '../chat/run-stats.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { FileRoots } from '../files/hermes-fs.js';
@@ -357,6 +358,8 @@ export class WorkspaceService {
           .onConflictDoNothing().run();
       }
       if (o.replaces) {
+        // the goal follows the copy that replaces its session, paused (the user rewrote the conversation)
+        moveGoalStatement(tx, o.instanceId, f.id, o.newId, now).run();
         tx.update(sessionWorkspace).set({ deletedAt: now })
           .where(and(eq(sessionWorkspace.instanceId, o.instanceId), eq(sessionWorkspace.sessionId, f.id), alive)).run();
       }
@@ -382,6 +385,7 @@ export class WorkspaceService {
       if (!back.changes) return false;
       tx.update(sessionWorkspace).set({ deletedAt: now })
         .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, copyId), alive)).run();
+      moveGoalStatement(tx, instanceId, copyId, originalId, now).run();
       return true;
     });
   }

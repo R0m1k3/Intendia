@@ -38,6 +38,9 @@
  * - "modifie": a write_file call (<workspace>/files/modifie.md) then a V4A patch (Update of that file, Add of
  *   files/nouveau.md); calls and results stored in the messages like Hermes does, files written on disk
  * - "taches": two todo_list calls (the second with merge: true, 1.5 s later), each result = the full list
+ * - goal block of Intendia in the instructions (option 7): "objectif-N" in the goal = OBJECTIF ATTEINT at the N-th run
+ *   carrying it, "objectif-bloque" = OBJECTIF BLOQUÉ : il manque la clé (see goalEnding); "lent" in the goal = every
+ *   run of the goal is slow
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
@@ -274,7 +277,8 @@ class Simulator {
   }
 
   private async play(run: SimRun) {
-    const slow = /lent/i.test(run.input);
+    // "lent" in the message, or in Intendia's goal (each relaunch of that goal is slow too)
+    const slow = /lent/i.test(run.input) || /\[Intendia\] Objectif de la session : .*lent/i.test(run.instructions);
     const step = slow ? 500 : this.stepMs;
     await sleep(step);
     // stopped before it started
@@ -594,7 +598,28 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
     this.finish(run, 'Le résumé est prêt : Frouard devant Houdemont.');
   }
 
+  /** Runs per session that carried Intendia's goal block ("objectif-N" scenario). */
+  private goalRuns = new Map<string, number>();
+
+  /**
+   * Goal of the session (option 7): the run's instructions carry « [Intendia] Objectif de la session : <texte> ».
+   * "objectif-N" (N = 1..9): the N-th such run of the session ends with OBJECTIF ATTEINT; "objectif-bloque": ends
+   * with OBJECTIF BLOQUÉ : il manque la clé; any other goal: an ordinary answer.
+   */
+  private goalEnding(run: SimRun): string | null {
+    const goal = /\[Intendia\] Objectif de la session : (.*)/.exec(run.instructions)?.[1];
+    if (goal === undefined) return null;
+    const n = (this.goalRuns.get(run.sessionId) ?? 0) + 1;
+    this.goalRuns.set(run.sessionId, n);
+    if (/objectif-bloque/i.test(goal)) return 'OBJECTIF BLOQUÉ : il manque la clé';
+    const m = /objectif-(\d)/i.exec(goal);
+    if (m && n >= Number(m[1])) return 'OBJECTIF ATTEINT';
+    return `J’avance vers l’objectif (tour ${n}).`;
+  }
+
   private finish(run: SimRun, output: string) {
+    const ending = this.goalEnding(run);
+    if (ending) output = `${output}\n\n${ending}`;
     const big = /cher/i.test(run.input);
     const input = big ? 1_250_000 : 12_000;
     const output_tokens = big ? 5_200 : 800;

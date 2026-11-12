@@ -71,6 +71,12 @@ describe('reduceEvent', () => {
     expect(entries[0]).not.toHaveProperty('steer');
   });
 
+  it('marks the relaunches of the goal loop', () => {
+    const entries = historyEntries([msg(1, 'user', 'Ranger', 1), msg(2, 'user', '[Intendia] Relance automatique 2/5 : continue vers l’objectif.', 2)]);
+    expect(entries[0]).not.toHaveProperty('relaunch');
+    expect(entries[1]).toMatchObject({ kind: 'user', relaunch: { n: 2, max: 5 } });
+  });
+
   it('keeps a question of the agent until it is settled or the run ends', () => {
     let s = run([
       { event: 'run.started' },

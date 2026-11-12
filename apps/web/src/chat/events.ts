@@ -1,12 +1,13 @@
 // Run events → thread entries. No React here: unit-tested in events.test.ts.
 import type { ChatMessage, DelegationInfo } from '../api';
 import { deliverySummary, EMPTY_DELIVERY } from './deliveries';
+import { parseRelaunch } from './goal';
 
 export type ToolState = 'running' | 'ok' | 'failed';
 
 export type Entry =
-  /** steer: given to the agent during its run (reorientation) */
-  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean }
+  /** steer: given to the agent during its run (reorientation); relaunch: sent by Intendia's goal loop (chat/goal.ts) */
+  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean; relaunch?: { n: number; max: number } }
   | { kind: 'assistant'; key: string; text: string; ts: number | null; streaming?: boolean }
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
@@ -340,7 +341,10 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
     if (m.role === 'delegation') {
       const info = m.delegation ?? EMPTY_DELIVERY;
       out.push({ kind: 'delegation', key: k, text: m.content, info, summary: deliverySummary(info), ts: m.timestamp });
-    } else if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}) });
+    } else if (m.role === 'user') {
+      const relaunch = parseRelaunch(m.content);
+      out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}), ...(relaunch ? { relaunch } : {}) });
+    }
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
       if (m.toolCalls.length) calls = [];
