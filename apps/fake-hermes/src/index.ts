@@ -27,6 +27,8 @@
  * Cron jobs: see crons.ts (in-memory store, scenarios "bloque" and "long" in the job prompt).
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
+ * - "fond": delegate_task in the background (ticket, run ended), delivery row 6 s later outside any run (FAKE_BG_DELAY_MS),
+ *   two child sessions moving meanwhile ("fond-alerte": early failure notice + hidden row; "fond-suivi": 40 s, FAKE_BG_SUIVI_MS)
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
  *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
  * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
@@ -78,6 +80,9 @@ export interface Break {
 
 export interface FakeOptions {
   fixturesDir: string;
+  /** "fond" scenarios: delay (ms) between the end of the run and the delivery of the sub-agents (6000; "fond-suivi" 40000). */
+  bgDelayMs?: number;
+  bgSuiviMs?: number;
   /** Git routes (`/api/fs/git-root`, `/api/git/*`): see git.ts. */
   git?: GitFakeOptions;
   /** Stats, logs and host metrics: see monitor.ts. */
@@ -190,6 +195,15 @@ interface SimMessage {
   tool_name: string | null;
   timestamp: number;
   display_kind?: string;
+  /** like Hermes 0.23: stored, never served by GET /api/sessions/{id}/messages */
+  display_metadata?: Record<string, unknown>;
+}
+
+/** Session row of a sub-agent (Hermes 0.23: `source: subagent`, listed only with `include_children`). */
+interface ChildRow {
+  id: string; source: string; parent_session_id: string | null; is_internal_child?: boolean; preview: string;
+  started_at: number; ended_at: number | null; end_reason: string | null; last_active: number;
+  message_count: number; tool_call_count: number; api_call_count: number; title: string | null;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
@@ -205,6 +219,11 @@ class Simulator {
   liveAlias = new Map<string, string>();
   /** Tests: sessions born elsewhere (Telegram, cron…) added by POST /_fake/sessions. */
   extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[] }>();
+  /** Sessions of sub-agents ("fond" scenarios, POST /_fake/children). */
+  children = new Map<string, ChildRow>();
+  /** Delay between the end of a "fond" run and the delivery of its sub-agents ("fond-suivi": bgSuiviMs). */
+  bgDelayMs = 6000;
+  bgSuiviMs = 40_000;
   /** Session titles set by PATCH /api/sessions/{id}. */
   titles = new Map<string, string>();
   /** Like Hermes 0.23 (unique index on sessions.title): the other session holding this title, if any. */
@@ -322,6 +341,7 @@ class Simulator {
     if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
     if (/modifie/i.test(run.input)) return this.playModified(run, step);
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
+    if (/fond/i.test(run.input)) return this.playBackground(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
     if (/artefact/i.test(run.input)) return this.playArtifact(run, step);
@@ -427,6 +447,82 @@ class Simulator {
     this.push(run, { event: 'tool.completed', tool: 'delegate_task', duration: 4.2, error: false, preview: result.slice(0, 500), call_id: 'call_d1' });
     await sleep(step);
     this.finish(run, 'Les deux sous-agents ont fini : 1 240 € de ventes à Frouard.');
+  }
+
+  /**
+   * "fond" scenarios: delegate_task in the background (Hermes 0.23 for an API server session). The run ends at once
+   * with a ticket; the delivery row comes later, outside any run ("fond-alerte": an early failure notice and a hidden
+   * row before it; "fond-suivi": a longer delay). Two child sessions move meanwhile.
+   */
+  private async playBackground(run: SimRun, step: number) {
+    const goals = ['Relire les ventes', 'Compter les rayons', 'Tâche refusée'];
+    const deleg = 'deleg_fake1';
+    const delay = /fond-suivi/i.test(run.input) ? this.bgSuiviMs : this.bgDelayMs;
+    const alert = /fond-alerte/i.test(run.input);
+    const args = JSON.stringify({ tasks: goals.map((goal) => ({ goal })) });
+    this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id: 'call_bg1', type: 'function', function: { name: 'delegate_task', arguments: args } }] });
+    this.push(run, { event: 'tool.started', tool: 'delegate_task', preview: 'Relire les ventes', call_id: 'call_bg1' });
+    const now = Date.now() / 1000;
+    const kids = [0, 1].map((i) => {
+      const row: ChildRow = {
+        id: `sa_sess_bg${i + 1}_${run.id}`, source: 'subagent', parent_session_id: run.sessionId, preview: goals[i]!, started_at: now, ended_at: null,
+        end_reason: null, last_active: now, message_count: 1, tool_call_count: 0, api_call_count: 1, title: null,
+      };
+      this.children.set(row.id, row);
+      this.push(run, {
+        event: 'subagent.start', goal: goals[i], task_index: i, task_count: 3, subagent_id: `sa_bg${i + 1}`, child_session_id: row.id,
+        delegation_id: deleg, depth: 1, model: 'fake/model-mini',
+      });
+      return row;
+    });
+    // long enough for a page to see the sub-agents « en cours » during the run
+    await sleep(Math.max(step, 1500));
+    const ticket = JSON.stringify({
+      status: 'dispatched', mode: 'background', count: 2, delegation_id: deleg, goals,
+      note: 'Sub-agents run in the background; their results are delivered to this session when they finish.',
+      refused: [{ task_index: 2, error: 'refusée' }],
+    });
+    this.addMessage(run.sessionId, 'tool', ticket, { tool_name: 'delegate_task' });
+    this.push(run, { event: 'tool.completed', tool: 'delegate_task', duration: 0.1, error: false, preview: ticket.slice(0, 500), call_id: 'call_bg1' });
+    await sleep(step);
+    this.finish(run, 'Je vous préviens quand c’est fini.');
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const t = Date.now() / 1000;
+      for (const k of kids) if (k.ended_at === null) { k.last_active = t; k.tool_call_count += 1; k.api_call_count += 1; }
+    }, 2000);
+    tick.unref?.();
+    await sleep(delay / 2);
+    kids[1]!.ended_at = Date.now() / 1000;
+    kids[1]!.end_reason = 'failed';
+    if (alert) {
+      this.addMessage(run.sessionId, 'user', `[ASYNC DELEGATION TASK FAILED — ${deleg}, task 2/3]\nA background subagent failed early; the others are still running.\n\nStatus: failed`, {
+        display_kind: 'async_delegation_complete',
+        display_metadata: { delegation_id: deleg, task_count: 1, completed_count: 0, failed_count: 1, delivery_notice: 'task_failure:1' },
+      });
+      this.addMessage(run.sessionId, 'user', 'muted notice', { display_kind: 'hidden', display_metadata: { notification_category: 'diagnostic' } });
+    }
+    await sleep(Math.max(0, delay - (Date.now() - start)));
+    clearInterval(tick);
+    kids[0]!.ended_at = Date.now() / 1000;
+    kids[0]!.end_reason = 'completed';
+    const secs = Math.round(delay / 1000);
+    const text = [
+      `[ASYNC DELEGATION BATCH COMPLETE — ${deleg}]`,
+      'A background fan-out unit you dispatched earlier — 2 subagent(s) — has finished; its consolidated results are below.',
+      '',
+      `Role: leaf   Model: fake/model-mini   Total duration: ${secs}s`,
+      '',
+      `--- ✓ TASK 1/3: ${goals[0]}  (status=completed, api_calls=4, ${secs - 1}s) ---`,
+      'Ventes relues : 1 240 € à Frouard.',
+      '',
+      `--- ✗ TASK 2/3: ${goals[1]}  (status=failed, api_calls=2, ${secs}s) ---`,
+      'Error: le fichier des rayons est introuvable.',
+    ].join('\n');
+    this.addMessage(run.sessionId, 'user', text, {
+      display_kind: 'async_delegation_complete',
+      display_metadata: { delegation_id: deleg, task_count: 2, completed_count: 1, failed_count: 1, duration_seconds: secs },
+    });
   }
 
   /** "artefact" scenario: an HTML page with a script, shown in the thread by its `::artefact` line. */
@@ -638,6 +734,22 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (via === 'api' && method === 'POST' && path === '/_fake/pool/seed') {
       config.providers.seedSamples(c.req.query('profile') ?? 'default');
       return c.json({ ok: true });
+    }
+    // tests: sub-agent session rows (fields of GET /api/sessions with include_children)
+    if (via === 'api' && path === '/_fake/children' && method === 'DELETE') { sim.children.clear(); return c.json({ ok: true }); }
+    if (via === 'api' && path === '/_fake/children' && method === 'POST') {
+      const b = (body ?? {}) as Record<string, unknown>;
+      const now = Date.now() / 1000;
+      const row = {
+        id: String(b.id ?? `fake_child_${sim.children.size + 1}`), source: typeof b.source === 'string' ? b.source : 'subagent',
+        parent_session_id: typeof b.parent_session_id === 'string' ? b.parent_session_id : null, preview: String(b.preview ?? ''),
+        started_at: typeof b.started_at === 'number' ? b.started_at : now, ended_at: typeof b.ended_at === 'number' ? b.ended_at : null,
+        end_reason: typeof b.end_reason === 'string' ? b.end_reason : null, last_active: typeof b.last_active === 'number' ? b.last_active : now,
+        message_count: 1, tool_call_count: typeof b.tool_call_count === 'number' ? b.tool_call_count : 0, api_call_count: 1, title: null,
+        ...(typeof b.is_internal_child === 'boolean' ? { is_internal_child: b.is_internal_child } : {}),
+      };
+      sim.children.set(row.id, row);
+      return c.json({ id: row.id });
     }
     if (via === 'api' && method === 'POST' && path === '/_fake/sessions') {
       const b = (body ?? {}) as Record<string, unknown>;
@@ -908,7 +1020,9 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const extra = [...sim.extraSessions.values()].map(({ messages, ...e }) => ({ ...e, message_count: messages.length }));
     const url = new URL(req.url);
     const source = url.searchParams.get('source');
-    const all = [...simulated, ...extra].sort((a, b) => b.started_at - a.started_at).concat(recorded as never[])
+    // like Hermes: sub-agent sessions only with include_children
+    const children = url.searchParams.get('include_children') === 'true' ? [...sim.children.values()] : [];
+    const all = [...simulated, ...extra, ...children].sort((a, b) => b.started_at - a.started_at).concat(recorded as never[])
       .filter((s) => !source || (s as { source?: string | null }).source === source);
     const limit = Math.min(200, Number(url.searchParams.get('limit') ?? 50));
     const offset = Number(url.searchParams.get('offset') ?? 0);
@@ -930,7 +1044,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       if (!simulated) return id === 'intendia-probe-1' ? null : NOT_FOUND_SESSION(id);
       return json({
         object: 'list', session_id: sim.liveAlias.get(id) ?? id,
-        data: [{ id: 1, session_id: id, role: 'session_meta', content: null, tool_calls: null, tool_name: null, timestamp: simulated[0]!.timestamp }, ...simulated].reverse(),
+        data: [{ id: 1, session_id: id, role: 'session_meta', content: null, tool_calls: null, tool_name: null, timestamp: simulated[0]!.timestamp }, ...simulated.map(({ display_metadata: _md, ...m }) => m)].reverse(),
         pagination: { limit: 500, offset: 0, order: 'latest', returned: simulated.length + 1 },
       });
     }
@@ -964,6 +1078,8 @@ export function createFakeHermes(opts: FakeOptions) {
   const files = new FilesStore(opts.filesRoot ?? mkdtempSync(join(tmpdir(), 'fake-hermes-files-')));
   files.delayMs = opts.filesDelayMs ?? 0;
   const sim = new Simulator(opts.stepMs ?? 5, files.root);
+  if (opts.bgDelayMs !== undefined) sim.bgDelayMs = opts.bgDelayMs;
+  if (opts.bgSuiviMs !== undefined) sim.bgSuiviMs = opts.bgSuiviMs;
   sim.controls = opts.controls ?? 'authority';
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);

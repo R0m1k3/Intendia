@@ -489,7 +489,16 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   the `delegate_task` call and its result (`{results: [...]}`): `historyEntries` turns them into a `subagents` entry
   (one node per task: goal, status, duration, model, tokens, summary; no cost, no nesting). The page keeps the live
   trees of the runs that ended while it was open (richer) and `withTrees` puts them back in place of the history
-  cards of the same turn. A background delegation (result without `results`) stays a tool line.
+  cards of the same turn.
+- Background sub-agents (`chat/deliveries.ts`, server `chat/delegation.ts`, `chat/subagents.ts`): a `delegate_task`
+  whose result is a ticket (`{status: dispatched, mode: background}`) gives a card of `background` nodes. Hermes later
+  writes a delivery row (`display_kind: async_delegation_complete`, `role: user`); the server turns it into Intendia's
+  own role `delegation` (read from Hermes' text: the API server does not serve `display_metadata`), never a message of
+  the user (no edit, no retry, not a question, exported as « Sous-agents (résultat) »). `hidden` rows are dropped.
+  While a unit is open, the session page re-reads the history and the children's session rows
+  (`GET /x/sessions/:inst/:id/subagents`, from `GET /api/sessions?include_children=true`) every 15 s for 10 min, then
+  60 s up to 24 h: each background node shows its child's last activity and tool count. Intendia never starts a run
+  at the delivery: the agent reads the result with the next message.
 - Tool results in the history go to the first open call of the same tool in the last assistant message with tool
   calls (Hermes writes them in call order), else to the last open call of that tool.
 - Agent task list (`chat/todos.ts`, `Todos.tsx`): the last `todo_list` result of the session (always the full list)

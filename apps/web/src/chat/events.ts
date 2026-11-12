@@ -1,5 +1,6 @@
 // Run events → thread entries. No React here: unit-tested in events.test.ts.
-import type { ChatMessage } from '../api';
+import type { ChatMessage, DelegationInfo } from '../api';
+import { deliverySummary, EMPTY_DELIVERY } from './deliveries';
 
 export type ToolState = 'running' | 'ok' | 'failed';
 
@@ -10,7 +11,10 @@ export type Entry =
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
   | { kind: 'note'; key: string; text: string; tone: 'muted' | 'bad'; ts: number | null }
-  | { kind: 'subagents'; key: string; nodes: SubagentNode[]; ts: number | null };
+  /** openSince: seconds, oldest start of its background nodes (absent when none) */
+  | { kind: 'subagents'; key: string; nodes: SubagentNode[]; ts: number | null; openSince?: number }
+  /** result of background sub-agents (Hermes' delivery row): its own turn, no action on it */
+  | { kind: 'delegation'; key: string; text: string; info: DelegationInfo; summary: string; ts: number | null };
 
 /** One delegated sub-agent of a run (Hermes subagent.start / subagent.complete). */
 export interface SubagentNode {
@@ -19,8 +23,19 @@ export interface SubagentNode {
   depth: number;
   goal: string;
   model: string | null;
-  /** running until subagent.complete, then Hermes' status (completed when absent) */
+  /**
+   * running until subagent.complete, then Hermes' status (completed when absent); background: left running after
+   * the run (delegate_task in the background), until its delivery; truncated: delivered incomplete
+   */
   status: string;
+  /** delegation id of the call (live event) or of its unit (ticket); null for a synchronous result */
+  delegationId: string | null;
+  /** base 0 */
+  taskIndex: number | null;
+  /** session of the sub-agent at Hermes (live event only) */
+  childSessionId: string | null;
+  /** live tracking of a background node: its child session (chat/deliveries.ts attachChildren) */
+  activity?: { lastActive: number | null; toolCalls: number | null; ended: boolean };
   /** seconds (event timestamp), null when unknown */
   startedAt: number | null;
   duration: number | null;
@@ -231,6 +246,7 @@ function reduceSubagent(entries: Entry[], ev: RunEvent, ts: number | null): Entr
   const prev: SubagentNode = i >= 0 ? nodes[i]! : {
     id, parentId: null, depth: 0, goal, model: null, status: 'running', startedAt: ts,
     duration: null, cost: null, inputTokens: null, outputTokens: null, toolCount: null, summary: null,
+    delegationId: null, taskIndex: null, childSessionId: null,
   };
   const parent = typeof ev.parent_id === 'string' && ev.parent_id ? ev.parent_id : null;
   const next: SubagentNode = {
@@ -239,6 +255,9 @@ function reduceSubagent(entries: Entry[], ev: RunEvent, ts: number | null): Entr
     depth: num(ev.depth) ?? prev.depth,
     goal: goal || prev.goal,
     model: (typeof ev.model === 'string' && ev.model) || prev.model,
+    delegationId: (typeof ev.delegation_id === 'string' && ev.delegation_id) || prev.delegationId,
+    taskIndex: num(ev.task_index) ?? prev.taskIndex,
+    childSessionId: (typeof ev.child_session_id === 'string' && ev.child_session_id) || prev.childSessionId,
   };
   if (ev.event === 'subagent.complete') {
     next.status = str(ev.status) || 'completed';
@@ -318,7 +337,10 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
   let calls: Extract<Entry, { kind: 'tool' }>[] = [];
   for (const m of messages) {
     const k = `h${m.id}`;
-    if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}) });
+    if (m.role === 'delegation') {
+      const info = m.delegation ?? EMPTY_DELIVERY;
+      out.push({ kind: 'delegation', key: k, text: m.content, info, summary: deliverySummary(info), ts: m.timestamp });
+    } else if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}) });
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
       if (m.toolCalls.length) calls = [];
@@ -339,7 +361,9 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
         continue;
       }
       open.result = m.content;
-      const nodes = open.tool === 'delegate_task' ? delegationNodes(open.preview, m.content, open.key, open.ts) : null;
+      const nodes = open.tool === 'delegate_task'
+        ? delegationNodes(open.preview, m.content, open.key, open.ts) ?? dispatchedNodes(open.preview, m.content, open.key, m.timestamp ?? open.ts)
+        : null;
       if (nodes) out[out.indexOf(open)] = { kind: 'subagents', key: open.key, nodes, ts: open.ts };
     }
   }
@@ -368,9 +392,52 @@ export function delegationNodes(argsJson: string, resultJson: string, key: strin
       model: typeof r.model === 'string' && r.model ? r.model : null,
       status: str(r.status) || 'completed', startedAt: ts, duration: num(r.duration_seconds), cost: null,
       inputTokens: num(tokens?.input), outputTokens: num(tokens?.output), toolCount: null,
-      summary: str(r.summary) || str(r.error) || null,
+      summary: str(r.summary) || str(r.error) || null, delegationId: null, taskIndex: index, childSessionId: null,
     };
   });
+}
+
+export interface Ticket {
+  delegationId: string | null;
+  goals: string[];
+  refused: Set<number>;
+  /** unit ids (independent completions), each with its task indexes */
+  units: { id: string; tasks: number[] }[];
+}
+
+/** Result of a delegate_task in the background (`{status: dispatched, mode: background, …}`), else null. */
+export function readTicket(content: string): Ticket | null {
+  const t = obj(parse(content));
+  if (!t || t.status !== 'dispatched' || t.mode !== 'background') return null;
+  const refused = new Set<number>();
+  if (Array.isArray(t.refused)) for (const r of t.refused) { const i = num(obj(r)?.task_index); if (i !== null) refused.add(i); }
+  const units = Array.isArray(t.units)
+    ? t.units.map((u) => obj(u)).filter((u): u is Record<string, unknown> => !!u && typeof u.delegation_id === 'string' && !!u.delegation_id)
+      .map((u) => ({ id: u.delegation_id as string, tasks: Array.isArray(u.task_indexes) ? u.task_indexes.map(num).filter((n): n is number => n !== null) : [] }))
+    : [];
+  return {
+    delegationId: typeof t.delegation_id === 'string' && t.delegation_id ? t.delegation_id : null,
+    goals: Array.isArray(t.goals) ? t.goals.map((g) => str(g)) : [], refused, units,
+  };
+}
+
+/** Cards of a delegate_task in the background: one `background` node per task not refused by Hermes. */
+export function dispatchedNodes(argsJson: string, resultJson: string, key: string, ts: number | null): SubagentNode[] | null {
+  const t = readTicket(resultJson);
+  if (!t) return null;
+  const args = obj(parse(argsJson || '{}')) ?? {};
+  const tasks = Array.isArray(args.tasks) ? args.tasks : [];
+  const goals = t.goals.length ? t.goals : tasks.length ? tasks.map((x) => str(obj(x)?.goal)) : [str(args.goal)];
+  const nodes: SubagentNode[] = [];
+  goals.forEach((goal, index) => {
+    if (t.refused.has(index)) return;
+    nodes.push({
+      id: `${key}-${index}`, parentId: null, depth: 1, goal: goal || str(obj(tasks[index])?.goal), model: null, status: 'background',
+      startedAt: ts, duration: null, cost: null, inputTokens: null, outputTokens: null, toolCount: null, summary: null,
+      delegationId: t.units.find((u) => u.tasks.includes(index))?.id ?? t.delegationId, taskIndex: index, childSessionId: null,
+    });
+  });
+  return nodes.length ? nodes : null;
 }
 
 /**

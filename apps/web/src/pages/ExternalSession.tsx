@@ -5,6 +5,7 @@ import { askChoice } from '../components/Dialog';
 import { newKey, useCopyOps } from '../sessions/copies';
 import { SESSION_LIST_KEYS } from '../sessions/UndoBar';
 import { api, type RecentSession } from '../api';
+import { applyDeliveries, delegationState } from '../chat/deliveries';
 import { historyEntries } from '../chat/events';
 import { agentName } from '../chat/format';
 import { Thread } from '../chat/Thread';
@@ -16,7 +17,9 @@ import { FullScreen, ICON_BTN, when } from './Session';
 export function ExternalSessionPage() {
   const { inst, profile, sessionId } = useParams({ strict: false }) as { inst: string; profile: string; sessionId: string };
   const messages = useQuery({ queryKey: ['external', inst, profile, sessionId], queryFn: () => api.externalMessages(inst, sessionId, profile) });
-  const entries = historyEntries(messages.data?.messages ?? []);
+  const list = messages.data?.messages ?? [];
+  // no re-reading here: background sub-agents show « rouvrez la session plus tard »
+  const entries = applyDeliveries(historyEntries(list), delegationState(list), false);
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const label = instances.data?.instances.find((i) => i.id === inst)?.label;
   const agent = agentName(profile, label);

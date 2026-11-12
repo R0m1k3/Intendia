@@ -415,6 +415,30 @@ Sub-agents and runs (API server):
 - `POST …/{name}/update` pulls the repository (not the catalog's commit) and may answer `consent_required` /
   `scan_blocked`: not used by Intendia.
 
+## Background sub-agents (read in the 0.23.0 source, 2026-11-12)
+
+- For a session of the API server (`/v1/runs` with `session_id`), `delegate_task` runs in the background
+  (`tools/delegate_tool_dispatch.py`): the tool result is a ticket `{status: "dispatched", mode: "background", count,
+  delegation_id, goals, note, units?: [{delegation_id, group, task_indexes}], refused?: [{task_index, error}]}`; the run
+  ends. SSE `subagent.start` carries `goal, task_index, task_count, subagent_id, child_session_id, delegation_id,
+  parent_id, depth, model`; the `subagent.complete` of a background child comes after the run (never in the stream).
+- At the end Hermes starts **no turn** (`gateway/wake.py`): it adds a row `role: "user"`,
+  `display_kind: "async_delegation_complete"` to the session (never during an active turn; on the live session after
+  a compression) and gives it to the model with the next user message. One row per `delegation_id` (+ `delivery_notice`
+  for an early failure). With `delegation.independent_completions`, one row per unit (`<id>-<k>`).
+- `GET /api/sessions/{id}/messages` does **not** serve `display_metadata` (`_message_response` keeps `id, session_id,
+  role, content, tool_call_id, tool_calls, tool_name, timestamp, token_count, finish_reason, reasoning,
+  reasoning_content, display_kind`). The text (`tools/process_registry_notifications.py`) gives the id in its header
+  (`[ASYNC DELEGATION COMPLETE — <id>]`, `[ASYNC DELEGATION BATCH COMPLETE — <id>]`, `[ASYNC DELEGATION TASK FAILED —
+  <id>, task i/n]`), one `--- ✓|✗|⚠ TASK i/n: <goal>  (status=<s>, …) ---` section per task of a batch,
+  `Total duration: <x>s` (batch) or `Status: <s> … Duration: <x>s` (single child). Indexes: `task_index` base 0,
+  headers base 1. A muted notice is `display_kind: "hidden"` (served with `content: ""` when diagnostic).
+- Each child has its own session, created when it is queued (`tools/delegate_tool_child_run.py`): `source:
+  "subagent"` (under the messaging gateway it may inherit the gateway's source and carry `is_internal_child: true`),
+  `parent_session_id` = the parent, first user message = the goal. `GET /api/sessions?include_children=true` lists them
+  (`last_active`, `tool_call_count`, `api_call_count`, `ended_at`, `end_reason`, `preview` = first 60 characters +
+  `...`); without `include_children` they are hidden. No HTTP route gives more progress.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),
