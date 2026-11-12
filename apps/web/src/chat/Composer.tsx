@@ -1,10 +1,10 @@
-import { ArrowUp, CornerDownRight, FileText, FolderArchive, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, CornerDownRight, FileText, FolderArchive, ShieldOff, Sparkles, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
 import { clearDraft, loadDraft, saveDraft } from './draft';
 import { PromptPicker } from './PromptPicker';
-import { matchCommands, parseCommand, type Command, type CommandName } from './commands';
+import { matchCommands, matchSkills, parseCommand, type Command, type CommandName } from './commands';
 import type { QueueItem } from './queue';
 
 export interface ComposerHandle {
@@ -55,17 +55,24 @@ let nextId = 1;
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
-  queue, onQueue, onSteer, steerDisabled, commands, onCommand, draftKey, extract, prompts,
+  queue, onQueue, onSteer, steerDisabled, commands, onCommand, draftKey, extract, prompts, skillNames, autoApprove, notice,
 }: {
+  /** skills offered by `/use` (activated ones of the session's agent) */
+  skillNames?: string[];
+  /** « Sans confirmation » is on: a pill above the text, a click turns it off */
+  autoApprove?: { onOff: () => void } | null;
+  /** a line under the text (e.g. a personality left out of the last run) */
+  notice?: string | null;
   /** localStorage key of the draft (chat/draft.ts); none = not kept */
   draftKey?: string;
   extract?: ExtractArchive;
   /** the « Prompts » button (saved prompts) */
   prompts?: boolean;
-  onSend: (text: string) => Promise<boolean>;
+  /** `skills`: asked by `/use` for this message */
+  onSend: (text: string, skills?: string[]) => Promise<boolean>;
   /** messages waiting for the end of the run; `paused`: why they wait for « Reprendre » */
   queue?: { items: QueueItem[]; paused: string | null; onRemove: (id: string) => void; onResume: () => void };
-  onQueue?: (text: string) => void;
+  onQueue?: (text: string, skills?: string[]) => void;
   /** true when the agent took the text */
   onSteer?: (text: string) => Promise<boolean>;
   /** why « Réorienter » cannot be used now (shown as its title) */
@@ -94,6 +101,8 @@ export function Composer({
   const [pastedText, setPastedText] = useState<{ id: number; text: string } | null>(null);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [promptFilter, setPromptFilter] = useState('');
+  // skills asked by /use for the next message (3 at most)
+  const [skills, setSkills] = useState<string[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   // object URLs still alive, freed when the tile goes, the upload ends or the composer unmounts
@@ -204,12 +213,13 @@ export function Composer({
   const failed = files.filter((a) => a.state === 'failed');
   const canSend = (text.trim() !== '' || files.length > 0) && !waiting && !sending && !disabled;
   // what was sent: a file added or text typed while the send is pending stays in the draft
-  const submit = async (how: (message: string) => Promise<boolean>) => {
+  const submit = async (how: (message: string, skills?: string[]) => Promise<boolean>) => {
     const message = [text.trim(), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
     const sentText = text;
     const sent = new Set(files.map((a) => a.id));
+    const sentSkills = skills;
     setSending(true);
-    const ok = await how(message);
+    const ok = await how(message, sentSkills.length ? sentSkills : undefined);
     setSending(false);
     if (ok) {
       setText((t) => (t === sentText ? '' : t));
@@ -217,6 +227,7 @@ export function Composer({
       for (const a of files) free(a.preview);
       setFiles((all) => all.filter((a) => !sent.has(a.id)));
       setPastedText(null);
+      setSkills((now) => (now === sentSkills ? [] : now));
     }
   };
   const send = async () => {
@@ -224,6 +235,15 @@ export function Composer({
     await submit(onSend);
   };
   const menu = commands && onCommand && !disabled && !sending && closedFor !== text ? matchCommands(text, commands) : null;
+  const skillMenu = !menu && skillNames && !disabled && !sending && closedFor !== text ? matchSkills(text, skillNames) : null;
+  const pickedSkill = skillMenu ? skillMenu[Math.min(pick, skillMenu.length - 1)]! : null;
+  const addSkill = (name: string) => {
+    if (skills.includes(name)) { edit(''); return; }
+    if (skills.length >= 3) { setCommandNote('3 skills au plus par message'); return; }
+    setSkills([...skills, name]);
+    edit('');
+    ref.current?.focus();
+  };
   const picked = menu ? menu[Math.min(pick, menu.length - 1)]! : null;
   const edit = (t: string) => { setText(t); setPick(0); setCommandNote(null); };
   /** Runs the command written in the text; false = the text is an ordinary message. */
@@ -231,6 +251,12 @@ export function Composer({
     if (!commands || !onCommand || sending) return false;
     const found = parseCommand(text, commands);
     if (!found) return false;
+    // /use <skill> stays in the composer: a pill for the next message
+    if (found.command.name === 'use' && !found.command.disabled) {
+      if (skillNames?.includes(found.arg)) addSkill(found.arg);
+      else setCommandNote(found.arg ? `Skill inconnu ou désactivé : ${found.arg}` : 'Écrivez le nom du skill après /use');
+      return true;
+    }
     if (found.command.disabled) { setCommandNote(`/${found.command.name} : ${found.command.disabled}`); return true; }
     const sentText = text;
     setSending(true);
@@ -258,10 +284,11 @@ export function Composer({
   const queueOrCommand = async () => { if (!(await runCommand())) await toQueue(); };
   const toQueue = async () => {
     if (!canSend || !running || !onQueue) return;
-    await submit(async (m) => { onQueue(m); return true; });
+    await submit(async (m, sk) => { onQueue(m, sk); return true; });
   };
   // a reorientation is text only: files would be cited before they are seen
-  const steerBlock = files.length > 0 ? 'Réorienter n’accepte pas de pièces jointes' : steerDisabled;
+  const steerBlock = files.length > 0 ? 'Réorienter n’accepte pas de pièces jointes'
+    : skills.length > 0 ? 'Réorienter n’accepte pas de skill' : steerDisabled;
   const canSteer = Boolean(onSteer) && text.trim() !== '' && !sending && !disabled && !steerBlock;
   const steer = async () => {
     if (!canSteer || !running || !onSteer) return;
@@ -309,6 +336,37 @@ export function Composer({
           <button type="button" onClick={unpaste} className="font-medium text-accent hover:underline">Remettre en texte</button>
         </p>
       )}
+      {(skills.length > 0 || autoApprove) && (
+        <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1">
+          {autoApprove && (
+            <button type="button" data-auto-approve onClick={autoApprove.onOff} title="L’agent agit sans demander votre accord. Cliquer pour redemander l’accord."
+              className="flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-xs text-warn hover:border-warn">
+              <ShieldOff className="size-3" strokeWidth={2} /> Sans confirmation <X className="size-3" strokeWidth={2} />
+            </button>
+          )}
+          {skills.map((name) => (
+            <span key={name} data-skill-pill={name} className="flex items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
+              <Sparkles className="size-3 text-ink-faint" strokeWidth={1.75} /> Skill : <span className="font-mono">{name}</span>
+              <button type="button" onClick={() => setSkills(skills.filter((x) => x !== name))} aria-label={`Retirer le skill ${name}`}
+                className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
+                <X className="size-3" strokeWidth={2} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {skillMenu && (
+        <ul role="listbox" aria-label="Skills" data-skills className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
+          {skillMenu.map((name) => (
+            <li key={name} role="option" aria-selected={name === pickedSkill}
+              onMouseDown={(e) => { e.preventDefault(); addSkill(name); }}
+              onMouseEnter={() => setPick(skillMenu.indexOf(name))}
+              className={cx('flex cursor-pointer items-baseline gap-2 rounded-md px-2 py-1.5 font-mono text-[13px]', name === pickedSkill && 'bg-raised')}>
+              {name}
+            </li>
+          ))}
+        </ul>
+      )}
       {menu && (
         <ul role="listbox" aria-label="Commandes" data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
           {menu.map((c) => (
@@ -349,6 +407,16 @@ export function Composer({
             if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); void choose(picked); return; }
             if (e.key === 'Escape') { e.preventDefault(); setClosedFor(text); return; }
           }
+          if (skillMenu && pickedSkill) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              const i = skillMenu.indexOf(pickedSkill) + (e.key === 'ArrowDown' ? 1 : -1);
+              setPick((i + skillMenu.length) % skillMenu.length);
+              return;
+            }
+            if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); addSkill(pickedSkill); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setClosedFor(text); return; }
+          }
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             void enter();
@@ -359,6 +427,7 @@ export function Composer({
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-2 py-2 text-sm placeholder:text-ink-faint focus:outline-none"
       />
       {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}
+      {notice && <p role="status" data-run-notice className="px-2 pb-1 text-[12px] text-warn">{notice}</p>}
       <div className="flex items-center gap-1">
         {leading}
         {upload && (

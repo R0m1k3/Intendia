@@ -50,4 +50,16 @@ describe('queue', () => {
     store.setItem('intendia-queue:a:s3', JSON.stringify({ items: [{ id: 'x', text: ' ' }, { id: 1 }, { id: 'y', text: 'ok' }], paused: 3 }));
     expect(loadQueue('a', 's3', store)).toEqual({ items: [{ id: 'y', text: 'ok' }], paused: null });
   });
+
+  it('keeps the skills asked with a message (/use), drops unreadable ones', () => {
+    const store = memory();
+    const q = enqueue(EMPTY_QUEUE, 'avec skill', ['codex']);
+    expect(q.items[0]).toMatchObject({ text: 'avec skill', skills: ['codex'] });
+    expect(enqueue(EMPTY_QUEUE, 'sans', []).items[0]!.skills).toBeUndefined();
+    expect(pushHead(q, 'devant', ['a']).items[0]!.skills).toEqual(['a']);
+    saveQueue('a', 's', q, store);
+    expect(loadQueue('a', 's', store).items[0]!.skills).toEqual(['codex']);
+    store.setItem('intendia-queue:a:t', JSON.stringify({ items: [{ id: 'x', text: 'ok', skills: [1] }] }));
+    expect(loadQueue('a', 't', store).items[0]).toEqual({ id: 'x', text: 'ok' });
+  });
 });

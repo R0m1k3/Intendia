@@ -1,4 +1,4 @@
-import type { ChatModelList } from '../api';
+import type { ChatModelList, ModelPin, RunMode } from '../api';
 import type { PickerItem } from '../components/Menu';
 import { shortModel } from './format';
 
@@ -9,8 +9,17 @@ export function encodeChoice(model: string, provider: string | null): string {
   return provider ? `${provider}${SEP}${model}` : model;
 }
 
+/** A pinned model is also listed in its group: its own value, so the two lines are distinct. */
+const PIN = '\u0002';
+/** A mode: applies its model, effort and personality. */
+const MODE = '\u0003';
+
+export const modeValue = (id: string) => `${MODE}${id}`;
+export const modeOf = (value: string | null): string | null => (value?.startsWith(MODE) ? value.slice(1) : null);
+
 export function decodeChoice(value: string | null): { model: string | null; provider: string | null } {
   if (value === null) return { model: null, provider: null };
+  if (value.startsWith(PIN)) value = value.slice(1);
   const i = value.indexOf(SEP);
   return i < 0 ? { model: value, provider: null } : { model: value.slice(i + 1), provider: value.slice(0, i) };
 }
@@ -20,11 +29,35 @@ export function decodeChoice(value: string | null): { model: string | null; prov
  * under "Autre" when it is in no group (no provider, removed from the declared list, provider without key), then
  * "Gérer les modèles…" when the declarations can be edited.
  */
-export function modelItems(list: ChatModelList | undefined, current: { model: string | null; provider: string | null }, manage: () => void): PickerItem[] {
+export interface ModelExtras {
+  modes?: RunMode[];
+  pins?: ModelPin[];
+  /** pin or unpin the session's current model */
+  togglePin?: () => void;
+  saveMode?: () => void;
+  removeMode?: () => void;
+}
+
+export const isPinned = (pins: ModelPin[] | undefined, c: { model: string | null; provider: string | null }) =>
+  Boolean(c.model && pins?.some((p) => p.model === c.model && (p.provider ?? null) === (c.provider ?? null)));
+
+export function modelItems(
+  list: ChatModelList | undefined, current: { model: string | null; provider: string | null }, manage: () => void, extras: ModelExtras = {},
+): PickerItem[] {
   const auto = list?.auto ?? null;
-  const items: PickerItem[] = [
-    { value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: 'Le modèle réglé pour l’agent' },
-  ];
+  const items: PickerItem[] = [];
+  if (extras.modes?.length) {
+    items.push({ heading: 'Modes' });
+    for (const m of extras.modes) {
+      const what = [m.model ? shortModel(m.model) : 'Auto', m.effort ? `effort ${m.effort}` : null, m.personality ? 'personnalité' : null].filter(Boolean).join(' · ');
+      items.push({ value: modeValue(m.id), label: m.name, hint: what });
+    }
+  }
+  items.push({ value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: 'Le modèle réglé pour l’agent' });
+  if (extras.pins?.length) {
+    items.push({ heading: 'Épinglés' });
+    for (const p of extras.pins) items.push({ value: `${PIN}${encodeChoice(p.model, p.provider)}`, label: p.model, mono: true, ...(p.provider ? { hint: p.provider } : {}) });
+  }
   const groups = list?.groups ?? [];
   for (const g of groups) {
     items.push({ heading: g.name, collapsible: true });
@@ -41,6 +74,11 @@ export function modelItems(list: ChatModelList | undefined, current: { model: st
       });
     }
   }
+  if (extras.togglePin && current.model) {
+    items.push({ action: extras.togglePin, label: isPinned(extras.pins, current) ? 'Retirer des épinglés' : 'Épingler ce modèle' });
+  }
+  if (extras.saveMode) items.push({ action: extras.saveMode, label: 'Enregistrer le réglage actuel comme mode…' });
+  if (extras.removeMode && extras.modes?.length) items.push({ action: extras.removeMode, label: 'Retirer un mode…' });
   if (list?.managed) items.push({ action: manage, label: 'Gérer les modèles…' });
   return items;
 }
