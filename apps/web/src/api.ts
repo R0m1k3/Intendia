@@ -403,6 +403,12 @@ export interface Platform {
   id: string; name: string; enabled: boolean; configured: boolean; state: string | null; errorMessage: string | null;
   env: { key: string; isSet: boolean; required: boolean }[];
 }
+export type GatewayAction = 'start' | 'stop' | 'restart';
+export interface CreateAgentInput {
+  name: string; description?: string; cloneFrom?: string;
+  /** with cloneFrom: memories and sessions too */
+  cloneAll?: boolean; noSkills?: boolean; soul?: string; provider?: string; model?: string;
+}
 export interface RestartStatus { running: boolean; exitCode: number | null; lines: string[]; truncated: boolean }
 export interface WriteResult { version: string | null }
 export interface ModelInput { scope: 'main' | 'auxiliary'; provider: string; model: string; task?: string; confirm?: boolean; version: string }
@@ -680,6 +686,8 @@ export const api = {
   clarify: (inst: string, id: string, runId: string, answer: string, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/clarify`, { answer, requestId }),
   chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
+  /** same list for an agent's default model: any agent, with or without a chat key */
+  agentModels: (inst: string, profile: string) => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}&for=agent`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
@@ -737,8 +745,19 @@ export const api = {
   profiles: (inst: string) => call<{ profiles: string[] }>('GET', instPath(inst, 'agents/profiles')),
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
   agent: (inst: string, name: string) => call<{ agent: AgentDetail }>('GET', instPath(inst, `agents/${enc(name)}/detail`)),
-  createAgent: (inst: string, a: { name: string; description?: string; cloneFrom?: string }) =>
-    call<{ name: string; keySource: 'env' | 'db' }>('POST', instPath(inst, 'agents'), a),
+  createAgent: (inst: string, a: CreateAgentInput) =>
+    call<{ name: string; keySource: 'env' | 'db'; modelError: string | null }>('POST', instPath(inst, 'agents'), a),
+  /** 409 `protected` (default) or `in_use` (+ workspaces, sessions); `keyLeft`: its key stays in INTENDIA_INSTANCES */
+  deleteAgent: (inst: string, name: string) => call<{ ok: true; keyLeft: boolean; pending: boolean }>('DELETE', instPath(inst, `agents/${enc(name)}`)),
+  /** draft of the masked SOUL.md: placeholders get their value back on the server (400 secret_moved / secret_placeholder) */
+  setAgentSoul: (inst: string, name: string, content: string) => call<{ soul: string }>('PUT', instPath(inst, `agents/${enc(name)}/soul`), { content }),
+  setAgentModel: (inst: string, name: string, provider: string, model: string) =>
+    call<{ provider: string; model: string }>('PUT', instPath(inst, `agents/${enc(name)}/model`), { provider, model }),
+  describeAgent: (inst: string, name: string) => call<{ description: string | null; reason: string | null }>('POST', instPath(inst, `agents/${enc(name)}/describe`), {}),
+  /** 409 `refused` (stop: live sessions, ask then interrupt) or `multiplexed` */
+  gatewayAction: (inst: string, profile: string, action: GatewayAction, interrupt = false) =>
+    call<{ ok: true }>('POST', instPath(inst, `config/gateway/${action}`, profile), action === 'stop' ? { interrupt } : {}),
+  gatewayActionStatus: (inst: string, profile: string, action: GatewayAction) => call<RestartStatus>('GET', instPath(inst, `config/gateway/${action}`, profile)),
   setAgentDescription: (inst: string, name: string, description: string) =>
     call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
   activity: (inst: string) => call<Activity>('GET', instPath(inst, 'activity')),

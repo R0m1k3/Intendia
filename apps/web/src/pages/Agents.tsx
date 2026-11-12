@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type Agent } from '../api';
 import { AgentDetail } from '../agents/AgentDetail';
+import { AgentModelPicker } from '../agents/AgentModel';
 import { keyHint } from '../agents/keyHint';
 import { Empty, ListItemBody, ListLink, ListPane, SplitView } from '../components/Panes';
 import { pickSelected } from '../components/selection';
@@ -14,6 +15,7 @@ import { Button, cx, ErrorText, Field, Input, Tag } from '../components/ui';
 const REQUIRED: OpRef[] = [['agents', 'list']];
 const OPTIONAL: OptionalOp[] = [
   ['agents', 'create', 'Créer un agent'], ['agents', 'setDescription', 'Modifier la description'], ['agents', 'soul', 'Lire le SOUL.md'],
+  ['agents', 'setSoul', 'Modifier le SOUL.md'], ['agents', 'setModel', 'Changer le modèle'], ['agents', 'remove', 'Supprimer un agent'],
   ['kanban', 'workers', 'Workers en cours'],
 ];
 const ICON = 'size-4';
@@ -22,18 +24,26 @@ const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 
 function NewAgent({ inst, agents, onClose, onCreated }: {
-  inst: string; agents: Agent[]; onClose: () => void; onCreated: (name: string, source: 'env' | 'db') => void;
+  inst: string; agents: Agent[]; onClose: () => void; onCreated: (name: string, source: 'env' | 'db', modelError: string | null) => void;
 }) {
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [cloneFrom, setCloneFrom] = useState('');
+  const [cloneAll, setCloneAll] = useState(false);
+  const [noSkills, setNoSkills] = useState(false);
+  const [soul, setSoul] = useState('');
+  const [model, setModel] = useState<{ model: string; provider: string } | null>(null);
   const create = useMutation({
-    mutationFn: () => api.createAgent(inst, { name: name.trim(), description: description.trim() || undefined, cloneFrom: cloneFrom || undefined }),
+    mutationFn: () => api.createAgent(inst, {
+      name: name.trim(), description: description.trim() || undefined, cloneFrom: cloneFrom || undefined,
+      ...(cloneFrom && cloneAll ? { cloneAll: true } : {}), ...(noSkills && !cloneFrom ? { noSkills: true } : {}),
+      ...(soul.trim() ? { soul } : {}), ...(model ?? {}),
+    }),
     onSuccess: async (r) => {
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['profiles', inst] });
-      onCreated(r.name, r.keySource);
+      onCreated(r.name, r.keySource, r.modelError);
     },
   });
   const nameOk = NAME_RE.test(name.trim());
@@ -60,6 +70,27 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
               <option value="">Aucun (agent vierge)</option>
               {agents.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
             </select>
+            {cloneFrom && (
+              <label className="mt-2 flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={cloneAll} onChange={(e) => setCloneAll(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-ink)]" />
+                <span>Copie complète<span className="block text-xs text-ink-faint">Aussi la mémoire et les sessions de {cloneFrom}. Les comptes des messageries (bots) ne sont jamais copiés.</span></span>
+              </label>
+            )}
+          </Field>
+          {!cloneFrom && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={noSkills} onChange={(e) => setNoSkills(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-ink)]" />
+              <span>Sans les skills fournis<span className="block text-xs text-ink-faint">L’agent démarre sans les skills livrés avec Hermes</span></span>
+            </label>
+          )}
+          <Field label="Modèle" hint="Celui de l’agent par défaut ; changeable ensuite">
+            <AgentModelPicker inst={inst} profile={cloneFrom || 'default'} model={model?.model ?? null} provider={model?.provider ?? null}
+              noneLabel="Celui d’Hermes" title="Modèle du nouvel agent" onPick={setModel} />
+          </Field>
+          <Field label="SOUL.md" hint={cloneFrom ? `Laissé vide : celui de ${cloneFrom}` : 'Personnalité de l’agent ; laissé vide : celui d’Hermes'}>
+            <textarea value={soul} onChange={(e) => setSoul(e.target.value)} maxLength={65536} rows={5}
+              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[13px] transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
+              placeholder="Tu es un assistant de recherche. Réponds brièvement, avec tes sources." />
           </Field>
           <ErrorText error={create.error} />
         </div>
@@ -79,7 +110,7 @@ export function AgentsPage() {
   const a = useModuleAvailability(inst, 'agents', REQUIRED, OPTIONAL);
   const agents = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst).then((r) => r.agents), enabled: a.available });
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<{ name: string; source: 'env' | 'db' } | null>(null);
+  const [created, setCreated] = useState<{ name: string; source: 'env' | 'db'; modelError: string | null } | null>(null);
 
   const current = instances.data?.instances.find((i) => i.id === inst);
   const items = agents.data ?? [];
@@ -99,6 +130,7 @@ export function AgentsPage() {
         <div role="status" className="mx-1.5 mt-1.5 flex items-start gap-3 rounded-[10px] bg-ok-soft px-3.5 py-3 text-[13px]">
           <div className="min-w-0 flex-1 space-y-1">
             <p>Agent <span className="font-medium">{created.name}</span> créé.</p>
+            {created.modelError && <p className="text-warn">Modèle non appliqué : {created.modelError}</p>}
             <p className="text-ink-soft">{keyHint(created.name, created.source)}</p>
           </div>
           <button type="button" className="text-ink-faint hover:text-ink" aria-label="Masquer" onClick={() => setCreated(null)}>
@@ -138,7 +170,7 @@ export function AgentsPage() {
       <SplitView label="Agents" selected={Boolean(name)} list={list}>
         {shown && a.available ? (
           <AgentDetail key={shown} inst={inst} name={shown} instance={current} available={a.available}
-            canEdit={a.has('agents', 'setDescription')} back={Boolean(name)} />
+            has={a.has} back={Boolean(name)} />
         ) : (
           <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? 'Aucun agent' : 'Agents indisponibles'}>
             {a.available ? 'Les profils Hermes de l’instance apparaissent ici' : 'Voir la colonne de gauche'}
@@ -147,7 +179,7 @@ export function AgentsPage() {
       </SplitView>
       {creating && (
         <NewAgent inst={inst} agents={items} onClose={() => setCreating(false)}
-          onCreated={(n, source) => { setCreating(false); setCreated({ name: n, source }); }} />
+          onCreated={(n, source, modelError) => { setCreating(false); setCreated({ name: n, source, modelError }); }} />
       )}
     </>
   );

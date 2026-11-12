@@ -1,3 +1,4 @@
+import { PROFILE_RE } from './params.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
@@ -354,9 +355,13 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   // Models of the chat's picker, per agent, grouped by provider (see chat/models-list.ts).
   r.get('/i/:inst/chat-models', async (c) => {
     const inst = c.req.param('inst');
-    const profile = instanceProfile(inst, c.req.query('profile'));
+    // ?for=agent: the default model of any agent (Agents page), even one Intendia cannot chat with
+    // (read on the dashboard: no API server key needed)
+    const raw = c.req.query('profile');
+    const forAgent = c.req.query('for') === 'agent' && Boolean(raw && PROFILE_RE.test(raw) && deps.store.get(inst));
+    const profile = forAgent ? raw! : instanceProfile(inst, raw);
     const managed = chatModelsManaged(compat.get(inst));
-    const options = await callOp<z.infer<typeof ModelOptionsSchema>>(compat.http(inst), compat.get(inst), 'chat', 'modelOptions', { profile });
+    const options = await callOp<z.infer<typeof ModelOptionsSchema>>(compat.http(inst), compat.get(inst), forAgent ? 'config' : 'chat', 'modelOptions', { profile });
     // read after the options: reading them may write discovered models into the file
     const declared = managed ? await deps.services.config.declaredFor(inst, profile).catch(() => null) : null;
     const out: ChatModelList = { auto: autoModel(options), groups: chatGroups(options, declared), managed };

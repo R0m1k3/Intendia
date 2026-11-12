@@ -1,7 +1,7 @@
 // Pinned models and modes (option 17) of an agent (instance + profile), kept by Intendia in `settings`. A mode is a
 // saved model + effort + personality, applied to the session in one PATCH; it never changes the profile (that would
 // copy the session: option 18 stays the explicit action).
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/index.js';
 import { settings } from '../db/schema.js';
@@ -48,4 +48,8 @@ export const presets = {
   setPins: (db: Db, inst: string, profile: string, pins: PinList) => write(db, keyOf('model_pins', inst, profile), pins),
   modes: (db: Db, inst: string, profile: string): ModeList => read(db, keyOf('run_modes', inst, profile), Modes) ?? [],
   setModes: (db: Db, inst: string, profile: string, modes: ModeList) => write(db, keyOf('run_modes', inst, profile), modes),
+  /** Every Intendia setting of a deleted profile (any new per-profile key goes through keyOf and here). */
+  dropProfile: (db: Db, inst: string, profile: string) => {
+    db.delete(settings).where(inArray(settings.key, [keyOf('model_pins', inst, profile), keyOf('run_modes', inst, profile)])).run();
+  },
 };

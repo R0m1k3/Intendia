@@ -215,6 +215,15 @@ export class WorkspaceService {
   }
 
   /** Unarchived sessions of the instance's workspaces, most recently active first (home page). */
+  /** What uses a Hermes profile on an instance: workspaces whose default it is, sessions that chose it. */
+  usesProfile(instanceId: string, profile: string): { workspaces: string[]; sessions: number } {
+    const ws = this.db.select({ slug: workspaces.slug }).from(workspaces)
+      .where(and(eq(workspaces.instanceId, instanceId), eq(workspaces.profile, profile))).all().map((r) => r.slug);
+    const n = this.db.select({ n: count() }).from(sessionWorkspace)
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.profile, profile))).get()?.n ?? 0;
+    return { workspaces: ws, sessions: n };
+  }
+
   recentSessions(limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: sessionProfile })
       .from(sessionWorkspace)

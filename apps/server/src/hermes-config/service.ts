@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq, notInArray } from 'drizzle-orm';
 import type { CompatService } from '../compat/service.js';
-import { ActionStatusSchema, lastRunLines } from '../connectors/actions.js';
+import { GatewayService } from './gateway.js';
 import {
-  AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, GATEWAY_RESTART_ACTION, McpServersSchema,
+  AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema,
   McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, mcpTokenEnv,
   configModule,
 } from '../connectors/config/index.js';
@@ -26,7 +26,6 @@ import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields }
 
 export const HISTORY_KEEP = 10;
 const HISTORY_PURPOSE = 'config-history-v1';
-const STATUS_LINES = 200;
 const TEST_MS = 40_000;
 
 export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login' | 'custom-providers';
@@ -188,7 +187,11 @@ export class ConfigService {
     private readonly secret: string,
   ) {
     this.mask = new Masker(secret);
+    this.gateway = new GatewayService(compat, store, secret);
   }
+
+  /** Start, stop, restart of the gateways. */
+  readonly gateway: GatewayService;
 
   private ctx(instanceId: string, profile: string): Ctx {
     if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
@@ -915,22 +918,10 @@ export class ConfigService {
   }
 
   async restartGateway(instanceId: string, profile: string): Promise<{ ok: true }> {
-    const ctx = this.ctx(instanceId, profile);
-    await this.call(ctx, 'restartGateway');
-    return { ok: true };
+    return this.gateway.run(instanceId, profile, 'restart');
   }
 
   async restartStatus(instanceId: string, profile: string): Promise<PublicRestart> {
-    const ctx = this.ctx(instanceId, profile);
-    try {
-      const raw = await this.call<unknown>(ctx, 'actionStatus', { params: { name: GATEWAY_RESTART_ACTION }, query: { lines: STATUS_LINES } });
-      const s = ActionStatusSchema.parse(raw);
-      const last = lastRunLines(GATEWAY_RESTART_ACTION, s.lines);
-      return { running: s.running, exitCode: s.exit_code, lines: last.lines.map((l) => this.mask.text(l)), truncated: last.truncated };
-    } catch (err) {
-      // no restart yet: Hermes does not know the action
-      if (err instanceof NotFoundError) return { running: false, exitCode: null, lines: [], truncated: false };
-      throw err;
-    }
+    return this.gateway.status(instanceId, profile, 'restart');
   }
 }

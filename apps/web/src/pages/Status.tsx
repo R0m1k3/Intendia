@@ -4,6 +4,7 @@ import { ArrowUpRight, Check, ChevronRight, Eye, RotateCw, X } from 'lucide-reac
 import { useState } from 'react';
 import { api, type CompatReport, type ModuleReport, type PublicInstance } from '../api';
 import { useCurrentInstance } from '../instance/current';
+import { Gateway } from '../agents/Gateway';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, host, MODULE_META, Panel, Tag, timeAgo } from '../components/ui';
 
@@ -125,6 +126,36 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
   );
 }
 
+const opOk = (r: CompatReport, module: string, name: string) => Boolean(r.modules.find((m) => m.id === module)?.ops[name]?.ok);
+
+/**
+ * Agents whose gateway is stopped, with "Démarrer": read from the dashboard, so it shows even when the API server of
+ * the instance is down (that is the only way to start it again).
+ */
+function StoppedGateways({ report }: { report: CompatReport }) {
+  const inst = report.instanceId;
+  const ok = opOk(report, 'agents', 'list') && opOk(report, 'config', 'gatewayStart');
+  const agents = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst).then((r) => r.agents), enabled: ok, refetchInterval: 30_000 });
+  const stopped = (agents.data ?? []).filter((a) => a.gatewayRunning === false);
+  if (!ok || stopped.length === 0) return null;
+  return (
+    <section className="card overflow-hidden" aria-labelledby={`gw-${inst}`}>
+      <h2 id={`gw-${inst}`} className="px-4 py-3 text-[15px] font-semibold">Passerelles arrêtées</h2>
+      <ul>
+        {stopped.map((a) => (
+          <li key={a.name} className="flex flex-wrap items-start gap-3 border-t border-line/70 px-4 py-3">
+            <Link to="/i/$inst/agents/$name" params={{ inst, name: a.name }} className="pt-2 font-mono text-[13.5px] hover:underline">{a.name}</Link>
+            <span className="pt-2 text-[13px] text-ink-faint">chat, runs et crons de cet agent arrêtés</span>
+            <div className="ml-auto min-w-[12rem] flex-1">
+              <Gateway inst={inst} profile={a.name} running={false} compact can={{ start: true, stop: false, restart: false }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function StatusPage() {
   const { instance, instances, select } = useCurrentInstance();
   const qc = useQueryClient();
@@ -162,7 +193,7 @@ export function StatusPage() {
         {(instance ? [instance] : []).map((i) => {
           const r = report(i.id);
           return r
-            ? <InstanceStatus key={i.id} report={r} label={i.label} />
+            ? <div key={i.id} className="space-y-5"><StoppedGateways report={r} /><InstanceStatus report={r} label={i.label} /></div>
             : <Panel key={i.id} title={i.label}><p className="text-sm text-ink-soft">Vérification en cours…</p></Panel>;
         })}
       </div>

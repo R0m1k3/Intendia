@@ -42,7 +42,7 @@ describe('agents', () => {
     const t = await testApp();
     const res = await t.request('POST', BASE, { name: 'veille', description: 'Suit la presse', cloneFrom: 'default' });
     expect(res.status).toBe(201);
-    expect(res.json).toEqual({ name: 'veille', keySource: 'env' });
+    expect(res.json).toEqual({ name: 'veille', keySource: 'env', modelError: null });
     expect(dash(t, 'POST', '/api/profiles').at(-1)?.body).toEqual({ name: 'veille', description: 'Suit la presse', clone_from: 'default' });
     expect((await t.request('GET', BASE)).json.agents.map((a: any) => a.name)).toContain('veille');
   });
@@ -104,5 +104,125 @@ describe('agents', () => {
     await worker(t, 'default', 'Veille stuck');
     const res = await t.request('GET', `${BASE}/default/detail`);
     expect(res.json.agent.activeWorkers).toMatchObject([{ board: 'default', taskTitle: 'Veille stuck', assignee: 'default' }]);
+  });
+});
+
+describe('agents: administration (lot 8 B)', () => {
+  it('creates with full copy, no bundled skills, SOUL and model; never the forbidden fields', async () => {
+    const t = await testApp();
+    const res = await t.request('POST', BASE, {
+      name: 'copie', cloneFrom: 'default', cloneAll: true, noSkills: true, soul: 'Tu es bref.', provider: 'openrouter', model: 'openai/gpt-5',
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.modelError).toBeNull();
+    const body = dash(t, 'POST', '/api/profiles').at(-1)?.body as Record<string, unknown>;
+    expect(body).toEqual({ name: 'copie', description: '', clone_from: 'default', clone_all: true, no_skills: true, soul: 'Tu es bref.', provider: 'openrouter', model: 'openai/gpt-5' });
+    for (const k of ['clone_channels', 'mcp_servers', 'hub_skills', 'keep_skills', 'api_key']) expect(body).not.toHaveProperty(k);
+    // clone_all only with an explicit source; provider and model together
+    await t.request('POST', BASE, { name: 'seul', cloneAll: true });
+    expect(dash(t, 'POST', '/api/profiles').at(-1)?.body).not.toHaveProperty('clone_all');
+    expect((await t.request('POST', BASE, { name: 'moitie', model: 'x' })).status).toBe(400);
+  });
+
+  it('reports a model refused at creation, the agent stays', async () => {
+    const t = await testApp();
+    const res = await t.request('POST', BASE, { name: 'mauvais', provider: 'openrouter', model: 'refuse/x' });
+    expect(res.status).toBe(201);
+    expect(res.json.modelError).toContain('not available');
+    expect((await t.request('GET', BASE)).json.agents.map((a: any) => a.name)).toContain('mauvais');
+  });
+
+  it('writes SOUL.md keeping a masked secret; a moved or unknown placeholder is refused', async () => {
+    const t = await testApp();
+    const shown = (await t.request('GET', `${BASE}/default/detail`)).json.agent.soul as string;
+    expect(shown).not.toContain('fake-soul-token-1234567890');
+    const marker = /«secret:[0-9a-f]+»/.exec(shown)![0];
+    const draft = shown.replace('Keep answers short.', 'Réponds en français.');
+    const ok = await t.request('PUT', `${BASE}/default/soul`, { content: draft });
+    expect(ok.status).toBe(200);
+    expect(ok.json.soul).toContain(marker);
+    const written = dash(t, 'PUT', '/api/profiles/default/soul').at(-1)?.body as { content: string };
+    expect(written.content).toContain('Bearer fake-soul-token-1234567890');
+    expect(written.content).toContain('Réponds en français.');
+    const moved = await t.request('PUT', `${BASE}/default/soul`, { content: `Le jeton est ${marker}` });
+    expect(moved.status).toBe(400);
+    expect(moved.json.code).toBe('secret_moved');
+    const unknown = await t.request('PUT', `${BASE}/default/soul`, { content: 'Authorization: Bearer «secret:00000000»' });
+    expect(unknown.status).toBe(400);
+    expect(unknown.json.code).toBe('secret_placeholder');
+    expect(dash(t, 'PUT', '/api/profiles/default/soul')).toHaveLength(1);
+  });
+
+  it('refuses to write over a SOUL.md longer than the editor limit', async () => {
+    const t = await testApp();
+    t.fake.profiles.souls.set('default', 'x'.repeat(64 * 1024 + 10));
+    const res = await t.request('PUT', `${BASE}/default/soul`, { content: 'court' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('too_long');
+  });
+
+  it('sets the default model and proposes a description', async () => {
+    const t = await testApp();
+    await t.request('POST', BASE, { name: 'veille' });
+    const m = await t.request('PUT', `${BASE}/veille/model`, { provider: 'anthropic', model: 'claude-sonnet-4.6' });
+    expect(m.status).toBe(200);
+    expect(dash(t, 'PUT', '/api/profiles/veille/model').at(-1)?.body).toEqual({ provider: 'anthropic', model: 'claude-sonnet-4.6' });
+    expect((await t.request('PUT', `${BASE}/veille/model`, { provider: 'anthropic', model: 'refuse' })).status).toBe(400);
+    const d = await t.request('POST', `${BASE}/veille/describe`);
+    expect(d.json).toEqual({ description: 'Agent de test', reason: null });
+    expect(dash(t, 'POST', '/api/profiles/veille/describe-auto').at(-1)?.body).toEqual({ overwrite: false });
+    await t.request('POST', BASE, { name: 'muet' });
+    expect((await t.request('POST', `${BASE}/muet/describe`)).json).toEqual({ description: null, reason: 'no auxiliary model' });
+  });
+
+  it('never deletes default nor a profile used by a workspace or a session', async () => {
+    const t = await testApp({ profileKeys: { dev: 'dev-profile-key-0000000', solo: 'solo-profile-key-000000' } });
+    await t.request('POST', BASE, { name: 'dev' });
+    await t.request('POST', BASE, { name: 'solo' });
+    const prot = await t.request('DELETE', `${BASE}/default`);
+    expect(prot.status).toBe(409);
+    expect(prot.json.code).toBe('protected');
+    await t.request('POST', '/x/workspaces', { slug: 'ws', name: 'Ws', instanceId: 'fake', profile: 'dev' });
+    const used = await t.request('DELETE', `${BASE}/dev`);
+    expect(used.status).toBe(409);
+    expect(used.json).toMatchObject({ code: 'in_use', workspaces: ['ws'], sessions: 0 });
+    await t.request('POST', '/x/workspaces', { slug: 'autre', name: 'Autre', instanceId: 'fake' });
+    const s = (await t.request('POST', '/x/workspaces/autre/sessions')).json.session;
+    expect((await t.request('PATCH', `/x/sessions/fake/${s.id}`, { profile: 'solo' })).status).toBe(200);
+    const bySession = await t.request('DELETE', `${BASE}/solo`);
+    expect(bySession.json).toMatchObject({ code: 'in_use', workspaces: [], sessions: 1 });
+    expect(dash(t, 'DELETE', '/api/profiles/dev').length + dash(t, 'DELETE', '/api/profiles/solo').length).toBe(0);
+    expect((await t.request('DELETE', `${BASE}/Mauvais%20Nom`)).status).toBe(400);
+  });
+
+  it('deletes a profile and its Intendia settings; says when its key stays in the environment', async () => {
+    const t = await testApp({ profileKeys: { veille: 'veille-profile-key-0000' } });
+    const { presets } = await import('../src/chat/presets.js');
+    await t.request('POST', BASE, { name: 'veille' });
+    presets.setPins(t.db, 'fake', 'veille', [{ provider: 'anthropic', model: 'claude-sonnet-4.6' }]);
+    presets.setModes(t.db, 'fake', 'veille', [{ id: 'm1', name: 'Rapide', model: null, provider: null, effort: 'low', personality: null }]);
+    presets.setPins(t.db, 'fake', 'default', [{ provider: 'anthropic', model: 'claude-sonnet-4.6' }]);
+    const res = await t.request('DELETE', `${BASE}/veille`);
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ ok: true, keyLeft: true, pending: false });
+    expect(dash(t, 'DELETE', '/api/profiles/veille').at(-1)?.query).toEqual({ profile: 'veille' });
+    expect(presets.pins(t.db, 'fake', 'veille')).toEqual([]);
+    expect(presets.modes(t.db, 'fake', 'veille')).toEqual([]);
+    expect(presets.pins(t.db, 'fake', 'default')).toHaveLength(1);
+    expect((await t.request('GET', BASE)).json.agents.map((a: any) => a.name)).not.toContain('veille');
+    await t.request('POST', BASE, { name: 'lent' });
+    expect((await t.request('DELETE', `${BASE}/lent`)).json).toEqual({ ok: true, keyLeft: false, pending: true });
+  });
+});
+
+describe('agents: model list of any agent', () => {
+  it('chat-models?for=agent reads the models of a profile without chat key', async () => {
+    const t = await testApp();
+    await t.request('POST', BASE, { name: 'veille' });
+    expect((await t.request('GET', '/x/i/fake/chat-models?profile=veille')).status).toBe(400);
+    const res = await t.request('GET', '/x/i/fake/chat-models?profile=veille&for=agent');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.json.groups)).toBe(true);
+    expect((await t.request('GET', '/x/i/fake/chat-models?profile=..%2Fx&for=agent')).status).toBe(400);
   });
 });

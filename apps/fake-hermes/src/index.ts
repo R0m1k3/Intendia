@@ -650,6 +650,8 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       const token = via === 'dash' ? FAKE_DASH_TOKEN : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
       if (!token || c.req.header('authorization') !== `Bearer ${token}`) return c.json({ error: 'unauthorized' }, 401);
     }
+    // a stopped gateway takes its API server down: only the dashboard answers
+    if (via === 'api' && profiles.stopped.has(profile)) return c.json({ error: 'gateway stopped (fake-hermes)' }, 503);
 
     const key = `${via} ${method} ${path}`;
     const brk = opts.breaks?.[key];
@@ -666,7 +668,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       const mon = stores.monitor.handle(method, path, c.req.query());
       if (mon) return c.json(mon.body, mon.status as 200);
     }
-    const prof = profiles.handle(via, method, path, body);
+    const prof = profiles.handle(via, method, path, body, c.req.query());
     if (prof) return prof;
     const kb = kanban.handle(via, method, path, c.req.query(), body);
     if (kb) return kb;
@@ -953,7 +955,7 @@ export function createFakeHermes(opts: FakeOptions) {
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);
-  const profiles = new ProfileStore(opts.fixturesDir);
+  const profiles = new ProfileStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
   const git = new GitStore(opts.git);
   const monitor = new MonitorStore(opts.monitor);
