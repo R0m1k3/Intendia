@@ -434,7 +434,9 @@ export class ConfigService {
       if (strings.some((s) => s.includes(PLACEHOLDER_START))) {
         throw new ConfigInputError('secret_placeholder', `${path} : valeur masquée`, { path });
       }
-      const bad = checkValue(field, value);
+      // `null` = back to Hermes' default, only for the fields Hermes types `string` because their default is None
+      // (agent.run_budget_seconds, agent.max_turns, kanban.max_in_progress…): « no limit »
+      const bad = checkValue(field, value, { allowNull: field.type === 'string' });
       if (bad) throw new ConfigInputError('invalid_field', `${path} : ${bad}`, { paths: [path] });
     }
     return this.write(ctx, 'form', version, async () => {

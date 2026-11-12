@@ -5,11 +5,15 @@ import { api, type ConfigField } from '../api';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 import { changeList, display, editorKind, fromText, isMasked, reapply, toText, type EditorKind } from './fields';
+import { APPLIES_TEXT, parsePreset, type Preset, type PresetItem } from './guardrails';
 
 const LABEL: Record<string, string> = {};
 
-/** Schema-generated form: one category at a time, only changed paths are sent. */
-export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
+/**
+ * Schema-generated form: one category at a time, only changed paths are sent. With `preset` (Garde-fous), a fixed
+ * list of paths with French labels instead of the categories; the paths missing from the schema are named below.
+ */
+export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & { preset?: Preset }) {
   const form = useQuery({ queryKey: configKey(inst, profile, 'form'), queryFn: () => api.config(inst, profile) });
   const invalidate = useInvalidateConfig(inst, profile);
   const [category, setCategory] = useState<string | null>(null);
@@ -40,7 +44,9 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
 
   const cat = category ?? data.categories[0] ?? 'general';
   const needle = q.trim().toLowerCase();
-  const paths = Object.keys(data.values).filter((p) => {
+  const presetOf = new Map((preset?.items ?? []).map((i) => [i.path, i]));
+  const missing = (preset?.items ?? []).filter((i) => !data.schema[i.path]).map((i) => i.path);
+  const paths = preset ? preset.items.map((i) => i.path).filter((p) => data.schema[p]) : Object.keys(data.values).filter((p) => {
     const f = data.schema[p];
     if (!f) return false;
     if (needle) return p.toLowerCase().includes(needle) || (f.description ?? '').toLowerCase().includes(needle);
@@ -52,7 +58,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   const edit = (path: string, kind: EditorKind, text: string, original: unknown) => {
     started();
     setTexts((t) => ({ ...t, [path]: text }));
-    const parsed = fromText(kind, text, original);
+    const parsed = presetOf.has(path) ? parsePreset(presetOf.get(path), kind, text, original) : fromText(kind, text, original);
     if (!parsed.ok) { setBad((b) => ({ ...b, [path]: parsed.error })); return; }
     setBad(({ [path]: _, ...rest }) => rest);
     setPending((p) => ({ ...p, [path]: parsed.value }));
@@ -85,8 +91,9 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
           {data.version === null ? 'Écriture impossible : Hermes ne donne pas le fichier de configuration.' : 'Enregistrement indisponible sur cette instance.'}
         </p>
       )}
-      <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-        <nav className="space-y-0.5 md:sticky md:top-4 md:self-start" aria-label="Catégories">
+      {preset && <p className="max-w-[760px] text-[13.5px] text-ink-soft" data-preset-intro>{preset.intro}</p>}
+      <div className={cx('grid gap-4', !preset && 'md:grid-cols-[220px_1fr]')}>
+        {!preset && <nav className="space-y-0.5 md:sticky md:top-4 md:self-start" aria-label="Catégories">
           <div className="relative mb-2">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
             <Input className="pl-8" placeholder="Chercher un réglage" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Chercher un réglage" />
@@ -107,14 +114,19 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
               );
             })}
           </div>
-        </nav>
-        <Panel title={needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line/70 border-t border-line/70">
+        </nav>}
+        <Panel title={preset ? 'Garde-fous' : needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line/70 border-t border-line/70">
           {paths.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucun réglage.</p>}
           {paths.map((path) => (
-            <FieldRow key={path} path={path} field={data.schema[path]!} original={data.values[path]}
+            <FieldRow key={path} path={path} field={data.schema[path]!} original={data.values[path]} item={presetOf.get(path)}
               value={path in pending ? pending[path] : data.values[path]} text={texts[path]} error={bad[path]} disabled={!writable}
               onText={edit} onValue={setValue} />
           ))}
+          {missing.length > 0 && (
+            <p className="px-4 py-3 text-xs text-ink-faint" data-preset-missing>
+              {missing.length} réglage{missing.length > 1 ? 's' : ''} absent{missing.length > 1 ? 's' : ''} de cette version d’Hermes : <span className="font-mono">{missing.join(', ')}</span>
+            </p>
+          )}
         </Panel>
       </div>
       {(changes.length > 0 || Object.keys(bad).length > 0) && (
@@ -154,20 +166,29 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   );
 }
 
-function FieldRow({ path, field, original, value, text, error, disabled, onText, onValue }: {
+function FieldRow({ path, field, original, value, text, error, disabled, onText, onValue, item }: {
   path: string; field: ConfigField; original: unknown; value: unknown; text: string | undefined; error: string | undefined; disabled: boolean;
+  item?: PresetItem;
   onText: (path: string, kind: EditorKind, text: string, original: unknown) => void; onValue: (path: string, value: unknown) => void;
 }) {
-  const kind = editorKind(field, original);
+  const kind = item?.numeric && editorKind(field, original) === 'text' ? 'number' : editorKind(field, original);
   const changed = JSON.stringify(value) !== JSON.stringify(original);
   const id = `f-${path}`;
   const description = field.description && !field.description.includes('→') ? field.description : null;
   return (
     <div className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_minmax(0,320px)] md:items-center">
-      <label htmlFor={id} className="min-w-0">
-        <span className={cx('block break-all font-mono text-[12.5px]', changed ? 'text-accent-ink' : 'text-ink')}>{path}</span>
-        {description && <span className="mt-0.5 block text-xs text-ink-faint">{description}</span>}
-      </label>
+      {item ? (
+        <label htmlFor={id} className="min-w-0" data-preset-field={path}>
+          <span className={cx('block text-sm font-medium', changed ? 'text-accent-ink' : 'text-ink')}>{item.label}</span>
+          <span className="mt-0.5 block text-xs text-ink-soft">{item.help}</span>
+          <span className="mt-0.5 block text-xs text-ink-faint">{APPLIES_TEXT[item.applies]} <span className="font-mono">{path}</span></span>
+        </label>
+      ) : (
+        <label htmlFor={id} className="min-w-0">
+          <span className={cx('block break-all font-mono text-[12.5px]', changed ? 'text-accent-ink' : 'text-ink')}>{path}</span>
+          {description && <span className="mt-0.5 block text-xs text-ink-faint">{description}</span>}
+        </label>
+      )}
       <div className="min-w-0">
         {kind === 'boolean' && (
           <input id={id} type="checkbox" className="size-4 accent-[var(--color-ink)]" checked={value === true} disabled={disabled}

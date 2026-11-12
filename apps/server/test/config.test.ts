@@ -82,6 +82,18 @@ describe('config: form', () => {
     expect(dashCalls(t, 'PUT', '/api/config')).toHaveLength(0);
   });
 
+  it('takes null (back to « no limit ») only for the fields Hermes types string', async () => {
+    const t = await testApp();
+    const set = await t.request('PUT', BASE, { changes: { 'agent.run_budget_seconds': 300, 'kanban.max_in_progress': 2 }, version: await version(t) });
+    expect(set.status).toBe(200);
+    const back = await t.request('PUT', BASE, { changes: { 'agent.run_budget_seconds': null }, version: set.json.version });
+    expect(back.status).toBe(200);
+    expect(dashCalls(t, 'PUT', '/api/config').at(-1)?.body).toEqual({ config: { agent: { run_budget_seconds: null } } });
+    const refused = await t.request('PUT', BASE, { changes: { 'delegation.max_spawn_depth': null }, version: back.json.version });
+    expect(refused.status).toBe(400);
+    expect(refused.json.code).toBe('invalid_field');
+  });
+
   it('refuses a stale version without writing, accepts the version returned by another write', async () => {
     const t = await testApp();
     const v = await version(t);
