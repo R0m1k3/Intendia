@@ -662,6 +662,14 @@ export const api = {
   tree: (slug: string, path = '') => call<FileTree>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
   gitLocate: (slug: string, path: string) => call<{ repo: string | null; outside: boolean }>('GET', `${gitPath(slug)}/locate?path=${enc(path)}`),
   gitStatus: (slug: string, repo: string) => call<GitStatus>('GET', `${gitPath(slug)}?repo=${enc(repo)}`),
+  gitStage: (slug: string, repo: string, file?: string) => call<{ unstaged: string[] }>('POST', `${gitPath(slug)}/stage`, { repo, file }),
+  gitUnstage: (slug: string, repo: string, file?: string) => call<{ ok: true }>('POST', `${gitPath(slug)}/unstage`, { repo, file }),
+  gitRevert: (slug: string, repo: string, file: string) => call<{ ok: true }>('POST', `${gitPath(slug)}/revert`, { repo, file }),
+  gitCommit: (slug: string, repo: string, message: string, push: boolean) =>
+    call<{ committed: true; pushError?: string }>('POST', `${gitPath(slug)}/commit`, { repo, message, push }),
+  gitPush: (slug: string, repo: string) => call<{ ok: true }>('POST', `${gitPath(slug)}/push`, { repo }),
+  gitSwitch: (slug: string, repo: string, branch: string) => call<{ branch: string }>('POST', `${gitPath(slug)}/switch`, { repo, branch }),
+  gitMessage: (slug: string, repo: string, avoid?: string) => call<{ message: string }>('POST', `${gitPath(slug)}/message`, { repo, avoid }),
   gitBranches: (slug: string, repo: string) => call<{ branches: { name: string; current: boolean }[] }>('GET', `${gitPath(slug)}/branches?repo=${enc(repo)}`),
   instanceTree: (inst: string, path = '') =>
     call<FileTree>('GET', `/i/${enc(inst)}/files/tree?path=${enc(path)}`),

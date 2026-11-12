@@ -1007,7 +1007,7 @@ export const FAKE_SESSION_STATS = {
 export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
   io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
   return (text) => {
-    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown } };
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown; template?: unknown; variables?: unknown } };
     try { msg = JSON.parse(text) as typeof msg; } catch { return; }
     const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
     if (msg.method === 'session.stats' && fake.sessionStats) {
@@ -1016,6 +1016,14 @@ export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => v
     }
     if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
     if (msg.method === 'llm.oneshot' && fake.oneshot !== 'off') {
+      const template = typeof msg.params?.template === 'string' ? msg.params.template : '';
+      if (template) {
+        if (template !== 'commit_message') return reply({ error: { code: 4031, message: `unknown one-shot template: ${template}` } });
+        if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured' } });
+        const vars = (msg.params?.variables ?? {}) as { diff?: string; avoid?: string };
+        const file = /^diff --git a\/(\S+)/m.exec(vars.diff ?? '')?.[1] ?? 'fichiers';
+        return reply({ result: { text: vars.avoid ? `chore: retouche ${file}` : `feat: modifie ${file}` } });
+      }
       const input = typeof msg.params?.input === 'string' ? msg.params.input : '';
       if (!input || typeof msg.params?.instructions !== 'string') return reply({ error: { code: 4030, message: 'llm.oneshot requires a template or instructions/input' } });
       if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured for task=title_generation' } });
