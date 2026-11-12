@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, Check, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo } from '../sessions/UndoBar';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +16,10 @@ import { measure, startFollow, type FollowState } from '../chat/follow';
 import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
+import { stamps } from '../chat/timeline';
+import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
+import { outline } from '../chat/turns';
+import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useRun } from '../chat/useRun';
 import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
@@ -519,6 +523,63 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(followIfPinned, [tail, live?.approval, live?.clarify]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // « Afficher les heures » (time of each step) and « Plan » / ↑ ↓ (jump between the user's questions)
+  const [times, setTimes] = useStoredFlag('intendia-thread-times');
+  const timeMap = useMemo(() => (times ? stamps(entries) : undefined), [times, entries]);
+  const items = useMemo(() => outline(entries), [entries]);
+  const header = useRef<HTMLElement>(null);
+  const turnEl = (key: string) => box()?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
+  const jumpTo = (key: string) => {
+    const main = box();
+    const el = turnEl(key);
+    if (!main || !el) return;
+    const head = header.current?.getBoundingClientRect().height ?? 0;
+    main.scrollTop += el.getBoundingClientRect().top - main.getBoundingClientRect().top - head - 8;
+    el.classList.add('ring-2', 'ring-accent');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-accent'), 1200);
+  };
+  /** Index of the current question: the last one whose top has reached the top of the view (under the header). */
+  const currentTurn = (): number => {
+    const main = box();
+    if (!main) return -1;
+    const line = main.getBoundingClientRect().top + (header.current?.getBoundingClientRect().height ?? 0) + 24;
+    let at = -1;
+    items.forEach((it, i) => { const el = turnEl(it.key); if (el && el.getBoundingClientRect().top <= line) at = i; });
+    return at;
+  };
+  const jump = (dir: -1 | 1) => {
+    if (!items.length) return;
+    const at = currentTurn();
+    if (dir === 1) { const next = items[at + 1]; if (next) jumpTo(next.key); return; }
+    if (at < 0) return;
+    // ↑ goes back to the top of the current question when the reader went down its turn, else to the previous one
+    const main = box()!;
+    const el = turnEl(items[at]!.key);
+    const top = main.getBoundingClientRect().top + (header.current?.getBoundingClientRect().height ?? 0);
+    const inside = el ? el.getBoundingClientRect().top < top - 4 : false;
+    const target = inside ? items[at] : items[at - 1];
+    if (target) jumpTo(target.key);
+  };
+  const jumpRef = useRef(jump);
+  jumpRef.current = jump;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      const t = e.target as HTMLElement | null;
+      if (t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) {
+        // in the message field only, and only when the caret is at the edge it moves towards (or the field is empty)
+        if (t.getAttribute('aria-label') !== 'Message') return;
+        const { selectionStart: a, selectionEnd: b, value } = t;
+        const edge = value === '' || (a === b && (e.key === 'ArrowUp' ? a === 0 : a === value.length));
+        if (!edge) return;
+      } else if (t?.isContentEditable) return;
+      e.preventDefault();
+      jumpRef.current(e.key === 'ArrowUp' ? -1 : 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const title = sess.data?.session.title || 'Nouvelle session';
 
   // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
@@ -569,7 +630,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     <FilePaths.Provider value={filePaths}>
     <div className="flex min-h-full">
     <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className={cx('flex min-w-0 flex-1 flex-col', EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
-      <header className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
+      <header ref={header} className="sticky top-0 z-10 border-b border-line bg-sheet/95 backdrop-blur-sm">
         <div className="flex items-center gap-3 px-5 py-3 md:px-6">
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-ink-faint">
@@ -588,6 +649,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
               <PanelRight className="size-4" strokeWidth={1.5} />
             </Button>
+            {items.length >= OUTLINE_MIN && <TurnPlan items={items} onJump={jumpTo} />}
             <Menu
               title="Actions de la session"
               trigger={<Ellipsis className="size-4" strokeWidth={1.5} />}
@@ -602,6 +664,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
                   ? { label: 'Désarchiver', icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
                   : { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
                 ...(sentOnce && !canCopy ? [] : [{ label: 'Dupliquer', icon: <Copy className="size-4" strokeWidth={1.5} />, disabled: running || duplicate.isPending, onSelect: () => duplicate.mutate(newKey()) }]),
+                times
+                  ? { label: 'Masquer les heures', icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(false) }
+                  : { label: 'Afficher les heures', icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(true) },
                 ...(sentOnce ? [
                   { label: 'Exporter en Markdown', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'md')) },
                   { label: 'Exporter en HTML', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
@@ -632,7 +697,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} />
+        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} />
         {running && !live?.approval && !live?.clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {live?.approval && (
           <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
@@ -652,7 +717,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       </div>
 
       <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent pt-4">
-        <div className="mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
+        <div className="relative mx-auto max-w-3xl px-5 pb-4 md:px-8 md:pb-6">
+          {items.length >= OUTLINE_MIN && (
+            <div className="absolute bottom-full right-5 mb-1 md:right-8"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
+          )}
           <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
           <Composer
             ref={composer}

@@ -131,7 +131,12 @@ demand from the State screen. State changes go to the webhook.
   path lines out of the user's bubble and shows them as thumbnails or chips, without a server call.
 - Thread: entries are grouped into turns (`chat/turns.ts`): one user turn per message, one agent turn up to the
   next message, consecutive tool calls folded into one "étapes" card. Floating menus (`components/Menu.tsx`) are
-  portalled to `<body>`.
+  portalled to `<body>`. Each turn carries `data-key` (key of its first entry).
+- Reading a long thread: « Afficher les heures » (session menu, `intendia-thread-times` in localStorage) shows the
+  time to the second and the gap with the previous dated entry on each step and each part (`chat/timeline.ts`,
+  pure; formatted in `Thread.tsx`). « Plan » (from 4 questions, `outline()` in `chat/turns.ts`, reorientations left
+  out) lists the user's questions; ↑ ↓ above the composer and Alt+↑ / Alt+↓ jump between them (in the message
+  field only when it is empty or the caret is at the edge it moves towards).
 
 ### During a run
 
