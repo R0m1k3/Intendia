@@ -50,6 +50,7 @@ import { KanbanStore } from './kanban.js';
 import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
 import { FilesStore } from './files.js';
+import { GitStore, type GitFakeOptions } from './git.js';
 export { OPENROUTER_MODELS } from './config.js';
 import { SkillStore } from './skills.js';
 
@@ -71,6 +72,8 @@ export interface Break {
 
 export interface FakeOptions {
   fixturesDir: string;
+  /** Git routes (`/api/fs/git-root`, `/api/git/*`): see git.ts. */
+  git?: GitFakeOptions;
   /** Keyed by "api GET /path" or "dash GET /path" (paths without the /p/<profile> prefix). */
   breaks?: Record<string, Break>;
   /** Hide entries of /v1/capabilities `endpoints` or dashboard OpenAPI routes ("METHOD /path"). */
@@ -570,7 +573,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore }
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -597,6 +600,14 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       const res = await stores.files.handle(method, path, c.req.raw, c.req.query());
       if (res) return res;
     }
+    if (via === 'dash' && (path === '/api/fs/git-root' || path.startsWith('/api/git/'))) {
+      log.push({ via, method, path, profile, authorization: c.req.header('authorization'), query: c.req.query(), headers: Object.fromEntries(c.req.raw.headers), body: undefined });
+      if (c.req.header('authorization') !== `Bearer ${FAKE_DASH_TOKEN}`) return c.json({ error: 'unauthorized' }, 401);
+      const brk = opts.breaks?.[`dash ${method} ${path}`];
+      if (brk?.status) return c.json(brk.body ?? { detail: 'broken by fake-hermes' }, brk.status as 404);
+      const res = await stores.git.handle(method, path, c.req.raw, c.req.query());
+      if (res) return res;
+    }
     let body: unknown;
     if (method !== 'GET' && method !== 'HEAD') body = await c.req.json().catch(() => undefined);
     log.push({
@@ -610,6 +621,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input, instructions: last.instructions } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
+    if (method === 'GET' && path === '/_fake/git/calls') return c.json({ calls: stores.git.calls });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
     if (via === 'api' && method === 'GET' && path === '/_fake/pool') return c.json({ entries: config.providers.poolOf(c.req.query('profile') ?? 'default') });
     if (via === 'api' && method === 'POST' && path === '/_fake/pool/seed') {
@@ -935,11 +947,12 @@ export function createFakeHermes(opts: FakeOptions) {
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);
   const profiles = new ProfileStore(opts.fixturesDir);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
-  const stores: Stores = { crons, skills, config, profiles, kanban, files };
+  const git = new GitStore(opts.git);
+  const stores: Stores = { crons, skills, config, profiles, kanban, files, git };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
-    requests, sim, crons, skills, config, profiles, kanban, files,
+    requests, sim, crons, skills, config, profiles, kanban, files, git,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */
@@ -994,7 +1007,7 @@ export const FAKE_SESSION_STATS = {
 export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
   io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
   return (text) => {
-    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown } };
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown; template?: unknown; variables?: unknown } };
     try { msg = JSON.parse(text) as typeof msg; } catch { return; }
     const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
     if (msg.method === 'session.stats' && fake.sessionStats) {
@@ -1003,6 +1016,14 @@ export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => v
     }
     if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
     if (msg.method === 'llm.oneshot' && fake.oneshot !== 'off') {
+      const template = typeof msg.params?.template === 'string' ? msg.params.template : '';
+      if (template) {
+        if (template !== 'commit_message') return reply({ error: { code: 4031, message: `unknown one-shot template: ${template}` } });
+        if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured' } });
+        const vars = (msg.params?.variables ?? {}) as { diff?: string; avoid?: string };
+        const file = /^diff --git a\/(\S+)/m.exec(vars.diff ?? '')?.[1] ?? 'fichiers';
+        return reply({ result: { text: vars.avoid ? `chore: retouche ${file}` : `feat: modifie ${file}` } });
+      }
       const input = typeof msg.params?.input === 'string' ? msg.params.input : '';
       if (!input || typeof msg.params?.instructions !== 'string') return reply({ error: { code: 4030, message: 'llm.oneshot requires a template or instructions/input' } });
       if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured for task=title_generation' } });

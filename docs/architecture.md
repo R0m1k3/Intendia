@@ -271,6 +271,24 @@ sequenceDiagram
   I->>H: POST /v1/runs/run_x/approval
 ```
 
+## Git
+
+The Git page of a workspace (`/w/$slug/git?repo=`) goes through the dashboard's git routes (module `git`, `apps/server/src/connectors/git`). Hermes 0.23 runs git in any folder of its host given as `path`, so only `GitService` (`apps/server/src/git/service.ts`) calls them, with a path it built and checked:
+- the browser gives a workspace slug, a repository folder relative to the workspace and file paths relative to the repository, never an absolute path;
+- before each request, `open()` checks that `git-root` of `<root>/<slug>/<repo>` is exactly that folder (so not a sub-folder, nor a link leading elsewhere: Hermes answers a resolved path) and that its `.git` is a real folder (a `.git` file, as in submodules and linked worktrees, points to a repository that can be anywhere);
+- a repository starting above the workspace (the files root itself, say) is refused; the Files page only shows its « Git » button for a repository inside the workspace;
+- file paths go to git as pathspecs: `* ? [ ]` and a leading `:` are refused; credential files (`hiddenByHermes`, aligned on Hermes' list) never get a diff.
+
+Write guards (Hermes' own routes would do worse):
+- staging a folder not tracked yet, or everything, can stage a credential file neither git's list nor Hermes' file list shows: after each staging, Intendia reads the list again and unstages every credential file this action staged, and names it;
+- a commit is refused when nothing is staged (Hermes would then run `add -A`) and while a credential file is staged; « puis pousser » is a separate push call, so a failed push keeps the commit;
+- revert only takes the exact path of a listed file (never a folder: `git clean -fd` would also delete hidden credential files; never a rename), unstages a new file first, and reads the list again since Hermes always answers ok;
+- one write at a time per repository (409 `busy`). The agent can still work in the same repository between Intendia's check and Hermes' action: accepted (it has a terminal on the host).
+
+Accepted limit: the repository's own configuration (`.git/config`, written by the agent) can still make git act outside the folder (`core.worktree`…); the agent already has a terminal on the host, Intendia only bounds what the browser can aim at.
+
+The fake runs the real `git` (`apps/fake-hermes/src/git.ts`, without confinement, like Hermes): the only way to test that Intendia bounds paths and to test staging and commits.
+
 ## Crons
 
 - `src/crons/service.ts` (`CronService`) calls the `crons` connector; `src/routes/crons.ts` serves

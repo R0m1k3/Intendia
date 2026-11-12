@@ -15,7 +15,7 @@ const Exists = z.object({ paths: z.array(z.string().max(1024)).max(EXISTS_MAX) }
 const Share = z.object({ path: z.string() });
 const Extract = z.object({ path: z.string().max(1024) });
 
-function slugOf(c: { req: { param: (k: string) => string } }): string {
+export function slugOf(c: { req: { param: (k: string) => string } }): string {
   const slug = c.req.param('slug');
   if (!SLUG_RE.test(slug)) throw new ValidationError('workspace invalide');
   return slug;
