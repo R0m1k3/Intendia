@@ -25,6 +25,15 @@ const TELEGRAM_WHOLE_RE = /^\d{6,12}:[A-Za-z0-9_-]{30,}$/;
 const TELEGRAM_ANY_RE = /\b\d{6,12}:[A-Za-z0-9_-]{30,}/g;
 const ENV_REF_RE = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 const URL_RE = /^https?:\/\//i;
+/** Known secret values shorter than this are not replaced (too many false hits). */
+export const KNOWN_MIN = 8;
+/** Absolute host paths of two segments or more, not inside a URL or a relative path. */
+const HOST_PATH_RE = /(?<![\w.:/~-])\/(?:[\w.@+-]+\/)+([\w.@+-]+)/g;
+
+/** Shortens absolute host paths to their last segment: `/opt/data/skills/x/SKILL.md` → `…/SKILL.md`. */
+export function hostPaths(text: string): string {
+  return text.replace(HOST_PATH_RE, (_, last: string) => `…/${last}`);
+}
 const URL_ANY_RE = /https?:\/\/[^\s"'<>`]+/gi;
 /** Webhook URLs whose path is the credential. */
 const WEBHOOK_PATH_RE = /^(https?:\/\/(?:hooks\.slack\.com\/services\/|(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\/|api\.telegram\.org\/bot))([^?#\s]+)/i;
@@ -121,18 +130,50 @@ export class Masker {
     return value;
   }
 
-  /** Masks free text coming from Hermes (error messages, logs, notices). */
-  text(text: string): string {
-    let out = text.replace(URL_ANY_RE, (u) => this.url(u));
+  /** Masks free text coming from Hermes (error messages, logs, notices). `found` gets every masked fragment. */
+  text(text: string, found?: Found): string {
+    let out = text.replace(URL_ANY_RE, (u) => this.url(u, found));
     out = out.replace(/\b(Bearer|Basic|Token)(\s+)([A-Za-z0-9._~+/=-]{6,})/g, (m, a: string, sp: string, v: string) =>
-      (v.startsWith(PLACEHOLDER_START) ? m : `${a}${sp}${this.token(v)}`));
+      (v.startsWith(PLACEHOLDER_START) ? m : `${a}${sp}${this.token(v, found)}`));
     // (?<!«): the «secret:<id>» placeholders written above are not a `secret: value` pair
     out = out.replace(/(?<![«A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*)(\s*[=:]\s*)(["']?)([^\s"',;&)]+)/g, (m, key: string, sep: string, q: string, v: string) => {
       if (!isSecretKey(key.split('.').pop()!) || /^\d+(\.\d+)?$/.test(v) || v.includes('«') || /^(Bearer|Basic|Token)$/.test(v)) return m;
-      return `${key}${sep}${q}${this.token(v)}`;
+      return `${key}${sep}${q}${this.token(v, found)}`;
     });
-    out = out.replace(TOKEN_ANY_RE, (t) => this.token(t));
-    return out.replace(TELEGRAM_ANY_RE, (t) => this.token(t));
+    out = out.replace(TOKEN_ANY_RE, (t) => this.token(t, found));
+    return out.replace(TELEGRAM_ANY_RE, (t) => this.token(t, found));
+  }
+
+  /** Replaces every exact occurrence of a known secret value (longest first) by its placeholder. */
+  known(text: string, values: readonly string[]): string {
+    let out = text;
+    for (const v of [...values].sort((a, b) => b.length - a.length)) {
+      if (v.length >= KNOWN_MIN && out.includes(v)) out = out.split(v).join(this.token(v));
+    }
+    return out;
+  }
+
+  /**
+   * Puts the secrets of `current` (free text, masked with `text()`) back into a draft that holds `«secret:<id>»`
+   * placeholders. Ids are HMACs of the fragment, so a moved secret is found again. A restored secret must still be
+   * hidden by `text()`: moved out of its context (`password: …` → plain prose), it would be shown in clear later.
+   */
+  restoreText(draft: string, current: string): string {
+    if (!draft.includes(PLACEHOLDER_START)) return draft;
+    const sources = new Map<string, string>();
+    this.text(current, (id, fragment) => sources.set(id, fragment));
+    const restored: string[] = [];
+    const out = draft.replace(PLACEHOLDER_RE, (_, id: string) => {
+      const fragment = sources.get(id);
+      if (fragment === undefined) throw new SecretError('secret_placeholder', 'Valeur masquée inconnue : rechargez le texte', {});
+      restored.push(fragment);
+      return fragment;
+    });
+    const remasked = this.text(out);
+    if (restored.some((f) => remasked.includes(f))) {
+      throw new SecretError('secret_moved', 'Un secret masqué a été déplacé à un endroit affiché en clair', {});
+    }
+    return out;
   }
 
   /** Masks the secret scalars of a YAML text in place, keeping comments and layout. */

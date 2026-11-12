@@ -1,7 +1,7 @@
 // Typed client for the Intendia server (/x/*). Mirrors apps/server/src/connectors/types.ts.
 
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor';
 
 export interface ResolvedOp {
   ok: boolean;
@@ -582,6 +582,32 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
+export interface UsageTotals {
+  input: number | null; output: number | null; cacheRead: number | null; reasoning: number | null;
+  estimatedCost: number | null; actualCost: number | null; sessions: number | null; apiCalls: number | null;
+}
+export interface UsageDay { day: string; estimatedCost: number | null; actualCost: number | null; input: number | null; output: number | null; sessions: number | null; apiCalls: number | null }
+export interface PublicUsage {
+  days: number;
+  totals: UsageTotals;
+  daily: UsageDay[];
+  byModel: { model: string; input: number | null; output: number | null; estimatedCost: number | null; sessions: number | null; apiCalls: number | null }[];
+  tools: { name: string; count: number | null; percentage: number | null }[];
+  skills: { name: string; count: number | null; percentage: number | null }[];
+  sources: Record<string, number> | null;
+  partial: string[];
+}
+export interface LogQuery { file: string; lines: number; level?: string; component?: string; search?: string }
+export interface PublicLogs { file: string; lines: string[]; unredacted: boolean }
+export interface PublicSystemStats {
+  psutil: boolean; hostname: string | null; system: string | null; release: string | null; arch: string | null;
+  hermesVersion: string | null; pythonVersion: string | null; cpuCount: number | null; cpuPercent: number | null;
+  loadAvg: number[] | null; uptimeSeconds: number | null;
+  memory: { total: number | null; used: number | null; available: number | null; percent: number | null } | null;
+  disk: { total: number | null; used: number | null; free: number | null; percent: number | null } | null;
+  process: { rss: number | null; threads: number | null } | null;
+}
+
 export const api = {
   setup: () => call<SetupState>('GET', '/setup'),
   setPassword: (code: string, password: string) => call<{ ok: true }>('POST', '/setup/password', { code, password }),
@@ -716,6 +742,11 @@ export const api = {
   setAgentDescription: (inst: string, name: string, description: string) =>
     call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
   activity: (inst: string) => call<Activity>('GET', instPath(inst, 'activity')),
+  monitorUsage: (inst: string, profile: string, days: number) => call<PublicUsage>('GET', instPath(inst, 'monitor/usage', profile, { days: String(days) })),
+  monitorLogs: (inst: string, profile: string, q: LogQuery) => call<PublicLogs>('GET', instPath(inst, 'monitor/logs', profile, Object.fromEntries(
+    Object.entries({ file: q.file, lines: String(q.lines), level: q.level, component: q.component, search: q.search }).filter((e): e is [string, string] => Boolean(e[1])),
+  ))),
+  monitorSystem: (inst: string) => call<PublicSystemStats>('GET', instPath(inst, 'monitor/system')),
   /** Runs of every instance waiting for approval, with their question. */
   approvals: () => call<{ approvals: PendingApproval[] }>('GET', '/approvals'),
   kanbanBoards: (inst: string) => call<{ boards: KanbanBoard[] }>('GET', kanbanPath(inst, 'boards')),

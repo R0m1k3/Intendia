@@ -14,7 +14,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { checkEndpoint, HERMES_ALIASES, keyEnvFor, readCustomProviders, slugFor, withoutProvider, type PublicCustomProvider } from './custom-providers.js';
 import { declaredModels, editableShape, type Declared } from './declared.js';
-import { Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
+import { KNOWN_MIN, Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
 
 /**
@@ -173,9 +173,12 @@ export function toConfigError(mask: Masker, err: unknown, what = 'Introuvable', 
   return new HermesError('http', `Hermes a répondu ${status} : ${detail}`, err.detail);
 }
 
+const KNOWN_TTL_MS = 60_000;
+
 export class ConfigService {
   private readonly mask: Masker;
   private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly knownCache = new Map<string, { at: number; values: string[] }>();
 
   constructor(
     private readonly compat: CompatService,
@@ -220,6 +223,25 @@ export class ConfigService {
       if (err instanceof HermesError && err.kind === 'http') return null;
       throw err;
     }
+  }
+
+  /**
+   * Secret values of the profile's config file (what the masking rules hide), to mask their exact copies in texts
+   * Hermes does not redact (logs). Cached 60 s; [] when the raw config cannot be read.
+   */
+  async knownSecrets(instanceId: string, profile: string): Promise<string[]> {
+    const key = `${instanceId}:${profile}`;
+    const hit = this.knownCache.get(key);
+    if (hit && Date.now() - hit.at < KNOWN_TTL_MS) return hit.values;
+    let values: string[] = [];
+    try {
+      const raw = await this.readRaw(this.ctx(instanceId, profile));
+      if (raw) values = [...new Set(this.mask.sources(raw).values())].filter((v) => v.length >= KNOWN_MIN);
+    } catch {
+      values = [];
+    }
+    this.knownCache.set(key, { at: Date.now(), values });
+    return values;
   }
 
   private async locked<T>(key: string, fn: () => Promise<T>): Promise<T> {

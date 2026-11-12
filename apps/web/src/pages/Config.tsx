@@ -6,7 +6,8 @@ import { api } from '../api';
 import { Narrow, PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, Chips, cx } from '../components/ui';
-import { ICON, SELECT, configKey } from '../config/common';
+import { ICON, configKey } from '../config/common';
+import { ProfileSelect } from '../components/ProfileSelect';
 import { ConfigEnv } from '../config/Env';
 import { ConfigForm } from '../config/Form';
 import { ConfigHistory } from '../config/History';
@@ -56,7 +57,6 @@ export function ConfigPage() {
 function ConfigView({ inst, profile, search }: { inst: string; profile: string; search: ConfigSearch }) {
   const navigate = useNavigate();
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const profiles = useQuery({ queryKey: ['profiles', inst], queryFn: () => api.profiles(inst).then((r) => r.profiles) });
   const a = useModuleAvailability(inst, 'config', REQUIRED, OPTIONAL);
   const can = (op: string) => a.has('config', op);
   const tabs = CONFIG_TABS.filter((t) => [TAB[t].op].flat().some(can));
@@ -71,8 +71,6 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
 
   const list = instances.data?.instances ?? [];
   const current = list.find((i) => i.id === inst);
-  const names = profiles.data ?? ['default'];
-  const options = names.includes(profile) ? names : [...names, profile];
   const go = (next: Partial<ConfigSearch>) => void navigate({
     to: '/i/$inst/config', params: { inst },
     search: { profile: profile === 'default' ? undefined : profile, tab, ...next },
@@ -86,13 +84,8 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         subtitle={<>Agent <span className="font-mono text-ink-soft">{profile}</span> sur {current ? current.label : 'l’instance'}</>}
         action={(
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-[13px] text-ink-faint">
-              Profil
-              <select className={cx(SELECT, 'h-[34px] font-mono text-ink')} value={profile} aria-label="Profil"
-                onChange={(e) => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value, tab } })}>
-                {options.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
+            <ProfileSelect inst={inst} value={profile}
+              onChange={(p) => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: p === 'default' ? undefined : p, tab } })} />
             {a.available && can('restartGateway') && (
               <Button disabled={restart.running} onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}>
                 <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? 'Redémarrage…' : 'Redémarrer la passerelle'}

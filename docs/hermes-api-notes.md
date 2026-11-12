@@ -324,6 +324,19 @@ Sub-agents and runs (API server):
 - Writes (POST, `{path, …}`): `review/stage|unstage {file?}` (`file` is a git **pathspec**: `*` matches; without `file`: `add -A` / `reset`), `review/revert {file?}` = `checkout HEAD -- f` + `clean -fd -- f`, errors ignored, **always `{ok: true}`**; `review/commit {message, push}` runs `add -A` first **when nothing is staged**; `review/push` (`push -u origin <branch>` without upstream); `branch/switch {branch}`. No pull, no fetch. `ship-info` / `create-pr` (gh) and `worktree/*` are not used.
 - `llm.oneshot` (dashboard WebSocket) has a `commit_message` template: `{template: 'commit_message', variables: {diff, recent_commits, avoid}}` (unknown template → 4031).
 
+## Usage, logs and host metrics (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12; same routes in 0.23.1)
+
+- `GET /api/analytics/usage?days=&profile=` (1-365, else 422): `daily`, `by_model`, `by_task`, `totals`, `skills`,
+  `tools`. Window = sessions started in the last `days`; costs = sums of the session costs (null counts 0, written
+  late, 0 when the price is unknown). Sums can be `null` on an empty window. One profile per call.
+- `GET /api/sessions/stats?profile=`: `{total, archived, messages, by_source}` (no period, no cost).
+- `GET /api/logs?file=&lines=&level=&component=&search=&profile=`: files `agent, errors, gateway, gui, desktop,
+  update, handoff, mcp` (other → 400), `lines` ≤ 500, `level` = minimum, `component` in `gateway, agent, tools, cli,
+  cron, gui` (else 400), `search` = substring over the last 2000 lines. Lines are raw text **with their newline**.
+  `mcp-stderr.log` (stdio MCP servers' stderr), update and desktop logs are **not** redacted by Hermes.
+- `GET /api/system/stats` (no profile): identity, `hostname`, CPU, memory, disk of the Hermes home, load, uptime,
+  dashboard process; without psutil only identity and load. In a container: the host's values.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

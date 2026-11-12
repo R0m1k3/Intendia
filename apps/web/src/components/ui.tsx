@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import {
-  Bot, CalendarClock, GitBranch, HeartPulse, KanbanSquare, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal,
+  Bot, CalendarClock, GitBranch, LineChart, HeartPulse, KanbanSquare, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
@@ -116,6 +116,7 @@ export const MODULE_META: Record<ModuleId, { icon: LucideIcon; does: string }> =
   agents: { icon: Bot, does: 'Profils d’agents' },
   kanban: { icon: KanbanSquare, does: 'Tableau de tâches' },
   git: { icon: GitBranch, does: 'Statut, diff et commits des dépôts des workspaces' },
+  monitor: { icon: LineChart, does: 'Utilisation, journaux et métriques du serveur' },
 };
 
 export function ErrorText({ error }: { error: unknown }) {

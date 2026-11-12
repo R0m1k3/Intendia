@@ -58,6 +58,8 @@ export const FAKE_SECRETS = {
   mcp: 'sk-test-mcp-0002',
   hook: 'sk-test-hook-0003',
   env: 'sk-test-env-0004',
+  /** No token prefix: only found by its config key (masked in logs as a known value). */
+  plain: 'plain-relay-pass-0008',
 };
 
 const EXTRA_YAML = `
@@ -71,6 +73,7 @@ providers:
     api_key: \${CUSTOM_KEY}
 notes:
   webhook: https://hooks.slack.com/services/T0/B0/${FAKE_SECRETS.hook}
+  relay_password: ${FAKE_SECRETS.plain}
 personalities:
   brief: Réponds en trois phrases au plus.
   formel:
