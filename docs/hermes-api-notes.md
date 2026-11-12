@@ -371,6 +371,17 @@ Sub-agents and runs (API server):
   the cron (no `?profile=` = `default`, not the active profile); 422 with a text `detail` for an unknown field, a
   missing value or a value outside a strict list. The cron has no workdir: Intendia frames it afterwards with a `PUT`.
 
+## Memory and learning graph (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
+
+- `GET /api/memory?profile=` → `{active, providers, builtin_files: {memory, user}}` (sizes in bytes, 0 when the file
+  is missing). `GET /api/learning/graph?profile=` → `{nodes, edges, clusters, memory, stats}`: memory cards (title =
+  first line, 80; body = first 1200 characters; fingerprint = sha256 of the entry, 12 hex), learned skills only
+  (written by the agent or used; not the bundled repository), skill→skill and memory→skill edges.
+- `GET /api/learning/node?id=` → `{kind, id, label, content}`; 404 « memory node id is stale — refresh the graph » when
+  the entry changed. `PUT /api/learning/node {id, content, profile}`: 400 for stale, empty (« use delete »), over the
+  file's limit (« Replacement would put memory at N/L chars »). `DELETE /api/learning/node {id, profile}` (JSON body)
+  removes a memory entry (no copy kept) or archives a skill. No route adds an entry.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

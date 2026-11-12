@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { api, type PublicInstance } from '../api';
 
 /** Pages that exist per instance, under /i/<inst>/<page>. */
-export const INSTANCE_PAGES = ['files', 'crons', 'skills', 'agents', 'config', 'kanban', 'suivi'] as const;
+export const INSTANCE_PAGES = ['files', 'crons', 'skills', 'agents', 'config', 'kanban', 'suivi', 'memoire'] as const;
 export type InstancePage = (typeof INSTANCE_PAGES)[number];
 const isInstancePage = (v: string | undefined): v is InstancePage => (INSTANCE_PAGES as readonly string[]).includes(v ?? '');
 

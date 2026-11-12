@@ -51,8 +51,10 @@ import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
 import { FilesStore } from './files.js';
 import { GitStore, type GitFakeOptions } from './git.js';
+import { MemoryStore } from './memory.js';
 import { MonitorStore, type MonitorFakeOptions } from './monitor.js';
 export { FAKE_SECRETS, OPENROUTER_MODELS } from './config.js';
+export { FAKE_MEMORY_LIMITS, FAKE_MEMORY_SEED, fingerprint as memoryFingerprint } from './memory.js';
 import { SkillStore } from './skills.js';
 
 /**
@@ -576,7 +578,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore }
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -667,6 +669,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (via === 'dash') {
       const mon = stores.monitor.handle(method, path, c.req.query());
       if (mon) return c.json(mon.body, mon.status as 200);
+      // before skills: /api/learning/node serves memory ids here, skill ids in the skills store
+      const mem = stores.memory.handle(method, path, c.req.query(), body);
+      if (mem) return c.json(mem.body, mem.status as 200);
     }
     const prof = profiles.handle(via, method, path, body, c.req.query());
     if (prof) return prof;
@@ -959,11 +964,16 @@ export function createFakeHermes(opts: FakeOptions) {
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
   const git = new GitStore(opts.git);
   const monitor = new MonitorStore(opts.monitor);
-  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor };
+  // learned skills of the graph: the first four of the list (used) and every skill written by the agent
+  const memory = new MemoryStore(() => [
+    ...skills.skills.slice(0, 4).map((s, i) => ({ name: s.name, category: s.category || 'general', useCount: 4 - i, createdBy: 'bundled', pinned: i === 0 })),
+    ...skills.skills.filter((s) => s.provenance === 'agent').map((s) => ({ name: s.name, category: s.category || 'general', useCount: 0, createdBy: 'agent', pinned: false })),
+  ]);
+  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor, memory };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
-    requests, sim, crons, skills, config, profiles, kanban, files, git, monitor,
+    requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */

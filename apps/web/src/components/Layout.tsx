@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -29,6 +29,7 @@ const NAV: readonly NavEntry[] = [
   { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
   { key: 'kanban', to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'auto', page: 'kanban' },
   { key: 'skills', to: '/skills', label: 'Skills', icon: Layers, group: 'agent', page: 'skills' },
+  { key: 'memory', to: '/memoire', label: 'Mémoire', icon: Brain, group: 'agent', page: 'memoire' },
   { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'agent', page: 'agents' },
   { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'agent', page: 'config' },
   { key: 'monitor', to: '/suivi', label: 'Suivi', icon: LineChart, group: 'foot', page: 'suivi' },

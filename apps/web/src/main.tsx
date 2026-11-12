@@ -23,6 +23,7 @@ import { CronsPage } from './pages/Crons';
 import { KanbanPage, type KanbanSearch } from './pages/Kanban';
 import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
+import { MEMORY_TABS, MemoryPage, type MemorySearch, type MemoryTab } from './pages/Memory';
 import { MONITOR_TABS, MonitorPage, type MonitorSearch, type MonitorTab } from './pages/Monitor';
 import { LOG_FILES } from './monitor/Logs';
 import { PERIODS, type Period } from './monitor/Usage';
@@ -218,6 +219,17 @@ const monitorRoute = createRoute({
     profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
   }),
 });
+/** /memoire: the current instance */
+const memoryIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/memoire', beforeLoad: () => toCurrent('memoire') });
+const memoryRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/memoire', component: MemoryPage,
+  validateSearch: (s: Record<string, unknown>): MemorySearch => ({
+    profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+    tab: typeof s.tab === 'string' && (MEMORY_TABS as readonly string[]).includes(s.tab) ? (s.tab as MemoryTab) : undefined,
+    entry: typeof s.entry === 'string' && /^memory:(memory|profile):\d{1,6}:[0-9a-f]{12}$/.test(s.entry) ? s.entry : undefined,
+    skill: typeof s.skill === 'string' && s.skill.length > 0 && s.skill.length <= 200 ? s.skill : undefined,
+  }),
+});
 /** /agents: the current instance */
 const agentsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/agents', beforeLoad: () => toCurrent('agents') });
 const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents', component: AgentsPage });
@@ -235,7 +247,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 
