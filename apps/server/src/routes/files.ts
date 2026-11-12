@@ -46,8 +46,10 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
   r.get(`${base}/raw`, async (c) => {
     const path = c.req.query('path') ?? '';
     const file = await files.read(slugOf(c), path, c.req.raw.signal);
-    // scripts only for a page under sessions/ (where the agent puts what it makes), never for an upload in inbox/
-    const artifact = c.req.query('artefact') === '1' && normalizeRel(path).startsWith('sessions/');
+    // scripts only for a page under sessions/ (where the agent puts what it makes), never for an upload in inbox/,
+    // and only inside a frame of the app, whose CSP (frame-src 'self') keeps the page from navigating elsewhere
+    const artifact = c.req.query('artefact') === '1' && c.req.header('sec-fetch-dest') === 'iframe'
+      && normalizeRel(path).startsWith('sessions/');
     return sendFile(c, file, file.name, { download: c.req.query('download') === '1', artifact });
   });
 

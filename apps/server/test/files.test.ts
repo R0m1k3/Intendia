@@ -268,11 +268,11 @@ describe('files', () => {
     expect((await t.request('PUT', `${t.F}/text`, { path: md.path, text: 'x'.repeat(1024 * 1024 + 1), mtime: ok.json.mtime })).status).toBe(413);
   });
 
-  it('raw with artefact=1: scripts without network only for an HTML page under sessions/', async () => {
+  it('raw with artefact=1: scripts without network only for an HTML page under sessions/, inside a frame', async () => {
     const t = await setup();
     mkdirSync(join(t.ws, 'sessions', 's1'), { recursive: true });
     for (const f of ['sessions/s1/page.html', 'sessions/s1/page.HTM', 'sessions/s1/notes.txt', 'inbox/page.html']) writeFileSync(join(t.ws, f), '<p>x</p>');
-    const csp = async (q: string) => (await t.rawRequest('GET', `${t.F}/raw?${q}`)).headers.get('content-security-policy');
+    const csp = async (q: string, dest = 'iframe') => (await t.rawRequest('GET', `${t.F}/raw?${q}`, { headers: { 'Sec-Fetch-Dest': dest } })).headers.get('content-security-policy');
     for (const p of ['sessions/s1/page.html', 'sessions/s1/page.HTM', './sessions//s1/page.html']) {
       const v = await csp(`path=${t.q(p)}&artefact=1`);
       expect(v, p).toContain('sandbox allow-scripts;');
@@ -283,6 +283,9 @@ describe('files', () => {
     expect(await csp(`path=${t.q('sessions/s1/page.html')}&artefact=1&download=1`)).toBe(FILE_CSP);
     expect(await csp(`path=${t.q('sessions/s1/notes.txt')}&artefact=1`)).toBe(FILE_CSP);
     expect(await csp(`path=${t.q('inbox/page.html')}&artefact=1`)).toBe(FILE_CSP);
+    // opened as a page (tab, link) rather than in a frame of the app: no scripts
+    expect(await csp(`path=${t.q('sessions/s1/page.html')}&artefact=1`, 'document')).toBe(FILE_CSP);
+    expect((await t.rawRequest('GET', `${t.F}/raw?path=${t.q('sessions/s1/page.html')}&artefact=1`)).headers.get('content-security-policy')).toBe(FILE_CSP);
     expect((await t.rawRequest('GET', `${t.F}/raw?path=${t.q('sessions/../inbox/page.html')}&artefact=1`)).status).toBe(400);
   });
 

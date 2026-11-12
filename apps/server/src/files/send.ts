@@ -6,7 +6,8 @@ export const FILE_CSP = "sandbox; frame-ancestors 'self'";
 
 /**
  * HTML page written by the agent and shown in the thread (`::artefact`): its scripts run, in an opaque origin
- * (no allow-same-origin: no cookie, no /x/), with no network (default-src 'none') and no way out of the frame.
+ * (no allow-same-origin: no cookie, no /x/), with no network (default-src 'none'), no popups, forms or top navigation;
+ * sent only to a frame of the app, whose own CSP (frame-src 'self') blocks a navigation of the frame to another site.
  */
 export const ARTIFACT_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
   + "img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'";

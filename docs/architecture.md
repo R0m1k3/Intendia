@@ -189,11 +189,14 @@ demand from the State screen. State changes go to the webhook.
   not for PDFs (Chrome refuses PDFs in sandboxed frames).
 - Artefacts: the framing block asks the agent to write an HTML page it wants to show in the session folder,
   self-contained, then a line `::artefact <full path>`. The web (`chat/artifacts.ts`, `Artifact.tsx`) replaces such a
-  line (alone on its line, outside code blocks, finished replies only) by a frame of
-  `…/files/raw?path=…&artefact=1` with `sandbox="allow-scripts"`; its path is checked first among the cited paths.
-  The server answers `artefact=1` with `ARTIFACT_CSP` (`sandbox allow-scripts; default-src 'none'; …`: scripts
-  inline, no network, opaque origin, no popups, forms or top navigation) only for an `.html`/`.htm` under
-  `sessions/` and not a download; anything else keeps the plain CSP.
+  line (alone on its line, at most 3 spaces before it, outside code fences, finished replies only) by a frame of
+  `…/files/raw?path=…&artefact=1` with `sandbox="allow-scripts"` (« Plein écran », never a tab of its own); its
+  path is checked first among the cited paths. The server answers `artefact=1` with `ARTIFACT_CSP`
+  (`sandbox allow-scripts; default-src 'none'; …`: scripts inline, no fetch, opaque origin, no popups, forms or top
+  navigation) only for an `.html`/`.htm` under `sessions/`, not a download, and only when the browser loads it in a
+  frame (`Sec-Fetch-Dest: iframe`); anything else keeps the plain CSP (no scripts). A script could still navigate
+  its own frame to another site with data in the address: the app's pages carry `frame-src 'self'`, so the browser
+  refuses that navigation.
 - Share links (`share_links`, `src/links/service.ts`): 10-character base62 token, volume path (relative to the
   workspace root of the instance), private by default, public until a date (365 days max), revoked rows kept so
   `/f/<token>` can say so. A move from the explorer rewrites link paths by exact prefix after the copy and before the

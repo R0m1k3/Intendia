@@ -170,7 +170,7 @@ describe('framing', () => {
     const page = await app.request('/w/demo/s/abc?embed=1');
     expect(page.status).toBe(200);
     expect(page.headers.get('x-frame-options')).toBe('SAMEORIGIN');
-    expect(page.headers.get('content-security-policy')).toBe("frame-ancestors 'self'");
+    expect(page.headers.get('content-security-policy')).toBe("frame-ancestors 'self'; frame-src 'self'");
     const apiRes = await app.request('/x/setup');
     expect(apiRes.headers.get('x-frame-options')).toBe('DENY');
     expect(apiRes.headers.get('content-security-policy')).toBeNull();

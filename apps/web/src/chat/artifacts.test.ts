@@ -23,6 +23,14 @@ describe('artefacts', () => {
     expect(splitArtifacts(t)[0]).toEqual({ kind: 'md', text: 'Exemple :\n```\n::artefact sessions/a.html\n```' });
   });
 
+  it('a longer fence holds an inner fence; an indented line is code', () => {
+    const t = '````md\n```\n::artefact sessions/a.html\n````\n::artefact sessions/b.html';
+    expect(artifactPaths(t)).toEqual(['sessions/b.html']);
+    expect(artifactPaths('~~~\n::artefact sessions/a.html\n```\n::artefact sessions/c.html\n~~~')).toEqual([]);
+    expect(artifactPaths('    ::artefact sessions/a.html')).toEqual([]);
+    expect(artifactPaths('   ::artefact sessions/a.html')).toEqual(['sessions/a.html']);
+  });
+
   it('lists each path once', () => {
     expect(artifactPaths('::artefact a.html\n::artefact b.html\n::artefact a.html')).toEqual(['a.html', 'b.html']);
   });

