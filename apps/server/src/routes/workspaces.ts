@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
 import { EFFORTS } from '../chat/run-stats.js';
+import { PERSONALITY_RE } from '../sessions/personalities.js';
+import { PROFILE_RE } from './params.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { pushTitle } from '../workspaces/title.js';
 import { SESSION_SOURCES, type SessionSource } from '../sessions/recent.js';
@@ -32,6 +34,12 @@ const PatchSession = z.object({
   /** Provider of `model` (picker group); accepts `custom:<name>` keys. Only with `model`. */
   provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, 'fournisseur invalide').nullable().optional(),
   effort: z.enum(EFFORTS).nullable().optional(),
+  /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
+  personality: z.string().regex(PERSONALITY_RE).nullable().optional(),
+  /** « Sans confirmation » */
+  autoApprove: z.boolean().optional(),
+  /** another profile of the instance (with its key), only before the first message; null = the workspace's */
+  profile: z.string().regex(PROFILE_RE).nullable().optional(),
 });
 
 const Ids = z.array(z.string().regex(SESSION_ID_RE)).min(1).max(200)
@@ -158,6 +166,16 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   r.patch('/sessions/:inst/:id', async (c) => {
     const { inst, id } = sessionParams(c);
     const body = PatchSession.parse(await c.req.json());
+    if (body.profile !== undefined) {
+      const ctx = workspaces.getSession(inst, id);
+      // a session with a history at Hermes changes agent by a copy (POST …/to-profile)
+      if (ctx.session.lastRunId || ctx.session.copiedFrom) {
+        return c.json({ error: 'Cette session a déjà des messages : copiez-la vers l’autre agent', code: 'has_history' }, 409);
+      }
+      if (body.profile && body.profile !== 'default' && !ctx.instance.profileKeys[body.profile]) {
+        return c.json({ error: `Profil sans clé sur cette instance : ${body.profile}`, code: 'no_key' }, 400);
+      }
+    }
     const session = workspaces.updateSession(inst, id, body);
     if (body.title !== undefined) await pushTitle(deps, workspaces.getSession(inst, id), session.title);
     return c.json({ session });

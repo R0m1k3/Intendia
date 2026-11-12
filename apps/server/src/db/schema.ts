@@ -56,6 +56,12 @@ export const sessionWorkspace = sqliteTable(
     replacesId: text('replaces_id'),
     /** Taken by the purger: next attempt (lease, then retry after a failure). */
     purgeAfter: integer('purge_after'),
+    /** 'hermes:<name>' (config of the profile) or 'intendia:<prompt id>'; NULL = none. */
+    personality: text('personality'),
+    /** « Sans confirmation »: Intendia answers the approvals of this session's runs. */
+    autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
+    /** Hermes profile of this session; NULL = the workspace's default profile. */
+    profile: text('profile'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );
@@ -83,6 +89,8 @@ export const runStats = sqliteTable(
     costBeforeSessionId: text('cost_before_session_id'),
     costUsd: real('cost_usd'),
     costFinal: integer('cost_final', { mode: 'boolean' }).notNull().default(false),
+    /** approvals Intendia gave by itself (« Sans confirmation ») */
+    autoApproved: integer('auto_approved').notNull().default(0),
     /** Runs covered by `costUsd`: more than 1 when the previous runs' costs were still settling at send time. */
     costRuns: integer('cost_runs').notNull().default(1),
   },

@@ -8,6 +8,8 @@ import { pendingFromStatus, readApproval } from './approvals.js';
 
 const WINDOW_MS = 24 * 3600_000;
 const MAX_CANDIDATES = 20;
+/** sessions in « Sans confirmation » read per pass */
+const AUTO_APPROVE_CANDIDATES = 200;
 const PARALLEL = 4;
 const TIMEOUT_MS = 3_000;
 const DONE_MAX = 1000;
@@ -25,7 +27,7 @@ export interface ActiveRun {
 }
 
 /** A run as read by `running()`: with the questions listed in its status (never sent to the page). */
-type CheckedRun = ActiveRun & { controls: PendingControl[] };
+export type CheckedRun = ActiveRun & { controls: PendingControl[] };
 
 /** A run waiting for approval, with its question when it could be read. */
 export interface PendingApproval {
@@ -85,11 +87,14 @@ export class ActivityService {
   }
 
   /** The last run of each recent session, still going (one instance, or all); errors go to `fail`. */
-  private async running(now: number, instanceId: string | undefined, fail: (instance: string, err: unknown) => void): Promise<CheckedRun[]> {
+  private async running(
+    now: number, instanceId: string | undefined, fail: (instance: string, err: unknown) => void,
+    opts: { onlyAutoApprove?: boolean; limit?: number } = {},
+  ): Promise<CheckedRun[]> {
     const known = new Set(this.store.list().map((i) => i.id).filter((id) => instanceId === undefined || id === instanceId));
     // finished runs are skipped before the limit, so an older run still going is reached
-    const candidates = this.workspaces.recentRuns(now - WINDOW_MS, MAX_CANDIDATES,
-      (r) => known.has(r.instanceId) && !this.done.has(`${r.instanceId}:${r.runId}`));
+    const candidates = this.workspaces.recentRuns(now - WINDOW_MS, opts.limit ?? MAX_CANDIDATES,
+      (r) => known.has(r.instanceId) && !this.done.has(`${r.instanceId}:${r.runId}`) && (!opts.onlyAutoApprove || r.autoApprove));
 
     const checked = await inBatches(candidates, PARALLEL, async (c): Promise<CheckedRun | null> => {
       const key = `${c.instanceId}:${c.runId}`;
@@ -114,6 +119,11 @@ export class ActivityService {
       }
     });
     return checked.filter((r): r is CheckedRun => r !== null);
+  }
+
+  /** Runs still going of the sessions in « Sans confirmation » (AutoApprover), with their status read. */
+  autoApproveRuns(now: number, fail: (instance: string, err: unknown) => void): Promise<CheckedRun[]> {
+    return this.running(now, undefined, fail, { onlyAutoApprove: true, limit: AUTO_APPROVE_CANDIDATES });
   }
 
   /** Runs in progress and kanban workers of one instance. */

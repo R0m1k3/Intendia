@@ -12,10 +12,13 @@ import { generateTitle } from '../sessions/title-ai.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { RUN_ACTIVE, SESSION_ID_RE, sessionParams } from './workspaces.js';
+import { PROFILE_RE } from './params.js';
+import { personalityExists } from '../sessions/personalities.js';
 
 /** Created by the browser once per action: the same key again gives the same copy. */
 const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, 'clé invalide');
 const DuplicateBody = z.object({ key: Key });
+const ToProfileBody = z.object({ key: Key, profile: z.string().min(1).max(64).regex(PROFILE_RE) });
 const ContinueBody = z.object({ key: Key, profile: z.string().max(64).default('default'), workspace: z.string().regex(SLUG_RE) });
 const ImportBody = z.object({ key: Key, file: z.unknown() });
 /** `before`: row id of the user message to cut before; 0 = keep nothing (clear); null = keep everything. */
@@ -46,7 +49,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const { session: s, workspace } = ctx;
     const newId = copyId(inst, workspace.slug, key);
     const title = `${s.title || 'Nouvelle session'} (copie)`;
-    const options = { model: s.model, provider: s.modelProvider, effort: s.effort };
+    // same agent and personality; « Sans confirmation » starts off on a copy
+    const options = { model: s.model, provider: s.modelProvider, effort: s.effort, profile: s.profile, personality: s.personality };
     const done = workspaces.existingCopy(workspace.slug, newId);
     if (done) return c.json({ session: done });
     // never sent to Hermes: nothing to copy there, a new empty session with the same options
@@ -65,6 +69,36 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     });
     if (!idle) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
     return c.json({ session: out!.session }, created ? 201 : 200);
+  });
+
+  // the same conversation with another agent (profile) of the instance: a full copy in that profile, same workspace;
+  // the original stays
+  r.post('/sessions/:inst/:id/to-profile', async (c) => {
+    const { inst, id } = sessionParams(c);
+    const { key, profile } = ToProfileBody.parse(await c.req.json());
+    const ctx = workspaces.getSession(inst, id);
+    const { session: s, workspace } = ctx;
+    if (profile === ctx.profile) return c.json({ error: 'La session est déjà sur cet agent', code: 'same_profile' }, 400);
+    if (profile !== 'default' && !ctx.instance.profileKeys[profile]) {
+      return c.json({ error: `Profil sans clé sur cette instance : ${profile}`, code: 'no_key' }, 400);
+    }
+    const newId = copyId(inst, workspace.slug, `${key}:${profile}`);
+    const done = workspaces.existingCopy(workspace.slug, newId);
+    if (done) return c.json({ session: done });
+    const personality = s.personality && await personalityExists(deps.services.config, inst, profile, s.personality) ? s.personality : null;
+    const options = { title: s.title, model: s.model, provider: s.modelProvider, effort: s.effort, profile, personality };
+    if (!s.lastRunId && !s.copiedFrom) {
+      const res = await workspaces.adoptSession(workspace.slug, newId, { ...options, copiedFrom: null });
+      return c.json({ session: res.session }, res.created ? 201 : 200);
+    }
+    let out: Awaited<ReturnType<WorkspaceService['adoptSession']>> | null = null;
+    const idle = await whenIdle(compat, ctx, async () => {
+      const exported = await exportSession(compat, inst, ctx.profile, id);
+      await importCopy(compat, inst, profile, copyPayload(exported, { id: newId, title: s.title || 'Nouvelle session' }));
+      out = await workspaces.adoptSession(workspace.slug, newId, { ...options, copiedFrom: id });
+    });
+    if (!idle) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
+    return c.json({ session: out!.session }, out!.created ? 201 : 200);
   });
 
   // edit, retry, undo, clear (replace) and branch: a truncated copy

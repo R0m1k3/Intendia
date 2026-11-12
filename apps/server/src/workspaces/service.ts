@@ -31,6 +31,12 @@ export interface PublicSession {
   copiedFrom: string | null;
   /** The session this one replaced (edit, retry, undo, clear), restorable during its undo window. */
   replacesId: string | null;
+  /** 'hermes:<name>' or 'intendia:<prompt id>', added to the instructions of each run; null = none. */
+  personality: string | null;
+  /** « Sans confirmation »: Intendia answers the approvals of its runs. */
+  autoApprove: boolean;
+  /** Hermes profile chosen for this session; null = the workspace's default profile (see SessionContext.profile). */
+  profile: string | null;
 }
 
 /** Undo window of a deletion: the session stays at Hermes and can be restored until it is over. */
@@ -51,7 +57,7 @@ export interface SessionContext {
   session: PublicSession;
   workspace: Workspace;
   instance: InstanceConfig;
-  /** Hermes profile serving the workspace ("default" when none). */
+  /** Hermes profile serving the session: its own, else the workspace's default ("default" when none). */
   profile: string;
 }
 
@@ -64,6 +70,7 @@ export interface RecentRun {
   runId: string;
   profile: string;
   lastActiveAt: number;
+  autoApprove: boolean;
 }
 
 export class NotFoundError extends Error {
@@ -82,11 +89,15 @@ export class ValidationError extends Error {
 
 export const TITLE_MAX = 60;
 
+/** Profile of a session in a query joined with its workspace: its own, else the workspace's default (NULL = "default"). */
+const sessionProfile = sql<string | null>`coalesce(${sessionWorkspace.profile}, ${workspaces.profile})`;
+
 function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
     lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
-    pinned: r.pinned, copiedFrom: r.copiedFrom, replacesId: r.replacesId,
+    pinned: r.pinned, copiedFrom: r.copiedFrom, replacesId: r.replacesId, personality: r.personality, autoApprove: r.autoApprove,
+    profile: r.profile,
   };
 }
 
@@ -205,7 +216,7 @@ export class WorkspaceService {
 
   /** Unarchived sessions of the instance's workspaces, most recently active first (home page). */
   recentSessions(limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
-    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
+    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: sessionProfile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
       .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId), alive))
@@ -217,7 +228,7 @@ export class WorkspaceService {
   /** Non-archived Intendia sessions whose title contains `q`, case-insensitive with Unicode folding (SQLite's `lower()` only folds ASCII). */
   searchSessions(q: string, limit: number, instanceId: string): (PublicSession & { workspaceName: string; profile: string })[] {
     const needle = q.toLocaleLowerCase();
-    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
+    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: sessionProfile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
       .where(and(eq(sessionWorkspace.archived, false), eq(workspaces.instanceId, instanceId), alive))
@@ -230,7 +241,7 @@ export class WorkspaceService {
   /** Non-archived Intendia sessions of an instance among `ids` (same fields as `recentSessions`). */
   sessionsByIds(instanceId: string, ids: string[]): (PublicSession & { workspaceName: string; profile: string })[] {
     if (ids.length === 0) return [];
-    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: workspaces.profile })
+    return this.db.select({ s: sessionWorkspace, workspaceName: workspaces.name, profile: sessionProfile })
       .from(sessionWorkspace)
       .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.archived, false), inArray(sessionWorkspace.sessionId, ids), alive))
@@ -256,7 +267,7 @@ export class WorkspaceService {
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId), alive)).get();
     if (!row) throw new NotFoundError(`Session inconnue : ${sessionId}`);
     const workspace = this.getWorkspace(row.workspaceSlug);
-    return { session: toPublic(row), workspace, instance: this.instance(instanceId), profile: workspace.profile ?? 'default' };
+    return { session: toPublic(row), workspace, instance: this.instance(instanceId), profile: row.profile ?? workspace.profile ?? 'default' };
   }
 
   async createSession(slug: string): Promise<PublicSession> {
@@ -312,6 +323,8 @@ export class WorkspaceService {
         sessionId: o.newId, instanceId: o.instanceId, workspaceSlug: o.slug, title: o.title ? titleFrom(o.title) : null, archived: false,
         createdAt: now, lastActiveAt: now, model: f.model, modelProvider: f.model ? f.modelProvider : null, effort: f.effort,
         pinned: f.pinned, copiedFrom: o.copiedFrom, replacesId: o.replaces ? f.id : null,
+        // same agent and personality; « Sans confirmation » only stays on the same session for the user (a replacement)
+        profile: f.profile, personality: f.personality, autoApprove: o.replaces ? f.autoApprove : false,
       }).run();
       for (const r of runs) {
         tx.insert(runStats).values({ ...r, runId: `${r.runId}@${o.newId}`, sessionId: o.newId, hermesSessionId: o.newId, costFinal: true })
@@ -353,7 +366,11 @@ export class WorkspaceService {
    */
   async adoptSession(
     slug: string, id: string,
-    o: { title: string | null; model: string | null; provider: string | null; effort: string | null; copiedFrom: string | null },
+    o: {
+      title: string | null; model: string | null; provider: string | null; effort: string | null; copiedFrom: string | null;
+      /** profile of the copy (null or the workspace's default = the workspace's) and its personality */
+      profile?: string | null; personality?: string | null;
+    },
   ): Promise<{ session: PublicSession; created: boolean }> {
     const ws = this.getWorkspace(slug);
     const existing = this.db.select().from(sessionWorkspace)
@@ -371,19 +388,28 @@ export class WorkspaceService {
     this.db.insert(sessionWorkspace).values({
       sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: o.title ? titleFrom(o.title) : null, archived: false,
       createdAt: now, lastActiveAt: now, model: o.model, modelProvider: o.model ? o.provider : null, effort: o.effort, copiedFrom: o.copiedFrom,
+      profile: o.profile && o.profile !== (ws.profile ?? 'default') ? o.profile : null, personality: o.personality ?? null,
     }).onConflictDoNothing().run();
     return { session: this.getSession(ws.instanceId, id).session, created: true };
   }
 
   updateSession(
     instanceId: string, sessionId: string,
-    patch: { title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: string | null },
+    patch: {
+      title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: string | null;
+      personality?: string | null; autoApprove?: boolean;
+      /** the caller checks the session was never sent and the profile has its key */
+      profile?: string | null;
+    },
   ): PublicSession {
     const { workspace } = this.getSession(instanceId, sessionId);
     const set: Partial<SessionRow> = {};
     if (patch.title !== undefined) set.title = patch.title ? titleFrom(patch.title) : null;
     if (patch.archived !== undefined) set.archived = patch.archived;
     if (patch.pinned !== undefined) set.pinned = patch.pinned;
+    if (patch.personality !== undefined) set.personality = patch.personality || null;
+    if (patch.autoApprove !== undefined) set.autoApprove = patch.autoApprove;
+    if (patch.profile !== undefined) set.profile = patch.profile && patch.profile !== (workspace.profile ?? 'default') ? patch.profile : null;
     // the run options are also remembered as the workspace's last choice (start of its next sessions)
     const choice: Partial<Workspace> = {};
     // model and provider always change together: a model alone clears the provider
@@ -433,7 +459,7 @@ export class WorkspaceService {
   claimPurgeable(now: number, limit: number): PurgeItem[] {
     const due = sql`coalesce(${sessionWorkspace.purgeAfter}, ${sessionWorkspace.deletedAt} + ${UNDO_MS})`;
     return this.db.transaction((tx) => {
-      const rows = tx.select({ instanceId: sessionWorkspace.instanceId, sessionId: sessionWorkspace.sessionId, profile: workspaces.profile })
+      const rows = tx.select({ instanceId: sessionWorkspace.instanceId, sessionId: sessionWorkspace.sessionId, profile: sessionProfile })
         .from(sessionWorkspace)
         .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
         .where(or(
@@ -464,6 +490,18 @@ export class WorkspaceService {
       )).all().map((r) => r.id);
   }
 
+  /** Profiles chosen per session on an instance (other than their workspace's). */
+  sessionProfiles(instanceId: string): string[] {
+    return this.db.selectDistinct({ p: sessionWorkspace.profile }).from(sessionWorkspace)
+      .where(and(eq(sessionWorkspace.instanceId, instanceId), isNotNull(sessionWorkspace.profile), alive)).all().map((r) => r.p!);
+  }
+
+  /** Approvals given by Intendia for a run (« Sans confirmation »). */
+  addAutoApproved(instanceId: string, runId: string): void {
+    this.db.update(runStats).set({ autoApproved: sql`${runStats.autoApproved} + 1` })
+      .where(and(eq(runStats.instanceId, instanceId), eq(runStats.runId, runId))).run();
+  }
+
   /** Moves a session row to another workspace (the caller checks instance, profile and folder). */
   moveSession(instanceId: string, sessionId: string, slug: string): void {
     this.db.update(sessionWorkspace).set({ workspaceSlug: slug })
@@ -481,8 +519,8 @@ export class WorkspaceService {
     for (let offset = 0; out.length < limit; offset += PAGE) {
       const page = this.db.select({
         instanceId: sessionWorkspace.instanceId, workspaceSlug: sessionWorkspace.workspaceSlug, sessionId: sessionWorkspace.sessionId,
-        title: sessionWorkspace.title, runId: sessionWorkspace.lastRunId, profile: workspaces.profile, workspaceName: workspaces.name,
-        lastActiveAt: sessionWorkspace.lastActiveAt,
+        title: sessionWorkspace.title, runId: sessionWorkspace.lastRunId, profile: sessionProfile, workspaceName: workspaces.name,
+        lastActiveAt: sessionWorkspace.lastActiveAt, autoApprove: sessionWorkspace.autoApprove,
       }).from(sessionWorkspace)
         .innerJoin(workspaces, eq(workspaces.slug, sessionWorkspace.workspaceSlug))
         .where(and(isNotNull(sessionWorkspace.lastRunId), gte(sessionWorkspace.lastActiveAt, sinceMs), alive))
@@ -505,7 +543,7 @@ export class WorkspaceService {
 
   // ---- run consumption (run_stats)
 
-  insertRunStat(row: Omit<RunStatRow, 'costFinal' | 'costRuns' | 'endedAt' | 'hermesSessionId' | 'servedModel' | 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd'> & { costRuns?: number }): void {
+  insertRunStat(row: Omit<RunStatRow, 'costFinal' | 'costRuns' | 'endedAt' | 'hermesSessionId' | 'servedModel' | 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'costUsd' | 'autoApproved'> & { costRuns?: number }): void {
     this.db.insert(runStats).values({ ...row, costRuns: row.costRuns ?? 1, costFinal: false }).onConflictDoNothing().run();
   }
 
