@@ -1,4 +1,7 @@
+import { stringify } from 'yaml';
+import { AdminError } from '../admin-error.js';
 import type { CompatService } from '../compat/service.js';
+import { hostPaths, Masker } from '../hermes-config/mask.js';
 import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import {
   ActionStartSchema, ActionStatusSchema, actionName, ContentSchema, HubOfficialSchema, HubSearchSchema, ScanSchema,
@@ -76,6 +79,12 @@ export class ActionBusyError extends Error {
 }
 
 export const CONTENT_MAX = 200_000;
+/** Hermes' own limits (skill_manager_tool.py): name and category, SKILL.md size, description on create. */
+export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+export const SKILL_MAX = 100_000;
+export const DESCRIPTION_MAX = 60;
+/** Only skills the user or the agent wrote can be edited or archived (not hub, bundled or external ones). */
+export const ARCHIVABLE_PROVENANCE = 'agent';
 const SLOW_MS = 40_000;
 const INSTALL_MS = 60_000;
 const STATUS_LINES = 200;
@@ -139,7 +148,83 @@ export class SkillService {
   /** Starts in flight (`inst:action`): closes the gap between the busy check and the Hermes call. */
   private readonly starting = new Set<string>();
 
-  constructor(private readonly compat: CompatService, private readonly store: InstanceStore) {}
+  private readonly mask: Masker;
+
+  constructor(private readonly compat: CompatService, private readonly store: InstanceStore, secret: string) {
+    this.mask = new Masker(secret);
+  }
+
+  /** A Hermes refusal of a write, with secrets and host paths hidden ("already exists at <path>"). */
+  private async writeOp<T = unknown>(instanceId: string, op: string, opts: Parameters<typeof callOp>[4], what = 'Skill introuvable'): Promise<T> {
+    const { http, report } = this.ctx(instanceId);
+    try {
+      return await callOp<T>(http, report, 'skills', op, opts);
+    } catch (err) {
+      if (err instanceof HermesError && err.kind === 'http') {
+        const detail = hostPaths(this.mask.text(hermesDetail(err)));
+        if (err.detail.status === 404) throw new NotFoundError(`${what} : ${detail}`);
+        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Requête refusée par Hermes : ${detail}`);
+        throw new HermesError('http', `Hermes a répondu ${err.detail.status} : ${detail}`, err.detail);
+      }
+      throw err;
+    }
+  }
+
+  private async own(instanceId: string, profile: string, name: string): Promise<PublicSkill> {
+    const skill = (await this.list(instanceId, profile)).find((s) => s.name === name);
+    if (!skill) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (skill.provenance !== ARCHIVABLE_PROVENANCE) {
+      throw new AdminError('protected', 'Seuls les skills écrits par vous ou par l’agent se modifient ici (pas ceux du hub ni ceux fournis)');
+    }
+    return skill;
+  }
+
+  /** New skill: Intendia writes the front matter (name, description escaped as YAML) above the body. */
+  async create(instanceId: string, profile: string, input: { name: string; category?: string; description: string; body: string }): Promise<PublicSkill> {
+    const description = input.description.trim();
+    if (!SKILL_NAME_RE.test(input.name)) throw new ValidationError('Nom de skill invalide : minuscules, chiffres, . _ - (64 caractères au plus)');
+    if (input.category && !SKILL_NAME_RE.test(input.category)) throw new ValidationError('Catégorie invalide : minuscules, chiffres, . _ - (64 caractères au plus)');
+    if (!description || description.length > DESCRIPTION_MAX || /[\r\n]/.test(description)) {
+      throw new ValidationError(`Description d’une ligne, ${DESCRIPTION_MAX} caractères au plus`);
+    }
+    if (!input.body.trim()) throw new ValidationError('Le corps du skill est vide');
+    const content = `---\n${stringify({ name: input.name, description }).trimEnd()}\n---\n\n${input.body.trim()}\n`;
+    if (content.length > SKILL_MAX) throw new ValidationError(`SKILL.md trop long (${SKILL_MAX} caractères au plus)`);
+    await this.writeOp(instanceId, 'create', { profile, body: { name: input.name, content, ...(input.category ? { category: input.category } : {}) } });
+    const skill = (await this.list(instanceId, profile)).find((s) => s.name === input.name);
+    if (!skill) throw new NotFoundError(`Skill introuvable après création : ${input.name}`);
+    return skill;
+  }
+
+  /** Rewrites SKILL.md from a draft of the masked text (secrets put back from the current content, read again). */
+  async putContent(instanceId: string, profile: string, name: string, draft: string): Promise<{ content: string }> {
+    await this.own(instanceId, profile, name);
+    const { http, report } = this.ctx(instanceId);
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), 'Skill introuvable');
+    const current = ContentSchema.parse(raw).content;
+    if (current.length > CONTENT_MAX) throw new AdminError('too_long', 'SKILL.md trop long pour l’éditeur : modifiez-le dans Hermes');
+    const content = this.mask.restoreText(draft, current);
+    if (content.length > SKILL_MAX) throw new ValidationError(`SKILL.md trop long (${SKILL_MAX} caractères au plus)`);
+    if (!content.startsWith('---')) throw new ValidationError('Le SKILL.md doit commencer par son en-tête (---)');
+    await this.writeOp(instanceId, 'putContent', { profile, body: { name, content } });
+    return { content: this.mask.text(content) };
+  }
+
+  /** Locked: the agent and the curator may no longer change it (the user still can). */
+  async lock(instanceId: string, profile: string, name: string, locked: boolean): Promise<PublicSkill> {
+    if (!(await this.list(instanceId, profile)).some((s) => s.name === name)) throw new NotFoundError(`Skill introuvable : ${name}`);
+    await this.writeOp(instanceId, 'lock', { profile, body: { name, locked } });
+    const skill = (await this.list(instanceId, profile)).find((s) => s.name === name);
+    if (!skill) throw new NotFoundError(`Skill introuvable : ${name}`);
+    return skill;
+  }
+
+  /** Archives a user or agent skill (Hermes keeps it in skills/.archive; a pinned skill is refused by Hermes). */
+  async archive(instanceId: string, profile: string, name: string): Promise<{ ok: true }> {
+    await this.own(instanceId, profile, name);
+    await this.writeOp(instanceId, 'archive', { profile, body: { id: name, profile } });
+    return { ok: true };
+  }
 
   private ctx(instanceId: string) {
     if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
@@ -167,7 +252,8 @@ export class SkillService {
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), 'Skill introuvable');
     const { content } = ContentSchema.parse(raw);
-    return { name, content: content.slice(0, CONTENT_MAX), truncated: content.length > CONTENT_MAX };
+    // a skill written by the agent may hold a key: shown (and edited) masked
+    return { name, content: this.mask.text(content.slice(0, CONTENT_MAX)), truncated: content.length > CONTENT_MAX };
   }
 
   async toolsets(instanceId: string, profile: string): Promise<PublicToolset[]> {

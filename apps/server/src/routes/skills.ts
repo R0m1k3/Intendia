@@ -14,6 +14,15 @@ const ACTION_RE = /^skills-[a-z0-9-]{1,120}$/;
 const EnabledBody = z.object({ name: NAME, enabled: z.boolean() });
 const InstallBody = z.object({ identifier: IDENTIFIER, acknowledged: z.boolean().default(false) });
 const UninstallBody = z.object({ name: NAME });
+const SKILL_NAME = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, 'nom de skill invalide (minuscules, chiffres, . _ -)');
+const CreateBody = z.object({
+  name: SKILL_NAME,
+  category: SKILL_NAME.optional(),
+  description: z.string().max(200),
+  body: z.string().max(100_000),
+});
+const ContentBody = z.object({ name: NAME, content: z.string().max(200_000) });
+const LockBody = z.object({ name: NAME, locked: z.boolean() });
 
 /** `?profile=`, `default` when absent. */
 export function profileOf(c: Context): string {
@@ -34,6 +43,22 @@ export function skillRoutes(skills: SkillService): Hono {
   r.get('/i/:inst/skills/content', async (c) => {
     const name = NAME.parse(c.req.query('name') ?? '');
     return c.json(await skills.content(inst(c), profileOf(c), name));
+  });
+  r.post('/i/:inst/skills', async (c) => {
+    const body = CreateBody.parse(await c.req.json());
+    return c.json({ skill: await skills.create(inst(c), profileOf(c), body) }, 201);
+  });
+  r.put('/i/:inst/skills/content', async (c) => {
+    const body = ContentBody.parse(await c.req.json());
+    return c.json(await skills.putContent(inst(c), profileOf(c), body.name, body.content));
+  });
+  r.put('/i/:inst/skills/lock', async (c) => {
+    const body = LockBody.parse(await c.req.json());
+    return c.json({ skill: await skills.lock(inst(c), profileOf(c), body.name, body.locked) });
+  });
+  r.delete('/i/:inst/skills/:name', async (c) => {
+    const name = NAME.parse(c.req.param('name'));
+    return c.json(await skills.archive(inst(c), profileOf(c), name));
   });
   r.get('/i/:inst/skills/toolsets', async (c) => c.json({ toolsets: await skills.toolsets(inst(c), profileOf(c)) }));
 

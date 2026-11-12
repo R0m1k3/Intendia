@@ -1,6 +1,6 @@
 import type { CompatService } from '../compat/service.js';
 import {
-  JobGetSchema, JobListSchema, normaliseJobs, RunListSchema, TargetListSchema, updateBody, type HermesJob,
+  BlueprintListSchema, JobGetSchema, JobListSchema, normaliseJobs, RunListSchema, TargetListSchema, updateBody, type HermesJob,
 } from '../connectors/crons/index.js';
 import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import type { FileRoots } from '../files/hermes-fs.js';
@@ -44,6 +44,36 @@ export interface PublicCron {
   deliver: string | null;
   skills: string[];
   model: string | null;
+  /** advanced options (null = Hermes' default) */
+  repeat: number | null;
+  repeatCompleted: number;
+  timezone: string | null;
+  enabledToolsets: string[] | null;
+  catchUp: boolean | null;
+  graceMinutes: number | null;
+  contextFrom: string[];
+}
+
+export interface PublicBlueprintField {
+  name: string;
+  type: string;
+  label: string;
+  default: string | null;
+  options: { value: string; label: string }[];
+  optional: boolean;
+  help: string | null;
+}
+
+export interface PublicBlueprint {
+  key: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  schedule: string | null;
+  fields: PublicBlueprintField[];
+  /** "plugin" templates come from an installed Hermes plugin (name in `plugin`) */
+  source: string | null;
+  plugin: string | null;
 }
 
 export interface PublicRun {
@@ -84,6 +114,16 @@ export interface CronInput {
   workspace: string | null;
   /** Creation only. */
   paused?: boolean;
+  /**
+   * Advanced options. Absent = not sent (creation) / unchanged (update); null on update = back to Hermes' default.
+   * `enabledToolsets` is never sent as [] (for Hermes an empty list allows no tool): [] and null both mean "all".
+   */
+  repeat?: number | 'forever';
+  timezone?: string | null;
+  enabledToolsets?: string[] | null;
+  catchUp?: boolean | null;
+  graceMinutes?: number | null;
+  contextFrom?: string[] | null;
 }
 
 // framing block: workspaces/framing.ts (shared with the kanban)
@@ -122,7 +162,37 @@ export function toPublic(instanceId: string, job: HermesJob, findWorkspace: (slu
     deliver: job.deliver ?? null,
     skills: job.skills ?? [],
     model: job.model ?? null,
+    repeat: job.repeat?.times ?? null,
+    repeatCompleted: job.repeat?.completed ?? 0,
+    timezone: job.timezone ?? null,
+    enabledToolsets: job.enabled_toolsets ?? null,
+    catchUp: job.catch_up ?? null,
+    graceMinutes: job.grace_minutes ?? null,
+    contextFrom: job.context_from ?? [],
   };
+}
+
+/**
+ * Hermes fields of the advanced options. Creation: only the given non-empty ones. Update (`reset`): a value set back
+ * to empty is sent as null (Hermes' default) and repeat as "forever".
+ */
+export function advancedFields(input: CronInput, reset: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (input.repeat !== undefined) {
+    if (input.repeat !== 'forever') out.repeat = input.repeat;
+    else if (reset) out.repeat = 'forever';
+  }
+  const put = (key: string, v: unknown, empty: boolean) => {
+    if (v === undefined) return;
+    if (!empty) out[key] = v;
+    else if (reset) out[key] = null;
+  };
+  put('timezone', input.timezone, !input.timezone);
+  put('enabled_toolsets', input.enabledToolsets, !input.enabledToolsets?.length);
+  put('catch_up', input.catchUp, input.catchUp === null);
+  put('grace_minutes', input.graceMinutes, input.graceMinutes === null);
+  put('context_from', input.contextFrom, !input.contextFrom?.length);
+  return out;
 }
 
 // ---------------------------------------------------------------- service
@@ -223,7 +293,7 @@ export class CronService {
     const ws = input.workspace ? this.workspaceFor(instanceId, input.workspace) : null;
     const body: Record<string, unknown> = {
       name: input.name, prompt: input.prompt, schedule: input.schedule, deliver: input.deliver,
-      skills: input.skills, model: input.model, paused: input.paused ?? false,
+      skills: input.skills, model: input.model, paused: input.paused ?? false, ...advancedFields(input, false),
     };
     let profile: string | undefined;
     if (ws) {
@@ -232,8 +302,16 @@ export class CronService {
       body.workdir = this.workspaces.agentPath(ws);
       profile = ws.profile ?? 'default';
     }
+    if (input.contextFrom?.length) await this.checkContext(instanceId, profile ?? 'default', input.contextFrom);
     const raw = await translate(() => callOp(http, report, 'crons', 'create', { body, profile }));
     return this.pub(instanceId, asJob(raw));
+  }
+
+  /** `context_from` ids must be crons of the same profile (Hermes refuses the others with a host-path-free 400). */
+  private async checkContext(instanceId: string, profile: string, ids: string[], self?: string): Promise<void> {
+    const known = new Set((await this.rawList(instanceId)).filter((j) => (j.profile ?? 'default') === profile && j.id !== self).map((j) => j.id));
+    const unknown = ids.filter((id) => !known.has(id));
+    if (unknown.length) throw new ValidationError(`Cron de contexte inconnu pour cet agent : ${unknown.join(', ')}`);
   }
 
   async update(instanceId: string, id: string, profile: string, input: CronInput): Promise<PublicCron> {
@@ -242,7 +320,9 @@ export class CronService {
     const current = unframe(job.prompt ?? '');
     const fields: Record<string, unknown> = {
       name: input.name, prompt: input.prompt, deliver: input.deliver, skills: input.skills, model: input.model,
+      ...advancedFields(input, true),
     };
+    if (input.contextFrom?.length) await this.checkContext(instanceId, job.profile ?? profile, input.contextFrom, id);
     if (input.schedule !== undefined) fields.schedule = input.schedule;
     if (input.workspace) {
       const ws = this.workspaceFor(instanceId, input.workspace);
@@ -265,6 +345,58 @@ export class CronService {
       params: { job_id: id }, profile, body: (via: 'api' | 'dash') => updateBody(via, fields),
     }));
     return this.pub(instanceId, asJob(raw));
+  }
+
+  /** Cron templates of a profile (Hermes keeps their prompt to itself). */
+  async blueprints(instanceId: string, profile: string): Promise<PublicBlueprint[]> {
+    const { http, report } = this.ctx(instanceId);
+    const raw = await translate(() => callOp<unknown>(http, report, 'crons', 'blueprints', { profile }), 'Agent introuvable');
+    return BlueprintListSchema.parse(raw).blueprints.map((b) => ({
+      key: b.key,
+      title: b.title || b.key,
+      description: b.description ?? null,
+      category: b.category ?? null,
+      schedule: b.scheduleHuman ?? null,
+      source: b.source ?? null,
+      plugin: b.plugin ?? null,
+      fields: (b.fields ?? []).map((f) => ({
+        name: f.name,
+        type: f.type ?? 'text',
+        label: f.label || f.name,
+        default: f.default === undefined || f.default === null ? null : String(f.default),
+        options: (f.options ?? []).map((o) => (typeof o === 'string' ? { value: o, label: o } : { value: String(o.value), label: o.label ?? String(o.value) })),
+        optional: f.optional ?? false,
+        help: f.help ?? null,
+      })),
+    }));
+  }
+
+  /**
+   * Creates a cron from a template, always with an explicit profile (Hermes would take `default`). With a workspace,
+   * the created cron is then framed like an Intendia cron (prompt block + workdir); if that write fails the cron stays,
+   * unattached (`attached: false`).
+   */
+  async instantiate(instanceId: string, profile: string, key: string, values: Record<string, string>, workspace: string | null): Promise<{ cron: PublicCron; attached: boolean }> {
+    const { http, report } = this.ctx(instanceId);
+    const bp = (await this.blueprints(instanceId, profile)).find((b) => b.key === key);
+    if (!bp) throw new NotFoundError(`Modèle de cron inconnu : ${key}`);
+    const names = new Set(bp.fields.map((f) => f.name));
+    const extra = Object.keys(values).filter((k) => !names.has(k));
+    if (extra.length) throw new ValidationError(`Champ inconnu pour ce modèle : ${extra.join(', ')}`);
+    const ws = workspace ? this.workspaceFor(instanceId, workspace) : null;
+    if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(`Ce workspace utilise le profil ${ws.profile ?? 'default'}, pas ${profile}`);
+    const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
+    if (!ws) return { cron: this.pub(instanceId, job), attached: false };
+    try {
+      const folder = folderKey(job.name || bp.title, await this.takenKeys(instanceId, ws, job.id));
+      const fields = { prompt: frame(job.prompt ?? '', this.blockLines(ws, folder)), workdir: this.workspaces.agentPath(ws) };
+      const raw = await translate(() => callOp(http, report, 'crons', 'update', {
+        params: { job_id: job.id }, profile, body: (via: 'api' | 'dash') => updateBody(via, fields),
+      }));
+      return { cron: this.pub(instanceId, asJob(raw)), attached: true };
+    } catch {
+      return { cron: this.pub(instanceId, job), attached: false };
+    }
   }
 
   private async action(instanceId: string, id: string, profile: string, op: 'pause' | 'resume' | 'trigger'): Promise<PublicCron> {
