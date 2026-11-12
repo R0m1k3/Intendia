@@ -11,6 +11,8 @@ describe('csv', () => {
     expect(csvSeparator('x.tsv', 'a,b')).toBe('\t');
     expect(csvSeparator('x.csv', 'nom;prix;remarque\n"a,b";1,5;x')).toBe(';');
     expect(csvSeparator('x.csv', 'a,b;c,d')).toBe(',');
+    expect(csvSeparator('x.csv', '"name;description;notes",price\nwidget,10\n')).toBe(',');
+    expect(csvSeparator('x.csv', '"a\n;;;",b\n')).toBe(',');
     expect(parseCsv('a\tb\n', '\t', 5).rows).toEqual([['a', 'b']]);
   });
   it('cut at the row limit, total still counted; empty cells and last line without newline', () => {

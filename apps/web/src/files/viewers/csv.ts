@@ -3,9 +3,17 @@
 /** `\t` for .tsv; for .csv, `;` when the first line has more `;` than `,` (French Excel export), else `,`. */
 export function csvSeparator(name: string, text: string): string {
   if (/\.tsv$/i.test(name)) return '\t';
-  const first = text.slice(0, text.search(/\r?\n/) === -1 ? undefined : text.search(/\r?\n/));
-  const count = (c: string) => first.split(c).length - 1;
-  return count(';') > count(',') ? ';' : ',';
+  // first record only, separators inside quotes not counted
+  let semi = 0;
+  let comma = 0;
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted; // "" inside quotes flips twice: no change
+    else if (!quoted && (ch === '\n' || ch === '\r')) break;
+    else if (!quoted && ch === ';') semi++;
+    else if (!quoted && ch === ',') comma++;
+  }
+  return semi > comma ? ';' : ',';
 }
 
 /** At most `maxRows` rows; `total` counts every row of the text (complete or not). */

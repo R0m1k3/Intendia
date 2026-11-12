@@ -61,8 +61,11 @@ export function readExcalidraw(text: string): Drawing | null {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const take = (px: number, py: number) => { minX = Math.min(minX, px); minY = Math.min(minY, py); maxX = Math.max(maxX, px); maxY = Math.max(maxY, py); };
   for (const s of shapes) {
-    if ('points' in s) for (const [px, py] of s.points) take(s.x + px, s.y + py);
-    else { take(s.x, s.y); take(s.x + s.w, s.y + s.h); }
+    // the same rotation as the drawing: around the centre of the element's box
+    const cx = s.x + s.w / 2, cy = s.y + s.h / 2, cos = Math.cos(s.angle), sin = Math.sin(s.angle);
+    const turned = (px: number, py: number) => take(cx + (px - cx) * cos - (py - cy) * sin, cy + (px - cx) * sin + (py - cy) * cos);
+    if ('points' in s) for (const [px, py] of s.points) turned(s.x + px, s.y + py);
+    else for (const [px, py] of [[s.x, s.y], [s.x + s.w, s.y], [s.x, s.y + s.h], [s.x + s.w, s.y + s.h]] as const) turned(px, py);
   }
   return { shapes, viewBox: [minX - 20, minY - 20, maxX - minX + 40, maxY - minY + 40] };
 }

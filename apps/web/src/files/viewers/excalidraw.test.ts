@@ -15,6 +15,11 @@ describe('excalidraw', () => {
     expect(d.shapes.map((s) => s.kind)).toEqual(['rect', 'ellipse', 'diamond', 'image', 'arrow', 'line', 'freedraw', 'text']);
     expect(d.viewBox).toEqual([-10, 0, 140, 90]);
   });
+  it('rotated elements: the bounds follow the rotation', () => {
+    const d = readExcalidraw(file([{ ...base, type: 'rectangle', x: 0, y: 0, width: 400, height: 20, angle: Math.PI / 2 }]))!;
+    const [x, y, w, h] = d.viewBox.map((v) => Math.round(v));
+    expect([x, y, w, h]).toEqual([170, -210, 60, 440]);
+  });
   it('bad colours → black, non-finite numbers → element left out, not Excalidraw → null', () => {
     const d = readExcalidraw(file([
       { ...base, type: 'rectangle', strokeColor: 'url(javascript:x)', backgroundColor: '#ff000080' },
