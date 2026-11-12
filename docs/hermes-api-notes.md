@@ -76,6 +76,12 @@ of the diff are empty lists (no session, no cron in that container).
   `{session}`. `GET /api/sessions/{id}/messages` → `{data: [{id, role, content, tool_calls, tool_name, timestamp}]}`,
   newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
 - A run that fails before starting (no provider key) leaves no user message in the session.
+- Session titles are unique (`idx_sessions_title_unique`, checked 2026-11-12): a rename to a title in use → 400
+  `invalid_title` « already in use by session … »; an import with one fails the whole write as 503
+  `storage_unavailable` (gateway log: `UNIQUE constraint failed: sessions.title`). Hermes numbers its own « title #2 ».
+  Intendia imports copies untitled, then sends the title, numbered « #N » at Hermes when taken (`workspaces/title.ts`).
+- `llm.oneshot {instructions, input, task, max_tokens, profile?}` on the dashboard WebSocket answers on a standalone
+  dashboard too: `{text}`, 4030 for empty params, 5030 when no model is set for the task (« Titre par l'IA »).
 
 ### Run options and consumption (read in the 0.23.0 source, 2026-11-10)
 

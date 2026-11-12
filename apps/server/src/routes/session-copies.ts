@@ -8,6 +8,7 @@ import { ExportSchema } from '../connectors/sessions/index.js';
 import { copyId, copyPayload, CopyError, exportSession, importCopy, type Exported } from '../sessions/copy.js';
 import { agentName, attachmentHeader, toHtml, toMarkdown } from '../sessions/export.js';
 import { revertRewrite, rewriteSession, RunActiveError } from '../sessions/rewrite.js';
+import { generateTitle } from '../sessions/title-ai.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { RUN_ACTIVE, SESSION_ID_RE, sessionParams } from './workspaces.js';
@@ -88,6 +89,12 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
       if (err instanceof RunActiveError) return c.json({ error: err.message, code: 'run_active' }, 409);
       throw err;
     }
+  });
+
+  // a title by the auxiliary model of Hermes (llm.oneshot), saved like a rename
+  r.post('/sessions/:inst/:id/title/generate', async (c) => {
+    const { inst, id } = sessionParams(c);
+    return c.json({ session: await generateTitle(deps, workspaces.getSession(inst, id)) });
   });
 
   r.post('/i/:inst/external/:id/continue', async (c) => {

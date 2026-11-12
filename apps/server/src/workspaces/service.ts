@@ -80,7 +80,7 @@ export class ValidationError extends Error {
   }
 }
 
-const TITLE_MAX = 60;
+export const TITLE_MAX = 60;
 
 function toPublic(r: SessionRow): PublicSession {
   return {

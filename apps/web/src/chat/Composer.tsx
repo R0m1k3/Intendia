@@ -1,6 +1,7 @@
 import { ArrowUp, CornerDownRight, FileText, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import { cx } from '../components/ui';
+import { matchCommands, parseCommand, type Command, type CommandName } from './commands';
 import type { QueueItem } from './queue';
 
 export interface ComposerHandle {
@@ -36,10 +37,12 @@ let nextId = 1;
  * every tile to be uploaded; a failed tile must be removed first.
  * Bottom bar: `leading` (home page: the workspace) before the paperclip, `hint` (keys) in the middle on wide
  * screens, `options` (session: model, effort) right of it, before the send button.
+ * Slash commands (`commands`, session page): a menu while « /name » is typed (↑/↓, Entrée or Tab, Échap); a known
+ * command is run by `onCommand` (true = done, the text goes), even during a run; any other « /… » text is a message.
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
-  queue, onQueue, onSteer, steerDisabled,
+  queue, onQueue, onSteer, steerDisabled, commands, onCommand,
 }: {
   onSend: (text: string) => Promise<boolean>;
   /** messages waiting for the end of the run; `paused`: why they wait for « Reprendre » */
@@ -59,10 +62,16 @@ export function Composer({
   options?: ReactNode;
   hint?: ReactNode;
   ref?: Ref<ComposerHandle>;
+  commands?: Command[];
+  onCommand?: (name: CommandName, arg: string) => Promise<boolean>;
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [files, setFiles] = useState<Attachment[]>([]);
+  // slash menu: highlighted line, text for which Échap closed it, why the last command could not run
+  const [pick, setPick] = useState(0);
+  const [closedFor, setClosedFor] = useState<string | null>(null);
+  const [commandNote, setCommandNote] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   // object URLs still alive, freed when the tile goes, the upload ends or the composer unmounts
@@ -134,6 +143,36 @@ export function Composer({
     if (!canSend || running) return;
     await submit(onSend);
   };
+  const menu = commands && onCommand && !disabled && closedFor !== text ? matchCommands(text, commands) : null;
+  const picked = menu ? menu[Math.min(pick, menu.length - 1)]! : null;
+  const edit = (t: string) => { setText(t); setPick(0); setCommandNote(null); };
+  /** Runs the command written in the text; false = the text is an ordinary message. */
+  const runCommand = async (): Promise<boolean> => {
+    if (!commands || !onCommand || sending) return false;
+    const found = parseCommand(text, commands);
+    if (!found) return false;
+    if (found.command.disabled) { setCommandNote(`/${found.command.name} : ${found.command.disabled}`); return true; }
+    const sentText = text;
+    setSending(true);
+    const ok = await onCommand(found.command.name, found.arg).catch(() => false);
+    setSending(false);
+    if (ok) setText((t) => (t === sentText ? '' : t));
+    return true;
+  };
+  const choose = async (c: Command) => {
+    // a command with an argument: its name goes in the text, the user goes on typing
+    if (c.args) { edit(`/${c.name} `); ref.current?.focus(); return; }
+    setText(`/${c.name}`);
+    if (c.disabled) { setCommandNote(`/${c.name} : ${c.disabled}`); setClosedFor(`/${c.name}`); return; }
+    setSending(true);
+    const ok = await onCommand!(c.name, '').catch(() => false);
+    setSending(false);
+    setText((t) => (ok && t === `/${c.name}` ? '' : t));
+  };
+  const enter = async () => {
+    if (await runCommand()) return;
+    await (running ? toQueue() : send());
+  };
   const toQueue = async () => {
     if (!canSend || !running || !onQueue) return;
     await submit(async (m) => { onQueue(m); return true; });
@@ -180,6 +219,21 @@ export function Composer({
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
         </ul>
       )}
+      {menu && (
+        <ul role="listbox" aria-label="Commandes" data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
+          {menu.map((c) => (
+            <li key={c.name} role="option" aria-selected={c === picked} aria-disabled={Boolean(c.disabled)}
+              onMouseDown={(e) => { e.preventDefault(); void choose(c); }}
+              onMouseEnter={() => setPick(menu.indexOf(c))}
+              title={c.disabled}
+              className={cx('flex cursor-pointer items-baseline gap-2 rounded-md px-2 py-1.5 text-sm', c === picked && 'bg-raised', c.disabled && 'opacity-50')}>
+              <span className="font-mono text-[13px]">/{c.name}{c.args ? <span className="text-ink-faint"> {c.args}</span> : null}</span>
+              <span className="truncate text-ink-soft">{c.label}</span>
+              {c.disabled && <span className="ml-auto shrink-0 text-[11px] text-ink-faint">{c.disabled}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {failed.length > 0 && (
         <p role="alert" className="px-1.5 pb-1 text-[12px] text-bad">
           {failed.length === 1 ? 'Pièce jointe non envoyée' : `${failed.length} pièces jointes non envoyées`}
@@ -191,18 +245,30 @@ export function Composer({
         rows={1}
         value={text}
         disabled={disabled}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => edit(e.target.value)}
         onPaste={paste}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (e.nativeEvent.isComposing) return;
+          if (menu && picked) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              const i = menu.indexOf(picked) + (e.key === 'ArrowDown' ? 1 : -1);
+              setPick((i + menu.length) % menu.length);
+              return;
+            }
+            if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); void choose(picked); return; }
+            if (e.key === 'Escape') { e.preventDefault(); setClosedFor(text); return; }
+          }
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            void (running ? toQueue() : send());
+            void enter();
           }
         }}
         placeholder={placeholder ?? 'Écrire à l’agent'}
         aria-label="Message"
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-2 py-2 text-sm placeholder:text-ink-faint focus:outline-none"
       />
+      {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}
       <div className="flex items-center gap-1">
         {leading}
         {upload && (
@@ -249,7 +315,7 @@ export function Composer({
         ) : (
           <button
             type="button"
-            onClick={() => void send()}
+            onClick={() => void enter()}
             disabled={!canSend}
             aria-label="Envoyer"
             title={waiting ? (files.some((a) => a.state === 'failed') ? 'Retirez les pièces jointes en échec' : 'Envoi des pièces jointes…') : 'Envoyer (Entrée)'}

@@ -97,6 +97,11 @@ export interface FakeOptions {
    * dashboard, the method answers -32601 like Hermes 0.23.
    */
   sessionStats?: boolean;
+  /**
+   * `llm.oneshot` on `/api/ws` (answers on a standalone dashboard too): `ok` (default) = a title made from the start of
+   * the input, `no_model` = 5030 as without a provider key, `off` = -32601 (method absent).
+   */
+  oneshot?: 'ok' | 'off' | 'no_model';
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -182,6 +187,12 @@ class Simulator {
   extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[] }>();
   /** Session titles set by PATCH /api/sessions/{id}. */
   titles = new Map<string, string>();
+  /** Like Hermes 0.23 (unique index on sessions.title): the other session holding this title, if any. */
+  titleHolder(title: string, except: string): string | undefined {
+    for (const [id, t] of this.titles) if (t === title && id !== except) return id;
+    for (const e of this.extraSessions.values()) if (e.title === title && e.id !== except) return e.id;
+    return undefined;
+  }
   /** POST /v1/runs received since start. */
   runsPosted = 0;
   /** Approval format, see FakeOptions.controls. */
@@ -626,6 +637,8 @@ function sessionCopies(method: string, path: string, body: unknown, sim: Simulat
       if (deleted.has(id)) { out.errors.push({ id, error: 'session id retired' }); continue; }
       // like Hermes 0.23: the import is anchored on the id, an existing one is a revision conflict
       if (sim.messages.has(id) || sim.extraSessions.has(id)) return json({ detail: 'revision_conflict' }, 409);
+      // the unique title index fails the whole write: Hermes answers it as a storage failure
+      if (typeof raw.title === 'string' && sim.titleHolder(raw.title, id)) return json({ detail: 'storage_unavailable' }, 503);
       const started = typeof raw.started_at === 'number' ? raw.started_at : Date.now() / 1000;
       const msgs = (Array.isArray(raw.messages) ? raw.messages : []) as Record<string, unknown>[];
       const source = typeof raw.source === 'string' ? raw.source : 'import';
@@ -765,9 +778,14 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       if (method === 'DELETE') {
         deleted.add(id);
         sim.messages.delete(id);
+        sim.titles.delete(id);
         return json({ object: 'hermes.session.deleted', id, deleted: true });
       }
-      if (typeof b.title === 'string') sim.titles.set(id, b.title);
+      if (typeof b.title === 'string') {
+        const holder = sim.titleHolder(b.title, id);
+        if (holder) return json({ error: { message: `Title '${b.title}' is already in use by session ${holder}`, type: 'invalid_request_error', param: null, code: 'invalid_title' } }, 400);
+        sim.titles.set(id, b.title);
+      }
       return json({ object: 'hermes.session', session: { id, ...b } });
     }
     if (!m[2] && method === 'GET' && simulated) {
@@ -800,6 +818,8 @@ export function createFakeHermes(opts: FakeOptions) {
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */
     sessionStats: opts.sessionStats ?? false,
+    /** Can be switched at run time by tests. */
+    oneshot: opts.oneshot ?? 'ok',
   };
 }
 
@@ -848,7 +868,7 @@ export const FAKE_SESSION_STATS = {
 export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
   io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
   return (text) => {
-    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown } };
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown } };
     try { msg = JSON.parse(text) as typeof msg; } catch { return; }
     const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
     if (msg.method === 'session.stats' && fake.sessionStats) {
@@ -856,6 +876,14 @@ export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => v
       return reply({ result: FAKE_SESSION_STATS });
     }
     if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
+    if (msg.method === 'llm.oneshot' && fake.oneshot !== 'off') {
+      const input = typeof msg.params?.input === 'string' ? msg.params.input : '';
+      if (!input || typeof msg.params?.instructions !== 'string') return reply({ error: { code: 4030, message: 'llm.oneshot requires a template or instructions/input' } });
+      if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured for task=title_generation' } });
+      // first words of the first message, between quotes and with a final dot (cleaned by Intendia)
+      const first = input.split('\n').find((l) => l.trim() && !/^(Utilisateur|Agent)\s*:\s*$/.test(l))?.replace(/^(Utilisateur|Agent)\s*:\s*/, '') ?? 'Session';
+      return reply({ result: { text: `« ${first.split(/\s+/).slice(0, 5).join(' ')}. »\nAutre ligne` } });
+    }
     return reply({ error: { code: -32601, message: `unknown method: ${String(msg.method)}` } });
   };
 }

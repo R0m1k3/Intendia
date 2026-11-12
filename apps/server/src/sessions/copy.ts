@@ -4,6 +4,7 @@ import type { CompatService } from '../compat/service.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { ExportSchema } from '../connectors/sessions/index.js';
 import { readHistory } from '../chat/history.js';
+import { pushHermesTitle } from '../workspaces/title.js';
 
 // One way to copy a session: the dashboard's export, ids of messages removed, imported under a new id with
 // source "api_server" (the only one, with bot_room, that accepts runs). Used to duplicate, to continue a session
@@ -105,21 +106,31 @@ export async function exportSession(compat: CompatService, instanceId: string, p
  * Imports the copy into `profile`. Already there (same key: a retry) → fine: Hermes 0.23 answers 409
  * `revision_conflict` for an id it has (the import is anchored on that id), older ones list it in `skipped_ids`. Hermes busy (storage lock held by a
  * run, seen on 0.23 as 503 storage_unavailable) → `busy`, to try again with the same key.
+ * Imported without its title: Hermes keeps titles unique and fails the whole import on a duplicate (a replacing copy
+ * has its original's title, a second « (copie) » the first one's), answered as the same 503. The title follows by
+ * `pushHermesTitle`, numbered « #N » when taken.
  */
 export async function importCopy(compat: CompatService, instanceId: string, profile: string, payload: Row): Promise<void> {
   const id = payload.id as string;
+  const { title, ...untitled } = payload;
   let res: { imported_ids: string[]; skipped_ids: string[]; errors: unknown[] };
   try {
     res = await callOp(compat.http(instanceId), compat.get(instanceId), 'sessions', 'import', {
       profile,
-      body: { sessions: [payload], request_id: randomUUID(), expected_revision: 0, ...(profile !== 'default' ? { profile } : {}) },
+      body: { sessions: [untitled], request_id: randomUUID(), expected_revision: 0, ...(profile !== 'default' ? { profile } : {}) },
     });
   } catch (err) {
     if (err instanceof HermesError && err.detail.status === 503) throw new CopyError('busy', 'Hermes est occupé : réessayez dans un instant', 503);
-    if (err instanceof HermesError && err.detail.status === 409 && (await readHistory(compat, instanceId, id, profile, 1)).exists) return;
+    if (err instanceof HermesError && err.detail.status === 409 && (await readHistory(compat, instanceId, id, profile, 1)).exists) {
+      await pushHermesTitle(compat, instanceId, profile, id, typeof title === 'string' ? title : null);
+      return;
+    }
     throw err;
   }
-  if (res.imported_ids.includes(id) || res.skipped_ids.includes(id)) return;
+  if (res.imported_ids.includes(id) || res.skipped_ids.includes(id)) {
+    await pushHermesTitle(compat, instanceId, profile, id, typeof title === 'string' ? title : null);
+    return;
+  }
   const first = res.errors[0];
   const why = typeof first === 'string' ? first : first && typeof first === 'object' ? String((first as Row).error ?? (first as Row).detail ?? JSON.stringify(first)) : 'copie refusée';
   throw new CopyError('refused', `Hermes a refusé la copie : ${why}`, 502);

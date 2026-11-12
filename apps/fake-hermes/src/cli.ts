@@ -25,6 +25,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   controls: process.env.FAKE_CONTROLS === 'legacy' ? 'legacy' : 'authority',
   // FAKE_SESSION_STATS=on: the dashboard runs inside the gateway, `session.stats` answers on /api/ws
   sessionStats: process.env.FAKE_SESSION_STATS === 'on',
+  // FAKE_ONESHOT=off|no_model: `llm.oneshot` absent, or without a model for titles
+  oneshot: process.env.FAKE_ONESHOT === 'off' ? 'off' : process.env.FAKE_ONESHOT === 'no_model' ? 'no_model' : 'ok',
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);
