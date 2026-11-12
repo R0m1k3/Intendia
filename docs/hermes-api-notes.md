@@ -382,6 +382,23 @@ Sub-agents and runs (API server):
   file's limit (« Replacement would put memory at N/L chars »). `DELETE /api/learning/node {id, profile}` (JSON body)
   removes a memory entry (no copy kept) or archives a skill. No route adds an entry.
 
+## Agent plugins (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
+
+- `GET /api/dashboard/plugins/hub` → `{plugins: [{name, version, description, source (bundled|user|git|pip), runtime_status
+  (enabled|inactive|disabled), path (host path), can_remove, can_update_git, auth_required, auth_command, user_hidden,
+  removed_reason}], orphan_dashboard_plugins, providers}`. Reference instance: 64 bundled plugins, none removable.
+- `GET /api/dashboard/plugins/catalog` → `{entries: [{name, repo, sha (40 hex), title, description, maintainer, tier
+  (official|verified|community), category, requires_hermes, docs_url, version, platforms, capabilities {provides_tools,
+  provides_hooks, provides_middleware, requires_env}, known_issues, sha_short, installed, installed_sha, update_available,
+  runtime_status, readme, screenshots…}], removed: [{name, repo, reason, date}], generated_at}`: 1050 entries on 0.23.0,
+  some descriptions are a whole README (29 kB).
+- `POST /api/dashboard/agent-plugins/install {identifier, ref, catalog_name, enable, force}`: synchronous (clone + pip),
+  `{ok, plugin_name, warnings, python_dependencies, missing_env, enabled, gateway_reloaded, restart_required,
+  known_issues}`; only `consent_required` comes back as 200 with `ok: false`, any other failure (scan included) is 400
+  `{detail}`. `POST …/{name}/enable|disable`, `DELETE …/{name}` (`{name:path}`, `..` and backslashes refused). None takes a profile.
+- `POST …/{name}/update` pulls the repository (not the catalog's commit) and may answer `consent_required` /
+  `scan_blocked`: not used by Intendia.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

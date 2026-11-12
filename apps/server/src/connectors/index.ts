@@ -7,11 +7,12 @@ import { gitModule } from './git/index.js';
 import { healthModule } from './health/index.js';
 import { kanbanModule } from './kanban/index.js';
 import { memoryModule } from './memory/index.js';
+import { pluginsModule } from './plugins/index.js';
 import { monitorModule } from './monitor/index.js';
 import { sessionsModule } from './sessions/index.js';
 import { skillsModule } from './skills/index.js';
 import type { ModuleDef } from './types.js';
 
 export const MODULES: readonly ModuleDef[] = [
-  healthModule, chatModule, sessionsModule, cronsModule, skillsModule, configModule, agentsModule, kanbanModule, filesModule, gitModule, monitorModule, memoryModule,
+  healthModule, chatModule, sessionsModule, cronsModule, skillsModule, configModule, agentsModule, kanbanModule, filesModule, gitModule, monitorModule, memoryModule, pluginsModule,
 ];

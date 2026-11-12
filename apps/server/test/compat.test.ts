@@ -13,7 +13,7 @@ describe.each(RECORDINGS)('compatibility engine on the Hermes $version recording
     expect(report.dash.openapi).toBe(true);
     expect(states(report)).toEqual({
       health: 'full', chat: 'full', sessions: 'full', crons: 'full',
-      skills: 'full', config: 'full', agents: 'full', kanban: 'full', files: 'full', git: 'full', monitor: 'full', memory: 'full',
+      skills: 'full', config: 'full', agents: 'full', kanban: 'full', files: 'full', git: 'full', monitor: 'full', memory: 'full', plugins: 'full',
     });
   });
 });

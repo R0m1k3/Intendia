@@ -115,6 +115,7 @@ export const MODULE_META: Record<ModuleId, { icon: LucideIcon; does: string }> =
   git: { icon: GitBranch, does: 'Statut, diff et commits des dépôts des workspaces' },
   monitor: { icon: LineChart, does: 'Utilisation, journaux et métriques du serveur' },
   memory: { icon: Brain, does: 'Mémoire de l’agent et ce qu’il a appris' },
+  plugins: { icon: Puzzle, does: 'Plugins d’Hermes : installés et catalogue' },
 };
 
 export function ErrorText({ error }: { error: unknown }) {

@@ -60,3 +60,14 @@ describe('Masker.text found / restoreText / known', () => {
     expect(out.match(/«secret:/g)).toHaveLength(2);
   });
 });
+
+describe('Masker.text command-line flags', () => {
+  it('masks the value of a secret flag, keeps the others', () => {
+    expect(m.text('hermes auth x --token abcdef123456 --profile work')).toMatch(/^hermes auth x --token «secret:[0-9a-f]{8}» --profile work$/);
+    expect(m.text('run --api-key=zzzz9999yyyy -v')).toMatch(/^run --api-key=«secret:[0-9a-f]{8}» -v$/);
+    expect(m.text('--password "correct horse battery staple" -v')).toMatch(/^--password "«secret:[0-9a-f]{8}»" -v$/);
+    expect(m.text("--token='a b' x")).toMatch(/^--token='«secret:[0-9a-f]{8}»' x$/);
+    expect(m.text('npx srv --port 8080 --token-file /x/y')).toBe('npx srv --port 8080 --token-file /x/y');
+    expect(m.text('--token --other')).toBe('--token --other');
+  });
+});

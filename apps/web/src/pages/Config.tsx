@@ -15,6 +15,7 @@ import { ConfigMcp } from '../config/Mcp';
 import { ConfigModelsTab } from '../config/Models';
 import { ConfigProviders } from '../config/Providers';
 import { ConfigPlatforms } from '../config/Platforms';
+import { ConfigPlugins } from '../config/Plugins';
 import { ConfigYaml } from '../config/Yaml';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask } from '../components/Dialog';
@@ -30,12 +31,18 @@ const OPTIONAL: OptionalOp[] = [
   ['config', 'poolList', 'Clés d’API'], ['config', 'poolAdd', 'Ajouter une clé'], ['config', 'poolRemove', 'Retirer une clé'],
 ];
 
-export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'yaml', 'variables', 'mcp', 'plateformes', 'historique'] as const;
+const PLUGINS_REQUIRED: OpRef[] = [['plugins', 'installed']];
+const PLUGINS_OPTIONAL: OptionalOp[] = [
+  ['plugins', 'catalog', 'Catalogue'], ['plugins', 'install', 'Installer'], ['plugins', 'enable', 'Activer'], ['plugins', 'disable', 'Désactiver'],
+  ['plugins', 'remove', 'Désinstaller'],
+];
+
+export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'yaml', 'variables', 'mcp', 'plugins', 'plateformes', 'historique'] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 export interface ConfigSearch { profile?: string; tab?: ConfigTab; key?: string }
 
-/** A tab shows when the config module has its operation (one of them, for a list). */
-const TAB: Record<ConfigTab, { label: string; op: string | string[] }> = {
+/** A tab shows when the config module has its operation (one of them, for a list); Plugins is its own module. */
+const TAB: Record<Exclude<ConfigTab, 'plugins'>, { label: string; op: string | string[] }> = {
   modeles: { label: 'Modèles', op: 'modelInfo' },
   fournisseurs: { label: 'Fournisseurs', op: ['oauthList', 'poolList'] },
   reglages: { label: 'Réglages', op: 'schema' },
@@ -59,7 +66,8 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const a = useModuleAvailability(inst, 'config', REQUIRED, OPTIONAL);
   const can = (op: string) => a.has('config', op);
-  const tabs = CONFIG_TABS.filter((t) => [TAB[t].op].flat().some(can));
+  const pa = useModuleAvailability(inst, 'plugins', PLUGINS_REQUIRED, PLUGINS_OPTIONAL);
+  const tabs = CONFIG_TABS.filter((t) => (t === 'plugins' ? pa.available : [TAB[t].op].flat().some(can)));
   const tab: ConfigTab | undefined = search.tab && tabs.includes(search.tab) ? search.tab : tabs[0];
   const [needRestart, setNeedRestart] = useState(false);
   const restart = useRestart(inst, profile, () => setNeedRestart(false));
@@ -107,13 +115,16 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         <RestartStrip state={restart} />
         {a.available && tab && (
           <>
-            <Chips role="tab" label="Sections" value={tab} items={tabs.map((t) => ({ key: t, label: TAB[t].label }))} onChange={(t) => go({ tab: t, key: undefined })} />
+            <Chips role="tab" label="Sections" value={tab} items={tabs.map((t) => ({ key: t, label: t === 'plugins' ? 'Plugins' : TAB[t].label }))} onChange={(t) => go({ tab: t, key: undefined })} />
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}
             {tab === 'yaml' && <ConfigYaml {...props} />}
             {tab === 'variables' && <ConfigEnv key={search.key ?? ''} {...props} focusKey={search.key} />}
             {tab === 'mcp' && <ConfigMcp {...props} />}
+            {tab === 'plugins' && (
+              <ConfigPlugins inst={inst} can={(op) => pa.has('plugins', op)} onVariable={(key) => go({ tab: 'variables', key })} onRestart={() => setNeedRestart(true)} />
+            )}
             {tab === 'plateformes' && <ConfigPlatforms {...props} />}
             {tab === 'historique' && <ConfigHistory {...props} />}
           </>

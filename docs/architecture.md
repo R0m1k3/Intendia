@@ -384,6 +384,26 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   (learned skills, the skills and memories linked to them, a link to the Skills page). No server cache; 15 s in the
   browser.
 
+## Plugins (agent plugins of an instance)
+
+- `src/plugins/service.ts` (`PluginService`) calls the `plugins` connector; `src/routes/plugins.ts` serves
+  `/x/i/:inst/plugins` (installed), `/plugins/catalog`, `POST /plugins/install {name}` (202 `{job}`), `/plugins/jobs`
+  (the running install, or null), `/plugins/jobs/:job`, `POST /plugins/:name/enable|disable`, `DELETE /plugins/:name`.
+  No profile: Hermes installs plugins once for every agent of the instance (dashboard home, shared venv).
+- Installed list without `path`; descriptions, auth commands and errors masked (`Masker.text`, which also masks the
+  value of a secret command-line flag such as `--token x`) and host paths shortened (`hostPaths`).
+- Install from Hermes' curated catalog only: the browser sends a name, the server reads the catalog again and sends
+  that entry's `repo` and pinned `sha` (`identifier`, `ref`, `catalog_name`, `enable: true`). Refused: a name absent or
+  withdrawn (404, no call), already installed (409 `already_installed`), a second install while one runs on the instance
+  (409 `busy`). Hermes answers only at the end (git clone + pip): Intendia runs it as an in-memory background job (10 min
+  timeout, jobs kept 1 h, lost on restart); the page polls every 2 s and finds a running job again after a reload.
+  `consent_required` (200) is shown as « accord demandé » with no way to give it from Intendia; other refusals (scan)
+  are 400 and end the job as `failed`. No update (it pulls the repository head, not the pinned commit): the page says
+  « désinstallez puis réinstallez depuis le catalogue ».
+- Bundled plugins cannot be uninstalled (409 `protected`); enable / disable apply after a gateway restart, proposed.
+- Configuration › Plugins (`config/Plugins.tsx`, `config/plugin-catalog.ts`): added plugins first, bundled ones folded;
+  catalog search (accents ignored, official first) drawing 40 entries; long descriptions cut at 600 characters.
+
 ## Configuration
 
 - `src/hermes-config/service.ts` (`ConfigService`) calls the `config` connector; `src/routes/config.ts` serves
