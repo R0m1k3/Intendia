@@ -5,7 +5,7 @@ import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
-import { historyEntries, isTerminal, mergeHistory, withTrees, type Entry, type RunState } from '../chat/events';
+import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
 import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
 import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
 import { sessionDraftKey } from '../chat/draft';
@@ -205,7 +205,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [qc, inst, sessionId]);
 
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
-  const [live, localEvent] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  const [live, localEvent, deferred] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  // followed without a live stream (streams.ts): what waits for an answer comes from the approvals feed, which the
+  // global bar hides for the session on screen
+  const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: deferred, refetchInterval: deferred ? 5_000 : false });
+  const pendingFeed = deferred && active ? feed.data?.approvals.find((a) => a.sessionId === sessionId && a.runId === active.id) : undefined;
+  const approval: Approval | null = live?.approval
+    ?? (pendingFeed?.kind === 'approval' ? { requestId: pendingFeed.requestId, command: pendingFeed.command, description: pendingFeed.description, choices: pendingFeed.choices } : null);
+  const clarify: Clarify | null = live?.clarify
+    ?? (pendingFeed?.kind === 'clarify' ? { requestId: pendingFeed.requestId, question: pendingFeed.question ?? '', choices: pendingFeed.choices, multiSelect: pendingFeed.multiSelect } : null);
 
   const send = async (text: string, skills?: string[]): Promise<boolean> => (await launch(text, skills)) === null;
   /** Starts a run; the error, or null once started. */
@@ -254,15 +262,16 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
       return false;
     }
   };
-  const steerDisabled = live?.approval || live?.clarify ? 'Un accord ou une réponse est attendu'
+  const steerDisabled = approval || clarify ? 'Un accord ou une réponse est attendu'
     : !chat.has('chat', 'steer') ? 'Réorientation indisponible sur cette instance'
     : live?.status !== 'running' ? 'L’agent n’a pas encore commencé' : undefined;
 
   const approve = async (choice: ApprovalChoice) => {
-    if (!inst || !active || !live?.approval) return;
+    if (!inst || !active || !approval) return;
     setBusy(true);
     try {
-      await api.approve(inst, sessionId, active.id, choice, live.approval.requestId ?? undefined);
+      await api.approve(inst, sessionId, active.id, choice, approval.requestId ?? undefined);
+      if (deferred) void qc.invalidateQueries({ queryKey: ['approvals'] });
     } catch (err) {
       setError(err);
     } finally {
@@ -271,10 +280,11 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   };
 
   const answer = async (text: string) => {
-    if (!inst || !active || !live?.clarify) return;
+    if (!inst || !active || !clarify) return;
     setBusy(true);
     try {
-      await api.clarify(inst, sessionId, active.id, text, live.clarify.requestId ?? undefined);
+      await api.clarify(inst, sessionId, active.id, text, clarify.requestId ?? undefined);
+      if (deferred) void qc.invalidateQueries({ queryKey: ['approvals'] });
     } catch (err) {
       setError(err);
     } finally {
@@ -573,7 +583,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(followIfPinned, [tail, live?.approval, live?.clarify]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(followIfPinned, [tail, approval, clarify]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // « Afficher les heures » (time of each step) and « Plan » / ↑ ↓ (jump between the user's questions)
   const [times, setTimes] = useStoredFlag('intendia-thread-times');
@@ -769,12 +779,15 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
         <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} />
-        {running && !live?.approval && !live?.clarify && <ThinkingIndicator entries={entries} agent={agent} />}
-        {live?.approval && (
-          <div className="mt-5"><ApprovalCard approval={live.approval} onChoose={approve} busy={busy} /></div>
+        {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
+        {running && deferred && (
+          <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.</p>
         )}
-        {live?.clarify && (
-          <div className="mt-5"><ClarifyCard key={live.clarify.requestId ?? ''} clarify={live.clarify} onAnswer={(t) => void answer(t)} busy={busy} /></div>
+        {approval && (
+          <div className="mt-5"><ApprovalCard approval={approval} onChoose={approve} busy={busy} /></div>
+        )}
+        {clarify && (
+          <div className="mt-5"><ClarifyCard key={clarify.requestId ?? ''} clarify={clarify} onAnswer={(t) => void answer(t)} busy={busy} /></div>
         )}
         {endNote && (
           <div className={cx('mt-5', AGENT_INDENT)}>
