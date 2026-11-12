@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LogOut, MessageSquareText, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,6 +12,7 @@ import type { PaletteMode } from './palette';
 import { InstanceSwitcher } from './InstanceSwitcher';
 import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
 import { flushDrafts } from '../chat/draft';
+import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
 import { cx, Wordmark } from './ui';
 
@@ -22,6 +23,7 @@ interface NavEntry { key: string; to: string; label: string; icon: typeof House;
 /** In display order; `group` places each entry in the sidebar; `page`: per instance. */
 const NAV: readonly NavEntry[] = [
   { key: 'home', to: '/', label: 'Sessions', icon: Inbox, group: 'top' },
+  { key: 'chat', to: '/chat', label: 'Chat', icon: MessagesSquare, group: 'top' },
   { key: 'workspaces', to: '/w', label: 'Workspaces', icon: Folder, group: 'top' },
   { key: 'files', to: '/files', label: 'Fichiers', icon: Files, group: 'top', page: 'files' },
   { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
@@ -36,7 +38,8 @@ const NAV: readonly NavEntry[] = [
 
 /** Which entry the address belongs to: sessions open in the inbox light "Sessions", a workspace "Workspaces". */
 export function activeKey(pathname: string): string | null {
-  if (pathname === '/' || pathname === '/sessions' || /^\/w\/[^/]+\/s\//.test(pathname) || /^\/i\/[^/]+\/p\//.test(pathname)) return 'home';
+  if (/^\/w\/[^/]+\/s\//.test(pathname)) return 'chat';
+  if (pathname === '/' || pathname === '/sessions' || /^\/i\/[^/]+\/p\//.test(pathname)) return 'home';
   if (/^\/w(\/[^/]+(\/fichiers)?)?\/?$/.test(pathname)) return 'workspaces';
   if (pathname === '/files' || /^\/i\/[^/]+\/files(\/|$)/.test(pathname) || pathname === '/liens') return 'files';
   for (const n of NAV) {
@@ -89,7 +92,9 @@ function FullLayout() {
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
   const myCrons = (overview.data?.crons ?? []).filter((c) => c.instanceId === inst);
   const failed = failedCount(myCrons);
+  const openChats = useChat(inst).open.length;
   const counts: Record<string, { n?: number; bad?: boolean; label?: string }> = {
+    chat: { n: openChats || undefined, label: `${openChats} chat${openChats > 1 ? 's' : ''} ouvert${openChats > 1 ? 's' : ''}` },
     workspaces: { n: inst ? mine.length : undefined },
     crons: failed > 0
       ? { n: failed, bad: true, label: `${failed} en échec` }

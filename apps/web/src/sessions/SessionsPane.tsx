@@ -31,7 +31,11 @@ function useDebounced<T>(value: T, ms: number): T {
  * in the history. Its state is local and survives opening a session (the column stays mounted, see InboxLayout);
  * `/?source=` sets the filter.
  */
-export function SessionsPane({ openId }: { openId: string | null }) {
+export function SessionsPane({ openId, onBeside }: {
+  openId: string | null;
+  /** Chat page: Ctrl/Cmd + click and « Ouvrir à côté » open a session in another column */
+  onBeside?: (slug: string, id: string) => void;
+}) {
   const asked = (useSearch({ strict: false }) as { source?: SessionSource }).source;
   const [source, setSource] = useState<SessionSource>(asked ?? 'all');
   useEffect(() => { if (asked) setSource(asked); }, [asked]);
@@ -114,7 +118,7 @@ export function SessionsPane({ openId }: { openId: string | null }) {
         <div key={g.label} role="group" aria-label={g.label}>
           <ListLabel>{g.label}</ListLabel>
           <ul className="flex flex-col gap-0.5">
-            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} />)}
+            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} />)}
           </ul>
         </div>
       ))}

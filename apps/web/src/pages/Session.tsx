@@ -102,7 +102,7 @@ export function SessionPage() {
   return <SessionView key={`${slug}/${sessionId}`} slug={slug} sessionId={sessionId} />;
 }
 
-function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
+export function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const qc = useQueryClient();
   const col = useColumn();
   const goTo = useOpenSession();
@@ -878,9 +878,12 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     </Scroller>
     {panel && (
       <aside className={cx(
-        'fixed inset-0 z-30 bg-sheet lg:z-auto lg:shrink-0 lg:border-l lg:border-line/70',
-        col ? 'lg:static lg:h-full' : 'lg:sticky lg:top-0 lg:h-[var(--content-h)]',
-        previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]',
+        // a column beside others is too narrow to share: the panel covers it (its close button stays in the panel)
+        col && !col.wide
+          ? 'absolute inset-y-0 right-0 z-20 w-full max-w-full border-l border-line/70 bg-sheet shadow-xl'
+          : 'fixed inset-0 z-30 bg-sheet lg:z-auto lg:shrink-0 lg:border-l lg:border-line/70',
+        col ? (col.wide && 'lg:static lg:h-full') : 'lg:sticky lg:top-0 lg:h-[var(--content-h)]',
+        !(col && !col.wide) && (previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]'),
       )}>
         {side}
       </aside>

@@ -32,7 +32,7 @@ function swap(c: Chat, at: number, col: Col): Chat {
 
 /** Opens in the active column (or as the first one); an open session is made active. */
 export function openHere(c: Chat, col: Col): Chat {
-  if (has(c, col.id)) return { ...c, active: col.id };
+  if (has(c, col.id)) return activate(c, col.id);
   const at = indexOf(c, c.active);
   if (at < 0) return c.open.length ? { ...c, open: [...c.open, col], active: col.id } : { ...c, open: [col], active: col.id };
   return { ...swap(c, at, col), active: col.id };
