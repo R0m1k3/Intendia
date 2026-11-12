@@ -245,7 +245,7 @@ export class GitService {
   }
 
   private sensitive(r: Repo, path: string): boolean {
-    return hiddenByHermes(normalizeRel(under(r.repo, path)));
+    return sensitiveIn(r.repo, path);
   }
 
   /**

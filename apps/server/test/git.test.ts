@@ -360,3 +360,15 @@ describe('cleanMessage', () => {
     expect(cleanMessage('« fix: y »')).toBe('fix: y');
   });
 });
+
+describe('writes in a repository at the workspace root', () => {
+  it('stage a folder: the credential file inside is unstaged again', async () => {
+    const t = await setup();
+    repo(t.ws);
+    mkdirSync(join(t.ws, 'neuf'));
+    writeFileSync(join(t.ws, 'neuf', 'x.txt'), 'x\n');
+    writeFileSync(join(t.ws, 'neuf', '.env'), 'S=1\n');
+    expect((await t.request('POST', `${t.G}/stage`, { repo: '', file: 'neuf/' })).json).toEqual({ unstaged: ['neuf/.env'] });
+    expect((await t.request('POST', `${t.G}/revert`, { repo: '', file: 'a.txt' })).status).toBe(400);
+  });
+});
