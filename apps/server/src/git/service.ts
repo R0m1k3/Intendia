@@ -85,6 +85,13 @@ interface Place { inst: InstanceConfig; http: HermesHttp; report: CompatReport |
 export interface Repo extends Place { repo: string; abs: string }
 
 const under = (parent: string, rel: string) => (rel ? `${parent}/${rel}` : parent);
+/** `repo/path` relative to the workspace ('' repo: the workspace itself). */
+const inRepo = (repo: string, path: string) => (repo ? `${repo}/${path}` : path);
+/**
+ * A credential file Hermes hides. Never throws: a name Intendia would refuse from the browser (a backslash, a very
+ * long path) must not break the whole list, only its own actions (refused by `checkFile`).
+ */
+export const sensitiveIn = (repo: string, path: string) => hiddenByHermes(inRepo(repo, path.replace(/\/+$/, '')));
 
 export class GitService {
   constructor(
@@ -172,7 +179,7 @@ export class GitService {
         added: f.added ?? 0,
         removed: f.removed ?? 0,
         dir: f.path.endsWith('/'),
-        sensitive: hiddenByHermes(normalizeRel(under(r.repo, f.path))),
+        sensitive: sensitiveIn(r.repo, f.path),
       };
     });
   }
@@ -198,7 +205,7 @@ export class GitService {
   async diff(slug: string, repo: string, file: string, which: DiffWhich): Promise<string> {
     const f = checkFile(file);
     if (f.dir) throw new WorkspaceFsError('invalid', 'Pas de diff pour un dossier non suivi');
-    if (hiddenByHermes(normalizeRel(under(normalizeRel(repo, { allowRoot: true }), f.path)))) {
+    if (sensitiveIn(normalizeRel(repo, { allowRoot: true }), f.path)) {
       throw new GitError('sensitive', `${f.path} : fichier sensible, diff non affiché`);
     }
     const r = await this.open(slug, repo);
