@@ -32,6 +32,9 @@ describe('skills asked by /use', () => {
     expect(bad.json.code).toBe('skill_not_found');
     expect(runsPosted(t)).toHaveLength(n);
     expect((await t.request('POST', `${base}/runs`, { input: 'x', skills: ['a', 'b', 'c', 'd'] })).status).toBe(400);
+    // qualified names (category/name) pass validation and reach the lookup; `..` never does
+    expect((await t.request('POST', `${base}/runs`, { input: 'x', skills: ['outils/absent'] })).json.code).toBe('skill_not_found');
+    expect((await t.request('POST', `${base}/runs`, { input: 'x', skills: ['../absent'] })).status).toBe(400);
   });
 
   it('a long or truncated skill: its start, then the skill_view instruction', async () => {

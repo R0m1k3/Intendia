@@ -260,8 +260,10 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   const setOptions = useMutation({
     mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null; personality?: string | null; autoApprove?: boolean; profile?: string | null }) =>
       api.updateSession(inst!, sessionId, patch),
-    onSuccess: (res) => {
+    onSuccess: (res, patch) => {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
+      // another agent: the effective profile (models, modes, personalities, skills) is read again
+      if (patch.profile !== undefined) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
       void qc.invalidateQueries({ queryKey: ['workspace', slug] });
     },
     onError: setError,

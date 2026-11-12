@@ -31,7 +31,8 @@ const OTHER_PAGE = 50;
 const SendBody = z.object({
   input: z.string().min(1).max(100_000),
   /** `/use <skill>`: put in the instructions of this run only */
-  skills: z.array(z.string().min(1).max(128).regex(/^[^\s/\\]+$/)).max(SKILLS_MAX).optional(),
+  // same names as the skills routes (`category/name` for same-tier duplicates), never a `..` segment
+  skills: z.array(z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/).refine((n) => !n.split('/').includes('..'))).max(SKILLS_MAX).optional(),
 });
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
 const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });

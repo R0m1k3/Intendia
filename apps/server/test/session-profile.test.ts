@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { runKey, startingRuns } from '../src/chat/history.js';
 import { testApp, waitRun } from './helpers.js';
 
 const DEV_KEY = 'dev-profile-key-0000000';
@@ -31,6 +32,17 @@ describe('profile per session', () => {
     // with a history: copy instead
     expect((await t.request('PATCH', base, { profile: null })).json.code).toBe('has_history');
     expect((await t.request('PATCH', base, { profile: 'nokey' })).status).toBe(409);
+  });
+
+  it('PATCH profile refused while the first message is on its way', async () => {
+    const { t, base, s } = await setup();
+    startingRuns.add(runKey('fake', s.id));
+    try {
+      expect((await t.request('PATCH', base, { profile: 'dev' })).json.code).toBe('run_active');
+    } finally {
+      startingRuns.delete(runKey('fake', s.id));
+    }
+    expect((await t.request('PATCH', base, { profile: 'dev' })).status).toBe(200);
   });
 
   it('PATCH: a copy (copiedFrom) has a history; a profile without key → 400', async () => {

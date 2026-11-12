@@ -169,6 +169,8 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     if (body.profile !== undefined) {
       const ctx = workspaces.getSession(inst, id);
       // a session with a history at Hermes changes agent by a copy (POST …/to-profile)
+      // a first message on its way keeps the profile it was sent with
+      if (startingRuns.has(runKey(inst, id))) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
       if (ctx.session.lastRunId || ctx.session.copiedFrom) {
         return c.json({ error: 'Cette session a déjà des messages : copiez-la vers l’autre agent', code: 'has_history' }, 409);
       }
