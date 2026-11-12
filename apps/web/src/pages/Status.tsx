@@ -118,6 +118,11 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
           </span>
         )}
         <span className="font-mono text-xs text-ink-faint">Hermes {report.hermesVersion ?? '?'}</span>
+        {report.checkError
+          ? <span className="text-bad" data-check-error>Vérification échouée : {report.checkError}</span>
+          : report.unchecked?.length
+            ? <span className="text-ink-soft" data-unchecked>{report.unchecked.length} opération{report.unchecked.length > 1 ? 's' : ''} pas encore vérifiée{report.unchecked.length > 1 ? 's' : ''}{report.checking ? ' (vérification en cours)' : ''}</span>
+            : null}
       </div>
       <ul>
         {report.modules.map((m) => <ModuleRow key={m.id} m={m} anchor={`${report.instanceId}-${m.id}`} />)}
