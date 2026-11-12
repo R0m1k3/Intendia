@@ -43,6 +43,17 @@ describe('GET /x/sessions/:inst/:id/subagents', () => {
     expect(list.query).toMatchObject({ include_children: 'true', limit: '100' });
   });
 
+  it('reads further pages before concluding: a child beyond the first 100 rows is found', async () => {
+    const { t, s, base } = await session();
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId)).toBe('completed');
+    for (let i = 0; i < 150; i++) child(t, { id: `busy${i}`, parent_session_id: 'another-session', preview: 'Ailleurs', started_at: 10_000 + i });
+    child(t, { id: 'mine', parent_session_id: s.id, preview: 'Relire', started_at: 50 });
+    const res = await t.request('GET', `${base}/subagents`);
+    expect(res.json.children.map((c: { id: string }) => c.id)).toEqual(['mine']);
+    const offsets = t.fake.requests.filter((r) => r.method === 'GET' && r.path === '/api/sessions' && r.query.include_children === 'true').map((r) => r.query.offset);
+    expect(offsets).toEqual(['0', '100']);
+  });
+
   it('the "fond" scenario: two children moving, a delivery row with no display_metadata served', async () => {
     const { t, s, base } = await session();
     expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');

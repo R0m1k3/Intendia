@@ -13,7 +13,10 @@ export const EMPTY_DELIVERY: DelegationInfo = {
 export interface DelegationState {
   /** unit ids still waiting for their delivery (without units: the call's id) */
   open: Set<string>;
-  /** seconds: oldest ticket still open */
+  /**
+   * seconds: newest ticket still open. The pace follows the latest delegation, so an abandoned ticket older than
+   * 24 h never stops the re-reading of a new one (each card shows its own age).
+   */
   since: number | null;
   /** by unit id, in Hermes' order (an early failure notice does not close its unit) */
   deliveries: Map<string, DelegationInfo[]>;
@@ -45,7 +48,7 @@ export function delegationState(messages: ChatMessage[]): DelegationState {
     }
   }
   const times = [...openAt.values()].filter((v): v is number => v !== null);
-  return { open: new Set(openAt.keys()), since: times.length ? Math.min(...times) : null, deliveries, unitOf };
+  return { open: new Set(openAt.keys()), since: times.length ? Math.max(...times) : null, deliveries, unitOf };
 }
 
 function deliveredStatus(d: DelegationInfo, taskIndex: number): string {

@@ -496,7 +496,7 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   own role `delegation` (read from Hermes' text: the API server does not serve `display_metadata`), never a message of
   the user (no edit, no retry, not a question, exported as « Sous-agents (résultat) »). `hidden` rows are dropped.
   While a unit is open, the session page re-reads the history and the children's session rows
-  (`GET /x/sessions/:inst/:id/subagents`, from `GET /api/sessions?include_children=true`) every 15 s for 10 min, then
+  (`GET /x/sessions/:inst/:id/subagents`, from `GET /api/sessions?include_children=true`, up to 5 pages of 100) every 15 s for 10 min, then
   60 s up to 24 h: each background node shows its child's last activity and tool count. Intendia never starts a run
   at the delivery: the agent reads the result with the next message.
 - Tool results in the history go to the first open call of the same tool in the last assistant message with tool

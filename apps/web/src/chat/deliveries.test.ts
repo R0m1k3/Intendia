@@ -52,6 +52,12 @@ describe('delegationState', () => {
     expect(closed.since).toBeNull();
   });
 
+  it('pace of the newest open ticket: an old abandoned one does not stop the re-reading of a new one', () => {
+    const s = delegationState([ticket(3, { delegation_id: 'old' }, 1000), ticket(5, { delegation_id: 'new' }, 1000 + 90_000)]);
+    expect(s.since).toBe(1000 + 90_000);
+    expect(pollDelay(s, 1000 + 90_010)).toBe(15_000);
+  });
+
   it('two units, one delivered: one open, unitOf filled', () => {
     const s = delegationState([
       ticket(3, { delegation_id: 'd1', goals: ['a', 'b'], units: [{ delegation_id: 'd1-0', task_indexes: [0] }, { delegation_id: 'd1-1', task_indexes: [1] }] }),

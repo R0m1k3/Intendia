@@ -23,6 +23,8 @@ export interface SubagentChild {
 }
 
 const LIST_LIMIT = 100;
+/** 500 rows at most per re-reading */
+const MAX_PAGES = 5;
 const TIMEOUT_MS = 10_000;
 
 interface RawChild {
@@ -47,12 +49,19 @@ export async function listChildren(compat: CompatService, ctx: SessionContext): 
   const h = await readHistory(compat, inst, ctx.session.id, ctx.profile, 1);
   if (!h.exists) return [];
   const parents = new Set([ctx.session.id, h.liveId]);
-  const res = await callOp<{ data: RawChild[] }>(compat.http(inst), compat.get(inst), 'sessions', 'list', {
-    profile: ctx.profile, query: { include_children: 'true', limit: LIST_LIMIT }, timeoutMs: TIMEOUT_MS,
-  });
-  return res.data
+  // the list covers the whole profile (newest activity first): a few pages before concluding a child is absent
+  const rows: RawChild[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await callOp<{ data: RawChild[] }>(compat.http(inst), compat.get(inst), 'sessions', 'list', {
+      profile: ctx.profile, query: { include_children: 'true', limit: LIST_LIMIT, offset: page * LIST_LIMIT }, timeoutMs: TIMEOUT_MS,
+    });
+    rows.push(...res.data);
+    if (res.data.length < LIST_LIMIT) break;
+  }
+  return rows
     .filter((r) => typeof r.id === 'string' && typeof r.parent_session_id === 'string' && parents.has(r.parent_session_id)
       && (r.source === 'subagent' || r.is_internal_child === true))
+    .filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i)
     .map(toChild)
     .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
 }
