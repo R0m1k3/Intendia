@@ -28,7 +28,9 @@ import { FilesPage, type FilesSearch } from './pages/Files';
 import { GitPage, type GitSearch } from './pages/Git';
 import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
 import { ChatPage } from './chat/ChatPage';
-import { loadChat } from './chat/columns';
+import { loadChat, openBeside, updateChat } from './chat/columns';
+import { pickWorkspace } from './chat/newSession';
+import { invalidateSessionLists } from './sessions/UndoBar';
 import { InboxLayout } from './sessions/InboxLayout';
 import { parseCronKey } from './components/selection';
 import { WorkspacePage } from './pages/Workspace';
@@ -123,6 +125,40 @@ const chatRoute = createRoute({
     throw redirect({ to: '/' });
   },
 });
+/**
+ * « Nouvelle session »: an empty session in a new chat column, right of the active one (chat/newSession.ts picks the
+ * workspace). Never on a preload (the router preloads links on hover): it creates a session. One creation at a time;
+ * the redirect replaces this entry, so « Précédent » never comes back here. No instance, workspace or a failure: the
+ * home page, where the message box creates a session on sending.
+ */
+let creating: Promise<{ slug: string; id: string } | null> | null = null;
+async function createChat(): Promise<{ slug: string; id: string } | null> {
+  try {
+    const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
+    const inst = resolveCurrent({ ids: instances.map((i) => i.id), tab: currentTab() });
+    if (!inst) return null;
+    const { workspaces } = await queryClient.fetchQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
+    const slug = pickWorkspace({ workspaces, inst, chat: loadChat(inst), last: localStorage.getItem('intendia-last-workspace') });
+    if (!slug) return null;
+    const { session } = await api.createSession(slug);
+    void invalidateSessionLists(queryClient);
+    updateChat(inst, (c) => openBeside(c, { slug, id: session.id }));
+    return { slug, id: session.id };
+  } catch (err) {
+    console.error('Nouvelle session', err);
+    return null;
+  }
+}
+const newChatRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/chat/nouvelle', preload: false,
+  beforeLoad: async ({ preload }) => {
+    if (preload) return;
+    creating ??= createChat().finally(() => { creating = null; });
+    const made = await creating;
+    if (!made) throw redirect({ to: '/', search: { nouvelle: 1 }, replace: true } as never);
+    throw redirect({ to: '/w/$slug/s/$sessionId', params: { slug: made.slug, sessionId: made.id }, replace: true } as never);
+  },
+});
 /** Entry of an instance page (bookmarks, old links): the current instance of this tab, else the first. */
 async function toCurrent(page: InstancePage, search?: object): Promise<never> {
   const { instances } = await queryClient.fetchQuery({ queryKey: ['instances'], queryFn: api.instances });
@@ -185,7 +221,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

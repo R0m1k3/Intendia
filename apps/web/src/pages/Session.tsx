@@ -39,7 +39,7 @@ import { setDraft, setHandoff, takeDraft, takeHandoff } from '../home/handoff';
 import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/history-actions';
 import { COMMANDS, type Command, type CommandName } from '../chat/commands';
 import { formatTokens } from '../chat/format';
-import { Menu } from '../components/Menu';
+import { Menu, Picker } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { workspaceScope } from '../files/scope';
@@ -461,6 +461,31 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   }, [doneTodoCalls, qc, inst, sessionId]);
   const entries: Entry[] = withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees);
   const lastStatus = lastRun.data;
+  // an empty session (« Nouvelle session », or one never used): the cursor goes to its message box, once
+  const focusedEmpty = useRef<string | null>(null);
+  const emptyReady = leading && history.isSuccess && entries.length === 0 && !active;
+  useEffect(() => {
+    if (!emptyReady || focusedEmpty.current === sessionId) return;
+    focusedEmpty.current = sessionId;
+    composer.current?.focus();
+  }, [emptyReady, sessionId]);
+  // its workspace can still change (moved: nothing sent, no file written), as on the home page
+  const allWorkspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces, enabled: Boolean(inst) });
+  const siblings = (allWorkspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
+  const neverSent = Boolean(sess.data && !sess.data.session.lastRunId && !sess.data.session.copiedFrom);
+  const moveTo = async (to: string | null) => {
+    if (!to || to === slug || !inst) return;
+    setError(null);
+    try {
+      const res = await api.bulkSessions(inst, [sessionId], 'move', to);
+      const r = res.results[0];
+      if (!r?.ok) throw new Error(r?.error ?? 'Déplacement refusé');
+      await invalidateSessionLists(qc);
+      goTo.open(to, sessionId);
+    } catch (err) {
+      setError(err);
+    }
+  };
   const endNote = !active && (outcome ?? (lastStatus && OUTCOME[lastStatus.status] ? { status: lastStatus.status, error: lastStatus.error ?? lastStatus.output, input: null } : null));
   // Hermes does not keep the message of a run that failed before starting: keep it on screen.
   const lostInput = endNote && endNote.input && !messages.some((m) => m.role === 'user' && m.content === endNote.input) ? endNote.input : null;
@@ -792,6 +817,16 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {history.isSuccess && entries.length === 0 && !running && !endNote && (
           <div className="py-16 text-center">
             <p className="text-base font-semibold">Nouvelle session dans {ws.data?.workspace.name}</p>
+            {neverSent && siblings.length > 1 && (
+              <div className="mt-2 flex justify-center" data-move-empty>
+                <Picker
+                  title="Workspace de cette session" placement="below" value={slug}
+                  items={siblings.map((w) => ({ value: w.slug, label: w.name }))}
+                  onPick={(v) => void moveTo(v)}
+                  label={<>Changer de workspace</>}
+                />
+              </div>
+            )}
             <p className="mt-1.5 text-sm text-ink-faint">L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session</p>
           </div>
         )}

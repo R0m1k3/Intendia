@@ -51,10 +51,13 @@ export function openBeside(c: Chat, col: Col): Chat {
 /**
  * The column of `fromId` now shows `col` (a branch, a copy, `/new`…). null when `fromId` is no longer open (closed
  * meanwhile: the caller navigates instead). `col` already open elsewhere: that column is made active, `fromId` kept.
+ * The same session with another workspace (a move): the column follows it.
  */
 export function replaceIn(c: Chat, fromId: string, col: Col): Chat | null {
   const at = indexOf(c, fromId);
   if (at < 0) return null;
+  // the same session in another workspace (moved): the column keeps its place, width and active mark
+  if (col.id === fromId) return c.open[at]!.slug === col.slug ? c : { ...c, open: c.open.map((x, i) => (i === at ? col : x)) };
   if (has(c, col.id)) return { ...c, active: col.id };
   return swap(c, at, col);
 }
