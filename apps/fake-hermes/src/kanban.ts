@@ -6,7 +6,12 @@
  * - POST /dispatch turns each assigned `ready` task into `running` with an active worker; after `stepMs`
  *   the task is `done` and the worker gone; a `dir` workspace is created when it is under the managed files root;
  * - POST /runs/{id}/terminate ends the worker and puts the task back in `ready` (Hermes relaunches it);
- * - specify / decompose answer {ok:false} (no auxiliary model) unless the title contains "preciser".
+ * - specify / decompose answer {ok:false} (no auxiliary model) unless the title contains "preciser" (or "mission"
+ *   for decompose: 3 children A, B, C after A, the parents of the root; "mission-seule" → fanout false,
+ *   "mission-course" → A already running, "mission-lente" → answer after 4 s);
+ * - PATCH scheduled (from todo/ready/running/blocked) and blocked keep their reason as `latest_summary` (Hermes has
+ *   no block_reason column); PATCH ready from scheduled/blocked → todo while a parent is not finished; PATCH
+ *   archived from any state (the worker is dropped); an archived task counts as finished.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -151,21 +156,55 @@ export class KanbanStore {
     for (const t of b.tasks) {
       if (t.status !== 'todo') continue;
       const parents = b.links.filter((l) => l.child === t.id).map((l) => b.tasks.find((x) => x.id === l.parent));
-      if (parents.every((x) => !x || x.status === 'done')) {
+      if (parents.every((x) => !x || x.status === 'done' || x.status === 'archived')) {
         t.status = 'ready';
         this.emit(b, 'promoted', t.id);
       }
     }
   }
 
+  /** Hermes' decompose: children linked as parents of the root, the root in todo; refused out of triage. */
+  private decompose(b: Board, t: Task): Response | Promise<Response> {
+    if (t.status !== 'triage') return json({ ok: false, task_id: t.id, reason: `task ${t.id} is not in triage`, fanout: false, child_ids: [], new_title: null });
+    if (/mission-seule/i.test(t.title)) {
+      t.status = 'todo';
+      return json({ ok: true, task_id: t.id, reason: null, fanout: false, child_ids: [], new_title: t.title });
+    }
+    const make = (title: string, body: string, parents: string[]): Task => {
+      this.taskSeq += 1;
+      const c: Task = {
+        id: `t_fake${String(this.taskSeq).padStart(4, '0')}`, title, body, assignee: 'default',
+        status: parents.length ? 'todo' : this.orchestration.auto_promote_children ? 'ready' : 'todo', priority: 0,
+        created_by: 'decomposer', created_at: now(), started_at: null, completed_at: null,
+        workspace_kind: 'scratch', workspace_path: null, result: null, last_failure_error: null, latest_summary: null,
+      };
+      b.tasks.push(c);
+      for (const p of parents) b.links.push({ parent: p, child: c.id });
+      b.links.push({ parent: c.id, child: t.id });
+      this.emit(b, 'created', c.id, { status: c.status, assignee: c.assignee });
+      return c;
+    };
+    const a = make('Rassembler les sources', 'Lister les documents utiles.', []);
+    const bb = make('Interroger les équipes', 'Recueillir les besoins.', []);
+    const c = make('Rédiger la synthèse', 'Écrire le compte rendu à partir des sources.', [a.id]);
+    t.status = 'todo';
+    this.emit(b, 'decomposed', t.id);
+    if (/mission-course/i.test(t.title)) {
+      a.status = 'ready';
+      this.startWorker(b, a);
+    }
+    const answer = json({ ok: true, task_id: t.id, reason: null, fanout: true, child_ids: [a.id, bb.id, c.id], new_title: t.title });
+    return /mission-lente/i.test(t.title) ? new Promise((r) => setTimeout(() => r(answer), 4000)) : answer;
+  }
+
   /** null when the route is not a kanban route. */
-  handle(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
+  handle(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | Promise<Response> | null {
     const res = this.route(via, method, path, query, body);
     if (res && method !== 'GET') for (const b of this.boards.values()) this.recompute(b);
     return res;
   }
 
-  private route(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | null {
+  private route(via: 'api' | 'dash', method: string, path: string, query: Record<string, string>, body: unknown): Response | Promise<Response> | null {
     if (via !== 'dash' || !path.startsWith('/api/plugins/kanban/')) return null;
     const p = path.slice('/api/plugins/kanban'.length);
     const b0 = (body ?? {}) as Record<string, unknown>;
@@ -312,7 +351,20 @@ export class KanbanStore {
       if (typeof b0.status === 'string' && b0.status !== t.status) {
         const to = b0.status;
         if (to === 'running') return json({ detail: "Cannot set status to 'running' directly; use the dispatcher/claim path" }, 400);
-        if (!(this.workflow.manual[t.status] ?? []).includes(to)) return json({ detail: `cannot move ${t.id} from '${t.status}' to '${to}'` }, 400);
+        const archive = to === 'archived';
+        const park = to === 'scheduled' && ['todo', 'ready', 'running', 'blocked'].includes(t.status);
+        if (!archive && !park && !(this.workflow.manual[t.status] ?? []).includes(to)) return json({ detail: `cannot move ${t.id} from '${t.status}' to '${to}'` }, 400);
+        if (archive) {
+          for (const [id, w] of this.workers) if (w.task_id === t.id) { clearTimeout(w.timer); this.workers.delete(id); }
+        }
+        if (to === 'scheduled' || to === 'blocked') t.latest_summary = typeof b0.block_reason === 'string' ? b0.block_reason : null;
+        // like Hermes' unblock_task: back to todo while a parent is not finished
+        const unfinished = () => b.links.some((l) => l.child === t.id && !['done', 'archived'].includes(String(b.tasks.find((x) => x.id === l.parent)?.status)));
+        if (to === 'ready' && (t.status === 'scheduled' || t.status === 'blocked') && unfinished()) {
+          t.status = 'todo';
+          this.emit(b, 'unblocked', t.id);
+          return json({ task: this.view(b, t) });
+        }
         if (to === 'done') {
           const open = b.links.filter((l) => l.child === t.id).map((l) => b.tasks.find((x) => x.id === l.parent)).filter((x) => x && x.status !== 'done');
           if (open.length) {
@@ -321,7 +373,7 @@ export class KanbanStore {
         }
         t.status = to;
       }
-      for (const k of ['assignee', 'priority', 'title', 'body', 'block_reason']) if (b0[k] !== undefined) t[k] = b0[k];
+      for (const k of ['assignee', 'priority', 'title', 'body']) if (b0[k] !== undefined) t[k] = b0[k];
       this.emit(b, 'updated', t.id, b0);
       return json({ task: this.view(b, t) });
     }
@@ -330,6 +382,7 @@ export class KanbanStore {
       this.emit(b, 'commented', t.id);
       return json({ ok: true });
     }
+    if (sub === '/decompose' && method === 'POST' && /mission/i.test(t.title)) return this.decompose(b, t);
     if ((sub === '/specify' || sub === '/decompose') && method === 'POST') {
       if (!/preciser/i.test(t.title)) return json({ ok: false, task_id: t.id, reason: 'LLM error: AuxiliaryClientUnavailable', new_title: null });
       if (sub === '/specify') {

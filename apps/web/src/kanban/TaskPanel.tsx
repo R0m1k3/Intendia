@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Download, FolderOpen, Link2, Pencil, ScrollText, Unlink, Wand2, Split } from 'lucide-react';
 import { useState } from 'react';
-import { api, kanbanPath, type KanbanTask, type KanbanTaskDetail, type KanbanTaskPatch, type KanbanWorkflow } from '../api';
+import { api, kanbanPath, type KanbanMissionRow, type KanbanTask, type KanbanTaskDetail, type KanbanTaskPatch, type KanbanWorkflow } from '../api';
+import { MISSION_STATE } from './mission';
 import { Button, cx, ErrorText, Field, Input, Mark, timeAgo } from '../components/ui';
 import { moveTargets, statusLabel } from './moves';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
@@ -59,11 +60,13 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
   );
 }
 
-export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, polling, onClose, onOpen }: {
+export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, polling, mission = null, onOpenMission, onClose, onOpen }: {
   inst: string; board: string; taskId: string; workflow: KanbanWorkflow | undefined; assignees: string[];
   /** Live events unavailable: the open task is polled like the board. */
   polling: boolean;
   allTasks: KanbanTask[]; onClose: () => void; onOpen: (id: string) => void;
+  /** the mission whose root this task is */
+  mission?: KanbanMissionRow | null; onOpenMission?: (id: string) => void;
 }) {
   const qc = useQueryClient();
   const key = ['kanban-task', inst, board, taskId];
@@ -107,6 +110,18 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
         <>
           <TextEditor task={t} save={(p) => update.mutateAsync(p)} busy={update.isPending} />
 
+          {mission && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm" data-root-of={mission.id}>
+              <span className="min-w-0 flex-1">
+                Tâche racine de la mission « {mission.goal} » ({MISSION_STATE[mission.state]}) : elle attend toutes ses tâches{d.parents.length ? `, ${d.parents.filter((p) => p.status === 'done' || p.status === 'archived').length}/${d.parents.length} finies` : ''}.
+              </span>
+              {onOpenMission && (
+                <Button variant={mission.state === 'held' ? 'primary' : 'secondary'} onClick={() => onOpenMission(mission.id)}>
+                  {mission.state === 'held' ? 'Relire et lancer' : 'Voir la mission'}
+                </Button>
+              )}
+            </div>
+          )}
           {t.status === 'blocked' && (
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 px-4 py-3 text-sm">
               <span className="min-w-0 flex-1">Bloquée{d.blockReason ? ` : ${d.blockReason}` : ''}</span>

@@ -16,6 +16,7 @@ import { ProvidersService } from './hermes-config/providers.js';
 import { ConfigService } from './hermes-config/service.js';
 import { McpLink } from './mcp/connect.js';
 import type { InstanceStore } from './instances/store.js';
+import { MissionService } from './kanban/missions.js';
 import { KanbanService } from './kanban/service.js';
 import { LinkService } from './links/service.js';
 import { RecentService } from './sessions/recent.js';
@@ -34,6 +35,7 @@ export interface Services {
   skills: SkillService;
   agents: AgentService;
   kanban: KanbanService;
+  missions: MissionService;
   activity: ActivityService;
   recent: RecentService;
   config: ConfigService;
@@ -68,5 +70,5 @@ export function createServices(deps: {
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);
   const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
-  return { roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
+  return { roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }

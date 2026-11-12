@@ -5,7 +5,7 @@ import {
   AssigneesSchema, BoardListSchema, BoardSchema, OrchestrationSchema, TaskDetailSchema, TaskLogSchema, TaskSchema, WorkersSchema, WorkflowSchema,
   type HermesTask,
 } from '../connectors/kanban/index.js';
-import { callOp, HermesError, hermesDetail, streamOp, type CallOptions } from '../connectors/runtime.js';
+import { callOp, HermesError, hermesDetail, ModuleUnavailableError, streamOp, type CallOptions } from '../connectors/runtime.js';
 import { Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
@@ -14,7 +14,8 @@ import { NotFoundError, ValidationError, type Workspace, type WorkspaceService }
 /** 409 from Hermes, or a kanban state Intendia reports with its own code. */
 export class KanbanError extends Error {
   constructor(
-    readonly code: 'hermes_conflict' | 'worker_ended' | 'task_restarted' | 'board_exists' | 'aux_failed',
+    readonly code: 'hermes_conflict' | 'worker_ended' | 'task_restarted' | 'board_exists' | 'aux_failed'
+      | 'mission_state' | 'mission_dependency' | 'mission_last',
     message: string,
     readonly status: 409 | 422 = 409,
   ) {
@@ -140,6 +141,19 @@ export class KanbanService {
     return this.call<T>(instanceId, op, { ...opts, query: { ...(opts.query ?? {}), board } }, what);
   }
 
+  assertInstance(instanceId: string): void {
+    this.check(instanceId);
+  }
+
+  /** Throws like a call would (409 without code) when one of the ops is missing on the instance. */
+  requireOps(instanceId: string, ops: string[]): void {
+    this.check(instanceId);
+    const mod = this.compat.get(instanceId)?.modules.find((m) => m.id === 'kanban');
+    for (const op of ops) {
+      if (!this.can(instanceId, op)) throw new ModuleUnavailableError('kanban', op, mod?.ops[op]?.notes ?? ['pas encore vérifié']);
+    }
+  }
+
   /** Is the operation usable on this instance (last compatibility report)? */
   can(instanceId: string, op: string): boolean {
     const mod = this.compat.get(instanceId)?.modules.find((m) => m.id === 'kanban');
@@ -241,7 +255,9 @@ export class KanbanService {
     const side = (ids: string[] | undefined) => (ids ?? []).map((id) => ({ id, title: linked.get(id)?.title ?? null, status: linked.get(id)?.status ?? null }));
     return {
       task: this.toPublic(instanceId, d.task),
-      blockReason: str(d.task.block_reason),
+      // Hermes 0.23 keeps no block_reason column: the reason of a block / schedule is the summary of the run it writes
+      blockReason: d.task.status === 'blocked' || d.task.status === 'scheduled'
+        ? str(d.task.block_reason) ?? (str(d.task.latest_summary) && this.mask.text(d.task.latest_summary as string)) : str(d.task.block_reason),
       comments: (d.comments ?? []).map((c) => ({ id: num(c.id) ?? 0, author: c.author ?? null, body: c.body, createdAt: c.created_at ?? null })),
       events: (d.events ?? []).slice(-50).map((e) => ({ id: num(e.id) ?? 0, kind: e.kind, createdAt: e.created_at ?? null })),
       attachments: (d.attachments ?? []).map((a) => ({
@@ -372,9 +388,9 @@ export class KanbanService {
   }
 
   /** specify / decompose: an auxiliary model at Hermes; `{ok: false, reason}` is a 422 aux_failed. */
-  async aux(instanceId: string, board: string, taskId: string, op: 'specify' | 'decompose'): Promise<Record<string, unknown>> {
+  async aux(instanceId: string, board: string, taskId: string, op: 'specify' | 'decompose', opts: { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
     const res = await this.onBoard<Record<string, unknown>>(instanceId, board, op, {
-      params: { task_id: taskId }, body: { author: 'intendia' }, timeoutMs: 120_000,
+      params: { task_id: taskId }, body: { author: 'intendia' }, timeoutMs: opts.timeoutMs ?? 120_000,
     }, 'Tâche introuvable');
     if (res.ok === false) throw new KanbanError('aux_failed', `Hermes n’a pas pu le faire : ${this.mask.text(String(res.reason ?? 'raison inconnue'))}`, 422);
     return res;
