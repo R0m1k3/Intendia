@@ -31,6 +31,20 @@ describe('instance files (read only, whole root)', () => {
     expect(res.json.entries.find((e: any) => e.name === 'crons').workspace).toBeUndefined();
   });
 
+  it('zip of the whole root (fichiers.zip) without credentials files; agentRoot in tree', async () => {
+    const { unzipSync } = await import('fflate');
+    const t = await setup();
+    const res = await t.rawRequest('GET', `${t.I}/zip`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-disposition')).toContain('filename="fichiers.zip"');
+    const names = Object.keys(unzipSync(new Uint8Array(await res.arrayBuffer())));
+    expect(names).toEqual(expect.arrayContaining(['fichiers/crons/veille/rapport.md', 'fichiers/Notes agent/idées.txt', 'fichiers/dev/AGENTS.md']));
+    expect(names.some((n) => n.endsWith('.env'))).toBe(false);
+    expect((await t.request('GET', `${t.I}/tree`)).json.agentRoot).toBe(t.root);
+    expect((await t.request('GET', '/x/workspaces/dev/files/tree')).json.agentRoot).toBe(`${t.root}/dev`);
+    expect((await t.rawRequest('GET', `${t.I}/zip?path=dev/.env`)).status).toBe(404);
+  });
+
   it('opens a folder outside the workspaces, whatever its name, and reads a file', async () => {
     const t = await setup();
     const sub = await t.request('GET', `${t.I}/tree?path=${t.q('Notes agent')}`);

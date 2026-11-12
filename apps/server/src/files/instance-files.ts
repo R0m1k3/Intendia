@@ -7,6 +7,8 @@ import { WorkspaceFsError } from '../workspaces/fs.js';
 import { NotFoundError, type WorkspaceService } from '../workspaces/service.js';
 import type { FileRoots } from './hermes-fs.js';
 import { hiddenByHermes, normalizeRel } from './paths.js';
+import { walk } from './walk.js';
+import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
 import { LIST_MAX, searchTree, toFileEntry, type FileEntry } from './service.js';
 
 export type InstanceFileEntry = FileEntry & {
@@ -28,7 +30,7 @@ export class InstanceFileService {
     return this.roots.fs(inst);
   }
 
-  async list(inst: string, relIn: string): Promise<{ path: string; entries: InstanceFileEntry[]; truncated: boolean }> {
+  async list(inst: string, relIn: string): Promise<{ path: string; entries: InstanceFileEntry[]; truncated: boolean; agentRoot: string }> {
     const fs = this.fs(inst);
     const rel = normalizeRel(relIn, { allowRoot: true });
     const { entries: all } = await fs.listAt(rel);
@@ -41,7 +43,25 @@ export class InstanceFileService {
       .map((e) => (slugs && e.kind === 'dir' && slugs.has(e.name) ? { ...e, workspace: e.name } : e));
     const isDir = (e: FileEntry) => e.kind === 'dir';
     entries.sort((a, b) => Number(isDir(b)) - Number(isDir(a)) || a.name.localeCompare(b.name, 'fr'));
-    return { path: rel, entries, truncated };
+    return { path: rel, entries, truncated, agentRoot: fs.root };
+  }
+
+  /** A folder of the file root as a zip stream (`fichiers.zip` for the root); names hidden by Hermes left out. */
+  async zip(inst: string, relIn: string): Promise<{ body: ReadableStream<Uint8Array>; name: string }> {
+    const fs = this.fs(inst);
+    const rel = normalizeRel(relIn, { allowRoot: true });
+    if (rel && hiddenByHermes(rel)) throw new WorkspaceFsError('not_found', `Introuvable : ${rel}`);
+    const join = (a: string, b: string) => (a && b ? `${a}/${b}` : a || b);
+    const release = zipSlot();
+    try {
+      const tree = await walk(async (r) => (await fs.listAt(r)).entries.filter((e) => !hiddenByHermes(join(r, e.name))), rel, ZIP_WALK);
+      const name = rel ? nameOf(rel) : 'fichiers';
+      const body = zipFolder({ name, tree, read: async (r) => (await fs.readAt(join(rel, r))).body, onEnd: release });
+      return { body, name: `${name}.zip` };
+    } catch (err) {
+      release();
+      throw err;
+    }
   }
 
   async search(inst: string, q: string): Promise<{ results: FileEntry[]; truncated: boolean }> {

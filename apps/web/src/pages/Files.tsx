@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, File, Folder, Plus, Search, Upload, X } from 'lucide-react';
+import { ChevronRight, File, FileArchive, Folder, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api, type FileEntry } from '../api';
 import { askText } from '../components/Dialog';
@@ -131,12 +131,17 @@ export function FilesPage() {
               </nav>
             }
             action={
+              <div className="flex items-center gap-1">
+              <a href={workspaceScope(slug).zip(dir)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger ce dossier (zip)" aria-label="Télécharger ce dossier (zip)">
+              <FileArchive className="size-4" strokeWidth={1.5} />
+            </a>
               <div className="relative w-40 shrink-0 sm:w-48">
                 <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom" className="h-9 pl-8" aria-label="Chercher un fichier" />
                 {q && (
                   <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label="Effacer"><X className="size-4" strokeWidth={1.5} /></button>
                 )}
+              </div>
               </div>
             }
           >
@@ -149,7 +154,7 @@ export function FilesPage() {
             )}
             {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
             {entries.length > 0 ? (
-              <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} />
+              <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} agentRoot={tree.data?.agentRoot} />
             ) : (tree.isSuccess && !debounced) ? (
               <div className="px-4 py-12 text-center">
                 <p className="text-sm font-medium">Aucun fichier ici</p>

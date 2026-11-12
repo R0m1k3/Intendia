@@ -8,6 +8,7 @@ import { api } from '../api';
 import { currentTab, navTarget, setTab, useCurrentInstance, useUrlInstance, type InstancePage } from '../instance/current';
 import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
+import type { PaletteMode } from './palette';
 import { InstanceSwitcher } from './InstanceSwitcher';
 import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
 import { flushDrafts } from '../chat/draft';
@@ -109,11 +110,11 @@ function FullLayout() {
   const current = activeKey(pathname);
 
   // Ctrl/Cmd K anywhere (even in a field) toggles the palette; closing gives the focus back
-  const [palette, setPalette] = useState(false);
+  const [palette, setPalette] = useState<false | PaletteMode>(false);
   const before = useRef<HTMLElement | null>(null);
-  const openPalette = useCallback(() => {
-    before.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setPalette(true);
+  const openPalette = useCallback((mode: PaletteMode = 'all') => {
+    if (!before.current) before.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPalette(mode);
   }, []);
   const closePalette = useCallback(() => {
     setPalette(false);
@@ -143,6 +144,11 @@ function FullLayout() {
         e.preventDefault();
         if (palette) closePalette();
         else openPalette();
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        // Ctrl/⌘ P: a file of the instance (the browser's print stays in its menu)
+        e.preventDefault();
+        if (palette === 'files') closePalette();
+        else openPalette('files');
       } else if (isSideChatKey(e)) {
         e.preventDefault();
         if (side) closeSide();
@@ -193,7 +199,7 @@ function FullLayout() {
         </div>
         <NewSessionButton />
         <InstanceSwitcher className="mt-2.5" />
-        <button type="button" onClick={openPalette} aria-haspopup="dialog"
+        <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" title={`Rechercher (${shortcutLabel()}) ; un fichier : ${shortcutLabel().replace('K', 'P')}`}
           className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} />
           <span className="flex-1 text-left">Rechercher</span>
@@ -227,9 +233,9 @@ function FullLayout() {
       </main>
 
       {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
-      {palette && <CommandPalette nav={paletteNav} onClose={closePalette} />}
+      {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
       <Approvals />
-      <MobileNav version={version} inst={inst} onSearch={openPalette} onChat={!onSession && inst ? openSide : undefined} current={current} />
+      <MobileNav version={version} inst={inst} onSearch={() => openPalette()} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
   );
 }

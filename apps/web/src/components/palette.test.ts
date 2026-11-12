@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OverviewCron, RecentSession } from '../api';
-import { flatItems, moveIndex, paletteGroups, type PaletteSources } from './palette';
+import { fileItems, fileTarget, flatItems, moveIndex, paletteGroups, type PaletteSources } from './palette';
 
 const nav = [
   { key: 'home', label: 'Accueil', target: { to: '/' } },
@@ -55,5 +55,25 @@ describe('moveIndex', () => {
     expect(moveIndex(2, 1, 3)).toBe(0);
     expect(moveIndex(0, -1, 3)).toBe(2);
     expect(moveIndex(-1, 1, 0)).toBe(-1);
+  });
+});
+
+describe('fileTarget', () => {
+  const ws = [{ slug: 'maison' }];
+  it('a path in a workspace of this instance → its Fichiers page, the file open', () => {
+    expect(fileTarget('a', 'maison/files/plan.pdf', ws)).toEqual({ to: '/w/$slug/fichiers', params: { slug: 'maison' }, search: { path: 'files', f: 'files/plan.pdf' } });
+    expect(fileTarget('a', 'maison/AGENTS.md', ws)).toEqual({ to: '/w/$slug/fichiers', params: { slug: 'maison' }, search: { path: undefined, f: 'AGENTS.md' } });
+    expect(fileTarget('a', 'maison/files', ws, true)).toEqual({ to: '/w/$slug/fichiers', params: { slug: 'maison' }, search: { path: 'files' } });
+  });
+  it('outside the workspaces, or a slug of another instance → the instance page', () => {
+    expect(fileTarget('a', 'crons/veille/rapport.md', ws)).toEqual({ to: '/i/$inst/files', params: { inst: 'a' }, search: { path: 'crons/veille', f: 'crons/veille/rapport.md' } });
+    expect(fileTarget('a', 'autre/files/x.md', ws).to).toBe('/i/$inst/files');
+    expect(fileTarget('a', 'maison', ws, true)).toEqual({ to: '/i/$inst/files', params: { inst: 'a' }, search: { path: 'maison' } });
+  });
+  it('items: name, folder as hint, 50 at most', () => {
+    const res = Array.from({ length: 60 }, (_, i) => ({ name: `${i}.md`, path: `crons/${i}.md`, kind: 'file' as const, size: 0, mtime: 0 }));
+    const items = fileItems('a', res, ws);
+    expect(items).toHaveLength(50);
+    expect(items[0]).toMatchObject({ label: '0.md', hint: 'crons' });
   });
 });

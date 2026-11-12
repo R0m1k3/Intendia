@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronRight, FolderOpen, Link2, Search, X } from 'lucide-react';
+import { ChevronRight, FolderOpen, Link2, Search, X, FileArchive } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type FileEntry } from '../api';
 import { PageHeader } from '../components/Layout';
@@ -91,12 +91,17 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
           </nav>
         }
         action={
+          <div className="flex items-center gap-1">
+            <a href={scope.zip(dir)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger ce dossier (zip)" aria-label="Télécharger ce dossier (zip)">
+              <FileArchive className="size-4" strokeWidth={1.5} />
+            </a>
           <div className="relative w-40 shrink-0 sm:w-48">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom" className="h-9 pl-8" aria-label="Chercher un fichier" />
             {q && (
               <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label="Effacer"><X className="size-4" strokeWidth={1.5} /></button>
             )}
+          </div>
           </div>
         }
       >
@@ -109,7 +114,7 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
         )}
         {debounced && <p className="px-4 pb-2 pt-1 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans toute l’instance${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
         {entries.length > 0 ? (
-          <FileRows scope={scope} entries={entries} selected={open} onOpen={onOpen} />
+          <FileRows scope={scope} entries={entries} selected={open} onOpen={onOpen} agentRoot={tree.data?.agentRoot} />
         ) : (tree.isSuccess && !debounced) ? (
           <p className="border-t border-line/70 px-4 py-12 text-center text-sm text-ink-faint">Dossier vide</p>
         ) : null}

@@ -1,10 +1,12 @@
-import type { OverviewCron, RecentSession } from '../api';
+import type { FileEntry, OverviewCron, RecentSession } from '../api';
 import { matchesAll, wordsOf } from './text';
 
 /** Where an item leads: options for the router's `navigate`. */
 export interface Target { to: string; params?: Record<string, string>; search?: Record<string, unknown> }
-export type PaletteGroupId = 'actions' | 'pages' | 'workspaces' | 'crons' | 'sessions';
-export interface PaletteItem { id: string; label: string; hint?: string; target: Target }
+export type PaletteGroupId = 'actions' | 'pages' | 'workspaces' | 'crons' | 'sessions' | 'files';
+export type PaletteMode = 'all' | 'files';
+/** `target`: where it leads; an item with `mode` switches the palette instead (« Ouvrir un fichier… »). */
+export interface PaletteItem { id: string; label: string; hint?: string; target?: Target; mode?: PaletteMode }
 export interface PaletteGroup { id: PaletteGroupId; label: string; items: PaletteItem[] }
 
 export const PER_GROUP = 5;
@@ -12,13 +14,41 @@ export const PER_GROUP = 5;
 export const SEARCH_MIN = 2;
 
 const GROUP_LABEL: Record<PaletteGroupId, string> = {
-  actions: 'Actions', pages: 'Pages', workspaces: 'Workspaces', crons: 'Crons', sessions: 'Sessions',
+  actions: 'Actions', pages: 'Pages', workspaces: 'Workspaces', crons: 'Crons', sessions: 'Sessions', files: 'Fichiers',
 };
 
 export const ACTIONS: PaletteItem[] = [
   { id: 'a:new-session', label: 'Nouvelle session', target: { to: '/', search: { nouvelle: 1 } } },
   { id: 'a:new-workspace', label: 'Nouveau workspace', target: { to: '/w' } },
+  { id: 'a:files', label: 'Ouvrir un fichier…', mode: 'files' },
 ];
+
+/** Results shown in the « Fichiers » mode of the palette. */
+export const FILES_MAX = 50;
+
+const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
+
+/**
+ * A path of the instance's file root → the page that shows it: the workspace's Fichiers page when its first segment
+ * is a workspace of this instance, else the instance's Fichiers page. A folder opens, a file opens in the preview.
+ */
+export function fileTarget(inst: string, path: string, workspaces: readonly { slug: string }[], dir = false): Target {
+  const seg = path.split('/')[0]!;
+  if (path.includes('/') && workspaces.some((w) => w.slug === seg)) {
+    const rel = path.slice(seg.length + 1);
+    const search = dir ? { path: rel } : { path: parentOf(rel) || undefined, f: rel };
+    return { to: '/w/$slug/fichiers', params: { slug: seg }, search };
+  }
+  return { to: '/i/$inst/files', params: { inst }, search: dir ? { path } : { path: parentOf(path) || undefined, f: path } };
+}
+
+/** The instance search's results as palette items (name, folder). */
+export function fileItems(inst: string, results: readonly FileEntry[], workspaces: readonly { slug: string }[]): PaletteItem[] {
+  return results.slice(0, FILES_MAX).map((e) => ({
+    id: `f:${e.path}`, label: e.name, hint: parentOf(e.path) || '/',
+    target: fileTarget(inst, e.path, workspaces, e.kind === 'dir'),
+  }));
+}
 
 export function sessionTarget(s: RecentSession): Target {
   return s.kind === 'intendia' && s.workspace

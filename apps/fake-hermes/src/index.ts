@@ -32,6 +32,8 @@
  * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
  *   tries fetch('/x/setup'), then answers with a `::artefact <path>` line; "absent" too: a line for a missing page;
  *   "fuite": fuite.html instead, whose script navigates its frame to http://localhost:9/leak?d=… after 300 ms
+ * - "modifie": a write_file call (<workspace>/files/modifie.md) then a V4A patch (Update of that file, Add of
+ *   files/nouveau.md); calls and results stored in the messages like Hermes does, files written on disk
  * - "taches": two todo_list calls (the second with merge: true, 1.5 s later), each result = the full list
  *
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
@@ -305,6 +307,7 @@ class Simulator {
       return this.fail(run, 'Provider error: model unavailable');
     }
     if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
+    if (/modifie/i.test(run.input)) return this.playModified(run, step);
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
@@ -340,6 +343,47 @@ class Simulator {
     this.addMessage(run.sessionId, 'tool', `Wrote ${path}`, { tool_name: 'write_file' });
     await sleep(step);
     this.finish(run, `Voilà le rapport : \`${path}\`. Il reprend les ventes des deux magasins.`);
+  }
+
+  /** "modifie" scenario: write_file then a V4A patch that updates that file and adds another one. */
+  private async playModified(run: SimRun, step: number) {
+    const dir = /dans (\S+)\/sessions\/[^/\s]+\/\./.exec(run.instructions)?.[1] ?? '/workspace';
+    const first = `${dir}/files/modifie.md`;
+    const added = `${dir}/files/nouveau.md`;
+    const onDisk = first.startsWith(`${this.filesRoot}/`);
+    const write = JSON.stringify({ path: first, content: '# Modifié\n\nPremière version.\n' });
+    this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id: 'call_w1', type: 'function', function: { name: 'write_file', arguments: write } }] });
+    this.push(run, { event: 'tool.started', tool: 'write_file', preview: first, call_id: 'call_w1' });
+    if (onDisk) {
+      mkdirSync(`${dir}/files`, { recursive: true });
+      writeFileSync(first, '# Modifié\n\nPremière version.\n');
+    }
+    await sleep(step);
+    this.addMessage(run.sessionId, 'tool', JSON.stringify({ bytes_written: 30, dirs_created: false }), { tool_name: 'write_file' });
+    this.push(run, { event: 'tool.completed', tool: 'write_file', duration: 0.05, error: false, preview: first, call_id: 'call_w1' });
+    const patch = [
+      '*** Begin Patch',
+      `*** Update File: ${first}`,
+      '@@',
+      ' # Modifié',
+      '-Première version.',
+      '+Deuxième version.',
+      `***Add File: ${added}`,
+      '+# Nouveau',
+      '*** End Patch',
+    ].join('\n');
+    const args = JSON.stringify({ mode: 'patch', patch });
+    this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id: 'call_p1', type: 'function', function: { name: 'patch', arguments: args } }] });
+    this.push(run, { event: 'tool.started', tool: 'patch', preview: 'patch', call_id: 'call_p1' });
+    if (onDisk) {
+      writeFileSync(first, '# Modifié\n\nDeuxième version.\n');
+      writeFileSync(added, '# Nouveau\n');
+    }
+    await sleep(step);
+    this.addMessage(run.sessionId, 'tool', JSON.stringify({ success: true, files_modified: [first], files_created: [added] }), { tool_name: 'patch' });
+    this.push(run, { event: 'tool.completed', tool: 'patch', duration: 0.08, error: false, preview: 'ok', call_id: 'call_p1' });
+    await sleep(step);
+    this.finish(run, 'J’ai modifié deux fichiers.');
   }
 
   /** "delegue" scenario: two sub-agents, the second one a child of the first. */

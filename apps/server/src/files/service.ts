@@ -10,6 +10,7 @@ import { mapLimit, type FileRoots, type FsEntry, type HermesFs } from './hermes-
 import { ArchiveError, archiveKind, archiveStem, extractArchive, precheckArchive, type Skipped } from './archive.js';
 import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
 import { FILE_READ_MAX, idleGuard, MOVE_MAX_BYTES, MOVE_MAX_FILES, walk, type WalkResult } from './walk.js';
+import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
 
 export const LIST_MAX = 2000;
 export const SEARCH_VISIT_MAX = 20_000;
@@ -107,7 +108,30 @@ export class FileService {
     return e;
   }
 
-  async list(slug: string, relIn: string): Promise<{ path: string; entries: FileEntry[]; truncated: boolean }> {
+  /**
+   * A folder of the workspace as a zip stream (`<folder>.zip`, `<slug>.zip` for the root). Walked first: past the
+   * limits, 413 before any byte. Symbolic links are left out.
+   */
+  async zip(slug: string, relIn: string): Promise<{ body: ReadableStream<Uint8Array>; name: string }> {
+    const c = this.ctx(slug);
+    const rel = normalizeRel(relIn, { allowRoot: true });
+    if (rel) {
+      const e = await this.mustEntry(c, rel);
+      if (!e.isDir || e.isLink) throw new WorkspaceFsError('not_file', `Pas un dossier : ${rel}`);
+    }
+    const release = zipSlot();
+    try {
+      const tree = await walk(async (r) => (await c.fs.list(this.vol(c, r))).entries, rel, ZIP_WALK);
+      const name = rel ? nameOf(rel) : c.ws.slug;
+      const body = zipFolder({ name, tree, read: async (r) => (await c.fs.read(this.vol(c, under(rel, r)))).body, onEnd: release });
+      return { body, name: `${name}.zip` };
+    } catch (err) {
+      release();
+      throw err;
+    }
+  }
+
+  async list(slug: string, relIn: string): Promise<{ path: string; entries: FileEntry[]; truncated: boolean; agentRoot: string }> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn, { allowRoot: true });
     const { entries: all } = await c.fs.list(this.vol(c, rel));
@@ -115,7 +139,7 @@ export class FileService {
     const entries = all.slice(0, LIST_MAX).map((e) => toFileEntry(e, rel));
     const isDir = (e: FileEntry) => e.kind === 'dir';
     entries.sort((a, b) => Number(isDir(b)) - Number(isDir(a)) || a.name.localeCompare(b.name, 'fr'));
-    return { path: rel, entries, truncated };
+    return { path: rel, entries, truncated, agentRoot: `${c.fs.root}/${c.ws.slug}` };
   }
 
   /** Name search, breadth first, 4 folders at a time, symbolic links not followed; bounded in entries, results and time. */
