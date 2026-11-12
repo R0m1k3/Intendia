@@ -68,8 +68,8 @@ describe('gateway start / stop', () => {
     await t.request('POST', '/x/i/fake/agents', { name: 'veille' });
     await t.request('POST', `${BASE}/stop?profile=veille`, {});
     await follow(t, 'stop', 'veille');
-    const r = await t.fake.api.request('/v1/capabilities', { headers: { Authorization: 'Bearer veille-profile-key-0000', 'X-Hermes-Profile': 'veille' } });
-    expect([503, 200]).toContain(r.status);
+    const r = await t.fake.api.request('/p/veille/v1/capabilities', { headers: { Authorization: 'Bearer veille-profile-key-0000' } });
+    expect(r.status).toBe(503);
     expect((await t.request('POST', `${BASE}/start?profile=veille`)).status).toBe(202);
   });
 });

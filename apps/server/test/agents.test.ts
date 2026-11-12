@@ -147,7 +147,7 @@ describe('agents: administration (lot 8 B)', () => {
     const moved = await t.request('PUT', `${BASE}/default/soul`, { content: `Le jeton est ${marker}` });
     expect(moved.status).toBe(400);
     expect(moved.json.code).toBe('secret_moved');
-    const unknown = await t.request('PUT', `${BASE}/default/soul`, { content: 'Authorization: Bearer «secret:0000000000000000»' });
+    const unknown = await t.request('PUT', `${BASE}/default/soul`, { content: 'Authorization: Bearer «secret:00000000»' });
     expect(unknown.status).toBe(400);
     expect(unknown.json.code).toBe('secret_placeholder');
     expect(dash(t, 'PUT', '/api/profiles/default/soul')).toHaveLength(1);
