@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import { api } from '../api';
+import { configKey } from '../config/common';
 import { Panel } from '../components/ui';
 import { Ask } from '../home/Ask';
 import { useCurrentInstance } from '../instance/current';
@@ -20,7 +21,7 @@ export function HomePage() {
   const ws = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === id);
   const focused = useCallback(() => { void navigate({ to: '/', search: {}, replace: true }); }, [navigate]);
   // no main model on the current instance: the setup was skipped (model/info only: never writes; error → nothing)
-  const info = useQuery({ queryKey: ['model-info', id], queryFn: () => api.modelInfo(id!), enabled: Boolean(id), retry: false, staleTime: 60_000 });
+  const info = useQuery({ queryKey: configKey(id ?? '', 'default', 'model-info'), queryFn: () => api.modelInfo(id!), enabled: Boolean(id), retry: false, staleTime: 60_000 });
 
   return (
     <div data-home className="flex min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] flex-col md:min-h-[var(--content-h)]">

@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { api } from '../api';
 import { Button, Wordmark } from '../components/ui';
-import { useCurrentInstance } from '../instance/current';
+import { setTab, useCurrentInstance } from '../instance/current';
 
 export interface StepSearch { inst?: string }
 const LABELS = ['Fournisseur', 'Modèle', 'Workspace'];
@@ -26,7 +26,7 @@ export function StepFrame({ step, title, intro, children, next, nextLabel = 'Con
   const navigate = useNavigate();
   const { inst } = useStepInstance();
   const skip = () => {
-    if (step === 2) void navigate({ to: '/' });
+    if (step === 2) finishSetup(navigate, inst);
     else void navigate({ to: step === 0 ? '/installation/modele' : '/installation/workspace', search: inst ? { inst } : {} });
   };
   return (
@@ -46,4 +46,10 @@ export function StepFrame({ step, title, intro, children, next, nextLabel = 'Con
       </div>
     </div></div>
   );
+}
+
+/** End of the steps: the instance just set up becomes the current one, then the home page (its workspaces). */
+export function finishSetup(navigate: ReturnType<typeof useNavigate>, inst: string | null): void {
+  if (inst) setTab(inst);
+  void navigate({ to: '/' });
 }
