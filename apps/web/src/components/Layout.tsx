@@ -9,6 +9,7 @@ import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
 import { InstanceSwitcher } from './InstanceSwitcher';
 import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
+import { flushDrafts } from '../chat/draft';
 import { SideChat } from './SideChat';
 import { cx, Wordmark } from './ui';
 
@@ -44,6 +45,8 @@ export function Layout() {
 
 /** Inside the side chat's iframe: the page alone; ⌘J goes to the page around it. */
 function EmbeddedLayout() {
+  // the page saves this frame's draft before removing it (SideChat)
+  useEffect(() => { window.intendiaFlushDrafts = flushDrafts; }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isSideChatKey(e)) return;

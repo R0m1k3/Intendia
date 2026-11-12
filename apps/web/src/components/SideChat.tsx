@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { Maximize2, Plus, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
-import { embedUrl, setSideSession, sideSession, TOGGLE, type SideSession } from '../chat/embed';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { api, ApiError } from '../api';
+import { embedUrl, flushFrame, forgetSideSession, setSideSession, sideSession, TOGGLE, type SideSession } from '../chat/embed';
 import { shortcutLabel } from './CommandPalette';
 import { Button } from './ui';
 
@@ -41,6 +41,7 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
     if (!slug || creating.current) return;
     creating.current = true;
     setError(null);
+    flushFrame(frame.current);
     try {
       const { session } = await api.createSession(slug);
       const s = { slug, id: session.id };
@@ -60,10 +61,24 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
   useEffect(() => {
     if (!ready) return;
     const stored = sideSession(inst);
-    if (stored && known(stored.slug)) setShown(stored);
-    else void startNew();
+    if (!stored || !known(stored.slug)) { void startNew(); return; }
+    // deleted elsewhere (Sessions page, workspace list): forgotten, a new one instead
+    let live = true;
+    api.session(inst, stored.id).then(
+      () => { if (live) setShown(stored); },
+      (e: unknown) => {
+        if (!live) return;
+        if (e instanceof ApiError && e.status === 404) { forgetSideSession(inst, stored.id); void startNew(); }
+        else setShown(stored);
+      },
+    );
+    return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inst, ready]);
+
+  // closed, expanded or another instance: the frame's draft is saved before React removes it (layout cleanup runs
+  // before the DOM node goes; the frame's own React tree is never unmounted)
+  useLayoutEffect(() => () => flushFrame(frame.current), []);
 
   // ⌘J pressed inside the frame closes the panel
   useEffect(() => {

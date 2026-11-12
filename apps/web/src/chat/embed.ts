@@ -5,6 +5,15 @@
 export const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top
   && new URLSearchParams(window.location.search).has('embed');
 
+declare global {
+  interface Window { intendiaFlushDrafts?: () => void }
+}
+
+/** Asks a side chat frame to save its draft now, before the page removes it. */
+export function flushFrame(frame: HTMLIFrameElement | null): void {
+  try { frame?.contentWindow?.intendiaFlushDrafts?.(); } catch { /* frame gone or elsewhere: nothing to save */ }
+}
+
 /** Message from the iframe to the page: ⌘J pressed inside the side chat. */
 export const TOGGLE = 'side-chat-toggle';
 

@@ -2,7 +2,7 @@ import { ArrowUp, CornerDownRight, FileText, FolderArchive, ShieldOff, Sparkles,
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
-import { clearDraft, loadDraft, saveDraft } from './draft';
+import { clearDraft, loadDraft, onFlush, saveDraft } from './draft';
 import { PromptPicker } from './PromptPicker';
 import { matchCommands, matchSkills, parseCommand, type Command, type CommandName } from './commands';
 import type { QueueItem } from './queue';
@@ -121,6 +121,8 @@ export function Composer({
     // empty and must not erase it; clearing goes through the timer below and the send
     return () => { const l = latest.current; if (l.key && l.text.trim()) saveDraft(l.key, l.text); };
   }, [draftKey]);
+  // saved at once when the side chat's iframe is about to go (same rule as the cleanup above)
+  useEffect(() => onFlush(() => { const l = latest.current; if (l.key && l.text.trim()) saveDraft(l.key, l.text); }), []);
   useEffect(() => {
     if (!draftKey) return;
     const id = setTimeout(() => saveDraft(draftKey, text), 400);
