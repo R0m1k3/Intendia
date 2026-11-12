@@ -173,6 +173,10 @@ demand from the State screen. State changes go to the webhook.
 - Live follow: at most 3 run streams per tab (`chat/streams.ts`, a browser keeps 6 HTTP/1.1 connections per host);
   other runs are polled every 3 s (`followRun` in `chat/useRun.ts`, « Suivi en différé »), their approvals and
   questions read from `GET /x/approvals`.
+- « Nouvelle session » (sidebar, palette) goes to `/chat/nouvelle`: its `beforeLoad` (never on a preload) creates an
+  empty session in the active chat's workspace, else the last one used, else the instance's first
+  (`chat/newSession.ts`), opens it right of the active column and redirects there; the message box gets the cursor.
+  An empty session can still move to another workspace of its instance (« Changer de workspace », bulk `move`).
 - The session list folds when several chats are visible (button « Afficher la liste », kept in `localStorage`).
 
 ## Files, share links and MCP

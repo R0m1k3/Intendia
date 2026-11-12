@@ -310,11 +310,12 @@ function MobileNav({ current, onSearch, onChat, version, inst }: { current: stri
   );
 }
 
-/** "Nouvelle session": the home page, cursor in "Demander quelque chose à Hermes…". */
+/** "Nouvelle session": an empty session in a new chat column, cursor in its message box (route /chat/nouvelle). */
 function NewSessionButton({ className, onClick }: { className?: string; onClick?: () => void }) {
   return (
     <Link
-      to="/" search={{ nouvelle: 1 }} onClick={onClick}
+      // never preloaded: opening the route creates a session
+      to="/chat/nouvelle" preload={false} onClick={onClick}
       className={cx('flex h-[34px] items-center justify-center gap-2 rounded-lg border border-accent-strong bg-accent px-3 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong', className)}
     >
       <PenLine className="size-4" strokeWidth={1.5} />
