@@ -471,7 +471,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   }, [emptyReady, sessionId]);
   // its workspace can still change (moved: nothing sent, no file written), as on the home page
   const allWorkspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces, enabled: Boolean(inst) });
-  const siblings = (allWorkspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
+  // same instance and same agent (the server refuses another one, as the list's « Déplacer vers… »)
+  const agentOf = sess.data?.profile ?? 'default';
+  const siblings = (allWorkspaces.data?.workspaces ?? [])
+    .filter((w) => w.instanceId === inst && (w.profile ?? 'default') === agentOf);
   const neverSent = Boolean(sess.data && !sess.data.session.lastRunId && !sess.data.session.copiedFrom);
   const moveTo = async (to: string | null) => {
     if (!to || to === slug || !inst) return;
