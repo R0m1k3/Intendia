@@ -90,7 +90,9 @@ function Soul({ inst, name, x, editable }: { inst: string; name: string; x: Agen
   return (
     <section className="card overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3">
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
+        {/* not folded while editing: the draft lives in the editor */}
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={draft !== null}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left disabled:cursor-default">
           <span className="min-w-0">
             <span className="font-mono text-[13.5px] font-medium">SOUL.md</span>
             <span className="ml-3 text-xs text-ink-faint">personnalité de l’agent ; les valeurs qui ressemblent à des secrets sont masquées</span>
@@ -106,11 +108,12 @@ function Soul({ inst, name, x, editable }: { inst: string; name: string; x: Agen
           {draft !== null ? (
             <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">Chargement…</p>}>
               {/* starting text only: CodeView is rebuilt on every value */}
-              <CodeView name="SOUL.md" value={x.soul} editable onChange={setDraft} />
+              <CodeView key="edit" name="SOUL.md" value={x.soul} editable onChange={setDraft} />
             </Suspense>
           ) : x.soul ? (
             <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">Chargement…</p>}>
-              <CodeView name="SOUL.md" value={x.soul} editable={false} />
+              {/* another key: Annuler shows the saved text again, not the edited editor */}
+              <CodeView key="view" name="SOUL.md" value={x.soul} editable={false} />
             </Suspense>
           ) : <p className="px-4 py-3 text-sm text-ink-faint">SOUL.md vide</p>}
           {x.soulTruncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Tronqué à 64 Kio : trop long pour l’éditeur</p>}
