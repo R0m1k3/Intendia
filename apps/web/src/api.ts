@@ -259,6 +259,18 @@ export interface Cron {
   deliver: string | null;
   skills: string[];
   model: string | null;
+  /** Number of runs asked (null = forever) and already done. */
+  repeat: number | null;
+  repeatCompleted: number;
+  /** IANA zone, null = Hermes' zone. */
+  timezone: string | null;
+  /** null = every toolset of the agent. */
+  enabledToolsets: string[] | null;
+  /** null = Hermes' default. */
+  catchUp: boolean | null;
+  graceMinutes: number | null;
+  /** Crons whose last output is given as context. */
+  contextFrom: string[];
 }
 
 export interface CronRun {
@@ -281,6 +293,36 @@ export interface CronInput {
   model: string | null;
   workspace: string | null;
   paused?: boolean;
+  /** Advanced options: on create, empty ones are left out; on update, empty = back to Hermes' default. */
+  repeat?: number | 'forever';
+  timezone?: string | null;
+  enabledToolsets?: string[] | null;
+  catchUp?: boolean | null;
+  graceMinutes?: number | null;
+  contextFrom?: string[] | null;
+}
+
+export interface BlueprintField {
+  name: string;
+  /** time, select, text… (an unknown type is shown as a text input) */
+  type: string;
+  label: string;
+  default: string | null;
+  options: { value: string; label: string }[];
+  optional: boolean;
+  /** false: the options are only suggestions, any value is accepted */
+  strict: boolean;
+  help: string | null;
+}
+export interface Blueprint {
+  key: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  schedule: string | null;
+  fields: BlueprintField[];
+  source: string | null;
+  plugin: string | null;
 }
 
 export interface DeliveryTarget { id: string; name: string }
@@ -735,6 +777,10 @@ export const api = {
   cancelCron: (inst: string, id: string, profile: string) =>
     call<{ cancelled: boolean; detail: string | null }>('POST', cronPath(inst, id, profile, 'cancel'), {}),
   cronRuns: (inst: string, id: string, profile: string) => call<{ runs: CronRun[] }>('GET', cronPath(inst, id, profile, 'runs')),
+  blueprints: (inst: string, profile: string) =>
+    call<{ blueprints: Blueprint[] }>('GET', `${cronsPath(inst)}/blueprints?profile=${enc(profile)}`),
+  instantiateBlueprint: (inst: string, profile: string, key: string, values: Record<string, string>, workspace: string | null) =>
+    call<{ cron: Cron; attached: boolean }>('POST', `${cronsPath(inst)}/blueprints/${enc(key)}?profile=${enc(profile)}`, { values, workspace }),
   cronTargets: (inst: string) => call<{ targets: DeliveryTarget[] }>('GET', `${cronsPath(inst)}/targets`),
   recentSessions: (inst: string, limit = 20, source: SessionSource = 'all') =>
     call<{ sessions: RecentSession[] } & SessionErrors>('GET', instPath(inst, `sessions/recent?limit=${limit}${source === 'all' ? '' : `&source=${source}`}`)),
@@ -794,6 +840,13 @@ export const api = {
     call<{ name: string; content: string; truncated: boolean }>('GET', instPath(inst, 'skills/content', profile, { name })),
   setSkillEnabled: (inst: string, profile: string, name: string, enabled: boolean) =>
     call<{ skill: Skill }>('PUT', instPath(inst, 'skills/enabled', profile), { name, enabled }),
+  createSkill: (inst: string, profile: string, input: { name: string; category?: string; description: string; body: string }) =>
+    call<{ skill: Skill }>('POST', instPath(inst, 'skills', profile), input),
+  putSkillContent: (inst: string, profile: string, name: string, content: string) =>
+    call<{ content: string }>('PUT', instPath(inst, 'skills/content', profile), { name, content }),
+  lockSkill: (inst: string, profile: string, name: string, locked: boolean) =>
+    call<{ skill: Skill }>('PUT', instPath(inst, 'skills/lock', profile), { name, locked }),
+  archiveSkill: (inst: string, profile: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `skills/${enc(name)}`, profile)),
   toolsets: (inst: string, profile: string) => call<{ toolsets: Toolset[] }>('GET', instPath(inst, 'skills/toolsets', profile)),
   hubOfficial: (inst: string, profile: string) => call<{ results: HubResult[]; timedOut: string[] }>('GET', instPath(inst, 'skills/hub/official', profile)),
   hubSearch: (inst: string, profile: string, q: string) =>

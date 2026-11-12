@@ -351,6 +351,26 @@ Sub-agents and runs (API server):
   (auxiliary model; refuses over a user-written description). Create (`POST /api/profiles`) also takes `clone_all`,
   `no_skills`, `soul`, `provider` + `model` (a refused model is `model_error`, the profile is created).
 
+## Writing skills, advanced cron options, cron templates (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
+
+- `POST /api/skills?profile= {name, content, category?}` writes `skills/<category>/<name>/SKILL.md`; name
+  `^[a-z0-9][a-z0-9._-]{0,63}$`, description of the front matter ≤ 60 characters, 400 « already exists at <host path> »
+  (Intendia hides the path). The new skill has `provenance: agent`, like the ones the agent writes.
+- `PUT /api/skills/content {name, content}` rewrites the whole SKILL.md; `PUT /api/skills/lock {name, locked}`: the
+  agent and the curator may no longer edit it (the user still can).
+- Removal = archive: `DELETE /api/learning/node?profile= {id: <name>, profile}` moves it to `skills/.archive`
+  (restore: `hermes curator restore`, no HTTP route). Refused for pinned, hub, bundled and external skills; Intendia
+  only offers it for `provenance: agent`.
+- Cron fields: `repeat` (`{times, completed}` on read; a number, `"forever"` or `"once"` on write), `timezone`,
+  `enabled_toolsets` (`[]` = no tool at all: never sent, `null` = every toolset), `catch_up`, `grace_minutes`,
+  `context_from` (ids of crons of the same profile). On update `null` brings back Hermes' default.
+- `GET /api/cron/blueprints?profile=` → `{blueprints: [{key, title, description, category, tags, fields,
+  scheduleHuman, source, plugin, command, appUrl}]}`; 16 builtin templates on 0.23.0. Field types `time`, `enum`,
+  `text`, `weekdays` (`everyday`, `weekdays`, `weekends`); `options` are strings; `strict: false` (the `deliver`
+  field) = options are suggestions only. `POST /api/cron/blueprints/instantiate?profile= {blueprint, values}` creates
+  the cron (no `?profile=` = `default`, not the active profile); 422 with a text `detail` for an unknown field, a
+  missing value or a value outside a strict list. The cron has no workdir: Intendia frames it afterwards with a `PUT`.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

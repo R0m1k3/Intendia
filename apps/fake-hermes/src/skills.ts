@@ -69,6 +69,10 @@ export class SkillStore {
   readonly skills: Skill[];
   readonly hub: HubEntry[];
   readonly actions = new Map<string, Action>();
+  /** SKILL.md written by POST /api/skills or PUT /api/skills/content */
+  readonly contents = new Map<string, string>();
+  /** archived skills (DELETE /api/learning/node) */
+  readonly archived: string[] = [];
   private pid = 9000;
 
   constructor(fixturesDir: string, private readonly stepMs: number) {
@@ -118,9 +122,58 @@ export class SkillStore {
       if (s) s.enabled = enabled;
       return json({ ok: true, name, enabled });
     }
+    const NAME_RE = /^[a-z0-9][a-z0-9._-]*$/;
+    if (method === 'POST' && path === '/api/skills') {
+      const name = String(b.name ?? '');
+      const content = String(b.content ?? '');
+      const category = typeof b.category === 'string' && b.category ? b.category : null;
+      if (!NAME_RE.test(name) || name.length > 64) return json({ detail: `Invalid skill name '${name}'. Use lowercase letters, numbers, hyphens, dots, and underscores. Must start with a letter or digit.` }, 400);
+      if (category && (!NAME_RE.test(category) || category.length > 64)) return json({ detail: `Invalid category '${category}'.` }, 400);
+      if (content.length > 100_000) return json({ detail: 'SKILL.md content is 100001 characters (limit: 100,000).' }, 400);
+      const fm = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(content);
+      if (!fm) return json({ detail: 'SKILL.md must start with YAML frontmatter (---).' }, 400);
+      const desc = /^description: (.*)$/m.exec(fm[1]!)?.[1]?.replace(/^['"]|['"]$/g, '') ?? '';
+      if (!/^name: /m.test(fm[1]!) || !desc) return json({ detail: "Frontmatter must include 'name' and 'description' fields." }, 400);
+      if (desc.length > 60) return json({ detail: `Skill description is ${desc.length} characters; the limit is 60.` }, 400);
+      if (!fm[2]!.trim()) return json({ detail: 'SKILL.md must have content after the frontmatter (instructions, procedures, etc.).' }, 400);
+      const prev = this.skills.find((x) => x.name === name) ?? (this.archived.includes(name) ? { category: '.archive' } : null);
+      if (prev) return json({ detail: `A skill named '${name}' already exists at /opt/data/profiles/default/skills/${prev.category}/${name}.` }, 400);
+      this.skills.push({ name, description: desc, category: category ?? '', locked: false, enabled: true, usage: 0, provenance: 'agent' });
+      this.contents.set(name, content);
+      const where = `${category ? `${category}/` : ''}${name}/SKILL.md`;
+      return json({ success: true, message: `Skill '${name}' created.`, path: where, skill_md: `/opt/data/profiles/default/skills/${where}`, category, hint: '' });
+    }
+    if (method === 'PUT' && path === '/api/skills/content') {
+      const name = String(b.name ?? '');
+      const content = String(b.content ?? '');
+      const s = this.skills.find((x) => x.name === name);
+      if (!s) return json({ detail: `Skill '${name}' not found.` }, 404);
+      if (!content.startsWith('---')) return json({ detail: 'SKILL.md must start with YAML frontmatter (---).' }, 400);
+      this.contents.set(name, content);
+      return json({ success: true, message: `Skill '${name}' updated.` });
+    }
+    if (method === 'PUT' && path === '/api/skills/lock') {
+      const s = this.skills.find((x) => x.name === String(b.name ?? ''));
+      if (!s) return json({ detail: `Skill '${String(b.name)}' not found.` }, 404);
+      s.locked = Boolean(b.locked);
+      return json({ ok: true, name: s.name, locked: s.locked });
+    }
+    if (method === 'DELETE' && path === '/api/learning/node') {
+      const id = String(b.id ?? '');
+      const i = this.skills.findIndex((x) => x.name === id);
+      if (i < 0) return json({ detail: `delete failed: node '${id}' not found` }, 400);
+      const s = this.skills[i]!;
+      if (s.provenance !== 'agent') return json({ detail: `delete failed: '${id}' is ${s.provenance === 'hub' ? 'hub-installed' : 'bundled'}; uninstall it instead` }, 400);
+      if (id.startsWith('epingle')) return json({ detail: `delete failed: '${id}' is pinned; unpin it first` }, 400);
+      this.skills.splice(i, 1);
+      this.archived.push(id);
+      return json({ ok: true, message: `archived skill '${id}' to skills/.archive` });
+    }
     if (method === 'GET' && path === '/api/skills/content') {
       const s = this.skills.find((x) => x.name === query.name);
       if (!s) return json({ detail: `Skill '${query.name}' not found.` }, 404);
+      const written = this.contents.get(s.name);
+      if (written !== undefined) return json({ name: s.name, content: written, path: `/opt/data/profiles/default/skills/${s.name}/SKILL.md` });
       const requires = s.name === 'claude-code' ? '    requires_toolsets: [terminal]\n' : '';
       const content = `---\nname: ${s.name}\ndescription: ${s.description}\nmetadata:\n  hermes:\n${requires}---\n\n# ${s.name}\n\n${s.description}\n\n<script>alert(1)</script> stays text.\n`;
       return json({ name: s.name, content, path: `/opt/hermes/skills/${s.category}/${s.name}/SKILL.md` });

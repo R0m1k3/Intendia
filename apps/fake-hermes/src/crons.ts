@@ -62,6 +62,52 @@ function json(body: unknown, status = 200): Response {
 
 const NOT_FOUND = () => json({ detail: 'Job not found' }, 404);
 
+/** Three templates like Hermes' catalogue (the prompt is never returned by the list). */
+const BLUEPRINTS = [
+  {
+    key: 'morning-brief', title: 'Morning brief', description: 'A short summary of your day every morning.', category: 'daily', tags: ['daily'],
+    fields: [
+      { name: 'time', type: 'time', label: 'Time', default: '08:00', options: [], optional: false, strict: true, help: 'When to send it' },
+      { name: 'recurrence', type: 'weekdays', label: 'Repeat on', default: 'everyday', options: ['everyday', 'weekdays', 'weekends'], optional: false, strict: true, help: '' },
+      { name: 'style', type: 'enum', label: 'Style', default: 'short', options: ['short', 'detailed'], optional: false, strict: true, help: '' },
+      // like Hermes' deliver slot: options are suggestions, any value is accepted
+      { name: 'deliver', type: 'enum', label: 'Where to deliver?', default: 'origin', options: ['origin', 'local'], optional: false, strict: false, help: 'origin = the chat you set this up from' },
+    ],
+    source: 'builtin', plugin: null, schedule: '{minute} {hour} * * {dow}', scheduleHuman: 'daily at 08:00', command: 'hermes cron add …', appUrl: '/cron?blueprint=morning-brief',
+    prompt: (v: Record<string, string>) => `Write a ${v.style ?? 'short'} morning brief.`,
+    sched: (v: Record<string, string>) => {
+      const [h, m] = (v.time ?? '08:00').split(':');
+      const dow = ({ everyday: '*', weekdays: '1-5', weekends: '0,6' } as Record<string, string>)[v.recurrence ?? 'everyday'] ?? '*';
+      return `${Number(m)} ${Number(h)} * * ${dow}`;
+    },
+  },
+  {
+    key: 'price-watch', title: 'Price watch', description: 'Checks a product page and reports price changes.', category: 'shopping', tags: [],
+    fields: [
+      { name: 'url', type: 'text', label: 'Product URL', default: '', options: [], optional: false, strict: true, help: 'Page to watch' },
+      { name: 'note', type: 'text', label: 'Note', default: null, options: [], optional: true, strict: true, help: '' },
+    ],
+    source: 'builtin', plugin: null, schedule: 'every 6h', scheduleHuman: 'Every 6 hours', command: null, appUrl: null,
+    prompt: (v: Record<string, string>) => `Check the price at ${v.url ?? ''}.`,
+    sched: () => 'every 6h',
+  },
+  {
+    key: 'plugin-x', title: 'Plugin report', description: 'Template shipped by a plugin.', category: 'plugins', tags: [],
+    fields: [], source: 'plugin', plugin: 'fake-plugin', schedule: 'every 24h', scheduleHuman: 'Every day', command: null, appUrl: null,
+    prompt: () => 'Run the plugin report.', sched: () => 'every 24h',
+  },
+];
+
+function badTimezone(tz: unknown): boolean {
+  if (tz === null || tz === undefined) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: String(tz) });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export class CronStore {
   jobs = new Map<string, Job>();
   runs: Run[] = [];
@@ -69,27 +115,57 @@ export class CronStore {
 
   constructor(private readonly stepMs: number, private readonly sessions: CronSessionSink) {}
 
+  /** Hermes' checks of the advanced fields (create and update). */
+  private checkAdvanced(b: Record<string, unknown>, profile: string): Response | null {
+    if ('repeat' in b && b.repeat !== null && b.repeat !== 'forever' && b.repeat !== 'once' && !(Number.isInteger(b.repeat) && Number(b.repeat) >= 1)) {
+      return json({ detail: 'repeat must be a positive integer, "once" or "forever"' }, 400);
+    }
+    if (badTimezone(b.timezone)) return json({ detail: `Unknown timezone '${String(b.timezone)}'` }, 400);
+    if ('enabled_toolsets' in b && b.enabled_toolsets !== null && !Array.isArray(b.enabled_toolsets)) return json({ detail: 'enabled_toolsets must be a list of toolset names (or [] for none).' }, 400);
+    if ('catch_up' in b && b.catch_up !== null && typeof b.catch_up !== 'boolean') return json({ detail: 'catch_up must be true, false, or null (use the default).' }, 400);
+    const ctx = b.context_from === null || b.context_from === undefined ? [] : Array.isArray(b.context_from) ? b.context_from : [b.context_from];
+    for (const id of ctx) {
+      const other = this.jobs.get(String(id));
+      if (!other || other.profile !== profile) return json({ detail: `context_from: job '${String(id)}' not found in profile '${profile}'` }, 400);
+    }
+    return null;
+  }
+
   private newJob(body: Record<string, unknown>, profile: string): Job | Response {
     const schedule = parseSchedule(String(body.schedule ?? ''));
     if (!schedule) return json({ detail: `Invalid schedule '${String(body.schedule ?? '')}'. ${SCHEDULE_HELP}` }, 400);
+    const bad = this.checkAdvanced(body, profile);
+    if (bad) return bad;
+    const times = typeof body.repeat === 'number' ? body.repeat : schedule.kind === 'once' ? 1 : null;
     this.n += 1;
     const paused = body.paused === true;
     const job: Job = {
       id: (0xa00000000000 + this.n).toString(16), profile, profile_name: profile,
       name: String(body.name ?? ''), prompt: String(body.prompt ?? ''), skills: Array.isArray(body.skills) ? body.skills : [],
       skill: null, model: body.model ?? null, provider: null, script: null, no_agent: false,
-      schedule, schedule_display: schedule.display, repeat: { times: schedule.kind === 'once' ? 1 : null, completed: 0 },
+      schedule, schedule_display: schedule.display, repeat: { times, completed: 0 },
       enabled: !paused, state: paused ? 'paused' : 'scheduled', paused_at: paused ? iso(Date.now()) : null, paused_reason: null,
       created_at: iso(Date.now()), next_run_at: paused ? null : nextRun(schedule), last_run_at: null, last_status: null,
       last_error: null, last_delivery_error: null, failure_streak: 0, deliver: body.deliver ?? 'local', origin: null,
-      workdir: body.workdir ?? null, timezone: null, hermes_home: `/opt/data/profiles/${profile}`, monitor_url: null,
+      workdir: body.workdir ?? null, timezone: body.timezone ?? null, hermes_home: `/opt/data/profiles/${profile}`, monitor_url: null,
+      enabled_toolsets: body.enabled_toolsets ?? null, context_from: body.context_from ?? null,
+      ...(typeof body.catch_up === 'boolean' ? { catch_up: body.catch_up } : {}),
+      ...(typeof body.grace_minutes === 'number' ? { grace_minutes: body.grace_minutes } : {}),
     };
     this.jobs.set(job.id, job);
     return job;
   }
 
   private update(job: Job, updates: Record<string, unknown>): Job | Response {
+    const bad = this.checkAdvanced(Object.fromEntries(Object.entries(updates).filter(([k]) => k !== 'context_from' || updates[k] !== null)), job.profile);
+    if (bad) return bad;
     for (const [k, v] of Object.entries(updates)) {
+      if (k === 'repeat') {
+        const completed = Number((job.repeat as { completed?: number } | null)?.completed ?? 0);
+        job.repeat = { times: v === 'forever' || v === null ? null : v === 'once' ? 1 : Number(v), completed };
+        continue;
+      }
+      if (k === 'context_from' && typeof v === 'string') { job.context_from = [v]; continue; }
       if (k === 'schedule') {
         const schedule = parseSchedule(String(v ?? ''));
         if (!schedule) return json({ detail: `Invalid schedule '${String(v ?? '')}'. ${SCHEDULE_HELP}` }, 400);
@@ -158,6 +234,27 @@ export class CronStore {
         { id: 'local', name: 'Local (save only)', home_target_set: true, home_env_var: null },
         { id: 'bot-chat:default', name: 'Bot Chat (default)', home_target_set: true, home_env_var: null },
       ] });
+    }
+    if (via === 'dash' && path === '/api/cron/blueprints' && method === 'GET') {
+      return json({ blueprints: BLUEPRINTS.map(({ prompt: _p, sched: _s, ...bp }) => bp) });
+    }
+    if (via === 'dash' && path === '/api/cron/blueprints/instantiate' && method === 'POST') {
+      const bp = BLUEPRINTS.find((x) => x.key === b.blueprint);
+      if (!bp) return json({ detail: `Unknown blueprint: ${String(b.blueprint)}` }, 404);
+      const values = (b.values ?? {}) as Record<string, string>;
+      // Hermes' fill_blueprint errors are 422 with a text detail
+      const unknown = Object.keys(values).filter((k) => !bp.fields.some((f) => f.name === k));
+      if (unknown.length) return json({ detail: `unknown slot: ${unknown.join(', ')}` }, 422);
+      for (const f of bp.fields) {
+        const v = values[f.name] ?? f.default;
+        if (!f.optional && !v) return json({ detail: `missing required value: ${f.name} (${f.label})` }, 422);
+        if (f.type === 'enum' && f.strict && v && !(f.options as string[]).includes(String(v))) {
+          return json({ detail: `${f.name}='${String(v)}' not allowed — one of ${(f.options as string[]).join(', ')}` }, 422);
+        }
+      }
+      // like Hermes: ?profile= absent means "default", not the active profile
+      const job = this.newJob({ name: bp.title, prompt: bp.prompt({ ...Object.fromEntries(bp.fields.map((f) => [f.name, String(f.default ?? '')])), ...values }), schedule: bp.sched(values), deliver: values.deliver ?? 'origin' }, query.profile || 'default');
+      return job instanceof Response ? job : json(job);
     }
     const base = via === 'dash' ? '/api/cron/jobs' : '/api/jobs';
     if (path !== base && !path.startsWith(`${base}/`)) return null;

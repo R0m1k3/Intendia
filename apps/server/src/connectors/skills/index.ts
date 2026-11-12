@@ -109,5 +109,11 @@ export const skillsModule: ModuleDef = {
     install: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/skills/hub/install' }] },
     uninstall: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/skills/hub/uninstall' }] },
     update: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/skills/hub/update' }] },
+    // writing a skill (lot 8 C): the user writes, Hermes runs no approval gate nor scan by default
+    create: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/skills' }] },
+    putContent: { kind: 'write', routes: [{ via: 'dash', method: 'PUT', path: '/api/skills/content' }] },
+    lock: { kind: 'write', routes: [{ via: 'dash', method: 'PUT', path: '/api/skills/lock' }] },
+    // the only HTTP way to remove a user or agent skill: archived to skills/.archive (hermes curator restore)
+    archive: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/learning/node' }] },
   },
 };

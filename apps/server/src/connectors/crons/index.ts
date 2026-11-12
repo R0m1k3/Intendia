@@ -34,6 +34,12 @@ export const JobSchema = z.looseObject({
   workdir: z.string().nullish(),
   timezone: z.string().nullish(),
   profile: z.string().nullish(),
+  /** times null = forever */
+  repeat: z.looseObject({ times: z.number().nullish(), completed: z.number().nullish() }).nullish(),
+  enabled_toolsets: z.array(z.string()).nullish(),
+  catch_up: z.boolean().nullish(),
+  grace_minutes: z.number().nullish(),
+  context_from: z.array(z.string()).nullish(),
 });
 
 export type HermesJob = z.infer<typeof JobSchema>;
@@ -60,6 +66,30 @@ export const RunSchema = z.looseObject({
 });
 
 export const RunListSchema = z.looseObject({ runs: z.array(RunSchema) });
+
+/** Cron templates of the dashboard (`/api/cron/blueprints`): the prompt itself is not returned. */
+export const BlueprintFieldSchema = z.looseObject({
+  name: z.string(),
+  type: z.string().nullish(),
+  label: z.string().nullish(),
+  default: z.unknown().optional(),
+  options: z.array(z.union([z.string(), z.looseObject({ value: z.unknown(), label: z.string().nullish() })])).nullish(),
+  optional: z.boolean().nullish(),
+  /** false: the options are suggestions, any value is accepted (Hermes' `deliver` slot) */
+  strict: z.boolean().nullish(),
+  help: z.string().nullish(),
+});
+export const BlueprintSchema = z.looseObject({
+  key: z.string(),
+  title: z.string().nullish(),
+  description: z.string().nullish(),
+  category: z.string().nullish(),
+  fields: z.array(BlueprintFieldSchema).nullish(),
+  source: z.string().nullish(),
+  plugin: z.string().nullish(),
+  scheduleHuman: z.string().nullish(),
+});
+export const BlueprintListSchema = z.looseObject({ blueprints: z.array(BlueprintSchema) });
 
 export const TargetListSchema = z.looseObject({
   targets: z.array(z.looseObject({ id: z.string(), name: z.string().nullish() })),
@@ -144,6 +174,14 @@ export const cronsModule: ModuleDef = {
     cancel: {
       kind: 'write',
       routes: [{ via: 'dash', method: 'POST', path: '/api/cron/jobs/{job_id}/cancel' }],
+    },
+    blueprints: {
+      kind: 'read', optional: true, probe: true, schema: BlueprintListSchema,
+      routes: [{ via: 'dash', method: 'GET', path: '/api/cron/blueprints' }],
+    },
+    instantiate: {
+      kind: 'write', optional: true,
+      routes: [{ via: 'dash', method: 'POST', path: '/api/cron/blueprints/instantiate' }],
     },
   },
 };
