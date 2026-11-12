@@ -284,11 +284,22 @@ export function subagentTree(nodes: SubagentNode[]): { node: SubagentNode; level
  * into it, each before the first entry that came after its first sub-agent (else at the end).
  */
 export function withTrees(entries: Entry[], trees: Extract<Entry, { kind: 'subagents' }>[]): Entry[] {
-  const out = [...entries];
+  let out = [...entries];
+  const place = (ts: number | null) => {
+    const at = ts === null ? -1 : out.findIndex((e) => e.kind !== 'subagents' && e.ts !== null && e.ts > ts);
+    return at < 0 ? out.length : at;
+  };
   for (const t of trees) {
     if (out.some((e) => e.key === t.key)) continue;
-    const at = t.ts === null ? -1 : out.findIndex((e) => e.kind !== 'subagents' && e.ts !== null && e.ts > (t.ts as number));
-    out.splice(at < 0 ? out.length : at, 0, t);
+    // the live tree is richer (cost, nested sub-agents): the cards read from the history for that turn go
+    const at = place(t.ts);
+    const question = (e: Entry) => e.kind === 'user' && !e.steer;
+    let from = at - 1;
+    while (from >= 0 && !question(out[from]!)) from--;
+    let to = at;
+    while (to < out.length && !question(out[to]!)) to++;
+    out = out.filter((e, i) => !(i > from && i < to && e.kind === 'subagents' && e.key.startsWith('h')));
+    out.splice(place(t.ts), 0, t);
   }
   return out;
 }
@@ -303,22 +314,63 @@ export const CHOICE_LABEL: Record<string, string> = {
 /** Session history (oldest first) → entries; tool results attach to their call. */
 export function historyEntries(messages: ChatMessage[]): Entry[] {
   const out: Entry[] = [];
+  // tool lines of the last assistant message with tool calls: Hermes writes their results in call order
+  let calls: Extract<Entry, { kind: 'tool' }>[] = [];
   for (const m of messages) {
     const k = `h${m.id}`;
     if (m.role === 'user') out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}) });
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
-      m.toolCalls.forEach((t, i) => out.push({
-        kind: 'tool', key: `${k}-${i}`, callId: null, tool: t.name, preview: t.arguments === '{}' ? '' : t.arguments,
-        result: null, duration: null, state: 'ok', ts: m.timestamp,
-      }));
+      if (m.toolCalls.length) calls = [];
+      m.toolCalls.forEach((t, i) => {
+        const line: Extract<Entry, { kind: 'tool' }> = {
+          kind: 'tool', key: `${k}-${i}`, callId: null, tool: t.name, preview: t.arguments === '{}' ? '' : t.arguments,
+          result: null, duration: null, state: 'ok', ts: m.timestamp,
+        };
+        calls.push(line);
+        out.push(line);
+      });
     } else if (m.role === 'tool') {
-      const open = [...out].reverse().find((e): e is Extract<Entry, { kind: 'tool' }> => e.kind === 'tool' && e.result === null && (!m.toolName || e.tool === m.toolName));
-      if (open) open.result = m.content;
-      else out.push({ kind: 'tool', key: k, callId: null, tool: m.toolName ?? 'outil', preview: '', result: m.content, duration: null, state: 'ok', ts: m.timestamp });
+      const fits = (e: Entry): e is Extract<Entry, { kind: 'tool' }> => e.kind === 'tool' && e.result === null && (!m.toolName || e.tool === m.toolName);
+      // first open call of that tool in the last message, else (older shapes) the last open one anywhere
+      const open = calls.find((e) => fits(e) && out.includes(e)) ?? [...out].reverse().find(fits);
+      if (!open) {
+        out.push({ kind: 'tool', key: k, callId: null, tool: m.toolName ?? 'outil', preview: '', result: m.content, duration: null, state: 'ok', ts: m.timestamp });
+        continue;
+      }
+      open.result = m.content;
+      const nodes = open.tool === 'delegate_task' ? delegationNodes(open.preview, m.content, open.key, open.ts) : null;
+      if (nodes) out[out.indexOf(open)] = { kind: 'subagents', key: open.key, nodes, ts: open.ts };
     }
   }
   return out;
+}
+
+const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
+const parse = (text: string): unknown => { try { return JSON.parse(text); } catch { return null; } };
+
+/**
+ * Sub-agent cards from a delegate_task call and its stored result (`{results: [{task_index, status, summary,
+ * error, duration_seconds, model, tokens}]}`); null when the result is not that (cut, background delegation).
+ */
+export function delegationNodes(argsJson: string, resultJson: string, key: string, ts: number | null): SubagentNode[] | null {
+  const results = obj(parse(resultJson))?.results;
+  if (!Array.isArray(results) || results.length === 0) return null;
+  const args = obj(parse(argsJson || '{}')) ?? {};
+  const tasks = Array.isArray(args.tasks) ? args.tasks : [];
+  return results.map((raw, i): SubagentNode => {
+    const r = obj(raw) ?? {};
+    const index = num(r.task_index) ?? i;
+    const goal = str(obj(tasks[index])?.goal) || str(args.goal);
+    const tokens = obj(r.tokens);
+    return {
+      id: `${key}-${index}`, parentId: null, depth: 1, goal,
+      model: typeof r.model === 'string' && r.model ? r.model : null,
+      status: str(r.status) || 'completed', startedAt: ts, duration: num(r.duration_seconds), cost: null,
+      inputTokens: num(tokens?.input), outputTokens: num(tokens?.output), toolCount: null,
+      summary: str(r.summary) || str(r.error) || null,
+    };
+  });
 }
 
 /**

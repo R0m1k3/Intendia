@@ -17,6 +17,8 @@ import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushH
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
+import { lastTodos } from '../chat/todos';
+import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
 import { useStoredFlag } from '../components/useStoredFlag';
@@ -184,7 +186,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
     else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
-    if (tree) setTrees((t) => [...t, tree]);
+    // a truncated replay may lack earlier delegations: the history's cards (all of them) win then
+    if (tree && !state.truncated) setTrees((t) => [...t, tree]);
     const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
@@ -422,6 +425,16 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
   }, [inst, sessionId]);
 
   const messages = history.data?.messages ?? [];
+  const todos = useMemo(() => lastTodos(messages), [messages]);
+  // todo_list finished during the run: Hermes stored its result first, the history is read again (last of a burst, 1 s later)
+  const doneTodoCalls = live?.entries.filter((e) => e.kind === 'tool' && e.tool === 'todo_list' && e.state !== 'running').length ?? 0;
+  const seenTodoCalls = useRef(0);
+  useEffect(() => {
+    if (doneTodoCalls <= seenTodoCalls.current) { seenTodoCalls.current = doneTodoCalls; return; }
+    seenTodoCalls.current = doneTodoCalls;
+    const t = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
+    return () => clearTimeout(t);
+  }, [doneTodoCalls, qc, inst, sessionId]);
   const entries: Entry[] = withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees);
   const lastStatus = lastRun.data;
   const endNote = !active && (outcome ?? (lastStatus && OUTCOME[lastStatus.status] ? { status: lastStatus.status, error: lastStatus.error ?? lastStatus.output, input: null } : null));
@@ -762,6 +775,7 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
           {items.length >= OUTLINE_MIN && (
             <div className="absolute bottom-full right-4 mb-1 md:right-6"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
           )}
+          {todos && todos.length > 0 && <Todos todos={todos} />}
           <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
           <Composer
             ref={composer}

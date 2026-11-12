@@ -309,8 +309,17 @@ sequenceDiagram
   place through the session's approval route, whatever the current instance.
 - Sub-agents (`apps/web/src/chat/events.ts`, `Subagents.tsx`): one `subagents` entry per run, at the first
   `subagent.start` (keyed by its `run_id`: `seq` is local to a run), nodes keyed by `subagent_id`, drawn as a tree by `parent_id` (unknown parents and cycles at the
-  root). A reload during the run rebuilds it from Hermes' replay; Hermes' history has no sub-agent events, so the page
-  keeps the trees of the runs that ended while it was open, and they are gone after a reload.
+  root). A reload during the run rebuilds it from Hermes' replay. Hermes' history has no sub-agent events but keeps
+  the `delegate_task` call and its result (`{results: [...]}`): `historyEntries` turns them into a `subagents` entry
+  (one node per task: goal, status, duration, model, tokens, summary; no cost, no nesting). The page keeps the live
+  trees of the runs that ended while it was open (richer) and `withTrees` puts them back in place of the history
+  cards of the same turn. A background delegation (result without `results`) stays a tool line.
+- Tool results in the history go to the first open call of the same tool in the last assistant message with tool
+  calls (Hermes writes them in call order), else to the last open call of that tool.
+- Agent task list (`chat/todos.ts`, `Todos.tsx`): the last `todo_list` result of the session (always the full list)
+  is a card above the composer, folded to « Tâches de l'agent · done/total · current task » (flag
+  `intendia-todos-open`). During a run, each finished `todo_list` call makes the page read `messages` again 1 s later
+  (Hermes writes the result before the event).
 
 ## Kanban
 
