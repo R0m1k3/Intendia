@@ -56,7 +56,7 @@ export function createServices(deps: {
   const crons = new CronService(deps.compat, workspaces, deps.store, roots);
   const skills = new SkillService(deps.compat, deps.store);
   const kanban = new KanbanService(deps.compat, deps.store, workspaces, deps.config.secret);
-  const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban);
+  const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban, workspaces, deps.db);
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban);
   const recent = new RecentService(deps.compat, deps.store, workspaces);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);

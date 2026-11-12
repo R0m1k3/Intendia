@@ -4,6 +4,7 @@ import { ConfigInputError, type ConfigService } from '../hermes-config/service.j
 import type { ProvidersService } from '../hermes-config/providers.js';
 import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
+import { GATEWAY_ACTIONS, type GatewayAction } from '../hermes-config/gateway.js';
 
 const VERSION = z.string().regex(/^[0-9a-f]{16}$/, 'version invalide');
 const PATH = z.string().regex(/^[A-Za-z0-9_.-]{1,200}$/);
@@ -84,6 +85,13 @@ const CustomProviderBody = z.object({
   apiKey: z.string().max(4000).optional(),
   model: z.string().max(200).optional(),
 });
+
+const StopBody = z.object({ interrupt: z.boolean().optional() });
+
+function gatewayAction(raw: string | undefined): GatewayAction {
+  if (!GATEWAY_ACTIONS.includes(raw as GatewayAction)) throw new ValidationError('action de passerelle inconnue');
+  return raw as GatewayAction;
+}
 
 export function configRoutes(config: ConfigService, providers: ProvidersService): Hono {
   const r = new Hono();
@@ -205,7 +213,12 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.delete('/i/:inst/config/mcp/:name', async (c) => c.json(await config.removeMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));
 
   r.get('/i/:inst/config/platforms', async (c) => c.json({ platforms: await config.platforms(inst(c), profileOf(c)) }));
-  r.post('/i/:inst/config/gateway/restart', async (c) => c.json(await config.restartGateway(inst(c), profileOf(c)), 202));
-  r.get('/i/:inst/config/gateway/restart', async (c) => c.json(await config.restartStatus(inst(c), profileOf(c))));
+  // start | stop | restart; stop takes {interrupt?: boolean} (ends the live sessions)
+  r.post('/i/:inst/config/gateway/:action', async (c) => {
+    const action = gatewayAction(c.req.param('action'));
+    const body = action === 'stop' ? StopBody.parse(await c.req.json().catch(() => ({}))) : {};
+    return c.json(await config.gateway.run(inst(c), profileOf(c), action, body.interrupt ?? false), 202);
+  });
+  r.get('/i/:inst/config/gateway/:action', async (c) => c.json(await config.gateway.status(inst(c), profileOf(c), gatewayAction(c.req.param('action')))));
   return r;
 }

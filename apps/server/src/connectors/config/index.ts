@@ -195,6 +195,8 @@ export const configModule: ModuleDef = {
     enableMcp: { kind: 'write', routes: [{ via: 'dash', method: 'PUT', path: '/api/mcp/servers/{name}/enabled' }] },
     removeMcp: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/mcp/servers/{name}' }] },
     restartGateway: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/restart' }] },
+    gatewayStart: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/start' }] },
+    gatewayStop: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/stop' }] },
     // provider accounts (OAuth device code) and the credential pool: auth.json of the profile, not the config file
     oauthList: { kind: 'read', probe: true, schema: OAuthProvidersSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/providers/oauth' }] },
     poolList: { kind: 'read', probe: true, schema: PoolSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/credentials/pool' }] },
