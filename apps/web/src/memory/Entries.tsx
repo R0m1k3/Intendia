@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError, type MemoryEntry, type MemoryOverview, type MemorySource } from '../api';
 import { ask } from '../components/Dialog';
 import { DetailBody, DetailHeader, Facts, ListItemBody, ListLink } from '../components/Panes';
@@ -96,6 +96,15 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
     onError,
   });
   const stale = codeOf(content.error) === 'stale';
+  // the entry changed between the list and its opening: read the list again, its new id replaces the old one
+  useEffect(() => {
+    if (!stale) return;
+    void reload().then((fresh) => {
+      const id = fresh.entries.find((e) => slotOf(e.id) === slotOf(entry.id))?.id;
+      if (id && id !== entry.id) onSaved(id);
+    }, () => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stale, entry.id]);
   const busy = save.isPending || remove.isPending;
 
   return (
@@ -125,7 +134,7 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
       <DetailBody className="gap-4">
         {notice && <p role="alert" className="rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">{notice}</p>}
         {!notice && stale && (
-          <p role="alert" className="rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">Cette entrée a changé depuis la lecture de la liste : choisissez-la de nouveau.</p>
+          <p role="alert" className="rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">Cette entrée a changé depuis la lecture de la liste : la liste est rechargée, choisissez-la de nouveau si elle ne s’ouvre pas.</p>
         )}
         <div className="empty:hidden">{!stale && <ErrorText error={content.error ?? (codeOf(save.error ?? remove.error) === 'stale' ? null : save.error ?? remove.error)} />}</div>
         {draft !== null ? (
