@@ -3,13 +3,13 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../components/ui';
 
-/** Right-hand sheet (portal: the page wrapper is animated, a `fixed` inside it would be relative to it). */
+/** Right-hand sheet (portal: the page wrapper is animated, a `fixed` inside it would be relative to it), above the mobile bar (z-50). */
 export function Sheet({ title, onClose, children, footer, width = 'md:w-[520px]', onSubmit }: {
   title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: string; onSubmit?: () => void;
 }) {
   const Tag = onSubmit ? 'form' : 'div';
   return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
+    <div className="fixed inset-0 z-[55] flex justify-end bg-ink/20" onClick={onClose}>
       <Tag
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         onSubmit={onSubmit ? (e: React.FormEvent) => { e.preventDefault(); onSubmit(); } : undefined}

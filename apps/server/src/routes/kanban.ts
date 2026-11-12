@@ -4,6 +4,7 @@ import type { CompatService } from '../compat/service.js';
 import { openKanbanEvents, type WsFactory } from '../connectors/kanban/index.js';
 import { disposition, FILE_CSP } from '../files/send.js';
 import type { ConfigService } from '../hermes-config/service.js';
+import type { MissionService } from '../kanban/missions.js';
 import { KanbanError, LIMITS, START_STATES, type KanbanService } from '../kanban/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { BOARD_RE, intParam, PROFILE_RE, TASK_RE } from './params.js';
@@ -52,9 +53,18 @@ const Orchestration = z.object({
   auto_promote_children: z.boolean().optional(),
 });
 
+const Mission = z.object({ goal: z.string().min(1).max(LIMITS.title), body: z.string().max(LIMITS.body).optional() });
+const MISSION_RE = /^m_[0-9a-f]{12}$/;
+
+function missionOf(c: Context): string {
+  const id = c.req.param('mid') ?? '';
+  if (!MISSION_RE.test(id)) throw new ValidationError('mission invalide');
+  return id;
+}
+
 const PING_MS = 25_000;
 
-export function kanbanRoutes(deps: { kanban: KanbanService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory; wsOpenTimeoutMs?: number }): Hono {
+export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory; wsOpenTimeoutMs?: number }): Hono {
   const { kanban } = deps;
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
@@ -102,6 +112,21 @@ export function kanbanRoutes(deps: { kanban: KanbanService; config: ConfigServic
   r.post(`${P}/dispatch`, async (c) => c.json(await kanban.dispatch(inst(c), boardOf(c), c.req.query('dry_run') === '1')));
   r.post(`${P}/workers/:runId/stop`, async (c) =>
     c.json(await kanban.stopWorker(inst(c), boardOf(c), intParam(c.req.param('runId'), 'run'))));
+
+  // supervised missions (lot 9 C): the split runs detached, the page polls GET missions/:mid
+  const { missions } = deps;
+  r.post(`${P}/missions`, async (c) => {
+    const board = boardOf(c);
+    return c.json({ mission: missions.create(inst(c), board, Mission.parse(await c.req.json())) }, 202);
+  });
+  r.get(`${P}/missions`, (c) => c.json({ missions: missions.list(inst(c), boardOf(c)) }));
+  r.get(`${P}/missions/:mid`, async (c) => c.json({ mission: await missions.get(inst(c), missionOf(c)) }));
+  r.post(`${P}/missions/:mid/launch`, async (c) => c.json({ mission: await missions.launch(inst(c), missionOf(c)) }));
+  r.post(`${P}/missions/:mid/cancel`, async (c) => c.json({ mission: await missions.cancel(inst(c), missionOf(c)) }));
+  r.delete(`${P}/missions/:mid/children/:id`, async (c) => {
+    const mid = missionOf(c);
+    return c.json({ mission: await missions.remove(inst(c), mid, taskOf(c)) });
+  });
 
   r.get(`${P}/attachments/:aid`, async (c) => {
     const board = boardOf(c);

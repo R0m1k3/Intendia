@@ -270,7 +270,15 @@ Kanban (`/api/plugins/kanban/...`):
    promoted back. Checked 2026-11-10: a task created `ready` without assignee, then `scheduled`, then assigned,
    was still `scheduled` after 70 s.
 10. `PATCH /tasks/{id} {status?, assignee?, priority?, title?, body?, block_reason?}`; transition errors are 400
-    `{detail}`. `POST /tasks/{id}/specify|decompose` call an auxiliary model; without one: 200 `{ok: false, reason}`.
+    `{detail}`. There is **no `block_reason` column** (checked 2026-11-12, `explore9`): the reason of `blocked` /
+    `scheduled` becomes the summary of a synthetic run, read back as `latest_summary` (task detail and board).
+    `PATCH archived` is accepted from any state (stops the worker) and counts as finished for the children;
+    `PATCH ready` on a `scheduled`/`blocked` task goes through `unblock_task`: `todo` while a parent is unfinished.
+    `decompose` answers `{ok, task_id, reason, fanout, child_ids, new_title}`: the children become the **parents**
+    of the root (the root waits for them) and, with `auto_promote_children`, `ready` at once; the dispatcher's
+    `recompute_ready` (60 s) promotes `todo` anyway, so only `scheduled` holds them. Between the split and Intendia's
+    `PATCH scheduled` the dispatcher may take a child (short window, not measured): Intendia leaves a running child
+    alone and shows it. `POST /tasks/{id}/specify|decompose` call an auxiliary model; without one: 200 `{ok: false, reason}`.
 11. `POST /dispatch?board=&dry_run=&max=` (default `max` 8); Hermes also dispatches by itself every 60 s.
 12. `GET/PUT /orchestration {orchestrator_profile, default_assignee, auto_decompose, auto_promote_children}`; the `GET`
     adds `active_profile`, whose `config.yaml` the `PUT` rewrites.
