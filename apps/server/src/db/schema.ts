@@ -130,3 +130,17 @@ export const prompts = sqliteTable('prompts', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+/** Supervised kanban missions (lot 9 C): a pointer to the root task; times in ms. */
+export const kanbanMissions = sqliteTable('kanban_missions', {
+  id: text('id').primaryKey(),
+  instanceId: text('instance_id').notNull(),
+  board: text('board').notNull(),
+  rootId: text('root_id'),
+  goal: text('goal').notNull(),
+  state: text('state').notNull(),
+  error: text('error'),
+  decomposeStartedAt: integer('decompose_started_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

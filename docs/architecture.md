@@ -544,6 +544,19 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   token's handshake unanswered), the server sends `event: closed` and ends the
   stream; the page (`apps/web/src/kanban/useLive.ts`) then rereads the board every 5 s, says so, and tries the stream
   again after 60 s. The browser never sees the token.
+- Supervised missions (`src/kanban/missions.ts`, `MissionService`; web `apps/web/src/kanban/Mission.tsx`): a goal
+  becomes a root task in `triage` that Hermes splits (`decompose`, auxiliary model) into children, linked as the
+  **parents** of the root. `POST /kanban/missions` answers 202 at once: the row (`kanban_missions`, a pointer:
+  root, goal, state `decomposing|held|launched|failed|cancelled`) is written before Hermes is called, the split runs
+  detached and `resume()` (startup) settles the ones cut by a stop. An answer lost (time-out, network) is settled by
+  re-reading the root every 10 s until 210 s after the split started. Every child in `todo`/`ready` is parked in
+  `scheduled` with the reason `Mission à valider dans Intendia` (read back as `latest_summary`: which children are
+  held is never copied in Intendia); one already running is left alone (« déjà lancée »). Review: title, text and
+  agent through the task route; « Retirer » archives a held child (409 `mission_dependency` when another held child
+  waits for it, `mission_last` for the last one); « Lancer » moves the held children to `ready` (Hermes puts back in
+  `todo` those whose parents are not finished) then dispatches once; « Annuler » archives the root first (else it
+  would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
+  route a 409 without code before anything is written.
 
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 

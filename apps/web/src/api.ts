@@ -659,6 +659,19 @@ export interface KanbanOrchestration {
 export type KanbanStart = 'scheduled' | 'ready' | 'triage';
 export interface KanbanTaskInput { title: string; body?: string; assignee?: string | null; priority?: number | null; start?: KanbanStart; workspace?: string | null }
 export interface KanbanTaskPatch { status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string }
+export type KanbanMissionState = 'decomposing' | 'held' | 'launched' | 'failed' | 'cancelled';
+export interface KanbanMissionChild {
+  id: string; title: string; body: string; status: string; assignee: string | null;
+  /** other children it waits for */
+  after: string[];
+  held: boolean;
+  lostTracking: boolean;
+}
+export interface KanbanMissionRow {
+  id: string; instanceId: string; board: string; rootId: string | null; goal: string; state: KanbanMissionState;
+  error: string | null; createdAt: number; updatedAt: number;
+}
+export interface KanbanMission extends KanbanMissionRow { rootStatus: string | null; children: KanbanMissionChild[] }
 export const kanbanPath = (inst: string, sub: string, board?: string, extra: Record<string, string> = {}) =>
   `/i/${encodeURIComponent(inst)}/kanban/${sub}${board || Object.keys(extra).length ? `?${new URLSearchParams({ ...(board ? { board } : {}), ...extra })}` : ''}`;
 
@@ -927,6 +940,14 @@ export const api = {
     call<{ task: KanbanTask }>('PATCH', kanbanPath(inst, `tasks/${enc(id)}`, board), patch),
   kanbanLog: (inst: string, board: string, id: string) => call<{ content: string; exists: boolean; truncated: boolean }>('GET', kanbanPath(inst, `tasks/${enc(id)}/log`, board)),
   commentKanbanTask: (inst: string, board: string, id: string, body: string) => call<{ ok: true }>('POST', kanbanPath(inst, `tasks/${enc(id)}/comments`, board), { body }),
+  createKanbanMission: (inst: string, board: string, m: { goal: string; body?: string }) =>
+    call<{ mission: KanbanMissionRow }>('POST', kanbanPath(inst, 'missions', board), m),
+  kanbanMissions: (inst: string, board: string) => call<{ missions: KanbanMissionRow[] }>('GET', kanbanPath(inst, 'missions', board)),
+  kanbanMission: (inst: string, id: string) => call<{ mission: KanbanMission }>('GET', kanbanPath(inst, `missions/${enc(id)}`)),
+  launchKanbanMission: (inst: string, id: string) => call<{ mission: KanbanMission }>('POST', kanbanPath(inst, `missions/${enc(id)}/launch`)),
+  cancelKanbanMission: (inst: string, id: string) => call<{ mission: KanbanMissionRow }>('POST', kanbanPath(inst, `missions/${enc(id)}/cancel`)),
+  removeKanbanMissionChild: (inst: string, id: string, child: string) =>
+    call<{ mission: KanbanMission }>('DELETE', kanbanPath(inst, `missions/${enc(id)}/children/${enc(child)}`)),
   kanbanAux: (inst: string, board: string, id: string, op: 'specify' | 'decompose') => call<Record<string, unknown>>('POST', kanbanPath(inst, `tasks/${enc(id)}/${op}`, board), {}),
   linkKanbanTasks: (inst: string, board: string, parent: string, child: string) => call<{ ok: true }>('POST', kanbanPath(inst, 'links', board), { parent, child }),
   unlinkKanbanTasks: (inst: string, board: string, parent: string, child: string) => call<{ ok: true }>('DELETE', kanbanPath(inst, 'links', board, { parent, child })),

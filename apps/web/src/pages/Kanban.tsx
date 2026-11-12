@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { AlertTriangle, FolderOpen, GitBranch, MessageSquare, Play, Plus, Settings2 } from 'lucide-react';
+import { AlertTriangle, FolderOpen, GitBranch, MessageSquare, Play, Plus, Settings2, Split } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type KanbanTask, type KanbanWorkflow } from '../api';
 import { PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, chipClass, cx, ErrorText, Field, Input, Mark, Tag } from '../components/ui';
+import { MissionSheet } from '../kanban/Mission';
+import { MISSION_STATE } from '../kanban/mission';
 import { canMove, moveLocally, moveTargets, statusLabel } from '../kanban/moves';
 import { Sheet, SELECT, TEXTAREA } from '../kanban/Sheet';
 import { TaskPanel } from '../kanban/TaskPanel';
@@ -14,8 +16,10 @@ import { POLL_MS, useKanbanLive } from '../kanban/useLive';
 const REQUIRED: OpRef[] = [['kanban', 'board'], ['kanban', 'boards'], ['kanban', 'workflow']];
 const OPTIONAL: OptionalOp[] = [
   ['kanban', 'createTask', 'Créer une tâche'], ['kanban', 'updateTask', 'Déplacer et modifier'], ['kanban', 'dispatch', 'Répartir'],
-  ['kanban', 'createBoard', 'Nouveau tableau'], ['kanban', 'setOrchestration', 'Orchestration'],
+  ['kanban', 'createBoard', 'Nouveau tableau'], ['kanban', 'setOrchestration', 'Orchestration'], ['kanban', 'decompose', 'Missions'],
 ];
+/** what a mission calls at Hermes: the button is hidden when one is missing */
+const MISSION_OPS = ['createTask', 'decompose', 'task', 'updateTask', 'dispatch', 'workers'];
 const ICON = 'size-4';
 const BOARD_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
@@ -288,6 +292,14 @@ export function KanbanPage() {
   const assignees = useQuery({ queryKey: ['kanban-assignees', inst], queryFn: () => api.kanbanAssignees(inst).then((r) => r.assignees), enabled: a.available });
   const orch = useQuery({ queryKey: ['kanban-orchestration', inst], queryFn: () => api.kanbanOrchestration(inst), enabled: a.available && a.has('kanban', 'orchestration') });
   const [dialog, setDialog] = useState<'board' | 'task' | 'dispatch' | 'orchestration' | null>(null);
+  /** undefined: closed; null: a new mission */
+  const [missionId, setMissionId] = useState<string | null | undefined>(undefined);
+  const canMission = a.available && MISSION_OPS.every((op) => a.has('kanban', op));
+  const missions = useQuery({
+    queryKey: ['kanban-missions', inst, board], queryFn: () => api.kanbanMissions(inst, board!).then((r) => r.missions),
+    enabled: canMission && Boolean(board),
+    refetchInterval: (q) => (q.state.data?.some((m) => m.state === 'decomposing') ? 5000 : false),
+  });
   const [dragging, setDragging] = useState<string | null>(null);
   const [mobileCol, setMobileCol] = useState<string>('ready');
   const [moveError, setMoveError] = useState<unknown>(null);
@@ -329,6 +341,7 @@ export function KanbanPage() {
           <div className="flex flex-wrap gap-2">
             {can('setOrchestration') && <Button onClick={() => setDialog('orchestration')}><Settings2 className={ICON} strokeWidth={1.5} />Orchestration</Button>}
             {can('dispatch') && <Button onClick={() => setDialog('dispatch')}><Play className={ICON} strokeWidth={1.5} />Répartir</Button>}
+            {canMission && <Button onClick={() => setMissionId(null)}><Split className={ICON} strokeWidth={1.5} />Nouvelle mission</Button>}
             {can('createTask') && <Button variant="primary" onClick={() => setDialog('task')}><Plus className={ICON} strokeWidth={1.5} />Nouvelle tâche</Button>}
           </div>
         ) : undefined}
@@ -344,6 +357,18 @@ export function KanbanPage() {
                 {(boards.data ?? []).map((b) => <option key={b.slug} value={b.slug}>{b.name} ({b.slug === board && view.data ? columns.reduce((n, c) => n + c.tasks.length, 0) : b.total})</option>)}
               </select>
               {can('createBoard') && <Button variant="ghost" onClick={() => setDialog('board')}><Plus className={ICON} strokeWidth={1.5} />Nouveau tableau</Button>}
+              <span className="text-xs text-ink-faint">Hermes ne gère ni échéance ni tags sur les tâches.</span>
+            </div>
+          )}
+          {(missions.data ?? []).length > 0 && (
+            <div className="flex flex-wrap items-center gap-2" data-missions>
+              <span className="text-xs font-medium text-ink-soft">Missions</span>
+              {missions.data!.map((m) => (
+                <button key={m.id} type="button" onClick={() => setMissionId(m.id)} data-mission={m.id}
+                  className={cx(chipClass(false), 'max-w-72 gap-1.5', m.state === 'held' && 'border-accent/50', m.state === 'failed' && 'text-bad')}>
+                  <span className="truncate">{m.goal}</span><span className="shrink-0 text-[11px] opacity-70">{MISSION_STATE[m.state]}</span>
+                </button>
+              ))}
             </div>
           )}
           <ErrorText error={boards.error ?? view.error ?? workflow.error ?? moveError} />
@@ -385,7 +410,13 @@ export function KanbanPage() {
       {dialog === 'orchestration' && <Orchestration inst={inst} assignees={assignees.data ?? []} onClose={() => setDialog(null)} />}
       {search.task && board && (
         <TaskPanel key={search.task} inst={inst} board={board} taskId={search.task} workflow={wf} assignees={assignees.data ?? []} allTasks={allTasks} polling={live.polling}
+          mission={missions.data?.find((m) => m.rootId === search.task) ?? null}
+          onOpenMission={(id) => { go({ task: undefined }); setMissionId(id); }}
           onClose={() => go({ task: undefined })} onOpen={(id) => go({ task: id })} />
+      )}
+      {missionId !== undefined && board && (
+        <MissionSheet key={missionId ?? 'new'} inst={inst} board={board} missionId={missionId} assignees={assignees.data ?? []}
+          onClose={() => setMissionId(undefined)} onCreated={(id) => setMissionId(id)} />
       )}
     </div>
   );

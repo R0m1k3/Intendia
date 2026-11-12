@@ -37,6 +37,8 @@ function main() {
   // deletions whose undo window passed while the server was stopped go first
   services.purger.start();
   services.autoApprover.start();
+  // splits cut by a stop of Intendia: Hermes may have finished them
+  services.missions.resume();
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
   const mcpApp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: VERSION });
 

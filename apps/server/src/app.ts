@@ -248,7 +248,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', memoryRoutes(deps.services.memory));
   priv.route('/', pluginRoutes(deps.services.plugins));
   priv.route('/', mcpCatalogRoutes(deps.services.mcpCatalog));
-  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
+  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, missions: deps.services.missions, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);
   app.route('/x', x);
