@@ -27,6 +27,12 @@ export interface CompatReport {
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
   socket?: { sessionStats: boolean; oneshot?: boolean; note: string };
+  /** Ops this Intendia knows that the report has not checked yet (`module.op`; report saved by an older version). */
+  unchecked?: string[];
+  /** Last full check failed (short message). */
+  checkError?: string;
+  /** A full check is running. */
+  checking?: boolean;
 }
 /** Composer gauge: `max` = context size of the model; `exact`/`quota` from the dashboard WebSocket only. */
 export interface SessionUsage {

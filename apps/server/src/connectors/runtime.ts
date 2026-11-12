@@ -1,4 +1,4 @@
-import type { CompatReport, ModuleId } from './types.js';
+import type { CompatReport, ModuleId, ResolvedOp } from './types.js';
 import { MODULES } from './index.js';
 import { HermesError, type HermesHttp, type RequestOptions, type Via } from '../hermes/http.js';
 
@@ -7,8 +7,8 @@ export { HermesError } from '../hermes/http.js';
 export type { HermesHttp } from '../hermes/http.js';
 
 export class ModuleUnavailableError extends Error {
-  constructor(readonly module: ModuleId, readonly op: string, readonly reasons: string[]) {
-    super(`${module}.${op} indisponible sur cette instance`);
+  constructor(readonly module: ModuleId, readonly op: string, readonly reasons: string[], pending = false) {
+    super(`${module}.${op} ${pending ? 'pas encore vérifié' : 'indisponible'} sur cette instance`);
     this.name = 'ModuleUnavailableError';
   }
 }
@@ -41,6 +41,13 @@ function fill(path: string, params: Record<string, string> = {}): string {
   });
 }
 
+/** Error for an op without a usable route; an op the report does not know yet is « pas encore vérifié ». */
+function unavailable(report: CompatReport | undefined, module: ModuleId, op: string, resolved: ResolvedOp | undefined): ModuleUnavailableError {
+  if (resolved) return new ModuleUnavailableError(module, op, resolved.notes);
+  const pending = !report || Boolean(report.unchecked?.includes(`${module}.${op}`));
+  return new ModuleUnavailableError(module, op, [report?.checkError ? `Vérification échouée : ${report.checkError}` : 'pas encore vérifié'], pending);
+}
+
 /**
  * Runs an operation through the route chosen by the last compatibility report.
  * Reads are validated against the op schema (tolerant: unknown fields are kept);
@@ -56,7 +63,7 @@ export async function callOp<T = unknown>(
   const def = MODULES.find((m) => m.id === module)?.ops[op];
   if (!def) throw new Error(`Unknown operation ${module}.${op}`);
   const resolved = report?.modules.find((m) => m.id === module)?.ops[op];
-  if (!resolved?.ok || !resolved.route) throw new ModuleUnavailableError(module, op, resolved?.notes ?? ['pas encore vérifié']);
+  if (!resolved?.ok || !resolved.route) throw unavailable(report, module, op, resolved);
   const { via, method, path } = resolved.route;
   const body = typeof opts.body === 'function' ? (opts.body as (v: Via) => unknown)(via) : opts.body;
   const data = await http.json(via, method, fill(path, opts.params), { ...opts, body });
@@ -79,7 +86,7 @@ export async function streamOp(
   opts: CallOptions = {},
 ): Promise<Response> {
   const resolved = report?.modules.find((m) => m.id === module)?.ops[op];
-  if (!resolved?.ok || !resolved.route) throw new ModuleUnavailableError(module, op, resolved?.notes ?? ['pas encore vérifié']);
+  if (!resolved?.ok || !resolved.route) throw unavailable(report, module, op, resolved);
   const { via, method, path } = resolved.route;
   return http.request(via, method, fill(path, opts.params), { ...opts, timeoutMs: opts.timeoutMs ?? 30_000 });
 }

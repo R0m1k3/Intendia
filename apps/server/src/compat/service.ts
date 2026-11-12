@@ -6,6 +6,7 @@ import type { WsFactory } from '../hermes/events.js';
 import { probeSocket } from '../hermes/gateway-ws.js';
 import { HermesHttp, type FetchLike } from '../hermes/http.js';
 import type { InstanceStore } from '../instances/store.js';
+import { MODULES } from '../connectors/index.js';
 import { checkInstance, stateChanges } from './engine.js';
 import { withFilesRoot } from './files-root.js';
 import type { Notifier } from './notify.js';
@@ -13,6 +14,16 @@ import type { Notifier } from './notify.js';
 const KEEP_REPORTS = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NO_ROOT_RETRY_MS = 15 * 60 * 1000;
+
+/** Operations of this version of Intendia (`module.op`) that a report does not have (saved by an older version). */
+export function uncheckedOps(report: CompatReport): string[] {
+  const out: string[] = [];
+  for (const mod of MODULES) {
+    const ops = report.modules.find((m) => m.id === mod.id)?.ops ?? {};
+    for (const name of Object.keys(mod.ops)) if (!(name in ops)) out.push(`${mod.id}.${name}`);
+  }
+  return out;
+}
 
 /**
  * Keeps one compatibility report per instance. Reruns the full check at boot, when the
@@ -34,7 +45,14 @@ export class CompatService {
     for (const inst of store.list()) {
       const row = db.select().from(compatReports).where(eq(compatReports.instanceId, inst.id))
         .orderBy(desc(compatReports.createdAt)).limit(1).get();
-      if (row) this.reports.set(inst.id, JSON.parse(row.reportJson) as CompatReport);
+      if (!row) continue;
+      const report = JSON.parse(row.reportJson) as CompatReport;
+      delete report.checkError;
+      delete report.checking;
+      const unchecked = uncheckedOps(report);
+      if (unchecked.length > 0) report.unchecked = unchecked;
+      else delete report.unchecked;
+      this.reports.set(inst.id, report);
     }
   }
 
@@ -49,7 +67,10 @@ export class CompatService {
   }
 
   all(): CompatReport[] {
-    return this.store.list().map((i) => this.reports.get(i.id)).filter((r): r is CompatReport => Boolean(r));
+    return this.store.list().map((i) => {
+      const r = this.reports.get(i.id);
+      return r && this.running.has(i.id) ? { ...r, checking: true } : r;
+    }).filter((r): r is CompatReport => Boolean(r));
   }
 
   /** Runs (or joins the running) full check of one instance. */
@@ -57,24 +78,36 @@ export class CompatService {
     const existing = this.running.get(instanceId);
     if (existing) return existing;
     const task = (async () => {
-      const http = this.http(instanceId);
-      const { report } = await checkInstance(http);
-      await withFilesRoot(http, report);
-      const inst = this.store.get(instanceId);
-      if (inst && report.dash.reachable) report.socket = await probeSocket(inst, { factory: this.wsFactory });
-      const prev = this.reports.get(instanceId);
-      const before = prev?.files?.workspaceRoot;
-      if (prev?.files && before !== report.files?.workspaceRoot) {
-        console.warn(`[intendia] instance "${instanceId}": workspace root ${before ?? '(none)'} -> ${report.files?.workspaceRoot ?? '(none)'}`);
+      try {
+        return await this.runCheck(instanceId);
+      } catch (err) {
+        const message = String((err as Error)?.message ?? err).slice(0, 200);
+        console.warn(`[intendia] compat check of instance "${instanceId}" failed: ${message}`);
+        const prev = this.reports.get(instanceId);
+        if (prev) prev.checkError = message;
+        throw err;
       }
-      this.reports.set(instanceId, report);
-      this.persist(report);
-      const changes = stateChanges(prev, report);
-      if (changes.length > 0) await this.notifier.moduleStates(report, changes);
-      return report;
     })().finally(() => this.running.delete(instanceId));
     this.running.set(instanceId, task);
     return task;
+  }
+
+  private async runCheck(instanceId: string): Promise<CompatReport> {
+    const http = this.http(instanceId);
+    const { report } = await checkInstance(http);
+    await withFilesRoot(http, report);
+    const inst = this.store.get(instanceId);
+    if (inst && report.dash.reachable) report.socket = await probeSocket(inst, { factory: this.wsFactory });
+    const prev = this.reports.get(instanceId);
+    const before = prev?.files?.workspaceRoot;
+    if (prev?.files && before !== report.files?.workspaceRoot) {
+      console.warn(`[intendia] instance "${instanceId}": workspace root ${before ?? '(none)'} -> ${report.files?.workspaceRoot ?? '(none)'}`);
+    }
+    this.reports.set(instanceId, report);
+    this.persist(report);
+    const changes = stateChanges(prev, report);
+    if (changes.length > 0) await this.notifier.moduleStates(report, changes);
+    return report;
   }
 
   async checkAll(): Promise<CompatReport[]> {
@@ -91,13 +124,13 @@ export class CompatService {
     for (const inst of this.store.list()) {
       const prev = this.reports.get(inst.id);
       // a report saved before the files root existed counts as not checked
-      if (!prev || !prev.files || Date.now() - prev.checkedAt > DAY_MS || !prev.api.reachable) {
+      if (!prev || !prev.files || Date.now() - prev.checkedAt > DAY_MS || !prev.api.reachable || prev.unchecked?.length || prev.checkError) {
         await this.check(inst.id).catch(() => undefined);
         continue;
       }
       try {
         const health = (await this.http(inst.id).json('api', 'GET', '/health/detailed')) as { version?: unknown };
-        if (typeof health?.version === 'string' && health.version !== prev.hermesVersion) await this.check(inst.id);
+        if (typeof health?.version === 'string' && health.version !== prev.hermesVersion) await this.check(inst.id).catch(() => undefined);
       } catch {
         await this.check(inst.id).catch(() => undefined);
       }
