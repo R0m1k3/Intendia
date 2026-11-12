@@ -189,7 +189,7 @@ describe('activity per instance', () => {
     expect((await t.request('GET', '/x/i/fake/activity')).json.runs.map((r: { runId: string }) => r.runId)).toEqual([runA]);
     expect((await t.request('GET', '/x/i/b/activity')).json.runs.map((r: { runId: string }) => r.runId)).toEqual([runB]);
     expect((await t.request('GET', '/x/i/inconnue/activity')).status).toBe(404);
-    expect((await t.request('GET', '/x/activity')).status).toBe(404);
+    expect((await t.request('GET', '/x/activity')).json.runs.map((r: { runId: string }) => r.runId).sort()).toEqual([runA, runB].sort());
   });
 });
 

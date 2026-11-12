@@ -1,75 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams, useRouterState } from '@tanstack/react-router';
 import { BellRing } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, type ApprovalChoice, type PendingApproval } from '../api';
-import { ClarifyCard } from '../chat/ClarifyCard';
-import { ApprovalCard } from '../chat/Thread';
+import { api } from '../api';
 import { toNotify, visibleApprovals } from './approvals';
-import { ErrorText } from './ui';
+import { canNotify, PendingItem } from './PendingItem';
 
 const MAX_SHOWN = 3;
-const canNotify = () => typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext;
-
-function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; onLater: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [perm, setPerm] = useState(() => (canNotify() ? Notification.permission : 'denied'));
-  const send = async (call: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await call();
-      onDone();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const choose = (choice: ApprovalChoice) => send(() => api.approve(a.instanceId, a.sessionId, a.runId, choice, a.requestId ?? undefined));
-  const answer = (text: string) => send(() => api.clarify(a.instanceId, a.sessionId, a.runId, text, a.requestId ?? undefined));
-  const link = 'text-[13px] font-medium text-accent-ink hover:underline';
-  const footer = (
-    <>
-      <ErrorText error={error} />
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <Link to="/w/$slug/s/$sessionId" params={{ slug: a.workspace, sessionId: a.sessionId }} className={link}>Ouvrir la session</Link>
-        <button type="button" onClick={onLater} className={link}>{error ? 'Fermer' : 'Plus tard'}</button>
-        {perm === 'default' && (
-          <button type="button" className={link} onClick={() => void Notification.requestPermission().then(setPerm)}>
-            Prévenir aussi hors de l’onglet
-          </button>
-        )}
-      </div>
-    </>
-  );
-  const clarify = a.kind === 'clarify';
-  return (
-    <section role="alertdialog" aria-label={`${clarify ? 'Question' : 'Approbation demandée'} sur ${a.instanceLabel}`} data-approval={a.key}
-      className="enter overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]">
-      <p className="truncate px-4 pb-1 pt-3 text-xs text-ink-soft">
-        <span className="font-medium text-ink">{a.instanceLabel}</span> · {a.workspaceName}{a.title ? ` · ${a.title}` : ''}
-      </p>
-      <div className="px-2 pb-2">
-        {clarify ? (
-          <ClarifyCard inline busy={busy} onAnswer={(t) => void answer(t)} disabled={!a.canAnswer} footer={footer}
-            clarify={{ requestId: a.requestId, question: a.question ?? 'Hermes vous pose une question : ouvrez la session pour la voir', choices: a.choices, multiSelect: a.multiSelect }} />
-        ) : (
-          <ApprovalCard
-            inline busy={busy} onChoose={(c) => void choose(c)} footer={footer}
-            approval={{
-              requestId: a.requestId,
-              description: a.description ?? (a.command ? null : 'Hermes attend votre accord : ouvrez la session pour voir la demande'),
-              command: a.command, choices: a.canAnswer ? a.choices : [],
-            }}
-          />
-        )}
-      </div>
-    </section>
-  );
-}
+export const CENTRE_PATH = '/activite';
 
 /**
  * Approvals asked on any instance, whatever the current one: a notification with the question, answered in place.
@@ -85,6 +24,7 @@ export function Approvals() {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const notified = useRef(new Set<string>());
   const all = list.data?.approvals ?? [];
+  const onCentre = useRouterState({ select: (st) => st.location.pathname === CENTRE_PATH });
   const shown = visibleApprovals(all, { openSession: sessionId, hidden });
 
   useEffect(() => {
@@ -97,13 +37,14 @@ export function Approvals() {
     }
   }, [shown]);
 
-  if (shown.length === 0) return null;
+  // on the Centre, no window in place (its « Vous attend » group has them), the browser notification above stays
+  if (shown.length === 0 || onCentre) return null;
   const hide = (key: string) => setHidden((h) => new Set(h).add(key));
   return createPortal(
     <div aria-live="polite"
       className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 flex flex-col gap-2 md:inset-x-auto md:bottom-4 md:right-4 md:w-[400px]">
       {shown.slice(0, MAX_SHOWN).map((a) => (
-        <Item key={a.key} a={a} onLater={() => hide(a.key)} onDone={() => {
+        <PendingItem key={a.key} a={a} onLater={() => hide(a.key)} onDone={() => {
           hide(a.key);
           void qc.invalidateQueries({ queryKey: ['approvals'] });
           void qc.invalidateQueries({ queryKey: ['activity'] });

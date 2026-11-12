@@ -16,7 +16,7 @@ import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
-import { ActivityPage } from './pages/Activity';
+import { CentrePage } from './pages/Centre';
 import { AgentPage } from './pages/Agent';
 import { AgentsPage } from './pages/Agents';
 import { CronsPage } from './pages/Crons';
@@ -243,7 +243,7 @@ const kanbanRoute = createRoute({
     task: typeof s.task === 'string' && /^t_[a-z0-9]{4,32}$/.test(s.task) ? s.task : undefined,
   }),
 });
-const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/activite', component: ActivityPage });
+const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/activite', component: CentrePage });
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({

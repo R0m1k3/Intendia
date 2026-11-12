@@ -33,7 +33,7 @@ const NAV: readonly NavEntry[] = [
   { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'agent', page: 'agents' },
   { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'agent', page: 'config' },
   { key: 'monitor', to: '/suivi', label: 'Suivi', icon: LineChart, group: 'foot', page: 'suivi' },
-  { key: 'activity', to: '/activite', label: 'Activité', icon: Activity, group: 'foot' },
+  { key: 'activity', to: '/activite', label: 'Centre', icon: Activity, group: 'foot' },
   { key: 'status', to: '/etat', label: 'État', icon: Server, group: 'foot' },
   { key: 'settings', to: '/reglages', label: 'Réglages', icon: Settings2, group: 'foot' },
 ];

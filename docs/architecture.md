@@ -476,6 +476,15 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   with a 3 s timeout. A finished run, or one Hermes no longer knows (404), goes into an in-memory set (1000 ids) and is
   never asked again. Kanban workers come from every live board of the instance. An unreachable instance is an
   `errors` line, not a failure of the page. The page rereads every 5 s while visible.
+- Centre (`apps/web/src/pages/Centre.tsx`, route `/activite`, options 60 and 61): three groups for the current
+  instance, « Vous attend » (`GET /x/approvals` filtered on the instance, answered in place with
+  `components/PendingItem.tsx`, the notifications are not shown on this page), « En cours » (activity, with
+  « Réorienter » = the session's steer route, hidden without the `chat.steer` op or when the run is not `running`;
+  a 409 is shown as refused) and « Terminé » (`GET /x/activity/finished?instance=`,
+  `WorkspaceService.finishedRuns`: `run_stats` ended in the last 24 h of live sessions, without the copies of
+  Dupliquer (`runId` with `@`), 50 at most). « Toutes les instances » (kept in `localStorage`, only with several
+  instances) reads `GET /x/activity` (`ActivityService.listAll`: one pass over every instance, shared between readers)
+  and the finished runs of every instance. Hermes has no pause and no token limit per run.
 - Approvals of every instance: `GET /x/approvals` (`ActivityService.approvals`, `src/agents/approvals.ts`) takes the
   same candidates on all instances, and for each run in `waiting_for_approval` reads its events again from the start
   (the question is only in `approval.request`): the stream of a waiting run stays open, so the reading stops 300 ms
