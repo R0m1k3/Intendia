@@ -6,7 +6,16 @@
  *
  * Run scenarios, chosen by words in the run input:
  * - default: run.started, two message.delta, tool.started, tool.completed, run.completed
- * - "approval": stops on approval.request until POST /v1/runs/{id}/approval
+ * - "approval": stops on approval.request until POST /v1/runs/{id}/approval. Format of Hermes 0.23 with its gateway
+ *   session authority by default (`prompt_id`, `execution_generation`, `approval.settled`, exact answer body, status with
+ *   `execution_generation` and `pending_controls`); `controls: 'legacy'` = API server without authority (`request_id`,
+ *   `approval.responded`, body `{choice}`)
+ * - steer (POST /v1/runs/{id}/steer): taken while the run is `running` (else 409), `run.steered` + a user line
+ *   `display_kind: "steer"`; with "perdu" in the run's message never delivered, back as `pending_steer` at the end
+ * - "secours": the run is served by another model than the one asked (`runtime.model = fake/model-fallback`)
+ * - "question": the agent asks a question (clarify.request, 3 choices; "multi": several may be picked) until
+ *   POST /v1/runs/{id}/clarify; the run stays `running`, the question is in `pending_controls`; the answer is quoted in
+ *   the final text. Gateway session authority only: with `controls: 'legacy'` the route answers 409 not_found
  * - "echec": tool.failed instead of tool.completed
  * - "lent": one event every 500 ms for 10 s (resume tests by hand)
  * - "panne": the run ends in `failed` (run.failed, no usage)
@@ -75,12 +84,24 @@ export interface FakeOptions {
   kanbanStepMs?: number;
   /** Managed files root of the dashboard (`locked_root`), also where the fake agent writes (default: a temporary folder). */
   filesRoot?: string;
+  /** Format of approvals: 'authority' (Hermes 0.23 gateway, default) or 'legacy' (API server without authority). */
+  controls?: 'authority' | 'legacy';
   /** `hermes_home` announced by the dashboard's /api/status (default /opt/data). */
   hermesHome?: string;
   /** `terminal.backend` in GET /api/config (default: the recording's, `local`). */
   terminalBackend?: string;
   /** Delay before each managed files answer, in ms (slow Hermes). */
   filesDelayMs?: number;
+  /**
+   * `session.stats` on the dashboard WebSocket `/api/ws` (dashboard inside the gateway); default false = standalone
+   * dashboard, the method answers -32601 like Hermes 0.23.
+   */
+  sessionStats?: boolean;
+  /**
+   * `llm.oneshot` on `/api/ws` (answers on a standalone dashboard too): `ok` (default) = a title made from the start of
+   * the input, `no_model` = 5030 as without a provider key, `off` = -32601 (method absent).
+   */
+  oneshot?: 'ok' | 'off' | 'no_model';
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -132,7 +153,12 @@ interface SimRun {
   usage: Record<string, number> | null;
   events: (Ev & { seq: number })[];
   listeners: Set<() => void>;
-  approval: { resolve: (choice: string) => void } | null;
+  approval: { resolve: (choice: string) => void; prompt: Record<string, unknown> } | null;
+  clarify: { resolve: (answer: string) => void; prompt: Record<string, unknown> } | null;
+  /** Answer given to the question of the run (quoted in the final text). */
+  answer?: string;
+  /** "perdu": a reorientation not given to the agent, sent back as `pending_steer` at the end. */
+  pendingSteer?: string;
 }
 
 interface SimMessage {
@@ -143,6 +169,7 @@ interface SimMessage {
   tool_calls: unknown;
   tool_name: string | null;
   timestamp: number;
+  display_kind?: string;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
@@ -160,8 +187,16 @@ class Simulator {
   extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[] }>();
   /** Session titles set by PATCH /api/sessions/{id}. */
   titles = new Map<string, string>();
+  /** Like Hermes 0.23 (unique index on sessions.title): the other session holding this title, if any. */
+  titleHolder(title: string, except: string): string | undefined {
+    for (const [id, t] of this.titles) if (t === title && id !== except) return id;
+    for (const e of this.extraSessions.values()) if (e.title === title && e.id !== except) return e.id;
+    return undefined;
+  }
   /** POST /v1/runs received since start. */
   runsPosted = 0;
+  /** Approval format, see FakeOptions.controls. */
+  controls: 'authority' | 'legacy' = 'authority';
   private counter = 0;
   private msgId = 1000;
 
@@ -173,7 +208,7 @@ class Simulator {
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
       sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, provider, status: 'queued', output: '', usage: null,
-      events: [], listeners: new Set(), approval: null,
+      events: [], listeners: new Set(), approval: null, clarify: null,
     };
     this.runs.set(run.id, run);
     this.lastRun = run;
@@ -200,6 +235,8 @@ class Simulator {
     const slow = /lent/i.test(run.input);
     const step = slow ? 500 : this.stepMs;
     await sleep(step);
+    // stopped before it started
+    if (TERMINAL.has(run.status)) return;
     run.status = 'running';
     this.push(run, { event: 'run.started' });
     if (/roman/i.test(run.input)) {
@@ -220,21 +257,41 @@ class Simulator {
       }
     }
     if (/approval/i.test(run.input)) {
+      if (TERMINAL.has(run.status)) return;
       run.status = 'waiting_for_approval';
+      const authority = this.controls === 'authority';
+      const question = { command: 'rm -rf build/', description: 'Supprimer le dossier build', choices: ['once', 'session', 'always', 'deny'] };
+      const prompt = authority ? { kind: 'approval', prompt_id: 'apr_1', execution_generation: 1, ...question } : { request_id: 'apr_1', ...question };
       const choice = await new Promise<string>((resolve) => {
-        run.approval = { resolve };
-        this.push(run, {
-          event: 'approval.request', request_id: 'apr_1', command: 'rm -rf build/', description: 'Supprimer le dossier build',
-          choices: ['once', 'session', 'always', 'deny'],
-        });
+        run.approval = { resolve, prompt };
+        this.push(run, { event: 'approval.request', ...prompt });
       });
       run.approval = null;
+      // stopped while it waited: stays cancelled
+      if (TERMINAL.has(run.status)) return;
       run.status = 'running';
-      this.push(run, { event: 'approval.responded', choice, request_id: 'apr_1', resolved: 1 });
+      this.push(run, authority
+        ? { event: 'approval.settled', prompt_id: 'apr_1', execution_generation: 1 }
+        : { event: 'approval.responded', choice, request_id: 'apr_1', resolved: 1 });
       if (choice === 'deny') {
         await sleep(step);
         return this.finish(run, 'Commande refusée, je m’arrête là.');
       }
+    }
+    if (/question/i.test(run.input) && this.controls === 'authority') {
+      const prompt = {
+        kind: 'clarify', prompt_id: 'clr_1', execution_generation: 1, question: 'Quel magasin dois-je traiter ?',
+        choices: ['Frouard', 'Houdemont', 'Les deux'], multi_select: /multi/i.test(run.input),
+      };
+      run.answer = await new Promise<string>((resolve) => {
+        run.clarify = { resolve, prompt };
+        this.push(run, { event: 'clarify.request', ...prompt });
+      });
+      run.clarify = null;
+      if (TERMINAL.has(run.status)) return;
+      this.push(run, { event: 'clarify.settled', prompt_id: 'clr_1', execution_generation: 1 });
+      await sleep(step);
+      return this.finish(run, `Vous avez choisi : ${run.answer}.`);
     }
     if (/panne/i.test(run.input)) {
       await sleep(step);
@@ -313,10 +370,24 @@ class Simulator {
     if (/tard/i.test(run.input)) setTimeout(addCost, 8_000).unref?.();
     else addCost();
     this.addMessage(run.sessionId, 'assistant', output);
-    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run) });
+    this.push(run, { event: 'run.completed', output, usage: run.usage, runtime: this.runtime(run), ...(run.pendingSteer ? { pending_steer: run.pendingSteer } : {}) });
+  }
+
+  /** Like Hermes: taken only while the run is exactly `running`; "perdu" in the run's message: never delivered. */
+  steer(run: SimRun, text: string): boolean {
+    if (run.status !== 'running') return false;
+    if (/perdu/i.test(run.input)) {
+      run.pendingSteer = run.pendingSteer ? `${run.pendingSteer}\n${text}` : text;
+      return true;
+    }
+    this.addMessage(run.sessionId, 'user', text, { display_kind: 'steer' });
+    this.push(run, { event: 'run.steered', accepted: true });
+    return true;
   }
 
   runtime(run: SimRun) {
+    // "secours": the provider fell back to another model
+    if (/secours/i.test(run.input)) return { provider: 'fake', model: 'fake/model-fallback' };
     return { provider: 'fake', model: run.model ?? 'fake/model-default' };
   }
 
@@ -329,6 +400,7 @@ class Simulator {
     if (TERMINAL.has(run.status)) return;
     run.status = 'cancelled';
     run.approval?.resolve('deny');
+    run.clarify?.resolve('');
     this.push(run, { event: 'run.cancelled' });
   }
 
@@ -409,7 +481,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // test route (Playwright runs cannot read the in-memory log): options of the last created run
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/last') {
       const last = sim.lastRun;
-      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input } : { run_id: null });
+      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input, instructions: last.instructions } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
@@ -443,6 +515,10 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (brk && 'body' in brk) return c.json(brk.body as object);
 
     if (via === 'dash' && method === 'GET' && path === '/api/sessions/search') return searchSessions(sim, c.req.query(), deleted);
+    if (via === 'dash') {
+      const copied = sessionCopies(method, path, body, sim, deleted);
+      if (copied) return copied;
+    }
 
     const prof = profiles.handle(via, method, path, body);
     if (prof) return prof;
@@ -525,11 +601,77 @@ function searchSessions(sim: Simulator, query: Record<string, string>, deleted: 
 const NOT_FOUND_SESSION = (id: string) => json({ error: { message: `Session not found: ${id}`, code: 'session_not_found' } }, 404);
 
 /** Simulated run and session routes of the API server; null = not handled here. */
+/**
+ * Dashboard export (`GET /api/sessions/{id}/export`: the row and every message, with their flags) and import
+ * (`POST /api/sessions/import`: the id given is kept, an existing one is skipped, a deleted one refused). Imported
+ * `api_server` sessions become simulated ones (runs continue them); other sources join the extra sessions.
+ */
+function sessionCopies(method: string, path: string, body: unknown, sim: Simulator, deleted: Set<string>): Response | null {
+  const ex = /^\/api\/sessions\/([^/]+)\/export$/.exec(path);
+  if (ex && method === 'GET') {
+    const id = decodeURIComponent(ex[1]!);
+    const simulated = sim.messages.get(id);
+    if (simulated && !deleted.has(id)) {
+      return json({
+        id, source: 'api_server', title: sim.titles.get(id) ?? null, model: 'fake/model-default', started_at: simulated[0]!.timestamp,
+        system_prompt: 'Tu es un agent de test.',
+        messages: simulated.map((m) => ({ ...m, message_uid: `uid-${id}-${m.id}`, active: 1, compacted: 0 })),
+      });
+    }
+    const extra = sim.extraSessions.get(id);
+    if (!extra || deleted.has(id)) return json({ detail: 'Session not found' }, 404);
+    return json({
+      id, source: extra.source, title: extra.title, model: null, started_at: extra.started_at,
+      messages: extra.messages.map((m, i) => ({ id: i + 1, session_id: id, role: m.role, content: m.content, timestamp: extra.started_at + i, active: 1, compacted: 0 })),
+    });
+  }
+  if (method === 'POST' && path === '/api/sessions/import') {
+    const b = (body ?? {}) as { sessions?: unknown; request_id?: unknown; expected_revision?: unknown };
+    if (typeof b.request_id !== 'string' || b.expected_revision !== 0 || !Array.isArray(b.sessions)) {
+      return json({ detail: 'Invalid session import payload' }, 400);
+    }
+    const out = { imported_ids: [] as string[], skipped_ids: [] as string[], errors: [] as unknown[] };
+    for (const raw of b.sessions as Record<string, unknown>[]) {
+      const id = String(raw.id ?? '');
+      if (!id) { out.errors.push({ error: 'missing id' }); continue; }
+      if (deleted.has(id)) { out.errors.push({ id, error: 'session id retired' }); continue; }
+      // like Hermes 0.23: the import is anchored on the id, an existing one is a revision conflict
+      if (sim.messages.has(id) || sim.extraSessions.has(id)) return json({ detail: 'revision_conflict' }, 409);
+      // the unique title index fails the whole write: Hermes answers it as a storage failure
+      if (typeof raw.title === 'string' && sim.titleHolder(raw.title, id)) return json({ detail: 'storage_unavailable' }, 503);
+      const started = typeof raw.started_at === 'number' ? raw.started_at : Date.now() / 1000;
+      const msgs = (Array.isArray(raw.messages) ? raw.messages : []) as Record<string, unknown>[];
+      const source = typeof raw.source === 'string' ? raw.source : 'import';
+      if (source === 'api_server' && msgs.length) {
+        sim.messages.set(id, msgs.map((m, i) => ({
+          id: i + 2, session_id: id, role: String(m.role), content: typeof m.content === 'string' ? m.content : null,
+          tool_calls: m.tool_calls ?? null, tool_name: typeof m.tool_name === 'string' ? m.tool_name : null,
+          timestamp: typeof m.timestamp === 'number' ? m.timestamp : started + i,
+        })));
+        if (typeof raw.title === 'string') sim.titles.set(id, raw.title);
+      } else {
+        sim.extraSessions.set(id, {
+          id, source, title: typeof raw.title === 'string' ? raw.title : null, started_at: started,
+          messages: msgs.map((m) => ({ role: String(m.role), content: typeof m.content === 'string' ? m.content : '' })),
+        });
+      }
+      out.imported_ids.push(id);
+    }
+    return json(out);
+  }
+  return null;
+}
+
 function handleRuns(req: Request, method: string, path: string, body: unknown, sim: Simulator, opts: FakeOptions, deleted: Set<string>): Response | null {
   const b = (body ?? {}) as Record<string, unknown>;
   if (method === 'POST' && path === '/v1/runs') {
     sim.runsPosted += 1;
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
+    // like Hermes: only api_server (and bot_room) sessions take runs
+    const extra = sim.extraSessions.get(sessionId);
+    if (extra && extra.source !== 'api_server' && extra.source !== 'bot_room') {
+      return json({ error: { message: 'Session belongs to another source', code: 'permission_denied' } }, 409);
+    }
     const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''),
       typeof b.model === 'string' ? b.model : null, b.model_options ?? null, typeof b.provider === 'string' ? b.provider : null);
     return json({ run_id: run.id, status: 'started', replayed: false });
@@ -544,7 +686,11 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       return json({
         object: 'hermes.run', run_id: run.id, status: run.status, session_id: run.sessionId, model: run.model ?? 'fake/model-default',
         created_at: run.createdAt, updated_at: run.updatedAt, output: run.output,
-        ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}), pending_controls: [],
+        ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
+        // with the gateway authority: the run's generation and the questions waiting for an answer
+        ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
+        ...(run.pendingSteer && TERMINAL.has(run.status) ? { pending_steer: run.pendingSteer } : {}),
+        pending_controls: sim.controls === 'authority' ? [run.approval?.prompt, run.clarify?.prompt].filter(Boolean) : [],
       });
     }
     if (sub === '/events' && method === 'GET') {
@@ -557,7 +703,34 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       sim.stop(run);
       return json({ object: 'hermes.run.stop', run_id: run.id, status: 'stopping' });
     }
+    if (sub === '/steer' && method === 'POST') {
+      const text = typeof b.input === 'string' ? b.input.trim() : '';
+      if (!text) return json({ error: { message: 'input is required', code: 'invalid_request' } }, 400);
+      if (!sim.steer(run, text)) return json({ error: { message: `Run is ${run.status}`, code: 'run_not_accepting_steer' } }, 409);
+      return json({ object: 'hermes.run.steer', run_id: run.id, accepted: true });
+    }
+    if (sub === '/clarify' && method === 'POST') {
+      // Hermes 0.23: through the session authority only (else not_found, answered 409)
+      if (sim.controls !== 'authority') return json({ error: { message: 'not_found', code: 'not_found' } }, 409);
+      const keys = Object.keys(b).sort().join(',');
+      if (keys !== 'answer,execution_generation,request_id' || typeof b.answer !== 'string') return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+      if (b.execution_generation !== 1) return json({ error: { message: 'stale_generation', code: 'stale_generation' } }, 409);
+      if (!run.clarify || b.request_id !== 'clr_1') return json({ error: { message: 'approval_not_pending', code: 'approval_not_pending' } }, 409);
+      run.clarify.resolve(b.answer);
+      return json({ run_id: run.id, status: 'resolved', prompt_id: 'clr_1' });
+    }
     if (sub === '/approval' && method === 'POST') {
+      if (sim.controls === 'authority') {
+        // Hermes 0.23 (api_server_authority_runs.respond_run): exactly these three keys, the run's generation
+        const keys = Object.keys(b).sort().join(',');
+        if (keys !== 'choice,execution_generation,request_id') return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+        if (b.execution_generation !== 1) return json({ error: { message: 'stale_generation', code: 'stale_generation' } }, 409);
+        if (!run.approval || b.request_id !== 'apr_1') return json({ error: { message: 'approval_not_pending', code: 'approval_not_pending' } }, 409);
+        if (!(run.approval.prompt.choices as string[]).includes(String(b.choice))) return json({ error: { message: 'invalid_params', code: 'invalid_params' } }, 400);
+        const choice = String(b.choice);
+        run.approval.resolve(choice);
+        return json({ run_id: run.id, status: 'resolved', prompt_id: 'apr_1' });
+      }
       if (!run.approval) return json({ error: { message: 'No pending approval', code: 'no_pending_approval' } }, 409);
       const choice = String(b.choice ?? 'deny');
       run.approval.resolve(choice);
@@ -605,9 +778,14 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       if (method === 'DELETE') {
         deleted.add(id);
         sim.messages.delete(id);
+        sim.titles.delete(id);
         return json({ object: 'hermes.session.deleted', id, deleted: true });
       }
-      if (typeof b.title === 'string') sim.titles.set(id, b.title);
+      if (typeof b.title === 'string') {
+        const holder = sim.titleHolder(b.title, id);
+        if (holder) return json({ error: { message: `Title '${b.title}' is already in use by session ${holder}`, type: 'invalid_request_error', param: null, code: 'invalid_title' } }, 400);
+        sim.titles.set(id, b.title);
+      }
       return json({ object: 'hermes.session', session: { id, ...b } });
     }
     if (!m[2] && method === 'GET' && simulated) {
@@ -625,6 +803,7 @@ export function createFakeHermes(opts: FakeOptions) {
   const files = new FilesStore(opts.filesRoot ?? mkdtempSync(join(tmpdir(), 'fake-hermes-files-')));
   files.delayMs = opts.filesDelayMs ?? 0;
   const sim = new Simulator(opts.stepMs ?? 5, files.root);
+  sim.controls = opts.controls ?? 'authority';
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);
@@ -637,6 +816,10 @@ export function createFakeHermes(opts: FakeOptions) {
     requests, sim, crons, skills, config, profiles, kanban, files,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
+    /** Can be switched at run time by tests. */
+    sessionStats: opts.sessionStats ?? false,
+    /** Can be switched at run time by tests. */
+    oneshot: opts.oneshot ?? 'ok',
   };
 }
 
@@ -671,6 +854,40 @@ export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: 
   });
 }
 
+/** Fixed figures of `session.stats` (a session of 12 345 tokens out of 200 000, plan used at 42 %). */
+export const FAKE_SESSION_STATS = {
+  context_tokens: 12_345, context_length: 200_000, tokens_per_s: 41.5,
+  plan_gauge: { label: 'Plan Pro', used_bp: 4200, resets_at_ms: Date.UTC(2026, 10, 12, 6) },
+};
+
+/**
+ * One connection to the dashboard JSON-RPC WebSocket `/api/ws?token=` (token already checked): answers
+ * `session.stats` (with `sessionStats`) and `commands.catalog`; any other method, or `session.stats` on a standalone
+ * dashboard, gets -32601. Pushes an `event` frame first, like the gateway. Returns the handler of incoming frames.
+ */
+export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => void }): (text: string) => void {
+  io.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready' } }));
+  return (text) => {
+    let msg: { id?: unknown; method?: unknown; params?: { session_id?: unknown; instructions?: unknown; input?: unknown } };
+    try { msg = JSON.parse(text) as typeof msg; } catch { return; }
+    const reply = (body: Record<string, unknown>) => io.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id ?? null, ...body }));
+    if (msg.method === 'session.stats' && fake.sessionStats) {
+      if (msg.params?.session_id === 'intendia-probe') return reply({ error: { code: 4001, message: 'session not found' } });
+      return reply({ result: FAKE_SESSION_STATS });
+    }
+    if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
+    if (msg.method === 'llm.oneshot' && fake.oneshot !== 'off') {
+      const input = typeof msg.params?.input === 'string' ? msg.params.input : '';
+      if (!input || typeof msg.params?.instructions !== 'string') return reply({ error: { code: 4030, message: 'llm.oneshot requires a template or instructions/input' } });
+      if (fake.oneshot === 'no_model') return reply({ error: { code: 5030, message: 'one-shot generation failed: No LLM provider configured for task=title_generation' } });
+      // first words of the first message, between quotes and with a final dot (cleaned by Intendia)
+      const first = input.split('\n').find((l) => l.trim() && !/^(Utilisateur|Agent)\s*:\s*$/.test(l))?.replace(/^(Utilisateur|Agent)\s*:\s*/, '') ?? 'Session';
+      return reply({ result: { text: `« ${first.split(/\s+/).slice(0, 5).join(' ')}. »\nAutre ligne` } });
+    }
+    return reply({ error: { code: -32601, message: `unknown method: ${String(msg.method)}` } });
+  };
+}
+
 /** WebSocket-like factory for tests (same shape as the server's `WsFactory`), backed by `connectKanbanEvents`. */
 export function fakeWebSocketFactory(fake: Fake) {
   return (url: string) => {
@@ -678,6 +895,7 @@ export function fakeWebSocketFactory(fake: Fake) {
     const fire = (type: string, ev: { data?: unknown; code?: number } = {}) => { for (const l of listeners.get(type) ?? []) l(ev); };
     let open = true;
     let stop = () => {};
+    let onText: ((text: string) => void) | null = null;
     const end = (code: number) => {
       if (!open) return;
       open = false;
@@ -687,13 +905,16 @@ export function fakeWebSocketFactory(fake: Fake) {
     queueMicrotask(() => {
       if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
       fire('open');
-      stop = connectKanbanEvents(fake, url, { send: (data) => { if (open) fire('message', { data }); }, close: end });
+      const io = { send: (data: string) => { if (open) fire('message', { data }); }, close: end };
+      if (new URL(url, 'ws://fake-dash').pathname === '/api/ws') onText = connectGatewaySocket(fake, io);
+      else stop = connectKanbanEvents(fake, url, io);
     });
     return {
       addEventListener(type: string, l: (ev: { data?: unknown; code?: number }) => void) {
         listeners.set(type, [...(listeners.get(type) ?? []), l]);
       },
       close: (code = 1000) => end(code),
+      send: (text: string) => { if (open) queueMicrotask(() => onText?.(text)); },
       /** test helper: is the connection still open? */
       get isOpen() { return open; },
     };

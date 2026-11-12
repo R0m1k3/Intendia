@@ -23,6 +23,11 @@ export interface OpDef {
   kind: 'read' | 'write';
   /** Without this operation the module cannot work at all. */
   required?: boolean;
+  /**
+   * An option of the module (e.g. a dashboard route): missing, it does not change the module's state, only its
+   * feature is hidden.
+   */
+  optional?: true;
   routes: RouteDef[];
   /** Response schema: tolerant (looseObject), only the fields Intendia reads. */
   schema?: z.ZodType;
@@ -71,4 +76,6 @@ export interface CompatReport {
    * Files module cannot be used. Absent in reports saved before Intendia 0.0.4 (= not checked yet).
    */
   files?: { workspaceRoot: string | null; reason: string | null };
+  /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
+  socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean };
 }

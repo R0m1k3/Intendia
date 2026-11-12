@@ -50,6 +50,24 @@ export const SessionSearchSchema = z.looseObject({
   })),
 });
 
+/** GET /api/sessions/{id}/export (dashboard): the session row and every message row, with their flags. */
+export const ExportSchema = z.looseObject({
+  id: z.string().nullish(),
+  source: z.string().nullish(),
+  title: z.string().nullish(),
+  model: z.string().nullish(),
+  started_at: z.number().nullish(),
+  system_prompt: z.string().nullish(),
+  messages: z.array(z.looseObject({ role: z.string() })),
+});
+
+/** POST /api/sessions/import (dashboard). */
+export const ImportResultSchema = z.looseObject({
+  imported_ids: z.array(z.string()).catch([]),
+  skipped_ids: z.array(z.string()).catch([]),
+  errors: z.array(z.unknown()).catch([]),
+});
+
 export const sessionsModule: ModuleDef = {
   id: 'sessions',
   label: 'Sessions',
@@ -83,6 +101,15 @@ export const sessionsModule: ModuleDef = {
     remove: {
       kind: 'write',
       routes: [{ via: 'api', method: 'DELETE', path: '/api/sessions/{session_id}', capability: 'session_delete' }],
+    },
+    // copies (duplicate, continue a session from elsewhere, import a file): dashboard only
+    export: {
+      kind: 'read', optional: true, probe: false, schema: ExportSchema,
+      routes: [{ via: 'dash', method: 'GET', path: '/api/sessions/{session_id}/export' }],
+    },
+    import: {
+      kind: 'write', optional: true, schema: ImportResultSchema,
+      routes: [{ via: 'dash', method: 'POST', path: '/api/sessions/import' }],
     },
   },
 };

@@ -91,7 +91,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   const store = new InstanceStore(db, config);
   const auth = new Auth(db, config);
   const fetchImpl = combineFetch(routes);
-  const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
+  const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl, fakeWebSocketFactory(fake));
   await compat.check(inst.id);
   for (const e of extra) await compat.check(e.id);
   const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs });

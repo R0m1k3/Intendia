@@ -4,7 +4,7 @@ import { toNotify, visibleApprovals } from './approvals';
 
 const a = (key: string, sessionId = 's1'): PendingApproval => ({
   key, instanceId: 'b', instanceLabel: 'Bureau', workspace: 'w', workspaceName: 'W', sessionId, title: null, runId: 'r',
-  requestId: null, command: null, description: null, choices: [], canAnswer: true,
+  kind: 'approval', requestId: null, question: null, multiSelect: false, command: null, description: null, choices: [], canAnswer: true,
 });
 
 describe('approvals', () => {

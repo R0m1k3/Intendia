@@ -1,14 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { FolderOpen, PenLine, Pencil } from 'lucide-react';
+import { FolderOpen, PenLine, Pencil, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type FileEntry, type PublicInstance } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
 import { DetailBody, DetailHeader } from '../components/Panes';
-import { Button, cx, ErrorText, timeAgo } from '../components/ui';
+import { Button, ErrorText } from '../components/ui';
 import { FileRows, isDirEntry } from '../files/FileRows';
 import { workspaceScope } from '../files/scope';
+import { newKey, useCopyOps } from '../sessions/copies';
+import { SessionSelectList } from '../sessions/Selection';
 import { OtherSessions } from './OtherSessions';
 
 const ROWS = 8;
@@ -40,6 +42,25 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
     mutationFn: (t: string) => api.saveAgentsMd(slug, t),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
   });
+  const { canCopy } = useCopyOps(w?.instanceId);
+  /** A JSON export (Intendia or Hermes) as a new session of this workspace. */
+  const importFile = useMutation({
+    mutationFn: async (file: File) => {
+      if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop gros (10 Mo au plus)');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        throw new Error('Ce fichier n’est pas un JSON lisible');
+      }
+      return api.importSession(slug, parsed, newKey());
+    },
+    onSuccess: async ({ session }) => {
+      await qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
+    },
+  });
   const saveName = useMutation({
     mutationFn: (n: string) => api.updateWorkspace(slug, { name: n }),
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['workspace', slug] }), qc.invalidateQueries({ queryKey: ['workspaces'] })]),
@@ -67,6 +88,15 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
         actions={(
           <>
             <Button onClick={() => void rename()} disabled={!w || saveName.isPending}><Pencil className="size-4" strokeWidth={1.5} />Renommer</Button>
+            {canCopy && (
+              <label className="inline-flex h-[34px] cursor-pointer items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium transition-colors hover:bg-paper">
+                <Upload className="size-4" strokeWidth={1.5} />Importer
+                <input
+                  type="file" accept=".json,application/json" className="sr-only" aria-label="Importer une session (JSON)" disabled={importFile.isPending}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile.mutate(f); }}
+                />
+              </label>
+            )}
             <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}>
               <PenLine className="size-4" strokeWidth={1.5} />{create.isPending ? 'Création…' : 'Nouvelle session ici'}
             </Button>
@@ -78,6 +108,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
         <div className="empty:hidden"><ChatNotice instanceId={w?.instanceId} /></div>
         <ErrorText error={create.error} />
         <ErrorText error={saveName.error} />
+        <ErrorText error={importFile.error} />
 
         <section aria-labelledby="ws-consignes">
           <div className="flex items-baseline gap-2">
@@ -130,16 +161,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
           {sessions.isSuccess && list.length === 0 && (
             <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{archived ? 'Aucune session archivée' : 'Aucune session : ouvrez-en une pour écrire à l’agent'}</p>
           )}
-          <ul>
-            {list.map((s) => (
-              <li key={s.id} className="border-t border-line/70">
-                <Link to="/w/$slug/s/$sessionId" params={{ slug, sessionId: s.id }} className="flex h-12 items-center gap-3.5 px-4 text-sm transition-colors hover:bg-paper">
-                  <span className={cx('min-w-0 flex-1 truncate', !s.title && 'text-ink-faint')}>{s.title || 'Nouvelle session'}</span>
-                  <span className="shrink-0 text-xs text-ink-faint">{timeAgo(s.lastActiveAt ?? s.createdAt)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {w && sessions.data && list.length > 0 && <div className="border-t border-line/70"><SessionSelectList workspace={w} sessions={list} /></div>}
         </section>
 
         {instance && <OtherSessions key={instance.id} inst={instance} />}

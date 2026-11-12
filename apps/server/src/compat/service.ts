@@ -2,6 +2,8 @@ import { desc, eq } from 'drizzle-orm';
 import type { CompatReport } from '../connectors/types.js';
 import type { Db } from '../db/index.js';
 import { compatReports } from '../db/schema.js';
+import type { WsFactory } from '../hermes/events.js';
+import { probeSocket } from '../hermes/gateway-ws.js';
 import { HermesHttp, type FetchLike } from '../hermes/http.js';
 import type { InstanceStore } from '../instances/store.js';
 import { checkInstance, stateChanges } from './engine.js';
@@ -26,6 +28,8 @@ export class CompatService {
     private readonly store: InstanceStore,
     private readonly notifier: Notifier,
     private readonly fetchImpl?: FetchLike,
+    /** WebSocket of the dashboard (tests: the fake's). */
+    readonly wsFactory?: WsFactory,
   ) {
     for (const inst of store.list()) {
       const row = db.select().from(compatReports).where(eq(compatReports.instanceId, inst.id))
@@ -56,6 +60,8 @@ export class CompatService {
       const http = this.http(instanceId);
       const { report } = await checkInstance(http);
       await withFilesRoot(http, report);
+      const inst = this.store.get(instanceId);
+      if (inst && report.dash.reachable) report.socket = await probeSocket(inst, { factory: this.wsFactory });
       const prev = this.reports.get(instanceId);
       const before = prev?.files?.workspaceRoot;
       if (prev?.files && before !== report.files?.workspaceRoot) {

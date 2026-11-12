@@ -76,7 +76,7 @@ describe('kanban live events', () => {
 
   it('gives up a handshake Hermes never answers (wrong token on 0.23.0) and closes the socket', async () => {
     let closedWith: number | undefined;
-    const silent = (): WsLike => ({ addEventListener: () => {}, close: (code) => { closedWith = code; } });
+    const silent = (): WsLike => ({ addEventListener: () => {}, send: () => {}, close: (code) => { closedWith = code; } });
     const reasons: string[] = [];
     openKanbanEvents(fakeInstance(), 'default', { onEvents: () => {}, onClose: (r) => reasons.push(r) }, silent, 50);
     await sleep(120);

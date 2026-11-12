@@ -9,10 +9,12 @@ import { Button, Input } from './ui';
 interface Common { title: string; message?: ReactNode; confirmLabel?: string; cancelLabel?: string }
 export interface AskOptions extends Common { danger?: boolean }
 export interface AskTextOptions extends Common { label?: string; value?: string; maxLength?: number; placeholder?: string }
+export interface AskChoiceOptions extends Common { label?: string; options: { value: string; label: string }[] }
 
 type Request =
   | { kind: 'ask'; opts: AskOptions; resolve: (v: boolean) => void }
   | { kind: 'text'; opts: AskTextOptions; resolve: (v: string | null) => void }
+  | { kind: 'choice'; opts: AskChoiceOptions; resolve: (v: string | null) => void }
   | { kind: 'copy'; opts: Common & { text: string }; resolve: () => void };
 
 let show: ((r: Request) => void) | null = null;
@@ -25,6 +27,11 @@ export function ask(opts: AskOptions): Promise<boolean> {
 /** One-line text; resolves the trimmed text, or null when cancelled or empty. */
 export function askText(opts: AskTextOptions): Promise<string | null> {
   return new Promise((resolve) => (show ? show({ kind: 'text', opts, resolve }) : resolve(null)));
+}
+
+/** One choice among `options` (radio buttons); resolves its value, or null when cancelled. */
+export function askChoice(opts: AskChoiceOptions): Promise<string | null> {
+  return new Promise((resolve) => (show ? show({ kind: 'choice', opts, resolve }) : resolve(null)));
 }
 
 /** Shows a text to copy by hand (the browser refused the clipboard). */
@@ -45,7 +52,7 @@ export function DialogHost() {
 }
 
 function DialogView({ req, done }: { req: Request; done: () => void }) {
-  const [text, setText] = useState(req.kind === 'text' ? req.opts.value ?? '' : req.kind === 'copy' ? req.opts.text : '');
+  const [text, setText] = useState(req.kind === 'text' ? req.opts.value ?? '' : req.kind === 'copy' ? req.opts.text : req.kind === 'choice' ? req.opts.options[0]?.value ?? '' : '');
   const input = useRef<HTMLInputElement>(null);
   const ok = useRef<HTMLButtonElement>(null);
   const before = useRef<Element | null>(document.activeElement);
@@ -53,6 +60,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
   const finish = (confirmed: boolean) => {
     if (req.kind === 'ask') req.resolve(confirmed);
     else if (req.kind === 'text') req.resolve(confirmed && text.trim() ? text.trim() : null);
+    else if (req.kind === 'choice') req.resolve(confirmed && text ? text : null);
     else req.resolve();
     done();
     // after the effect cleanup has lifted `inert` (an inert element cannot take focus)
@@ -87,7 +95,20 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
       >
         <h2 className="text-[15px] font-semibold">{title}</h2>
         {message && <div className="mt-2 text-sm leading-relaxed text-ink-soft">{message}</div>}
-        {req.kind !== 'ask' && (
+        {req.kind === 'choice' && (
+          <fieldset className="mt-4">
+            {req.opts.label && <legend className="mb-2 text-sm font-medium">{req.opts.label}</legend>}
+            <div className="max-h-[40vh] space-y-1 overflow-y-auto">
+              {req.opts.options.map((o) => (
+                <label key={o.value} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm hover:bg-raised">
+                  <input type="radio" name="choice" value={o.value} checked={text === o.value} onChange={() => setText(o.value)} className="accent-accent" />
+                  <span className="truncate">{o.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {(req.kind === 'text' || req.kind === 'copy') && (
           <label className="mt-4 block">
             {req.kind === 'text' && req.opts.label && <span className="mb-2 block text-sm font-medium">{req.opts.label}</span>}
             <Input
@@ -103,7 +124,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
           {req.kind !== 'copy' && <Button type="button" variant="ghost" onClick={() => finish(false)}>{req.opts.cancelLabel ?? 'Annuler'}</Button>}
           <Button
             ref={ok} type="submit" variant={danger ? 'danger' : 'primary'}
-            disabled={req.kind === 'text' && !text.trim()}
+            disabled={(req.kind === 'text' && !text.trim()) || (req.kind === 'choice' && !text)}
           >
             {confirmLabel}
           </Button>

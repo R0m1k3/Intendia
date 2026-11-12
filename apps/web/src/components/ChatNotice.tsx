@@ -5,8 +5,8 @@ const OPTIONAL: OptionalOp[] = [['chat', 'stopRun', 'Arrêter un run'], ['chat',
 
 /** Chat availability from the operations phase 2 uses: a missing `steer` must not warn, a missing `createRun` must block. */
 export function useChatAvailability(instanceId: string | undefined) {
-  const { available, missing, reasons, link } = useModuleAvailability(instanceId, 'chat', REQUIRED, OPTIONAL);
-  return { available, missing, reasons, link };
+  const { available, missing, reasons, link, has } = useModuleAvailability(instanceId, 'chat', REQUIRED, OPTIONAL);
+  return { available, missing, reasons, link, has };
 }
 
 export function ChatNotice({ instanceId }: { instanceId: string | undefined }) {

@@ -5,7 +5,7 @@ import { testApp, waitRun } from './helpers.js';
 
 const own = (id: string, at: number, extra: Record<string, unknown> = {}) => ({
   id, instanceId: 'a', workspace: 'dev', title: null, archived: false, lastRunId: null, lastActiveAt: at, createdAt: at,
-  model: null, modelProvider: null, effort: null, workspaceName: 'Dev', profile: 'default', ...extra,
+  model: null, modelProvider: null, effort: null, pinned: false, copiedFrom: null, replacesId: null, personality: null, autoApprove: false, workspaceName: 'Dev', profile: 'default', ...extra,
 });
 
 describe('mergeRecent', () => {
@@ -106,6 +106,14 @@ describe('GET /x/i/fake/sessions/recent?source', () => {
     expect(own.sessions.every((s: any) => s.kind === 'intendia')).toBe(true);
     expect(own.sessions).toHaveLength(1);
     expect(t.fake.requests.filter((r) => r.path === '/api/sessions').length).toBe(before);
+  });
+
+  it('cli: local and cli sessions merged by activity before the limit', async () => {
+    const t = await testApp();
+    for (let i = 0; i < 3; i++) t.fake.sim.extraSessions.set(`local-${i}`, { id: `local-${i}`, source: 'local', title: `Local ${i}`, started_at: 1_000 + i, messages: [] });
+    t.fake.sim.extraSessions.set('cli-new', { id: 'cli-new', source: 'cli', title: 'Récente', started_at: 9_000, messages: [] });
+    const res = (await t.request('GET', '/x/i/fake/sessions/recent?source=cli&limit=2')).json;
+    expect(res.sessions.map((s: any) => s.id)).toEqual(['cli-new', 'local-2']);
   });
 });
 

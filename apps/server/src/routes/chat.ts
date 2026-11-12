@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
-import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
+import { RunStatusSchema, TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError, streamOp } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
 import { pushTitle } from '../workspaces/title.js';
@@ -11,57 +11,32 @@ import { autoModel, chatGroups, chatModelsManaged, type ChatModelList } from '..
 import type { ModelOptionsSchema } from '../connectors/chat/index.js';
 import { NotFoundError, ValidationError, type RunStatRow, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { SESSION_ID_RE, sessionParams } from './workspaces.js';
+import { ModelInfoSchema } from '../connectors/config/index.js';
+import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
+import { toUsage } from '../chat/usage.js';
+import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from '../chat/history.js';
+import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
+import { presets, Modes, Pins } from '../chat/presets.js';
+import { PromptService } from '../prompts/service.js';
+import { listPersonalities } from '../sessions/personalities.js';
+import { personalityBlock, RunExtrasError, skillBlocks, SKILLS_MAX } from '../sessions/run-extras.js';
+import { profileOf } from './skills.js';
+
+export { toChatMessages, type ChatMessage } from '../chat/history.js';
+export { controlBody } from '../chat/approve.js';
 
 const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
 const OTHER_PAGE = 50;
 
-const SendBody = z.object({ input: z.string().min(1).max(100_000) });
+const SendBody = z.object({
+  input: z.string().min(1).max(100_000),
+  /** `/use <skill>`: put in the instructions of this run only */
+  // same names as the skills routes (`category/name` for same-tier duplicates), never a `..` segment
+  skills: z.array(z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/).refine((n) => !n.split('/').includes('..'))).max(SKILLS_MAX).optional(),
+});
+const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
+const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
-
-interface RawMessage {
-  id: number;
-  role: string;
-  content?: unknown;
-  tool_calls?: unknown;
-  tool_name?: string | null;
-  timestamp?: number | null;
-}
-
-export interface ChatMessage {
-  id: number;
-  role: string;
-  content: string;
-  toolName: string | null;
-  toolCalls: { name: string; arguments: string }[];
-  timestamp: number | null;
-}
-
-function text(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((p) => (p && typeof p === 'object' && 'text' in p ? String((p as { text: unknown }).text) : '')).join('');
-  }
-  return content == null ? '' : JSON.stringify(content);
-}
-
-function toolCalls(raw: unknown): ChatMessage['toolCalls'] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((t) => {
-    const fn = (t as { function?: { name?: unknown; arguments?: unknown } }).function ?? (t as { name?: unknown; arguments?: unknown });
-    return { name: String(fn.name ?? '?'), arguments: typeof fn.arguments === 'string' ? fn.arguments : JSON.stringify(fn.arguments ?? {}) };
-  });
-}
-
-/** Hermes messages → oldest first, without session_meta. */
-export function toChatMessages(data: RawMessage[]): ChatMessage[] {
-  return data
-    .filter((m) => m.role !== 'session_meta')
-    .sort((a, b) => a.id - b.id)
-    .map((m) => ({
-      id: m.id, role: m.role, content: text(m.content), toolName: m.tool_name ?? null,
-      toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
-    }));
-}
 
 function sseFrame(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}\n\n`;
@@ -91,35 +66,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return runId;
   };
 
-  interface RawStatus {
-    status: string; session_id?: string | null; created_at?: number; updated_at?: number | null; output?: string | null; error?: string | null;
-    usage?: unknown; runtime?: unknown;
-  }
-  /** Run status; a run Hermes forgot (404) is "unknown", treated as finished. `raw` feeds run_stats. */
-  const status = async (ctx: SessionContext, runId: string) => {
-    try {
-      const s = await callOp<RawStatus>(http(ctx), report(ctx), 'chat', 'runStatus', { params: { run_id: runId }, profile: ctx.profile });
-      return { status: s.status, createdAt: s.created_at ?? null, output: s.output ?? null, error: s.error ?? null, raw: s as RawStatus | null };
-    } catch (err) {
-      if (err instanceof HermesError && err.detail.status === 404) return { status: 'unknown', createdAt: null, output: null, error: null, raw: null };
-      throw err;
-    }
-  };
+  const status = (ctx: SessionContext, runId: string) => readRunStatus(compat, ctx.instance.id, ctx.profile, runId);
   const publicStatus = ({ raw: _raw, ...s }: Awaited<ReturnType<typeof status>>) => s;
 
-  /** Messages and the live session id (after a compression, the continuation); 404 = no message yet. */
-  const history = async (instanceId: string, sessionId: string, profile: string, limit?: number) => {
-    try {
-      const res = await callOp<{ data: RawMessage[]; session_id?: string | null }>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'messages', {
-        params: { session_id: sessionId }, profile, ...(limit ? { query: { limit, order: 'latest' } } : {}),
-      });
-      return { messages: toChatMessages(res.data), liveId: res.session_id || sessionId, exists: true };
-    } catch (err) {
-      // an Intendia session before its first message does not exist at Hermes yet
-      if (err instanceof HermesError && err.detail.status === 404) return { messages: [] as ChatMessage[], liveId: sessionId, exists: false };
-      throw err;
-    }
-  };
+  const history = (instanceId: string, sessionId: string, profile: string, limit?: number) =>
+    readHistory(compat, instanceId, sessionId, profile, limit);
   const messages = async (instanceId: string, sessionId: string, profile: string): Promise<ChatMessage[]> =>
     (await history(instanceId, sessionId, profile)).messages;
 
@@ -196,11 +147,34 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return fresh;
   };
 
+  const prompts = new PromptService(deps.db);
+  const instOf = (c: { req: { param: (k: string) => string | undefined } }) => {
+    const id = c.req.param('inst') ?? '';
+    if (!deps.store.get(id)) throw new NotFoundError(`Instance inconnue : ${id}`);
+    return id;
+  };
+
+  r.get('/i/:inst/personalities', async (c) => c.json(await listPersonalities(deps.services.config, prompts, instOf(c), profileOf(c))));
+  r.get('/i/:inst/model-pins', (c) => c.json({ pins: presets.pins(deps.db, instOf(c), profileOf(c)) }));
+  r.put('/i/:inst/model-pins', async (c) => {
+    const inst = instOf(c);
+    const pins = Pins.parse((await c.req.json()).pins);
+    presets.setPins(deps.db, inst, profileOf(c), pins);
+    return c.json({ pins });
+  });
+  r.get('/i/:inst/modes', (c) => c.json({ modes: presets.modes(deps.db, instOf(c), profileOf(c)) }));
+  r.put('/i/:inst/modes', async (c) => {
+    const inst = instOf(c);
+    const modes = Modes.parse((await c.req.json()).modes);
+    presets.setModes(deps.db, inst, profileOf(c), modes);
+    return c.json({ modes });
+  });
+
   const publicRun = (r: RunStatRow) => ({
     runId: r.runId, status: r.status, requestedModel: r.requestedModel, requestedEffort: r.requestedEffort,
     servedModel: r.servedModel, startedAt: r.startedAt, endedAt: r.endedAt,
     inputTokens: r.inputTokens, outputTokens: r.outputTokens, cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWriteTokens,
-    costUsd: r.costUsd, costRuns: r.costRuns, costFinal: r.costFinal,
+    costUsd: r.costUsd, costRuns: r.costRuns, costFinal: r.costFinal, autoApproved: r.autoApproved,
   });
 
   const instanceProfile = (instanceId: string, profile: string | undefined): string => {
@@ -223,11 +197,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   // one run creation at a time per session: two tabs could otherwise both pass the "no run in progress"
   // check and start two runs, the second overwriting the first in lastRunId
-  const starting = new Set<string>();
+  const starting = startingRuns;
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
-    const { input } = SendBody.parse(await c.req.json());
-    const key = `${ctx.instance.id}:${ctx.session.id}`;
+    const { input, skills: asked } = SendBody.parse(await c.req.json());
+    const key = runKey(ctx.instance.id, ctx.session.id);
     if (starting.has(key)) return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
     starting.add(key);
     try {
@@ -245,7 +219,16 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         return c.json({ error: 'Un run est déjà en cours dans cette session' }, 409);
       }
       const { model, modelProvider, effort } = fresh.session;
-      const instructions = await workspaces.instructionsFor(fresh);
+      // skills first: an unknown one stops the send before the run (400), the personality never does
+      let extra: string[];
+      try {
+        extra = asked?.length ? await skillBlocks(deps.services.skills, fresh, [...new Set(asked)]) : [];
+      } catch (err) {
+        if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
+        throw err;
+      }
+      const persona = await personalityBlock(deps.services.config, prompts, fresh);
+      const instructions = [await workspaces.instructionsFor(fresh), ...extra, ...(persona.block ? [persona.block] : [])].join('\n\n');
       const created = await callOp<{ run_id: string }>(http(ctx), report(ctx), 'chat', 'createRun', {
         profile: ctx.profile,
         body: {
@@ -261,7 +244,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         requestedModel: model, requestedEffort: effort, startedAt: Date.now(), ...handOverCost(fresh, cost),
       });
       const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
-      return c.json({ runId: created.run_id, session });
+      return c.json({ runId: created.run_id, session, ...(persona.notice ? { notice: persona.notice } : {}) });
     } finally {
       starting.delete(key);
     }
@@ -308,9 +291,62 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
     const { choice, requestId } = ApprovalBody.parse(await c.req.json());
-    return c.json(await callOp(http(ctx), report(ctx), 'chat', 'approval', {
-      params: { run_id: runId }, profile: ctx.profile, body: { choice, ...(requestId ? { request_id: requestId } : {}) },
-    }));
+    try {
+      return c.json(await answerApproval(compat, ctx, runId, choice, requestId ?? null));
+    } catch (err) {
+      if (err instanceof ApproveError) return c.json({ error: err.message, code: err.code }, 409);
+      throw err;
+    }
+  });
+
+  /** Answer to a question of the agent; Hermes allows it with its gateway session authority only. */
+  r.post('/sessions/:inst/:id/runs/:runId/clarify', async (c) => {
+    const ctx = ctxOf(c);
+    const runId = runOf(ctx, c.req.param('runId'));
+    const { answer, requestId } = ClarifyBody.parse(await c.req.json());
+    const unavailable = () => c.json({ error: 'Hermes ne permet pas de répondre à cette question depuis Intendia', code: 'clarify_unavailable' }, 409);
+    const s = await status(ctx, runId);
+    if (s.status === 'unknown') return c.json({ error: 'Ce run est terminé', code: 'run_gone' }, 409);
+    if (typeof RunStatusSchema.safeParse(s.raw).data?.execution_generation !== 'number') return unavailable();
+    const built = controlBody('clarify', s.raw, requestId ?? null, answer);
+    if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
+    try {
+      return c.json(await callOp(http(ctx), report(ctx), 'chat', 'clarify', { params: { run_id: runId }, profile: ctx.profile, body: built.body }));
+    } catch (err) {
+      // without the authority Hermes answers 409 not_found; an older Hermes has no such route (404)
+      if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 404 || (err.detail.status === 409 && /not_found/.test(err.detail.body ?? '')))) return unavailable();
+      throw err;
+    }
+  });
+
+  // Context gauge and plan quota: the model's context size by HTTP; exact figures and quota only from the dashboard
+  // WebSocket (`session.stats`), when the compat check found it. Every failure gives null figures, never an error.
+  r.get('/sessions/:inst/:id/usage', async (c) => {
+    const ctx = ctxOf(c);
+    const info = await callOp<z.infer<typeof ModelInfoSchema>>(http(ctx), report(ctx), 'config', 'modelInfo', { profile: ctx.profile })
+      .then((v) => ModelInfoSchema.parse(v)).catch(() => null);
+    let stats: SessionStats | null = null;
+    if (report(ctx)?.socket?.sessionStats) {
+      const live = await history(ctx.instance.id, ctx.session.id, ctx.profile, 1).catch(() => null);
+      if (live?.exists) stats = await sessionStats(ctx.instance, live.liveId, { factory: deps.wsFactory ?? compat.wsFactory }).catch(() => null);
+    }
+    return c.json(toUsage(stats, info, { model: ctx.session.model }));
+  });
+
+  // Reorientation: the text reaches the agent after its current batch of tools, without stopping the run. Hermes
+  // only takes it while the run is exactly `running` (not during an approval): otherwise 409.
+  r.post('/sessions/:inst/:id/runs/:runId/steer', async (c) => {
+    const ctx = ctxOf(c);
+    const runId = runOf(ctx, c.req.param('runId'));
+    const { input } = SteerBody.parse(await c.req.json());
+    try {
+      return c.json(await callOp(http(ctx), report(ctx), 'chat', 'steer', { params: { run_id: runId }, profile: ctx.profile, body: { input } }));
+    } catch (err) {
+      if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 409 || err.detail.status === 404)) {
+        return c.json({ error: 'L’agent n’accepte pas de réorientation maintenant', code: 'steer_refused' }, 409);
+      }
+      throw err;
+    }
   });
 
   // ---- instance-level

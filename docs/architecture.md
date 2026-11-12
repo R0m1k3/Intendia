@@ -82,9 +82,24 @@ demand from the State screen. State changes go to the webhook.
 - Intendia mints session ids (`iw-<slug>-<12 base36>`) and records them in `session_workspace` before the first
   message; Hermes creates the session on the first run that carries the id and reloads its history on every run.
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`<workspace root>/<slug>`), the session
-  folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`.
-- Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the workspace profile and
+  folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`; then, for that run only, the skills asked by
+  `/use` (12 000 characters each, else their start and a pointer to `skill_view`; unknown → 400 `skill_not_found`
+  before the run), and on every run the session's personality (`hermes:<name>` from the profile's `personalities` /
+  `agent.personalities`, or `intendia:<id>` from the `prompts` table; missing → left out, `notice` in the answer).
+- **Profile of a session**: a workspace has a *default* profile; a session may use another profile of the same
+  instance (`session_workspace.profile`, NULL = the workspace's). Every query reading a session's profile takes
+  `coalesce(session_workspace.profile, workspaces.profile)` (lists, search, purge, recent runs → approvals, activity,
+  « Sans confirmation »). A session never sent changes profile by `PATCH`; one with a history is copied
+  (`POST …/to-profile {profile, key}`, the original stays). Move, « Continuer dans Intendia » and attached crons keep
+  using the workspace's default profile.
+- Routes of an Intendia session live under `/x/sessions/<instance>/<id>/…`: the server reads the session's profile and
   calls Hermes through `/p/<profile>/` with that profile's key.
+- « Sans confirmation » (`session_workspace.auto_approve`): Hermes has no per-session switch reachable by HTTP, so
+  `src/sessions/auto-approve.ts` answers `once` to the approvals of those sessions' runs, one pass every 2 s over the
+  runs `ActivityService` follows (24 h window, 200 sessions); counted in `run_stats.auto_approved`, logged. Questions
+  of the agent (clarify) are never answered. Copies keep it only when they replace the session (edit, retry, undo).
+- Pinned models and modes (model + effort + personality, never the profile) per agent: `settings`
+  `model_pins:<inst>:<profile>` (20) and `run_modes:<inst>:<profile>` (30), `GET|PUT /x/i/:inst/model-pins|modes`.
 - Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
   The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
   becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
@@ -97,7 +112,7 @@ demand from the State screen. State changes go to the webhook.
   is `/?nouvelle=1`, which puts the cursor in that box.
 - Sessions of every source, per instance: `GET /x/i/:inst/sessions/recent?limit=1..200&source=all|intendia|telegram|cron`
   (`src/sessions/recent.ts`) merges the Intendia sessions of the instance's workspaces (filtered before the limit)
-  with the Hermes sessions of that instance only (`default` and the workspace profiles that have a key; 3 s per
+  with the Hermes sessions of that instance only (`default` and the workspace and session profiles that have a key; 3 s per
   call, errors listed, not fatal). Unknown instance → 404. The source is
   filtered on the server: `intendia` reads the database only, `telegram`/`cron` ask Hermes for that source only. The
   home page shows 7 lines; the Sessions page (`/sessions`, `pages/Sessions.tsx`) groups them by day (browser time)
@@ -118,6 +133,27 @@ demand from the State screen. State changes go to the webhook.
   next message, consecutive tool calls folded into one "étapes" card. Floating menus (`components/Menu.tsx`) are
   portalled to `<body>`.
 
+### During a run
+
+- Approvals and questions of the agent (clarify) are answered from the thread or from the notifications
+  (`GET /x/approvals`, `kind: approval|clarify`); the server builds Hermes' exact body from the run status
+  (`controlBody`, `routes/chat.ts`).
+- Queue: messages written during a run wait in the tab (`web/src/chat/queue.ts`, `sessionStorage` per session) and
+  leave one per run when the previous run ends `completed`; a failed or stopped run, a reorientation Hermes did not
+  deliver (`pending_steer` of the final event, or of the run status when the page reopens after the end; put back in
+  front once per run) or a refused send pauses the queue until « Reprendre ». Nothing leaves
+  when the page opens. « Réorienter » sends the text at once (`POST …/runs/:runId/steer`), shown in the thread as a
+  user message marked « Réorientation » (local event `intendia.steer` folded into the run, `chat/useRun.ts`).
+- Context gauge (`GET /x/sessions/:inst/:id/usage`, `src/chat/usage.ts`): the model's context size from
+  `/api/model/info` (Auto or the configured model only); exact figures and plan quota only from `session.stats` of the
+  dashboard WebSocket (`src/hermes/gateway-ws.ts`), used when the compatibility check found it (`report.socket`,
+  shown on the État page); otherwise the page estimates (`chat/estimate.ts`, « ≈ »). The reply footer shows an
+  approximate rate (output tokens over the whole run) and « (secours) » when the served model differs from the one asked.
+- Composer comfort: the text being written is kept by the browser only (`localStorage`, `intendia-draft:<inst>:<session>`
+  or `intendia-draft:home`, dropped after 30 days, `apps/web/src/chat/draft.ts`); saved prompts live in the `prompts`
+  table (`kind` `prompt` | `personality`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
+  a `collage-<date>.txt` attachment.
+
 ## Files, share links and MCP
 
 - **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector
@@ -134,6 +170,14 @@ demand from the State screen. State changes go to the webhook.
   links rewritten, then delete of the source; folders cannot be moved, text save with an mtime check, batch `exists`
   with one listing per folder). No file list in the database, no watcher. Hermes down → 502 `unreachable`; no root →
   422 `no_root`.
+- Archives joined in the chat (`.zip`, `.tar`, `.tar.gz`, `.tgz`): `POST …/files/extract {path}` reads the archive
+  back from Hermes (at most `INTENDIA_UPLOAD_MAX_MB`) and writes each file through the same `mkdir` / `upload-stream`
+  calls into `<folder>/<name without extension>/` (` (2)`… when taken). `src/files/archive.ts`: zip by `fflate`
+  (`Unzip`, file by file), tar read by hand (ustar, GNU long names, pax `path`), gzip by `fflate`. Paths with `..`,
+  absolute paths, links, special files and names hidden by Hermes are skipped and listed; 2 000 files, 500 MB in all,
+  `INTENDIA_UPLOAD_MAX_MB` per file. Sizes announced by zip and tar are checked before any write (413 `too_big`); a
+  `.tgz` beyond a limit stops while writing (`partial`, files already written stay). One extraction at a time on the
+  server (409 `busy`), 10 minutes at most, not tied to the browser request.
 - Everything served from a workspace (`raw`, `/f/*`) carries `Content-Security-Policy: sandbox; frame-ancestors 'self'`
   (`src/files/send.ts`): agent HTML or SVG gets an opaque origin. Only these responses allow framing by Intendia
   (`X-Frame-Options: SAMEORIGIN`), everything else stays `DENY`. The web preview adds `<iframe sandbox="">` for HTML/SVG,

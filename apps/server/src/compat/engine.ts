@@ -72,7 +72,9 @@ export async function checkModule(http: HermesHttp, surface: Surface, mod: Modul
     const r = ops[name]!;
     if (r.ok) continue;
     const why = r.notes.at(-1) ?? 'aucune route';
-    if (op.kind === 'read' && op.required) {
+    if (op.optional) {
+      reasons.push(`Option « ${name} » indisponible — ${why}`);
+    } else if (op.kind === 'read' && op.required) {
       state = 'unavailable';
       reasons.push(`Lecture « ${name} » impossible — ${why}`);
     } else if (op.kind === 'write') {

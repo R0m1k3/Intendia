@@ -139,14 +139,94 @@ describe('run stream', () => {
     expect((await t.request('GET', '/x/sessions/fake/a%2Fb/messages')).status).toBe(400);
   });
 
-  it('forwards approvals with choice and request_id', async () => {
+  it('answers approvals in the format of Hermes 0.23 (gateway session authority)', async () => {
     const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'approval' })).json.runId;
+    const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`), 200);
+    expect(ev.at(-1)?.data).toMatchObject({ event: 'approval.request', prompt_id: 'apr_1', execution_generation: 1 });
+    // no id from the page: the only pending approval of the run status is answered
+    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'session' })).status).toBe(200);
+    expect(t.fake.requests.find((r) => r.path.endsWith('/approval'))?.body).toEqual({ request_id: 'apr_1', execution_generation: 1, choice: 'session' });
+    await waitRun(t, base, run);
+    const again = await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'once', requestId: 'apr_1' });
+    expect(again.status).toBe(409);
+    expect(again.json.code).toBe('no_pending');
+    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'peut-être' })).status).toBe(400);
+  });
+
+  it('forwards approvals with choice and request_id to an API server without the session authority', async () => {
+    const { t, base } = await session({ controls: 'legacy' });
     const run = (await t.request('POST', `${base}/runs`, { input: 'approval' })).json.runId;
     const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`), 200);
     expect(ev.at(-1)?.data).toMatchObject({ event: 'approval.request', choices: ['once', 'session', 'always', 'deny'], request_id: 'apr_1' });
     expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'session', requestId: 'apr_1' })).status).toBe(200);
     expect(t.fake.requests.find((r) => r.path.endsWith('/approval'))?.body).toEqual({ choice: 'session', request_id: 'apr_1' });
-    expect((await t.request('POST', `${base}/runs/${run}/approval`, { choice: 'peut-être' })).status).toBe(400);
+  });
+
+  it('answers a question of the agent with the exact body of Hermes 0.23', async () => {
+    const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'question multi' })).json.runId;
+    const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`), 200);
+    expect(ev.at(-1)?.data).toMatchObject({ event: 'clarify.request', prompt_id: 'clr_1', multi_select: true });
+    expect((await t.request('POST', `${base}/runs/${run}/clarify`, { answer: '' })).status).toBe(400);
+    const answer = JSON.stringify(['Frouard', 'Houdemont']);
+    expect((await t.request('POST', `${base}/runs/${run}/clarify`, { answer, requestId: 'clr_1' })).status).toBe(200);
+    expect(t.fake.requests.find((r) => r.path.endsWith('/clarify'))?.body).toEqual({ request_id: 'clr_1', execution_generation: 1, answer });
+    await waitRun(t, base, run);
+    const again = await t.request('POST', `${base}/runs/${run}/clarify`, { answer: 'Frouard' });
+    expect(again.status).toBe(409);
+    expect(again.json.code).toBe('no_pending');
+  });
+
+  it('reorients a running run; refused once finished; marked in the history', async () => {
+    const { t, base } = await session({ stepMs: 60 });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    while ((await t.request('GET', `${base}/runs/${run}`)).json.status !== 'running') await new Promise((r) => setTimeout(r, 5));
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: '  ' })).status).toBe(400);
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Plutôt Houdemont' })).status).toBe(200);
+    expect(t.fake.requests.find((r) => r.path.endsWith('/steer'))?.body).toEqual({ input: 'Plutôt Houdemont' });
+    expect(await waitRun(t, base, run)).toBe('completed');
+    const late = await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Encore' });
+    expect(late.status).toBe(409);
+    expect(late.json.code).toBe('steer_refused');
+    const messages = (await t.request('GET', `${base}/messages`)).json.messages;
+    expect(messages.find((m: { steer?: boolean }) => m.steer)).toMatchObject({ role: 'user', content: 'Plutôt Houdemont' });
+    expect(messages.filter((m: { steer?: boolean }) => m.steer)).toHaveLength(1);
+  });
+
+  it('gives back a reorientation Hermes did not deliver (pendingSteer)', async () => {
+    const { t, base } = await session({ stepMs: 60 });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'perdu' })).json.runId;
+    while ((await t.request('GET', `${base}/runs/${run}`)).json.status !== 'running') await new Promise((r) => setTimeout(r, 5));
+    expect((await t.request('POST', `${base}/runs/${run}/steer`, { input: 'Plutôt Houdemont' })).status).toBe(200);
+    expect(await waitRun(t, base, run)).toBe('completed');
+    expect((await t.request('GET', `${base}/runs/${run}`)).json.pendingSteer).toBe('Plutôt Houdemont');
+  });
+
+  it('gives the context size; exact figures and quota only when the dashboard WebSocket has session.stats', async () => {
+    const { t, base } = await session();
+    expect(t.compat.get('fake')?.socket).toMatchObject({ sessionStats: false });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, run);
+    expect((await t.request('GET', `${base}/usage`)).json).toEqual({ max: 1_000_000, exact: null, quota: null });
+
+    const on = await session({ sessionStats: true });
+    expect(on.t.compat.get('fake')?.socket).toMatchObject({ sessionStats: true });
+    // before the first message: no session at Hermes, no WebSocket call
+    expect((await on.t.request('GET', `${on.base}/usage`)).json.exact).toBeNull();
+    const r2 = (await on.t.request('POST', `${on.base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(on.t, on.base, r2);
+    expect((await on.t.request('GET', `${on.base}/usage`)).json).toMatchObject({
+      max: 1_000_000, exact: { used: 12_345, max: 200_000 }, quota: { label: 'Plan Pro', usedPercent: 42 },
+    });
+  });
+
+  it('says a question cannot be answered without the session authority', async () => {
+    const { t, base } = await session({ controls: 'legacy' });
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    const res = await t.request('POST', `${base}/runs/${run}/clarify`, { answer: 'Frouard' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('clarify_unavailable');
   });
 });
 

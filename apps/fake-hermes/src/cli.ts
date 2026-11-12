@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import { WebSocketServer } from 'ws';
-import { connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, FAKE_DASH_TOKEN, REFERENCE_FIXTURES } from './index.ts';
+import { connectGatewaySocket, connectKanbanEvents, createFakeHermes, kanbanWsTokenOk, FAKE_API_KEY, FAKE_DASH_TOKEN, REFERENCE_FIXTURES } from './index.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../fixtures');
 const fixturesDir = process.env.FAKE_FIXTURES ?? join(root, REFERENCE_FIXTURES);
@@ -21,6 +21,14 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   kanbanStepMs: Number(process.env.FAKE_KANBAN_STEP_MS ?? 5000),
   // FAKE_KANBAN_WS=off: the events WebSocket refuses every connection (Intendia falls back to polling)
   kanbanWs: process.env.FAKE_KANBAN_WS !== 'off',
+  // FAKE_CONTROLS=legacy: approvals of an API server without the gateway session authority (request_id, {choice})
+  controls: process.env.FAKE_CONTROLS === 'legacy' ? 'legacy' : 'authority',
+  // FAKE_SESSION_STATS=on: the dashboard runs inside the gateway, `session.stats` answers on /api/ws
+  sessionStats: process.env.FAKE_SESSION_STATS === 'on',
+  // FAKE_ONESHOT=off|no_model: `llm.oneshot` absent, or without a model for titles
+  oneshot: process.env.FAKE_ONESHOT === 'off' ? 'off' : process.env.FAKE_ONESHOT === 'no_model' ? 'no_model' : 'ok',
+  // FAKE_PROFILE_KEYS='{"<profil>":"<clé>"}': keys of the API server of other profiles (/p/<profil>/...)
+  profileKeys: process.env.FAKE_PROFILE_KEYS ? JSON.parse(process.env.FAKE_PROFILE_KEYS) : undefined,
 });
 const apiPort = Number(process.env.FAKE_API_PORT ?? 18642);
 const dashPort = Number(process.env.FAKE_DASH_PORT ?? 19119);
@@ -31,6 +39,11 @@ const wss = new WebSocketServer({ noServer: true });
 dash.on('upgrade', (req, socket, head) => {
   if (!kanbanWsTokenOk(req.url ?? '/')) return; // like Hermes: the handshake gets no answer
   wss.handleUpgrade(req, socket, head, (ws) => {
+    if (new URL(req.url ?? '/', 'ws://fake-dash').pathname === '/api/ws') {
+      const onText = connectGatewaySocket(fake, { send: (t) => ws.send(t) });
+      ws.on('message', (data) => onText(String(data)));
+      return;
+    }
     const stop = connectKanbanEvents(fake, req.url ?? '/', { send: (t) => ws.send(t), close: (code) => ws.close(code) });
     ws.on('close', stop);
   });

@@ -5,6 +5,7 @@ import type { InstanceConfig } from '../config.js';
 export interface WsLike {
   addEventListener(type: 'open' | 'message' | 'close' | 'error', listener: (ev: { data?: unknown; code?: number }) => void): void;
   close(code?: number, reason?: string): void;
+  send(data: string): void;
 }
 export type WsFactory = (url: string) => WsLike;
 
@@ -18,17 +19,22 @@ export interface KanbanEventHandlers {
   onClose: (reason: string) => void;
 }
 
-/** ws(s)://<dashboard base>/api/plugins/kanban/events?board=&token= (base path of the dashboard URL kept). */
-export function kanbanEventsUrl(instance: InstanceConfig, board: string): string {
+/** ws(s)://<dashboard base><path>?<query>&token= (base path of the dashboard URL kept). Never log it: it holds the token. */
+export function dashboardSocketUrl(instance: InstanceConfig, path: string, query: Record<string, string> = {}): string {
   if (!instance.dashboard || !instance.dashboardToken) throw new Error('Dashboard non configuré');
   const u = new URL(instance.dashboard);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
-  u.pathname = `${u.pathname.replace(/\/+$/, '')}/api/plugins/kanban/events`;
-  u.search = new URLSearchParams({ board, token: instance.dashboardToken }).toString();
+  u.pathname = `${u.pathname.replace(/\/+$/, '')}${path}`;
+  u.search = new URLSearchParams({ ...query, token: instance.dashboardToken }).toString();
   return u.toString();
 }
 
-const defaultFactory: WsFactory = (url) => new WebSocket(url) as unknown as WsLike;
+/** ws(s)://<dashboard base>/api/plugins/kanban/events?board=&token= */
+export function kanbanEventsUrl(instance: InstanceConfig, board: string): string {
+  return dashboardSocketUrl(instance, '/api/plugins/kanban/events', { board });
+}
+
+export const defaultFactory: WsFactory = (url) => new WebSocket(url) as unknown as WsLike;
 
 /** Hermes 0.23.0 never answers the handshake of a wrong token: past this delay the connection is given up. */
 export const OPEN_TIMEOUT_MS = 10_000;

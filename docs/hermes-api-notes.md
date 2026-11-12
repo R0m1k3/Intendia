@@ -19,7 +19,7 @@ of the diff are empty lists (no session, no cron in that container).
   The session id given is kept (`GET /v1/runs/{id}` shows it).
 - `GET /v1/runs/{id}/events`: SSE, each event has `id:` and a `seq`; resume with `Last-Event-ID` or `?last_seq=`.
   Event types: `run.queued|started|completed|failed|cancelled|interrupted|stopping|steered`, `message.started|delta|interim`,
-  `reasoning.available`, `tool.started|progress|completed|failed`, `approval.request|responded`,
+  `reasoning.available`, `tool.started|progress|completed|failed`, `approval.request|responded|settled`,
   `subagent.start|complete`.
 - `GET /api/jobs` works although `features.jobs_admin` is `false` and it is absent from `endpoints`.
 - **Bug in 0.23.0**: `GET /v1/skills` answers HTTP 500 (`find_all_skills() got an unexpected keyword argument
@@ -37,8 +37,35 @@ of the diff are empty lists (no session, no cron in that container).
   `completed`, `failed`, `cancelled`, `interrupted`. Unknown run → 404 (also on `/events`, as JSON).
 - SSE frames have no `event:` line: the type is the `event` field of the JSON; `id:` is the `seq`. A resume asking for
   events Hermes no longer keeps first gets `replay.truncated {oldest_retained_seq}`, then the rest.
-- `approval.request` carries `choices` (`once`, `session`, `always`, `deny`) and sometimes `request_id`;
-  answer with `POST /v1/runs/{id}/approval {choice, request_id}`.
+- Approvals come in two formats (read in the 0.23.0 source, not seen live: no provider key on the reference instance):
+  - **gateway session authority** (the normal case of 0.23: the gateway always creates it, `gateway/run_bootstrap.py`):
+    `approval.request {prompt_id, execution_generation, command, description, choices}`, end `approval.settled
+    {prompt_id, execution_generation}`; `GET /v1/runs/{id}` gives `execution_generation` and `pending_controls` (the
+    same prompts); the answer must be exactly `{request_id: <prompt_id>, execution_generation, choice}`, any other key →
+    `invalid_params`, another generation → `stale_generation`, `choice` must be one of the prompt's `choices`
+    (`gateway/platforms/api_server_authority_runs.py` `respond_run`). The run status says `waiting_for_approval`.
+  - **without authority** (branch `else` of `_handle_run_approval`): `approval.request` with `choices` and sometimes
+    `request_id`, end `approval.responded`, answer `{choice, request_id?}`.
+  Intendia builds the body on the server from the run status (`controlBody` in `routes/chat.ts`); the fake uses the
+  authority format, `FAKE_CONTROLS=legacy` the other.
+  A page id no longer pending is refused (409 `no_pending`), never replaced by another prompt.
+- Questions of the agent (clarify tool), authority only (read in the 0.23.0 source): `clarify.request {prompt_id,
+  execution_generation, question, choices, multi_select}`, end `clarify.settled`; answer `POST /v1/runs/{id}/clarify
+  {request_id, execution_generation, answer}` (a string; several choices = a JSON array of the labels,
+  `tools/clarify_gateway.py`). Route not in `/v1/capabilities`; without the authority Hermes answers 409 `not_found`
+  (Intendia: 409 `clarify_unavailable`). A run waiting on a question stays `running`; the question is also in
+  `pending_controls` (`kind: "clarify"`).
+- Reorientation: `POST /v1/runs/{id}/steer {input}` (`run_steer`), only while the status is exactly `running` (else 409
+  `run_not_accepting_steer`, also during an approval); given to the agent after its current tools. `run.steered`
+  carries only `accepted`, not the text. A text never delivered comes back as `pending_steer` on the final event and in
+  the status; a delivered one is a `user` line with `display_kind: "steer"` in the messages.
+- Dashboard JSON-RPC WebSocket `/api/ws?token=<dashboard token>` (outside the OpenAPI; `?token=` accepted in
+  loopback / `--insecure`, an authenticated dashboard needs a user ticket Intendia has not): frames `{jsonrpc, id,
+  method, params}`, pushed events have no `id`. `session.stats {session_id}` → `context_tokens`, `context_length`,
+  `plan_gauge {label, used_bp, resets_at_ms}`, `tokens_per_s` (`gateway/session_usage.py`; 0 / null before the agent's
+  first turn) **only when the dashboard runs inside the gateway**: a standalone dashboard (reference instance, the
+  usual setup) answers `-32601 unknown method`. `commands.catalog` and `session.list` answer in both cases;
+  `session.resume` copies the session into the dashboard's process (never call it).
 - `GET /api/sessions` is paged (`limit` up to 200, `offset`, `has_more`) and takes `source` (`telegram`, `cron`…); its
   `title` filter is an exact match, useless for a search.
 - Search: dashboard `GET /api/sessions/search?q=&limit=(1..100)&profile=&source=` (not on the API server) looks for
@@ -49,6 +76,12 @@ of the diff are empty lists (no session, no cron in that container).
   `{session}`. `GET /api/sessions/{id}/messages` → `{data: [{id, role, content, tool_calls, tool_name, timestamp}]}`,
   newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
 - A run that fails before starting (no provider key) leaves no user message in the session.
+- Session titles are unique (`idx_sessions_title_unique`, checked 2026-11-12): a rename to a title in use → 400
+  `invalid_title` « already in use by session … »; an import with one fails the whole write as 503
+  `storage_unavailable` (gateway log: `UNIQUE constraint failed: sessions.title`). Hermes numbers its own « title #2 ».
+  Intendia imports copies untitled, then sends the title, numbered « #N » at Hermes when taken (`workspaces/title.ts`).
+- `llm.oneshot {instructions, input, task, max_tokens, profile?}` on the dashboard WebSocket answers on a standalone
+  dashboard too: `{text}`, 4030 for empty params, 5030 when no model is set for the task (« Titre par l'IA »).
 
 ### Run options and consumption (read in the 0.23.0 source, 2026-11-10)
 

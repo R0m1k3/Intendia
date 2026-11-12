@@ -4,9 +4,11 @@ import {
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { api, ApiError } from './api';
+import { api, ApiError, SESSION_SOURCES, type SessionSource } from './api';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
+import { pruneDrafts } from './chat/draft';
+import { UndoHost } from './sessions/UndoBar';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
 import { LoginPage } from './pages/Login';
@@ -26,7 +28,6 @@ import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFil
 import { SessionPage } from './pages/Session';
 import { InboxLayout } from './sessions/InboxLayout';
 import { parseCronKey } from './components/selection';
-import type { SessionSource } from './api';
 import { WorkspacePage } from './pages/Workspace';
 import { WorkspacesPage } from './pages/Workspaces';
 import '@fontsource-variable/hanken-grotesk';
@@ -64,7 +65,9 @@ const appRoute = createRoute({
 /** The inbox: the sessions column beside the home page and the open session (no path of its own). */
 const inboxRoute = createRoute({ getParentRoute: () => appRoute, id: 'inbox', component: InboxLayout });
 export interface HomeSearch { nouvelle?: 1; source?: Exclude<SessionSource, 'all'> }
-const sourceOf = (v: unknown): Exclude<SessionSource, 'all'> | undefined => (v === 'intendia' || v === 'telegram' || v === 'cron' ? v : undefined);
+const sourceOf = (v: unknown): Exclude<SessionSource, 'all'> | undefined => (
+  typeof v === 'string' && v !== 'all' && (SESSION_SOURCES as string[]).includes(v) ? v as Exclude<SessionSource, 'all'> : undefined
+);
 const homeRoute = createRoute({
   getParentRoute: () => inboxRoute, path: '/', component: HomePage,
   validateSearch: (s: Record<string, unknown>): HomeSearch => ({
@@ -161,11 +164,15 @@ declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
 }
 
+// drafts of the composer older than 30 days
+pruneDrafts();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <DialogHost />
+      <UndoHost />
     </QueryClientProvider>
   </StrictMode>,
 );

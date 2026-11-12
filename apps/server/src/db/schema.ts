@@ -47,6 +47,21 @@ export const sessionWorkspace = sqliteTable(
     /** Provider of `model` (group of the picker), sent with it; NULL = model sent alone. */
     modelProvider: text('model_provider'),
     effort: text('effort'),
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+    /** Deleted, waiting for the undo window to pass (ms); 0 = taken by the purger. */
+    deletedAt: integer('deleted_at'),
+    /** Copy of another Hermes session (its id) or "import:<key>": exists at Hermes without a run from Intendia. */
+    copiedFrom: text('copied_from'),
+    /** The session this one replaced (edit, retry, undo, clear): deleted with the undo window. */
+    replacesId: text('replaces_id'),
+    /** Taken by the purger: next attempt (lease, then retry after a failure). */
+    purgeAfter: integer('purge_after'),
+    /** 'hermes:<name>' (config of the profile) or 'intendia:<prompt id>'; NULL = none. */
+    personality: text('personality'),
+    /** « Sans confirmation »: Intendia answers the approvals of this session's runs. */
+    autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
+    /** Hermes profile of this session; NULL = the workspace's default profile. */
+    profile: text('profile'),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );
@@ -74,6 +89,8 @@ export const runStats = sqliteTable(
     costBeforeSessionId: text('cost_before_session_id'),
     costUsd: real('cost_usd'),
     costFinal: integer('cost_final', { mode: 'boolean' }).notNull().default(false),
+    /** approvals Intendia gave by itself (« Sans confirmation ») */
+    autoApproved: integer('auto_approved').notNull().default(0),
     /** Runs covered by `costUsd`: more than 1 when the previous runs' costs were still settling at send time. */
     costRuns: integer('cost_runs').notNull().default(1),
   },
@@ -103,4 +120,13 @@ export const compatReports = sqliteTable('compat_reports', {
   hermesVersion: text('hermes_version'),
   reportJson: text('report_json').notNull(),
   createdAt: integer('created_at').notNull(),
+});
+
+export const prompts = sqliteTable('prompts', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });

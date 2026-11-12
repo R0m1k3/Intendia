@@ -1,10 +1,15 @@
 import type { CompatService } from '../compat/service.js';
+import type { PendingControl } from '../connectors/chat/index.js';
 import { streamOp } from '../connectors/runtime.js';
 import { readSseFrames, type SseFrame } from '../connectors/sse.js';
 
 /** The question of a run waiting for approval, as read in its events. */
 export interface ApprovalQuestion {
-  /** `<runId>:<request_id>`, or `<runId>:seq<frame id>` when Hermes sends no request_id. */
+  /** approval: a command to allow; clarify: a question of the agent (answered with text). */
+  kind: 'approval' | 'clarify';
+  question: string | null;
+  multiSelect: boolean;
+  /** `<runId>:<id>`, or `<runId>:seq<frame id>` when Hermes sends no id. */
   key: string;
   requestId: string | null;
   command: string | null;
@@ -14,26 +19,44 @@ export interface ApprovalQuestion {
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
-/** The last `approval.request` not followed by an `approval.responded` (same reading as web/src/chat/events.ts). */
+/**
+ * The last `approval.request` not followed by its end (same reading as web/src/chat/events.ts). Two formats: with the
+ * gateway session authority (Hermes 0.23) `prompt_id` and `approval.settled`, without it `request_id` and
+ * `approval.responded`.
+ */
 export function lastPendingApproval(runId: string, frames: SseFrame[]): ApprovalQuestion | null {
   let pending: ApprovalQuestion | null = null;
   for (const f of frames) {
     const ev = f.data as Record<string, unknown> | null;
     if (!ev || typeof ev !== 'object') continue;
     if (ev.event === 'approval.request') {
-      const requestId = str(ev.request_id);
+      const requestId = str(ev.prompt_id) ?? str(ev.request_id);
       pending = {
+        kind: 'approval', question: null, multiSelect: false,
         key: `${runId}:${requestId ?? `seq${f.id ?? '?'}`}`,
         requestId,
         command: str(ev.command),
         description: str(ev.description),
         choices: Array.isArray(ev.choices) && ev.choices.length ? ev.choices.map(String) : ['once', 'deny'],
       };
-    } else if (ev.event === 'approval.responded') {
+    } else if (ev.event === 'approval.responded' || ev.event === 'approval.settled') {
       pending = null;
     }
   }
   return pending;
+}
+
+/** The first approval (else question of the agent) listed in the run status (`pending_controls`, gateway session authority). */
+export function pendingFromStatus(runId: string, controls: PendingControl[]): ApprovalQuestion | null {
+  const p = controls.find((c) => c.kind === 'approval' && c.prompt_id) ?? controls.find((c) => c.kind === 'clarify' && c.prompt_id);
+  if (!p) return null;
+  const clarify = p.kind === 'clarify';
+  return {
+    kind: clarify ? 'clarify' : 'approval', key: `${runId}:${p.prompt_id}`, requestId: p.prompt_id ?? null,
+    command: p.command ?? null, description: p.description ?? null, question: clarify ? (p.question ?? null) : null,
+    multiSelect: clarify && p.multi_select === true,
+    choices: p.choices?.length ? p.choices.map(String) : clarify ? [] : ['once', 'deny'],
+  };
 }
 
 /**

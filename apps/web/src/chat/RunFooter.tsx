@@ -17,7 +17,21 @@ function detail(r: RunStat): string {
     parts.push(`Coût : cette réponse et ${prev} avant qu'Hermes ait compté leur coût`);
   }
   parts.push(`Demandé : ${r.requestedModel ?? 'Auto'}, effort ${effortLabel(r.requestedEffort)}`);
+  if (fallback(r)) parts.push(`Servi par un modèle de secours : ${r.servedModel}`);
+  if (tokensPerSecond(r) !== null) parts.push('Débit : moyenne sur tout le run, outils compris');
   return parts.join('\n');
+}
+
+/** Output tokens over the whole run (tools included), when it lasted more than a second. */
+export function tokensPerSecond(r: RunStat): number | null {
+  if (r.outputTokens === null || r.endedAt === null || r.status === 'interrupted' || r.status === 'unknown') return null;
+  const ms = r.endedAt - r.startedAt;
+  return ms > 1000 && r.outputTokens > 0 ? Math.round(r.outputTokens / (ms / 1000)) : null;
+}
+
+/** Served by another model than the one asked (provider fallback); Auto asks nothing, so never. */
+export function fallback(r: RunStat): boolean {
+  return Boolean(r.requestedModel && r.servedModel && shortModel(r.requestedModel) !== shortModel(r.servedModel));
 }
 
 const STATUS: Record<string, { icon: React.ReactNode; label: string }> = {
@@ -30,15 +44,19 @@ const STATUS: Record<string, { icon: React.ReactNode; label: string }> = {
 /** One line under a reply: status · model · duration · cost · input → output · cache share. */
 export function RunFooter({ r }: { r: RunStat }) {
   const items: string[] = [];
-  if (r.servedModel) items.push(shortModel(r.servedModel));
+  if (r.servedModel) items.push(shortModel(r.servedModel) + (fallback(r) ? ' (secours)' : ''));
   else if (r.requestedModel) items.push(`${shortModel(r.requestedModel)} (demandé)`);
   // Hermes dates interrupted / forgotten runs when it notices them: no meaningful duration
   if (r.endedAt !== null && r.status !== 'interrupted' && r.status !== 'unknown') items.push(formatDuration(r.endedAt - r.startedAt));
   // a cost covering previous replies too (sent before their cost was known) says so
   if (r.costUsd) items.push(r.costRuns > 1 ? `${formatCost(r.costUsd)} (${r.costRuns} réponses)` : formatCost(r.costUsd));
   if (r.inputTokens !== null && r.outputTokens !== null) items.push(`${formatTokens(r.inputTokens)} → ${formatTokens(r.outputTokens)}`);
+  const rate = tokensPerSecond(r);
+  if (rate !== null) items.push(`≈ ${rate} jetons/s`);
   const share = cacheShare(r);
   if (share !== null) items.push(`Cache ${formatShare(share)}`);
+  // « Sans confirmation »: what Intendia approved by itself
+  if (r.autoApproved) items.push(r.autoApproved === 1 ? '1 approbation automatique' : `${r.autoApproved} approbations automatiques`);
   const st = STATUS[r.status];
   if (!items.length && !st) return null;
   return (

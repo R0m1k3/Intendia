@@ -25,6 +25,14 @@ export interface CompatReport {
   modules: ModuleReport[];
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
   files?: { workspaceRoot: string | null; reason: string | null };
+  /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
+  socket?: { sessionStats: boolean; oneshot?: boolean; note: string };
+}
+/** Composer gauge: `max` = context size of the model; `exact`/`quota` from the dashboard WebSocket only. */
+export interface SessionUsage {
+  max: number | null;
+  exact: { used: number; max: number } | null;
+  quota: { label: string | null; usedPercent: number; resetsAt: number | null } | null;
 }
 export interface PublicInstance {
   id: string;
@@ -87,7 +95,16 @@ export interface RunStat {
   costRuns: number;
   /** False while Hermes may still write the cost (re-read for COST_SETTLE_MS after the end). */
   costFinal: boolean;
+  /** approvals Intendia gave by itself (« Sans confirmation ») */
+  autoApproved?: number;
 }
+export interface PersonalityItem { value: string; label: string; source: 'hermes' | 'intendia' }
+export interface ModelPin { provider: string | null; model: string }
+export interface RunMode { id: string; name: string; model: string | null; provider: string | null; effort: Effort | null; personality: string | null }
+export type PromptKind = 'prompt' | 'personality';
+export interface Prompt { id: string; kind: PromptKind; title: string; body: string; createdAt: number; updatedAt: number }
+export interface ExtractResult { folder: string; count: number; skipped: { path: string; reason: string }[]; partial: boolean }
+
 export interface Session {
   id: string;
   instanceId: string;
@@ -102,7 +119,23 @@ export interface Session {
   /** Provider of `model` (picker group), sent with it; null = model sent alone. */
   modelProvider: string | null;
   effort: Effort | null;
+  /** First in the lists (kept by Intendia only). */
+  pinned: boolean;
+  /** Copy of another session (its id) or "import:<key>". */
+  copiedFrom: string | null;
+  /** The session this one replaced (edit, retry, undo, clear), restorable for 10 s. */
+  replacesId: string | null;
+  /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
+  personality?: string | null;
+  /** « Sans confirmation »: Intendia approves the actions of its runs */
+  autoApprove?: boolean;
+  /** profile chosen for this session (null = the workspace's) */
+  profile?: string | null;
 }
+/** A truncated copy: `before` = Hermes row id of the user message to cut before, 0 = nothing kept, null = all. */
+export interface RewriteResult { session: Session; replaced?: string; undoUntil?: number | null }
+export type BulkAction = 'archive' | 'unarchive' | 'pin' | 'unpin' | 'delete' | 'move';
+export interface BulkResult { id: string; ok: boolean; error?: string }
 export interface ChatMessage {
   id: number;
   role: string;
@@ -111,6 +144,8 @@ export interface ChatMessage {
   toolCalls: { name: string; arguments: string }[];
   /** seconds */
   timestamp: number | null;
+  /** given to the agent during a run (reorientation) */
+  steer?: true;
 }
 export interface RunStatus {
   status: string;
@@ -118,6 +153,8 @@ export interface RunStatus {
   createdAt: number | null;
   output: string | null;
   error: string | null;
+  /** reorientation Hermes did not give the agent before the end */
+  pendingSteer?: string | null;
 }
 export interface OtherSession {
   id: string;
@@ -144,7 +181,8 @@ export interface RecentSession {
   /** Search hit in the messages (hit between `>>>` and `<<<`); null outside a search. */
   snippet: string | null;
 }
-export type SessionSource = 'all' | 'intendia' | 'telegram' | 'cron';
+export type SessionSource = 'all' | 'intendia' | 'cli' | 'telegram' | 'discord' | 'cron' | 'kanban';
+export const SESSION_SOURCES: SessionSource[] = ['all', 'intendia', 'cli', 'telegram', 'discord', 'cron', 'kanban'];
 export interface SessionErrors { errors: { instance: string; message: string }[] }
 /**
  * Models of the chat's picker for one agent (instance + profile), one group per provider with a key: the models
@@ -406,7 +444,11 @@ export interface PendingApproval {
   sessionId: string;
   title: string | null;
   runId: string;
+  /** approval: allow a command; clarify: a question of the agent, answered with text. */
+  kind: 'approval' | 'clarify';
   requestId: string | null;
+  question: string | null;
+  multiSelect: boolean;
   command: string | null;
   description: string | null;
   choices: string[];
@@ -533,15 +575,54 @@ export const api = {
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
-  updateSession: (inst: string, id: string, patch: { title?: string | null; archived?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null }) =>
+  updateSession: (inst: string, id: string, patch: {
+    title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null;
+    personality?: string | null; autoApprove?: boolean; profile?: string | null;
+  }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
-  deleteSession: (inst: string, id: string) => call<{ ok: true }>('DELETE', sessionPath(inst, id)),
+  /** Hidden at once, deleted at Hermes after `undoUntil` unless restored. */
+  deleteSession: (inst: string, id: string) => call<{ ok: true; undoUntil: number }>('DELETE', sessionPath(inst, id)),
+  bulkSessions: (inst: string, ids: string[], action: BulkAction, workspace?: string) =>
+    call<{ results: BulkResult[]; undoUntil?: number }>('POST', `/i/${enc(inst)}/sessions/bulk`, { ids, action, ...(workspace ? { workspace } : {}) }),
+  restoreSessions: (inst: string, ids: string[]) => call<{ restored: string[] }>('POST', `/i/${enc(inst)}/sessions/restore`, { ids }),
+  /** `key`: made once per action (a retry gives the same copy). */
+  rewriteSession: (inst: string, id: string, body: { key: string; before: number | null; mode: 'replace' | 'branch' }) =>
+    call<RewriteResult>('POST', `${sessionPath(inst, id)}/rewrite`, body),
+  revertRewrite: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/revert`),
+  /** Title by the auxiliary model of Hermes (409 unsupported / busy, 503 no_model). */
+  prompts: (kind: PromptKind = 'prompt') => call<{ prompts: Prompt[] }>('GET', `/prompts?kind=${kind}`),
+  createPrompt: (input: { title: string; body: string; kind?: PromptKind }) => call<{ prompt: Prompt }>('POST', '/prompts', input),
+  updatePrompt: (id: string, patch: { title?: string; body?: string }) => call<{ prompt: Prompt }>('PATCH', `/prompts/${enc(id)}`, patch),
+  deletePrompt: (id: string) => call<{ ok: true }>('DELETE', `/prompts/${enc(id)}`),
+  extractArchive: (slug: string, path: string) => call<ExtractResult>('POST', `/workspaces/${enc(slug)}/files/extract`, { path }),
+  generateTitle: (inst: string, id: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/title/generate`),
+  duplicateSession: (inst: string, id: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/duplicate`, { key }),
+  exportUrl: (inst: string, id: string, format: 'md' | 'html' | 'json') => `/x${sessionPath(inst, id)}/export?format=${format}`,
+  importSession: (slug: string, file: unknown, key: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions/import`, { key, file }),
+  continueExternal: (inst: string, id: string, profile: string, workspace: string, key: string) =>
+    call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
+  cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
+  cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
-  send: (inst: string, id: string, input: string) => call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, { input }),
+  send: (inst: string, id: string, input: string, skills?: string[]) =>
+    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
+  personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),
+  modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
+  setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
+  modes: (inst: string, profile: string) => call<{ modes: RunMode[] }>('GET', instPath(inst, `modes?profile=${enc(profile)}`)),
+  setModes: (inst: string, profile: string, modes: RunMode[]) => call<{ modes: RunMode[] }>('PUT', instPath(inst, `modes?profile=${enc(profile)}`), { modes }),
+  toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),
+  sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
   runStatus: (inst: string, id: string, runId: string) => call<RunStatus>('GET', `${sessionPath(inst, id)}/runs/${enc(runId)}`),
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>
     call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/approval`, { choice, requestId }),
+  /** Text given to the agent during its run, after its current tools (409 steer_refused when it does not take it). */
+  steer: (inst: string, id: string, runId: string, input: string) =>
+    call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/steer`, { input }),
+  /** Answer to a question of the agent (several choices: a JSON array of their labels). */
+  clarify: (inst: string, id: string, runId: string, answer: string, requestId?: string) =>
+    call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/clarify`, { answer, requestId }),
   chatModels: (inst: string, profile = 'default') => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
