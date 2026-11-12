@@ -26,6 +26,8 @@ export interface RequestOptions {
   /** Hermes profile: /p/<profile>/ prefix on the API server, ?profile= on the dashboard. */
   profile?: string;
   headers?: Record<string, string>;
+  /** No bearer token (a public path of Hermes, called on behalf of a browser). */
+  anonymous?: boolean;
   signal?: AbortSignal;
   /** Overrides the default timeout; 0 disables it (SSE streams). */
   timeoutMs?: number;
@@ -72,7 +74,7 @@ export class HermesHttp {
     for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) full.searchParams.set(k, String(v));
     if (via === 'dash' && opts.profile) full.searchParams.set('profile', opts.profile);
 
-    const headers: Record<string, string> = { Authorization: `Bearer ${t.token}`, Accept: 'application/json', ...opts.headers };
+    const headers: Record<string, string> = { ...(opts.anonymous ? {} : { Authorization: `Bearer ${t.token}` }), Accept: 'application/json', ...opts.headers };
     let body: string | ReadableStream<Uint8Array> | undefined;
     if (opts.rawBody) {
       if (opts.contentType) headers['Content-Type'] = opts.contentType;

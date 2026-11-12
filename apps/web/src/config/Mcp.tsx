@@ -1,10 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plug, Plus, Trash2 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { LibraryBig, Plug, Plus, ScrollText, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, type McpInput, type McpServer } from '../api';
 import { Button, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 import { ask } from '../components/Dialog';
+import { McpCatalog } from './McpCatalog';
+import { McpConnect } from './McpConnect';
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -12,13 +15,23 @@ const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export function ConfigMcp({ inst, profile, can, onSaved }: TabProps) {
   const servers = useQuery({ queryKey: configKey(inst, profile, 'mcp'), queryFn: () => api.mcpServers(inst, profile).then((r) => r.servers) });
   const [left, setLeft] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState(false);
   if (servers.isPending) return <p className="text-sm text-ink-soft">Lecture des serveurs MCP…</p>;
   if (servers.isError) return <ErrorText error={servers.error} />;
   const list = servers.data ?? [];
   return (
     <div className="space-y-4">
       {left && <p className="text-sm text-warn">La variable {left} garde encore le jeton : supprimez-la dans l’onglet Variables si elle ne sert plus.</p>}
-      {can('addMcp') && <AddMcp inst={inst} profile={profile} existing={list.map((s) => s.name)} onSaved={() => onSaved(true)} />}
+      <div className="flex flex-wrap items-start gap-2">
+        {can('addMcp') && <AddMcp inst={inst} profile={profile} existing={list.map((s) => s.name)} onSaved={() => onSaved(true)} />}
+        {can('mcpCatalog') && !catalog && <Button onClick={() => setCatalog(true)}><LibraryBig className={ICON} strokeWidth={1.5} />Depuis le catalogue</Button>}
+        <span className="flex-1" />
+        <Link to="/i/$inst/suivi" params={{ inst }} search={{ tab: 'logs', file: 'mcp', profile: profile === 'default' ? undefined : profile }}
+          className="inline-flex h-9 items-center gap-1.5 text-[13px] text-ink-soft hover:text-ink">
+          <ScrollText className={ICON} strokeWidth={1.5} />Journal MCP
+        </Link>
+      </div>
+      {catalog && <McpCatalog inst={inst} profile={profile} can={can} onClose={() => setCatalog(false)} onSaved={() => onSaved(true)} />}
       <Panel title="Serveurs" bodyClassName="divide-y divide-line/70 border-t border-line/70">
         {list.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucun serveur MCP.</p>}
         {list.map((s) => <McpRow key={s.name} s={s} inst={inst} profile={profile} can={can} onSaved={() => onSaved(true)} onTokenLeft={setLeft} />)}
@@ -61,6 +74,7 @@ function McpRow({ s, inst, profile, can, onSaved, onTokenLeft }: {
           </Button>
         )}
       </div>
+      {!managed && s.auth === 'oauth' && s.url && can('mcpAuth') && <McpConnect inst={inst} profile={profile} name={s.name} onApproved={onSaved} />}
       {s.env.length > 0 && <p className="text-xs text-ink-faint">Variables : {s.env.map((e) => `${e.key}${e.isSet ? '' : ' (vide)'}`).join(', ')}</p>}
       {test.data && (test.data.ok
         ? <p className="text-xs text-ok">Connexion réussie : {test.data.tools.length} outil{test.data.tools.length > 1 ? 's' : ''}{test.data.tools.length ? ` (${test.data.tools.slice(0, 8).join(', ')}${test.data.tools.length > 8 ? '…' : ''})` : ''}.</p>

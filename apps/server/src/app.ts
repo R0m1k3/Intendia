@@ -21,6 +21,8 @@ import { AdminError } from './admin-error.js';
 import { SecretError } from './hermes-config/mask.js';
 import { memoryRoutes } from './routes/memory.js';
 import { pluginRoutes } from './routes/plugins.js';
+import { mcpCatalogRoutes, mcpOauthRoutes } from './routes/mcp-catalog.js';
+import { RateLimiter } from './auth/limiter.js';
 import { monitorRoutes } from './routes/monitor.js';
 import { linkRoutes, publicLinkRoute } from './routes/links.js';
 import type { Services } from './services.js';
@@ -144,6 +146,9 @@ export function createApp(deps: AppDeps) {
     return c.json({ ok: true });
   });
 
+  // public: the OAuth provider sends the browser back here (MCP catalog, lot 8 E2)
+  x.route('/', mcpOauthRoutes(deps.services.mcpCatalog, new RateLimiter(10, 60_000), (c) => auth.clientIp(c)));
+
   x.post('/logout', (c) => {
     auth.destroySession(c);
     return c.json({ ok: true });
@@ -242,6 +247,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', monitorRoutes(deps.services.monitor));
   priv.route('/', memoryRoutes(deps.services.memory));
   priv.route('/', pluginRoutes(deps.services.plugins));
+  priv.route('/', mcpCatalogRoutes(deps.services.mcpCatalog));
   priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);

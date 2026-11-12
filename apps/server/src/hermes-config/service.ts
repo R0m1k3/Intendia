@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
+import type { z } from 'zod';
 import { and, desc, eq, notInArray } from 'drizzle-orm';
 import type { CompatService } from '../compat/service.js';
 import { GatewayService } from './gateway.js';
 import {
-  AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema,
+  AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema, McpCatalogSchema, McpFlowSchema,
   McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, mcpTokenEnv,
   configModule,
 } from '../connectors/config/index.js';
@@ -28,6 +29,8 @@ export const HISTORY_KEEP = 10;
 const HISTORY_PURPOSE = 'config-history-v1';
 const TEST_MS = 40_000;
 
+export type McpCatalog = z.infer<typeof McpCatalogSchema>;
+export type McpFlow = z.infer<typeof McpFlowSchema>;
 export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login' | 'custom-providers';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
 
@@ -748,6 +751,74 @@ export class ConfigService {
       }
     });
     return tokenLeft ? { ...res, tokenLeft } : res;
+  }
+
+  // ---------------------------------------------------------------- MCP catalog and OAuth (lot 8 E2)
+
+  /** Catalog of approved MCP servers, as Hermes gives it (masking is done by `McpCatalogService`). */
+  async mcpCatalogRaw(instanceId: string, profile: string): Promise<McpCatalog> {
+    const ctx = this.ctx(instanceId, profile);
+    return McpCatalogSchema.parse(await this.call<unknown>(ctx, 'mcpCatalog'));
+  }
+
+  /**
+   * Installs a catalog entry; `env` (declared names only, checked by the caller) goes to Hermes, which writes the
+   * secret ones into the profile's .env. The values never appear in an error (scrubbed before masking).
+   */
+  async installMcpCatalog(instanceId: string, profile: string, name: string, env: Record<string, string>): Promise<{ version: string | null; background: boolean; action: string | null }> {
+    const ctx = this.ctx(instanceId, profile);
+    const values = Object.values(env).filter((v) => v.length >= 4).sort((a, b) => b.length - a.length);
+    const scrub = (t: string) => values.reduce((acc, v) => acc.split(v).join('…'), t);
+    let out: { background?: unknown; action?: unknown } = {};
+    const res = await this.write(ctx, 'mcp', null, async () => {
+      out = (await this.call<{ background?: unknown; action?: unknown }>(ctx, 'mcpInstall', { body: { name, env, enable: true } }, 'Absent du catalogue', scrub)) ?? {};
+    });
+    return { ...res, background: out.background === true, action: typeof out.action === 'string' ? out.action : null };
+  }
+
+  /**
+   * What decides the OAuth return URL of a server (Hermes: `mcp_servers.<name>.oauth.redirect_uri`, else
+   * `dashboard.public_url`, else the address Intendia used to reach the dashboard). null when the file is unreadable.
+   */
+  async mcpOauthSettings(instanceId: string, profile: string, name: string): Promise<{ present: boolean; redirectUri: string | null; dashboardPublicUrl: string | null } | null> {
+    const raw = await this.readRaw(this.ctx(instanceId, profile));
+    if (raw === null) return null;
+    const doc = (parse(raw).toJS() ?? {}) as { mcp_servers?: unknown; dashboard?: unknown };
+    const servers = doc.mcp_servers && typeof doc.mcp_servers === 'object' ? doc.mcp_servers as Record<string, unknown> : {};
+    const entry = servers[name] && typeof servers[name] === 'object' ? servers[name] as { oauth?: unknown } : null;
+    const oauth = entry?.oauth && typeof entry.oauth === 'object' ? entry.oauth as { redirect_uri?: unknown } : {};
+    const dash = doc.dashboard && typeof doc.dashboard === 'object' ? doc.dashboard as { public_url?: unknown } : {};
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    return { present: entry !== null, redirectUri: str(oauth.redirect_uri), dashboardPublicUrl: str(dash.public_url) };
+  }
+
+  /** Writes `mcp_servers.<name>.oauth.redirect_uri` (merged by Hermes into the existing entry). */
+  async setMcpRedirect(instanceId: string, profile: string, name: string, uri: string): Promise<{ version: string | null }> {
+    const ctx = this.ctx(instanceId, profile);
+    return this.write(ctx, 'mcp', null, async () => {
+      await this.call(ctx, 'put', { body: { config: { mcp_servers: { [name]: { oauth: { redirect_uri: uri } } } } } });
+    });
+  }
+
+  async mcpAuth(instanceId: string, profile: string, name: string): Promise<McpFlow> {
+    const ctx = this.ctx(instanceId, profile);
+    // Hermes waits up to 30 s for the authorization URL
+    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpAuth', { params: { name }, timeoutMs: 45_000 }, 'Serveur MCP introuvable'));
+  }
+
+  async mcpFlow(instanceId: string, profile: string, id: string): Promise<McpFlow> {
+    const ctx = this.ctx(instanceId, profile);
+    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpFlow', { params: { flow_id: id } }, 'Connexion expirée'));
+  }
+
+  async mcpFlowCancel(instanceId: string, profile: string, id: string): Promise<void> {
+    const ctx = this.ctx(instanceId, profile);
+    await this.call(ctx, 'mcpFlowCancel', { params: { flow_id: id } }, 'Connexion expirée');
+  }
+
+  /** The masked text of a Hermes message (MCP catalog texts). */
+  maskText(text: string): string {
+    return this.mask.text(text);
   }
 
   // ---------------------------------------------------------------- Anthropic subscription token

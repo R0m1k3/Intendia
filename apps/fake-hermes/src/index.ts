@@ -57,6 +57,7 @@ import { MonitorStore, type MonitorFakeOptions } from './monitor.js';
 export { FAKE_SECRETS, OPENROUTER_MODELS } from './config.js';
 export { FAKE_MEMORY_LIMITS, FAKE_MEMORY_SEED, fingerprint as memoryFingerprint } from './memory.js';
 export { FAKE_PLUGIN_CATALOG } from './plugins.js';
+export { FAKE_MCP_CATALOG } from './mcp-catalog.js';
 import { SkillStore } from './skills.js';
 
 /**
@@ -652,7 +653,8 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     }
     const titleMatch = /^\/_fake\/sessions\/([^/]+)\/title$/.exec(path);
     if (via === 'api' && method === 'GET' && titleMatch) return c.json({ title: sim.titles.get(decodeURIComponent(titleMatch[1]!)) ?? null });
-    if (path !== '/health') {
+    // like Hermes: the MCP OAuth callback is a public path of the dashboard (the browser of the user calls it)
+    if (path !== '/health' && !(via === 'dash' && path.startsWith('/api/mcp/oauth/callback/'))) {
       const token = via === 'dash' ? FAKE_DASH_TOKEN : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
       if (!token || c.req.header('authorization') !== `Bearer ${token}`) return c.json({ error: 'unauthorized' }, 401);
     }

@@ -28,6 +28,7 @@ const OPTIONAL: OptionalOp[] = [
   ['config', 'platforms', 'Plateformes'], ['config', 'restartGateway', 'Redémarrer la passerelle'],
   ['config', 'oauthList', 'Abonnements'], ['config', 'oauthStart', 'Connecter un abonnement'], ['config', 'oauthPoll', 'Suivre une connexion'],
   ['config', 'oauthCancel', 'Annuler une connexion'], ['config', 'oauthDisconnect', 'Déconnecter un abonnement'],
+  ['config', 'mcpCatalog', 'Catalogue MCP'], ['config', 'mcpAuth', 'Connexion OAuth MCP'],
   ['config', 'poolList', 'Clés d’API'], ['config', 'poolAdd', 'Ajouter une clé'], ['config', 'poolRemove', 'Retirer une clé'],
 ];
 

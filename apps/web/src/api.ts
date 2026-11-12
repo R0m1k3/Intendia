@@ -367,6 +367,14 @@ export interface LearnedSkill {
   related: string[]; memories: string[];
 }
 export interface MemoryUsage { bytes: number; limit: number }
+export interface McpCatalogEntry {
+  name: string; description: string; docsUrl: string | null; auth: string; requiredEnv: { name: string; prompt: string; required: boolean }[];
+  transport: string | null; url: string | null; command: string | null; args: string[]; needsInstall: boolean; postInstall: string;
+  installed: boolean; enabled: boolean;
+}
+export interface McpCatalog { entries: McpCatalogEntry[]; diagnostics: string[]; relay: boolean }
+export interface McpFlow { id: string; status: string; authorizationUrl: string | null; error: string | null; tools: string[] }
+export type McpOauthMode = 'relay' | 'hermes' | 'custom';
 export interface Plugin {
   name: string; version: string | null; description: string; source: string | null; status: string | null;
   canRemove: boolean; authRequired: boolean; authCommand: string | null; hidden: boolean; removedReason: string | null;
@@ -962,6 +970,13 @@ export const api = {
     call<WriteResult>('PUT', instPath(inst, `config/mcp/${enc(name)}/enabled`, profile), { enabled }),
   removeMcp: (inst: string, profile: string, name: string) =>
     call<WriteResult & { tokenLeft?: string }>('DELETE', instPath(inst, `config/mcp/${enc(name)}`, profile)),
+  mcpCatalog: (inst: string, profile: string) => call<McpCatalog>('GET', instPath(inst, 'config/mcp/catalog', profile)),
+  installMcpCatalog: (inst: string, profile: string, name: string, env: Record<string, string>) =>
+    call<{ version: string | null; background: boolean }>('POST', instPath(inst, `config/mcp/catalog/${enc(name)}`, profile), { env }),
+  connectMcpOauth: (inst: string, profile: string, name: string) =>
+    call<{ flow: McpFlow; mode: McpOauthMode }>('POST', instPath(inst, `config/mcp/${enc(name)}/connect`, profile)),
+  mcpFlow: (inst: string, profile: string, id: string) => call<McpFlow>('GET', instPath(inst, `config/mcp/flows/${enc(id)}`, profile)),
+  cancelMcpFlow: (inst: string, profile: string, id: string) => call<{ ok: true }>('DELETE', instPath(inst, `config/mcp/flows/${enc(id)}`, profile)),
   platforms: (inst: string, profile: string) => call<{ platforms: Platform[] }>('GET', instPath(inst, 'config/platforms', profile)),
   restartGateway: (inst: string, profile: string) => call<{ ok: true }>('POST', instPath(inst, 'config/gateway/restart', profile), {}),
   restartStatus: (inst: string, profile: string) => call<RestartStatus>('GET', instPath(inst, 'config/gateway/restart', profile)),

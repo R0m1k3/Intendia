@@ -382,6 +382,22 @@ Sub-agents and runs (API server):
   file's limit (« Replacement would put memory at N/L chars »). `DELETE /api/learning/node {id, profile}` (JSON body)
   removes a memory entry (no copy kept) or archives a skill. No route adds an entry.
 
+## MCP catalog and dashboard OAuth (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
+
+- `GET /api/mcp/catalog?profile=` → `{entries: [{name, description, source (doc URL), transport, auth_type, required_env:
+  [{name, prompt, required}], command, args, url, needs_install, post_install, installed, enabled…}], diagnostics}`
+  (66 entries on 0.23.0, all http, 56 OAuth).
+- `POST /api/mcp/catalog/install?profile= {name, env, enable}`: undeclared env names → 400; secret values go to the
+  profile `.env`; an entry with a git install answers `{background: true, action}`, else `{background: false}`.
+- `POST /api/mcp/servers/{name}/auth?profile=`: http server only (stdio / header auth 400, plugin 409, unknown 404), one
+  flow per server (409), 8 at most (429); waits ≤ 30 s for `{flow_id, server_name, status, authorization_url, error}`.
+  Return URL = `mcp_servers.<name>.oauth.redirect_uri`, else `HERMES_DASHBOARD_PUBLIC_URL` / `dashboard.public_url`,
+  else the request's base URL. `GET|DELETE /api/mcp/oauth/flows/{flow_id}` (GET adds `tools`; DELETE idempotent).
+- `GET /api/mcp/oauth/callback/{server_name}?code&state&error&iss`: public path (no token), matches the waiting flow by
+  server and `state`; 404 HTML when none; then Hermes exchanges the code (a fake code ends the flow in `error`,
+  `invalid_grant`). `PUT /api/config {config: {mcp_servers: {<name>: {oauth: {redirect_uri}}}}}` merges into the entry
+  (url kept): checked on 0.23.0 with `airtable`.
+
 ## Agent plugins (read in the 0.23.0 source, checked on 0.23.0, 2026-11-12)
 
 - `GET /api/dashboard/plugins/hub` → `{plugins: [{name, version, description, source (bundled|user|git|pip), runtime_status

@@ -153,6 +153,35 @@ export const PoolAddSchema = z.looseObject({ ok: z.boolean().optional(), provide
 
 export const GATEWAY_RESTART_ACTION = 'gateway-restart';
 
+/** `GET /api/mcp/catalog`: the approved MCP servers shipped with Hermes, with their state for the profile. */
+export const McpCatalogSchema = z.looseObject({
+  entries: z.array(z.looseObject({
+    name: z.string(),
+    description: z.string().nullish(),
+    source: z.string().nullish(),
+    transport: z.string().nullish(),
+    auth_type: z.string().nullish(),
+    required_env: z.array(z.looseObject({ name: z.string(), prompt: z.string().nullish(), required: z.boolean().nullish() })).nullish(),
+    command: z.string().nullish(),
+    args: z.array(z.string()).nullish(),
+    url: z.string().nullish(),
+    needs_install: z.boolean().nullish(),
+    post_install: z.string().nullish(),
+    installed: z.boolean().nullish(),
+    enabled: z.boolean().nullish(),
+  })),
+  diagnostics: z.array(z.looseObject({ name: z.string().nullish(), kind: z.string().nullish(), message: z.string().nullish() })).nullish(),
+});
+/** A dashboard MCP OAuth flow (`POST …/auth`, `GET /api/mcp/oauth/flows/{flow_id}`), kept 15 min by Hermes. */
+export const McpFlowSchema = z.looseObject({
+  flow_id: z.string(),
+  server_name: z.string().nullish(),
+  status: z.string(),
+  authorization_url: z.string().nullish(),
+  error: z.string().nullish(),
+  tools: z.array(z.unknown()).nullish(),
+});
+
 export const configModule: ModuleDef = {
   id: 'config',
   label: 'Configuration',
@@ -194,6 +223,14 @@ export const configModule: ModuleDef = {
     testMcp: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/mcp/servers/{name}/test' }] },
     enableMcp: { kind: 'write', routes: [{ via: 'dash', method: 'PUT', path: '/api/mcp/servers/{name}/enabled' }] },
     removeMcp: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/mcp/servers/{name}' }] },
+    // MCP catalog and OAuth (lot 8 E2)
+    mcpCatalog: { kind: 'read', probe: true, schema: McpCatalogSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/mcp/catalog' }] },
+    mcpInstall: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/mcp/catalog/install' }] },
+    mcpAuth: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/mcp/servers/{name}/auth' }] },
+    mcpFlow: { kind: 'read', probe: false, schema: McpFlowSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/mcp/oauth/flows/{flow_id}' }] },
+    mcpFlowCancel: { kind: 'write', routes: [{ via: 'dash', method: 'DELETE', path: '/api/mcp/oauth/flows/{flow_id}' }] },
+    // public path of the dashboard, answered in HTML: only its presence is checked, Intendia calls it without the token
+    mcpCallback: { kind: 'read', probe: false, routes: [{ via: 'dash', method: 'GET', path: '/api/mcp/oauth/callback/{server_name}' }] },
     restartGateway: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/restart' }] },
     gatewayStart: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/start' }] },
     gatewayStop: { kind: 'write', routes: [{ via: 'dash', method: 'POST', path: '/api/gateway/stop' }] },
