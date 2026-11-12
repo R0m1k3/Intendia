@@ -430,6 +430,10 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - `src/hermes-config/service.ts` (`ConfigService`) calls the `config` connector; `src/routes/config.ts` serves
   `/x/i/:inst/config...` (form, raw YAML, versions and restore, models, env, MCP servers, platforms, gateway restart),
   every route with `?profile=`. Lists come wrapped (`{versions}`, `{env}`, `{servers}`, `{platforms}`).
+- Tab Garde-fous (option 61): the generic form (`config/Form.tsx`) with a fixed list of paths (`config/guardrails.ts`:
+  French label, help, when it applies), only those present in the instance's schema, the others named below. A field
+  Hermes types `string` because its default is None takes `null` from the form (« no limit »); `saveForm` refuses
+  `null` for any other type. Hermes has no pause and no token limit per run (see `docs/hermes-api-notes.md`).
 - No secret reaches the browser: `mask.ts` (`Masker`) replaces each one with `«secret:<id>»` (HMAC of the value) in
   values, YAML text and every text that comes from Hermes; the YAML editor puts them back by id on save and refuses a
   secret moved under a key shown in clear (`secret_moved`).

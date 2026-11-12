@@ -9,6 +9,7 @@ import { Button, Chips, cx } from '../components/ui';
 import { ICON, configKey } from '../config/common';
 import { ProfileSelect } from '../components/ProfileSelect';
 import { ConfigEnv } from '../config/Env';
+import { GUARDRAILS } from '../config/guardrails';
 import { ConfigForm } from '../config/Form';
 import { ConfigHistory } from '../config/History';
 import { ConfigMcp } from '../config/Mcp';
@@ -38,7 +39,7 @@ const PLUGINS_OPTIONAL: OptionalOp[] = [
   ['plugins', 'remove', 'Désinstaller'],
 ];
 
-export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'yaml', 'variables', 'mcp', 'plugins', 'plateformes', 'historique'] as const;
+export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'garde-fous', 'yaml', 'variables', 'mcp', 'plugins', 'plateformes', 'historique'] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 export interface ConfigSearch { profile?: string; tab?: ConfigTab; key?: string }
 
@@ -47,6 +48,7 @@ const TAB: Record<Exclude<ConfigTab, 'plugins'>, { label: string; op: string | s
   modeles: { label: 'Modèles', op: 'modelInfo' },
   fournisseurs: { label: 'Fournisseurs', op: ['oauthList', 'poolList'] },
   reglages: { label: 'Réglages', op: 'schema' },
+  'garde-fous': { label: 'Garde-fous', op: 'schema' },
   yaml: { label: 'YAML', op: 'raw' },
   variables: { label: 'Variables', op: 'env' },
   mcp: { label: 'MCP', op: 'mcpServers' },
@@ -120,6 +122,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}
+            {tab === 'garde-fous' && <ConfigForm {...props} preset={GUARDRAILS} />}
             {tab === 'yaml' && <ConfigYaml {...props} />}
             {tab === 'variables' && <ConfigEnv key={search.key ?? ''} {...props} focusKey={search.key} />}
             {tab === 'mcp' && <ConfigMcp {...props} />}
