@@ -634,8 +634,9 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
 
   const title = sess.data?.session.title || 'Nouvelle session';
 
-  // files written by the agent (stored write_file / patch calls), most recent first
-  const written = useMemo(() => writtenPaths(entries), [entries]);
+  // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
+  // (during a run, the merged entries hide its stored messages behind the live ones)
+  const written = useMemo(() => writtenPaths(historyEntries(messages)), [messages]);
   // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
   const candidates = useMemo(() => {
     if (!mounts) return [];

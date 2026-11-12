@@ -35,6 +35,15 @@ export function zipSlot(): () => void {
   };
 }
 
+/** `_erreurs.txt`, or `_erreurs (2).txt`… when the folder already has a file or folder of that name. */
+export function reportName(tree: WalkResult): string {
+  const taken = new Set([...tree.dirs, ...tree.files.map((f) => f.rel)]);
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? '_erreurs.txt' : `_erreurs (${n}).txt`;
+    if (!taken.has(name)) return name;
+  }
+}
+
 export function zipFolder(opts: {
   /** Folder name at the top of the zip. */
   name: string;
@@ -114,7 +123,7 @@ export function zipFolder(opts: {
         errors.push(`${f.rel} : lecture interrompue, fichier incomplet dans le zip (${err instanceof Error ? err.message : String(err)})`);
       }
     }
-    if (errors.length) stored(`${name}/_erreurs.txt`, strToU8(`${errors.join('\n')}\n`));
+    if (errors.length) stored(`${name}/${reportName(tree)}`, strToU8(`${errors.join('\n')}\n`));
     zip.end();
   };
 

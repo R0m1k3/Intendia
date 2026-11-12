@@ -1,6 +1,6 @@
 import { unzipSync, strFromU8 } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { zipFolder, zipSlot } from '../src/files/zip.js';
+import { reportName, zipFolder, zipSlot } from '../src/files/zip.js';
 
 const stream = (s: string) => new Response(s).body!;
 const bytes = async (r: ReadableStream<Uint8Array>) => new Uint8Array(await new Response(r).arrayBuffer());
@@ -45,6 +45,12 @@ describe('zipFolder', () => {
     await reader.read();
     await reader.cancel();
     expect(ended).toBe(1);
+  });
+
+  it('the report never takes the name of a file of the folder', () => {
+    const f = (rel: string) => ({ rel, size: 1, mtimeMs: 1 });
+    expect(reportName({ dirs: [], files: [f('a.txt')] })).toBe('_erreurs.txt');
+    expect(reportName({ dirs: ['_erreurs (2).txt'], files: [f('_erreurs.txt'), f('sous/_erreurs (3).txt')] })).toBe('_erreurs (3).txt');
   });
 
   it('two places at most', () => {
