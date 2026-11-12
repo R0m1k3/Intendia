@@ -207,10 +207,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }),
       qc.invalidateQueries({ queryKey: ['run', inst, sessionId] }),
       invalidateSessionLists(qc),
-      // the session list's « En cours » mark goes at once
-      qc.invalidateQueries({ queryKey: ['activity', inst] }),
-      qc.invalidateQueries({ queryKey: ['approvals'] }),
     ]);
+    // the session list's « En cours » mark goes at once; not awaited: the activity read waits on kanban workers
+    void qc.invalidateQueries({ queryKey: ['activity', inst] });
+    void qc.invalidateQueries({ queryKey: ['approvals'] });
     setActive(null);
     setRunCount((n) => n + 1);
     void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
