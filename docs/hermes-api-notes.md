@@ -464,6 +464,13 @@ Sub-agents and runs (API server):
   `kanban.max_in_progress` (None = from RAM, 2 to 8) and `kanban.max_in_progress_per_profile`: next dispatcher pass
   (`kanban.dispatch_interval_seconds`, 60).
 
+## First run (read in the 0.23.0 source, `web_routers/models.py`, 2026-11-12)
+- `GET /api/model/info` never writes; without `model.default` it answers `model: ""` (and the provider of the file).
+- `GET /api/model/recommended-default?provider=` → `{provider, model, free_tier}`: the curated pick of an authenticated
+  provider (`pick_silent_default_model`), `""` for an unknown or unauthenticated one; `free_tier` for Nous only. It
+  goes through `build_models_payload`, so it may write the discovered models of custom endpoints (like `model/options`).
+  Never probed by the compatibility check.
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

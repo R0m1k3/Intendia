@@ -114,6 +114,8 @@ export interface FakeOptions {
   controls?: 'authority' | 'legacy';
   /** `hermes_home` announced by the dashboard's /api/status (default /opt/data). */
   hermesHome?: string;
+  /** No main model at start (first-run bench). */
+  noModel?: boolean;
   /** `terminal.backend` in GET /api/config (default: the recording's, `local`). */
   terminalBackend?: string;
   /** Delay before each managed files answer, in ms (slow Hermes). */
@@ -1086,6 +1088,7 @@ export function createFakeHermes(opts: FakeOptions) {
   const crons = new CronStore(opts.cronStepMs ?? opts.stepMs ?? 5, sim);
   const skills = new SkillStore(opts.fixturesDir, opts.skillStepMs ?? opts.stepMs ?? 5);
   const config = new ConfigStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5, opts.terminalBackend);
+  if (opts.noModel) config.clearModel();
   const profiles = new ProfileStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
   const git = new GitStore(opts.git);

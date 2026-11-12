@@ -63,7 +63,8 @@ export function SetupPage() {
         sont jamais renvoyées au navigateur.
       </p>
       <div className="mt-8 card p-5 md:p-6">
-        <InstanceForm onSaved={async () => { await qc.invalidateQueries(); await navigate({ to: '/' }); }} />
+        {/* then the provider, the model and a workspace, each step can be skipped */}
+        <InstanceForm onSaved={async (r) => { await qc.invalidateQueries(); await navigate({ to: '/installation/fournisseur', search: { inst: r.instanceId } }); }} />
       </div>
       <Button variant="ghost" className="mt-4" onClick={() => navigate({ to: '/' })}>Plus tard</Button>
     </div></div>

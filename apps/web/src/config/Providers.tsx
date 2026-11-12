@@ -13,7 +13,8 @@ import { displayName, visibleAccounts } from './provider-names';
  * the profile's auth.json. A provider connected here is offered by the chat's model picker (same rule as before: the
  * providers Hermes reports as authenticated).
  */
-export function ConfigProviders({ inst, profile, can, onVariable, onSaved }: TabProps & { onVariable: (key: string) => void }) {
+/** `onVariable` absent (first-run steps): no link to the Variables tab. */
+export function ConfigProviders({ inst, profile, can, onVariable, onSaved }: TabProps & { onVariable?: (key: string) => void }) {
   const info = useQuery({ queryKey: configKey(inst, profile, 'providers'), queryFn: () => api.configProviders(inst, profile) });
   const refresh = useRefreshProviders(inst, profile);
   const custom = useQuery({ queryKey: configKey(inst, profile, 'custom-providers'), queryFn: () => api.customProviders(inst, profile) });
@@ -355,7 +356,7 @@ function formatDate(v: string): string {
 // ---------------------------------------------------------------- API keys
 
 function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
-  inst: string; profile: string; info: ProvidersInfo; can: (op: string) => boolean; refresh: Refresh; onVariable: (key: string) => void;
+  inst: string; profile: string; info: ProvidersInfo; can: (op: string) => boolean; refresh: Refresh; onVariable?: (key: string) => void;
   endpoints: CustomProvider[];
 }) {
   if (info.keys === null) return <Panel title="Clés d’API"><p className="px-4 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
@@ -383,7 +384,7 @@ function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
 
 function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, refresh, onVariable }: {
   inst: string; profile: string; k: ProviderKey; name: string; canRemove: boolean; canDeleteEnv: boolean; endpoints: CustomProvider[];
-  refresh: Refresh; onVariable: (key: string) => void;
+  refresh: Refresh; onVariable?: (key: string) => void;
 }) {
   const qc = useQueryClient();
   const remove = useMutation({ mutationFn: () => api.removeProviderKey(inst, profile, k.provider, k.id), onSuccess: () => refresh() });
@@ -418,7 +419,7 @@ function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, re
             {k.lastStatus && <> · dernier état : {k.lastStatus}</>}
           </span>
         </div>
-        {variable && <Button variant="ghost" className="h-8" onClick={() => onVariable(variable)}>Voir la variable</Button>}
+        {variable && onVariable && <Button variant="ghost" className="h-8" onClick={() => onVariable(variable)}>Voir la variable</Button>}
         {variable && canDeleteEnv && (
           <Button variant="ghost" className="h-8 px-2" aria-label={`Retirer la clé ${k.label}`} disabled={dropEnv.isPending} onClick={() => void askDropEnv()}>
             <Trash2 className={ICON} strokeWidth={1.5} />

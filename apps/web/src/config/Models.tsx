@@ -84,8 +84,9 @@ function ProviderSelect({ value, providers, onChange, disabled, auto = false }: 
   );
 }
 
-function MainModel({ data, disabled, onSave, onKey }: {
-  data: ConfigModels; disabled: boolean; onSave: (provider: string, model: string) => void; onKey: (key: string) => void;
+/** Also the « Choisir un autre » of the first-run model step (without `onKey`: no link to the Variables tab). */
+export function MainModel({ data, disabled, onSave, onKey }: {
+  data: ConfigModels; disabled: boolean; onSave: (provider: string, model: string) => void; onKey?: (key: string) => void;
 }) {
   const [provider, setProvider] = useState(data.main.provider);
   const [model, setModel] = useState(data.main.model);
@@ -114,7 +115,7 @@ function MainModel({ data, disabled, onSave, onKey }: {
       {p && !p.authenticated && (
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-warn">
           {p.name} n’a pas de clé.
-          {p.keyEnv && <Button variant="ghost" className="h-7 px-2" onClick={() => onKey(p.keyEnv!)}><KeyRound className={ICON} strokeWidth={1.5} />Définir {p.keyEnv}</Button>}
+          {p.keyEnv && onKey && <Button variant="ghost" className="h-7 px-2" onClick={() => onKey(p.keyEnv!)}><KeyRound className={ICON} strokeWidth={1.5} />Définir {p.keyEnv}</Button>}
         </p>
       )}
       {p?.warning && <p className="mt-1 text-xs text-ink-faint">{p.warning}</p>}

@@ -76,6 +76,13 @@ export const AuxiliarySchema = z.looseObject({
   })),
 });
 
+/** `GET /api/model/recommended-default?provider=`: `model` may be empty (Hermes has nothing to propose). */
+export const RecommendedModelSchema = z.looseObject({
+  provider: z.string(),
+  model: z.string(),
+  free_tier: z.boolean().nullish(),
+});
+
 export const ModelSetSchema = z.looseObject({
   ok: z.boolean().optional(),
   confirm_required: z.boolean().optional(),
@@ -210,6 +217,11 @@ export const configModule: ModuleDef = {
     modelInfo: { kind: 'read', probe: true, schema: ModelInfoSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/model/info' }] },
     // May write discovered models into the config file: never probed.
     modelOptions: { kind: 'read', probe: false, schema: ModelOptionsSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/model/options' }] },
+    // Like model/options, it may write the discovered models of custom endpoints into the file: never probed.
+    recommendedModel: {
+      kind: 'read', probe: false, schema: RecommendedModelSchema,
+      routes: [{ via: 'dash', method: 'GET', path: '/api/model/recommended-default' }],
+    },
     auxiliary: { kind: 'read', probe: true, schema: AuxiliarySchema, routes: [{ via: 'dash', method: 'GET', path: '/api/model/auxiliary' }] },
     platforms: { kind: 'read', probe: true, schema: PlatformsSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/messaging/platforms' }] },
     // Declared here too on purpose: availability is computed per module, modules do not depend on each other.
