@@ -143,7 +143,7 @@ export function Composer({
     if (!canSend || running) return;
     await submit(onSend);
   };
-  const menu = commands && onCommand && !disabled && closedFor !== text ? matchCommands(text, commands) : null;
+  const menu = commands && onCommand && !disabled && !sending && closedFor !== text ? matchCommands(text, commands) : null;
   const picked = menu ? menu[Math.min(pick, menu.length - 1)]! : null;
   const edit = (t: string) => { setText(t); setPick(0); setCommandNote(null); };
   /** Runs the command written in the text; false = the text is an ordinary message. */
@@ -160,6 +160,7 @@ export function Composer({
     return true;
   };
   const choose = async (c: Command) => {
+    if (sending) return;
     // a command with an argument: its name goes in the text, the user goes on typing
     if (c.args) { edit(`/${c.name} `); ref.current?.focus(); return; }
     setText(`/${c.name}`);
@@ -173,6 +174,8 @@ export function Composer({
     if (await runCommand()) return;
     await (running ? toQueue() : send());
   };
+  // every way of sending the text runs a command first: « /stop » must never reach the agent or the queue
+  const queueOrCommand = async () => { if (!(await runCommand())) await toQueue(); };
   const toQueue = async () => {
     if (!canSend || !running || !onQueue) return;
     await submit(async (m) => { onQueue(m); return true; });
@@ -182,6 +185,7 @@ export function Composer({
   const canSteer = Boolean(onSteer) && text.trim() !== '' && !sending && !disabled && !steerBlock;
   const steer = async () => {
     if (!canSteer || !running || !onSteer) return;
+    if (await runCommand()) return;
     await submit(onSteer);
   };
   const iconButton = 'flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-40';
@@ -296,7 +300,7 @@ export function Composer({
           </button>
         )}
         {running && onQueue && (
-          <button type="button" onClick={() => void toQueue()} disabled={!canSend} aria-label="Mettre en file"
+          <button type="button" onClick={() => void queueOrCommand()} disabled={!canSend} aria-label="Mettre en file"
             title="Mettre en file (Entrée) : envoyé à la fin du travail en cours"
             className={cx(iconButton, 'text-ink-soft hover:bg-raised hover:text-ink')}>
             <ListPlus className="size-4" strokeWidth={1.5} />
