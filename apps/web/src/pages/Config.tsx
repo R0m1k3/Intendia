@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { api } from '../api';
 import { Narrow, PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, cx } from '../components/ui';
+import { Button, Chips, cx } from '../components/ui';
 import { ICON, SELECT, configKey } from '../config/common';
 import { ConfigEnv } from '../config/Env';
 import { ConfigForm } from '../config/Form';
@@ -83,12 +83,12 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
     <Narrow>
       <PageHeader
         title="Configuration"
-        subtitle={<>Les réglages d’Hermes pour l’agent <span className="font-mono text-ink">{profile}</span> sur {current ? <span className="text-ink">{current.label}</span> : 'l’instance'}.</>}
+        subtitle={<>Agent <span className="font-mono text-ink-soft">{profile}</span> sur {current ? current.label : 'l’instance'}</>}
         action={(
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-xs text-ink-soft">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-[13px] text-ink-faint">
               Profil
-              <select className={SELECT} value={profile} aria-label="Profil"
+              <select className={cx(SELECT, 'h-[34px] font-mono text-ink')} value={profile} aria-label="Profil"
                 onChange={(e) => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value, tab } })}>
                 {options.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
@@ -101,12 +101,12 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
           </div>
         )}
       />
-      <div className="space-y-6 px-5 pb-10 md:px-8">
+      <div className="space-y-5 px-4 pb-14 md:px-8">
         <div className="empty:hidden">
           <ModuleNotice instanceId={inst} module="config" title="La configuration" required={REQUIRED} optional={OPTIONAL} explainMissing />
         </div>
         {(needRestart || pendingPlatform) && !restart.running && !restart.done && can('restartGateway') && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
             <span>{pendingPlatform && !needRestart ? 'Une plateforme attend un redémarrage de la passerelle.' : 'Certains changements ne comptent qu’après un redémarrage de la passerelle.'}</span>
             <Button onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}><RefreshCw className={ICON} strokeWidth={1.5} />Redémarrer</Button>
           </div>
@@ -114,14 +114,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         <RestartStrip state={restart} />
         {a.available && tab && (
           <>
-            <div className="flex gap-1 overflow-x-auto border-b border-line" role="tablist">
-              {tabs.map((t) => (
-                <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go({ tab: t, key: undefined })}
-                  className={cx('-mb-px h-10 shrink-0 border-b-2 px-2.5 text-sm font-medium transition-colors', tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
-                  {TAB[t].label}
-                </button>
-              ))}
-            </div>
+            <Chips role="tab" label="Sections" value={tab} items={tabs.map((t) => ({ key: t, label: TAB[t].label }))} onChange={(t) => go({ tab: t, key: undefined })} />
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}

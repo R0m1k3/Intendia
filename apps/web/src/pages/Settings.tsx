@@ -5,7 +5,7 @@ import { api, type McpState, type McpTest, type ModuleId, type ModuleState } fro
 import { InstanceForm } from '../components/InstanceForm';
 import { Narrow, PageHeader } from '../components/Layout';
 import { useModuleAvailability } from '../components/ModuleNotice';
-import { Button, copyText, cx, ErrorText, Mark, Section, worst } from '../components/ui';
+import { Button, Chips, copyText, cx, ErrorText, Mark, worst } from '../components/ui';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask, askText } from '../components/Dialog';
 
@@ -96,21 +96,21 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
   /** Managed entry: the rotation also reaches Hermes; otherwise the manual section keeps its own rotation. */
   const managed = auto && (d.state === 'connected' || d.state === 'stale');
   return (
-    <div data-share={instanceId} data-mcp-state={d.state} className="space-y-4 card p-5">
+    <div data-share={instanceId} data-mcp-state={d.state} className="space-y-3.5">
       {many && <p className="text-sm font-semibold">{label}</p>}
       {!d.publicUrlSet && (
-        <p className="rounded-lg border border-warn/40 bg-warn-soft/40 p-3 text-[13px]">
-          <code className="font-mono text-xs">INTENDIA_PUBLIC_URL</code> n’est pas configurée : les liens donnés par l’agent ne marcheront que dans Intendia, pas dans Telegram.
+        <p className="rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
+          <strong className="font-semibold">Adresse publique manquante.</strong> Sans <code className="font-mono text-xs">INTENDIA_PUBLIC_URL</code>, les liens donnés par l’agent ne s’ouvrent que dans Intendia, pas dans Telegram.
         </p>
       )}
       {auto && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm font-medium"><Mark state={st.mark} />{st.label}</p>
-            <p className="mt-0.5 text-[13px] text-ink-soft">{st.help}</p>
+            <p className="mt-0.5 text-[13px] text-ink-faint">{st.help}</p>
           </div>
           {canConnect && (
-            <SmallBtn variant={d.state === 'connected' ? 'ghost' : undefined} disabled={busy} onClick={() => void start()}>
+            <SmallBtn variant={d.state === 'connected' ? 'secondary' : 'dark'} disabled={busy} onClick={() => void start()}>
               <Plug className="size-3.5" strokeWidth={1.5} />
               {connect.isPending ? 'Test par Hermes…' : d.state === 'connected' ? 'Rebrancher' : `Brancher Intendia à ${label}`}
             </SmallBtn>
@@ -119,7 +119,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
       )}
       <ErrorText error={connect.error ?? rotate.error} />
       {result && (
-        <div className="space-y-1 rounded-lg border border-line bg-raised/60 p-3 text-[13px]" data-mcp-result={result.test?.ok ? 'ok' : 'error'}>
+        <div className="space-y-1 rounded-[10px] bg-paper px-3.5 py-3 text-[13px]" data-mcp-result={result.test?.ok ? 'ok' : 'error'}>
           {result.error && <p className="text-bad">Jeton changé dans Intendia, mais Hermes n’a pas été mis à jour : {result.error}</p>}
           {result.test?.ok && <p className="flex items-center gap-2"><Check className="size-3.5 text-ok" strokeWidth={2} />Hermes voit l’outil share_file.</p>}
           {result.test && !result.test.ok && (
@@ -131,13 +131,13 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
         </div>
       )}
       {auto && (written || d.state === 'stale' || d.state === 'connected') && (
-        <div className={cx('space-y-2', written && 'rounded-lg border border-accent/30 p-3')}>
+        <div className={cx('space-y-2', written && 'rounded-lg border border-ink/30 p-3')}>
           {written && <p className="text-sm font-medium">Redémarrez Hermes pour que l’agent ait l’outil</p>}
           <RestartInstance instanceId={instanceId} label={label} />
         </div>
       )}
       {managed && (
-        <SmallBtn variant="ghost" disabled={busy}
+        <SmallBtn disabled={busy}
           onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus. Hermes est mis à jour automatiquement ; redémarrez-le ensuite.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
           {rotate.isPending ? 'Régénération…' : 'Régénérer le jeton'}
         </SmallBtn>
@@ -147,17 +147,17 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
         <div className="mt-3 space-y-4">
           {!auto && <p className="text-ink-soft">Cette instance ne permet pas à Intendia de brancher l’outil lui-même : ajoutez ce bloc à la configuration d’Hermes, puis redémarrez-le.</p>}
           <div className="relative">
-            <pre className="overflow-x-auto rounded-lg border border-line bg-raised/60 p-3 pr-20 font-mono text-[11.5px] leading-relaxed">
+            <pre className="overflow-x-auto rounded-[10px] bg-paper px-4 py-3.5 pr-24 font-mono text-[12.5px] leading-[1.65]">
               {shown ? block : mcpBlock(d.url, '•'.repeat(12))}
             </pre>
-            <Button variant="ghost" className="absolute right-1.5 top-1.5 h-7 px-2 text-xs" onClick={() => void copy()} aria-label="Copier le bloc mcp_servers">
+            <Button className="absolute right-2 top-2 h-8 px-3 text-[13px]" onClick={() => void copy()} aria-label="Copier le bloc mcp_servers">
               <Copy className="size-3.5" strokeWidth={1.5} />{copied ? 'Copié' : 'Copier'}
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            <SmallBtn variant="ghost" onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
+            <SmallBtn onClick={() => setShown(!shown)}>{shown ? 'Masquer le jeton' : 'Afficher le jeton'}</SmallBtn>
             {!managed && (
-              <SmallBtn variant="ghost" disabled={busy}
+              <SmallBtn disabled={busy}
                 onClick={async () => { if (await ask({ title: 'Régénérer le jeton ?', message: 'L’ancien ne marchera plus : il faudra mettre à jour la configuration d’Hermes.', confirmLabel: 'Régénérer', danger: true })) rotate.mutate(); }}>
                 Régénérer le jeton
               </SmallBtn>
@@ -205,89 +205,91 @@ export function SettingsPage() {
   const list = instances.data?.instances ?? [];
   const reports = compat.data?.reports ?? [];
 
+  const BOX_HEAD = 'flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3';
   return (
     <Narrow>
-      <PageHeader title="Réglages" subtitle="Instances Hermes reliées à Intendia, partage de fichiers et affichage" />
-      <div className="px-5 pb-12 md:px-8">
-        <Section
-          title="Instances"
-          description={declarative
-            ? <>Déclarées par <code className="font-mono text-xs">INTENDIA_INSTANCES</code> : modifiez la configuration du conteneur pour les changer.</>
-            : 'Les instances Hermes que pilote Intendia. Retirer une instance ne modifie pas Hermes.'}
-        >
-          <div className="space-y-3">
-            <ErrorText error={remove.error ?? rename.error} />
-            {list.map((i) => {
-              const r = reports.find((x) => x.instanceId === i.id);
-              return (
-                <div key={i.id} data-instance={i.id} className="flex flex-wrap items-start justify-between gap-3 card p-4">
-                  <div className="min-w-0 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Mark state={r ? worst(r.modules.map((m) => m.state)) : null} />
-                      <span className="font-medium">{i.label}</span>
-                      <span className="font-mono text-xs text-ink-faint">{i.id}</span>
-                      {r?.hermesVersion && <span className="font-mono text-xs text-ink-faint">· Hermes {r.hermesVersion}</span>}
-                    </div>
-                    <div className="mt-1.5 truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'}{i.files?.workspaceRoot ? ` · ${i.files.workspaceRoot}` : ''}</div>
-                    {i.files && !i.files.workspaceRoot && (
-                      <div className="mt-1.5 max-w-prose text-xs text-bad" data-files-reason="">{i.files.reason}</div>
-                    )}
+      <PageHeader title="Réglages" subtitle="Instances reliées à Intendia, partage de fichiers et affichage" />
+      <div className="max-w-[960px] space-y-5 px-4 pb-14 md:px-8">
+        <section className="card overflow-hidden" aria-labelledby="rg-i">
+          <div className={BOX_HEAD}>
+            <div className="min-w-0 flex-1">
+              <h2 id="rg-i" className="text-[15px] font-semibold">Instances</h2>
+              <p className="mt-0.5 text-[13px] text-ink-faint">
+                {declarative
+                  ? <>Déclarées par <code className="font-mono text-xs">INTENDIA_INSTANCES</code> : modifiez la configuration du conteneur pour les changer.</>
+                  : 'Les instances Hermes que pilote Intendia. Retirer une instance ne modifie pas Hermes.'}
+              </p>
+            </div>
+            {!declarative && !adding && (
+              <Button variant="primary" onClick={() => setAdding(true)}><Plus className="size-4" strokeWidth={1.5} />Ajouter une instance</Button>
+            )}
+          </div>
+          {(remove.error || rename.error) && <div className="px-4 pb-3"><ErrorText error={remove.error ?? rename.error} /></div>}
+          {list.map((i) => {
+            const r = reports.find((x) => x.instanceId === i.id);
+            const state = r ? worst(r.modules.map((m) => m.state)) : null;
+            return (
+              <div key={i.id} data-instance={i.id} className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-line/70 px-4 py-3">
+                <Mark state={state} className="size-2" />
+                <div className="min-w-0 flex-[1_1_260px]">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium">{i.label}</span>
+                    <span className="font-mono text-xs text-ink-faint">{i.id}{r?.hermesVersion ? ` · Hermes ${r.hermesVersion}` : ''}</span>
                   </div>
-                  {!declarative && (
-                    <div className="flex items-center gap-2">
-                      <SmallBtn onClick={() => void askRename(i)} disabled={rename.isPending}>
-                        <Pencil className="size-3.5" strokeWidth={1.5} />Renommer
-                      </SmallBtn>
-                      <SmallBtn
-                        variant="danger"
-                        onClick={async () => { if (await ask({ title: `Retirer l’instance « ${i.label} » d’Intendia ?`, message: 'Hermes n’est pas modifié.', confirmLabel: 'Retirer', danger: true })) remove.mutate(i.id); }}
-                      >
-                        Retirer
-                      </SmallBtn>
-                    </div>
+                  <div className="truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ' · sans dashboard'}{i.files?.workspaceRoot ? ` · ${i.files.workspaceRoot}` : ''}</div>
+                  {i.files && !i.files.workspaceRoot && (
+                    <div className="mt-1 max-w-prose text-xs text-bad" data-files-reason="">{i.files.reason}</div>
                   )}
                 </div>
-              );
-            })}
-            {!declarative && (adding ? (
-              <div className="card p-4">
-                <InstanceForm onSaved={async () => { setAdding(false); await qc.invalidateQueries(); }} />
-                <Button variant="ghost" className="mt-2" onClick={() => setAdding(false)}>Annuler</Button>
-              </div>
-            ) : (
-              <SmallBtn onClick={() => setAdding(true)}><Plus className="size-3.5" strokeWidth={1.5} />Ajouter une instance</SmallBtn>
-            ))}
-          </div>
-        </Section>
-        {list.length > 0 && (
-          <Section
-            title="Partage de fichiers"
-            description={<>L’outil <code className="font-mono text-xs">share_file</code> permet à l’agent de donner un lien privé vers chaque fichier qu’il livre, aussi depuis Telegram et les crons.</>}
-          >
-            <div className="space-y-3">
-              {list.map((i) => <ShareFileTool key={i.id} instanceId={i.id} label={i.label} many={list.length > 1} />)}
-            </div>
-          </Section>
-        )}
-        <Section title="Apparence" description="Le thème de l’interface, sur ce navigateur.">
-          <div role="radiogroup" aria-label="Thème" className="inline-flex gap-0.5 rounded-[9px] bg-raised p-[3px]">
-            {(['system', 'light', 'dark'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="radio"
-                aria-checked={theme === t}
-                onClick={() => { setTheme(t); applyTheme(t); }}
-                className={cx(
-                  'h-[26px] rounded-md px-2.5 text-xs font-medium transition-colors',
-                  theme === t ? 'bg-sheet text-ink shadow-[0_1px_2px_rgb(22_24_27/0.08)]' : 'text-ink-soft hover:text-ink',
+                {!declarative && (
+                  <div className="flex items-center gap-2">
+                    <Button onClick={() => void askRename(i)} disabled={rename.isPending}>
+                      <Pencil className="size-3.5" strokeWidth={1.5} />Renommer
+                    </Button>
+                    <Button
+                      variant="ghost" className="text-bad hover:text-bad"
+                      onClick={async () => { if (await ask({ title: `Retirer l’instance « ${i.label} » d’Intendia ?`, message: 'Hermes n’est pas modifié.', confirmLabel: 'Retirer', danger: true })) remove.mutate(i.id); }}
+                    >
+                      Retirer
+                    </Button>
+                  </div>
                 )}
-              >
-                {t === 'system' ? 'Système' : t === 'light' ? 'Clair' : 'Sombre'}
-              </button>
+              </div>
+            );
+          })}
+          {!declarative && adding && (
+            <div className="border-t border-line/70 p-4">
+              <InstanceForm onSaved={async () => { setAdding(false); await qc.invalidateQueries(); }} />
+              <Button variant="ghost" className="mt-2" onClick={() => setAdding(false)}>Annuler</Button>
+            </div>
+          )}
+        </section>
+        {list.length > 0 && (
+          <section className="card overflow-hidden" aria-labelledby="rg-s">
+            <div className={BOX_HEAD}>
+              <div className="min-w-0">
+                <h2 id="rg-s" className="text-[15px] font-semibold">Partage de fichiers</h2>
+                <p className="mt-0.5 text-[13px] text-ink-faint">L’outil <code className="font-mono text-xs">share_file</code> donne un lien privé vers chaque fichier livré, y compris depuis Telegram et les crons</p>
+              </div>
+            </div>
+            {list.map((i) => (
+              <div key={i.id} className={cx('px-4 pb-4', list.length > 1 && 'border-t border-line/70 pt-4')}>
+                <ShareFileTool instanceId={i.id} label={i.label} many={list.length > 1} />
+              </div>
             ))}
+          </section>
+        )}
+        <section className="card flex flex-wrap items-center gap-3 px-4 py-3.5" aria-labelledby="rg-t">
+          <div className="min-w-0 flex-1">
+            <h2 id="rg-t" className="text-[15px] font-semibold">Thème</h2>
+            <p className="text-[13px] text-ink-faint">Sur ce navigateur</p>
           </div>
-        </Section>
+          <Chips
+            label="Thème" value={theme}
+            items={[{ key: 'system', label: 'Système' }, { key: 'light', label: 'Clair' }, { key: 'dark', label: 'Sombre' }] as const}
+            onChange={(t) => { setTheme(t); applyTheme(t); }}
+          />
+        </section>
       </div>
     </Narrow>
   );

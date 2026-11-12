@@ -1,6 +1,7 @@
-import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, MessageSquareText, CalendarClock, Ellipsis, Files, Folder, FolderOpen, House, KanbanSquare, ListChecks, LogOut, MessagesSquare, Pin, Plus, Puzzle, Search, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Layers, LogOut, MessageSquareText, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -13,31 +14,42 @@ import { flushDrafts } from '../chat/draft';
 import { SideChat } from './SideChat';
 import { cx, Wordmark } from './ui';
 
-type NavGroup = 'top' | 'auto' | 'instance' | 'foot' | 'hidden';
+type NavGroup = 'top' | 'auto' | 'agent' | 'foot';
 
 interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage }
 
-/** In display order; `group` places each entry in the sidebar (`hidden`: bottom bar only); `page`: per instance. */
+/** In display order; `group` places each entry in the sidebar; `page`: per instance. */
 const NAV: readonly NavEntry[] = [
-  { key: 'home', to: '/', label: 'Accueil', icon: House, group: 'top' },
-  { key: 'sessions', to: '/sessions', label: 'Sessions', icon: MessagesSquare, group: 'top' },
+  { key: 'home', to: '/', label: 'Sessions', icon: Inbox, group: 'top' },
+  { key: 'workspaces', to: '/w', label: 'Workspaces', icon: Folder, group: 'top' },
   { key: 'files', to: '/files', label: 'Fichiers', icon: Files, group: 'top', page: 'files' },
   { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
-  { key: 'skills', to: '/skills', label: 'Skills', icon: Puzzle, group: 'auto', page: 'skills' },
-  { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'auto', page: 'agents' },
   { key: 'kanban', to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'auto', page: 'kanban' },
-  { key: 'workspaces', to: '/w', label: 'Workspaces', icon: FolderOpen, group: 'hidden' },
-  { key: 'activity', to: '/activite', label: 'Activité', icon: Activity, group: 'instance' },
-  { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'instance', page: 'config' },
-  { key: 'status', to: '/etat', label: 'État', icon: ListChecks, group: 'instance' },
+  { key: 'skills', to: '/skills', label: 'Skills', icon: Layers, group: 'agent', page: 'skills' },
+  { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'agent', page: 'agents' },
+  { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'agent', page: 'config' },
+  { key: 'activity', to: '/activite', label: 'Activité', icon: Activity, group: 'foot' },
+  { key: 'status', to: '/etat', label: 'État', icon: Server, group: 'foot' },
   { key: 'settings', to: '/reglages', label: 'Réglages', icon: Settings2, group: 'foot' },
 ];
 
-const ROW = 'flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
-/** Selected entry: a white tab lifted off the grey frame (the ! classes win over ROW's hover). */
-const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(22_24_27/0.05)]';
+/** Which entry the address belongs to: sessions open in the inbox light "Sessions", a workspace "Workspaces". */
+export function activeKey(pathname: string): string | null {
+  if (pathname === '/' || pathname === '/sessions' || /^\/w\/[^/]+\/s\//.test(pathname) || /^\/i\/[^/]+\/p\//.test(pathname)) return 'home';
+  if (/^\/w(\/[^/]+(\/fichiers)?)?\/?$/.test(pathname)) return 'workspaces';
+  if (pathname === '/files' || /^\/i\/[^/]+\/files(\/|$)/.test(pathname) || pathname === '/liens') return 'files';
+  for (const n of NAV) {
+    if (n.to === '/') continue;
+    if (pathname === n.to || pathname.startsWith(`${n.to}/`) || new RegExp(`^/i/[^/]+${n.to}(/|$)`).test(pathname)) return n.key;
+  }
+  return null;
+}
 
-const GROUP = 'flex items-center justify-between px-3 pb-2 pt-6 text-xs font-medium text-ink-faint';
+const ROW = 'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
+/** Selected entry: a white tab with a hairline ring (the ! classes win over ROW's hover). */
+const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line)]';
+
+const GROUP = 'px-2.5 pb-1 pt-4 text-xs text-ink-faint';
 
 export function Layout() {
   return EMBEDDED ? <EmbeddedLayout /> : <FullLayout />;
@@ -73,8 +85,15 @@ function FullLayout() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const version = useQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: Infinity }).data?.version;
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
-  const counts: Record<string, number | undefined> = { crons: inst ? overview.data?.crons.filter((c) => c.instanceId === inst).length : undefined };
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
+  const myCrons = (overview.data?.crons ?? []).filter((c) => c.instanceId === inst);
+  const failed = failedCount(myCrons);
+  const counts: Record<string, { n?: number; bad?: boolean; label?: string }> = {
+    workspaces: { n: inst ? mine.length : undefined },
+    crons: failed > 0
+      ? { n: failed, bad: true, label: `${failed} en échec` }
+      : { n: inst && overview.data ? myCrons.length : undefined },
+  };
   // the address names an instance (/i/<inst>/…, a workspace, /etat#<inst>): it becomes this tab's
   const { fromUrl } = useUrlInstance();
   const ids = instances.map((i) => i.id).join(',');
@@ -85,13 +104,9 @@ function FullLayout() {
   useEffect(() => {
     if (inst && currentTab() === null) setTab(inst);
   }, [inst]);
-  const paletteNav = NAV.filter((n) => n.group !== 'hidden').map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
-  const params = useParams({ strict: false }) as { slug?: string; sessionId?: string };
-  const openSlug = params.slug;
+  const paletteNav = NAV.map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // per-instance console pages (/i/<inst>/crons, /i/<inst>/skills) light up their entry (/crons, /skills)
-  const alsoActive = (to: string) => to !== '/' && new RegExp(`^/i/[^/]+${to}(/|$)`).test(pathname);
-  const sessions = useQuery({ queryKey: ['sessions', openSlug, false], queryFn: () => api.sessions(openSlug!), enabled: Boolean(openSlug) });
+  const current = activeKey(pathname);
 
   // Ctrl/Cmd K anywhere (even in a field) toggles the palette; closing gives the focus back
   const [palette, setPalette] = useState(false);
@@ -144,26 +159,29 @@ function FullLayout() {
     await navigate({ to: '/connexion' });
   };
 
-  const entries = (group: NavGroup) => NAV.filter((n) => n.group === group).map((n) => (
-    <Link
-      key={n.key}
-      {...(navTarget(n, inst) as { to: string })}
-      activeOptions={{ exact: n.to === '/' }}
-      className={cx(ROW, alsoActive(n.to) && ACTIVE)}
-      activeProps={{ className: ACTIVE }}
-      // same marks as a router-active link, so assistive tech and tests see the entry as current
-      {...(alsoActive(n.to) ? { 'aria-current': 'page' as const, 'data-status': 'active' } : {})}
-    >
-      <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
-      <span className="flex-1 truncate">{n.label}</span>
-      <Count n={counts[n.key]} />
-    </Link>
-  ));
+  const entries = (group: NavGroup) => NAV.filter((n) => n.group === group).map((n) => {
+    const on = current === n.key;
+    return (
+      <Link
+        key={n.key}
+        {...(navTarget(n, inst) as { to: string })}
+        activeOptions={{ exact: true }}
+        activeProps={{}}
+        className={cx(ROW, on && ACTIVE)}
+        // same marks as a router-active link, so assistive tech and tests see the entry as current
+        {...(on ? { 'aria-current': 'page' as const, 'data-status': 'active' } : { 'aria-current': undefined, 'data-status': undefined })}
+      >
+        <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
+        <span className="flex-1 truncate">{n.label}</span>
+        <Count {...(counts[n.key] ?? {})} />
+      </Link>
+    );
+  });
 
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <aside className="hidden w-62 shrink-0 flex-col px-3 pb-3 pt-4 md:flex">
-        <div className="flex items-center justify-between pb-4 pl-2 pt-1">
+      <aside className="hidden w-[232px] shrink-0 flex-col bg-paper px-2.5 pb-3 pt-3.5 md:flex">
+        <div className="flex items-center justify-between pb-3.5 pl-2.5 pt-0.5">
           <Wordmark />
           {!onSession && inst && (
             <button type="button" onClick={side ? closeSide : openSide} aria-expanded={side}
@@ -173,80 +191,37 @@ function FullLayout() {
             </button>
           )}
         </div>
-        <InstanceSwitcher className="mb-2" />
+        <NewSessionButton />
+        <InstanceSwitcher className="mt-2.5" />
         <button type="button" onClick={openPalette} aria-haspopup="dialog"
-          className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-line bg-sheet px-3 text-sm text-ink-soft transition-colors hover:text-ink">
+          className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} />
           <span className="flex-1 text-left">Rechercher</span>
           <kbd className="font-mono text-[11px] text-ink-faint">{shortcutLabel()}</kbd>
         </button>
-        <NewSessionButton className="mb-4" />
 
-        <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
+        <nav className="-mx-1 mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
           {entries('top')}
-
-          <p className={GROUP}>
-            Workspaces
-            <Link to="/w" aria-label="Nouveau workspace" title="Nouveau workspace"
-              className="-my-1 flex size-[22px] items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink">
-              <Plus className="size-3.5" strokeWidth={1.5} />
-            </Link>
-          </p>
-          {mine.map((w) => (
-            <div key={w.slug} className="flex flex-col gap-0.5">
-              <Link
-                to="/w/$slug"
-                params={{ slug: w.slug }}
-                activeOptions={{ exact: true }}
-                className={ROW}
-                activeProps={{ className: ACTIVE }}
-              >
-                <Folder className="size-4 shrink-0" strokeWidth={1.5} />
-                <span className="flex-1 truncate">{w.name}</span>
-                <Count n={w.sessionCount} />
-              </Link>
-              {openSlug === w.slug && (
-                <ul className="ml-7 flex flex-col gap-0.5">
-                  {sessions.data?.sessions.slice(0, 8).map((s) => (
-                    <li key={s.id}>
-                      <Link
-                        to="/w/$slug/s/$sessionId"
-                        params={{ slug: w.slug, sessionId: s.id }}
-                        className="flex h-7 items-center rounded-md px-2 text-[13px] text-ink-soft transition-colors hover:bg-raised hover:text-ink"
-                        activeProps={{ className: ACTIVE }}
-                      >
-                        {s.pinned && <Pin className="mr-1.5 size-3 shrink-0 text-ink-faint" strokeWidth={1.75} aria-label="Épinglée" />}
-                        <span className="truncate">{s.title || 'Nouvelle session'}</span>
-                      </Link>
-                    </li>
-                  ))}
-                  <li>
-                    <NewSessionLink slug={w.slug} />
-                  </li>
-                </ul>
-              )}
-            </div>
-          ))}
-
           <p className={GROUP}>Automatisation</p>
           {entries('auto')}
-
-          <p className={GROUP}>Instance</p>
-          {entries('instance')}
+          <p className={GROUP}>Agent</p>
+          {entries('agent')}
         </nav>
 
-        <div className="flex flex-col gap-0.5 border-t border-line pt-3">
+        <div className="flex flex-col gap-0.5 pt-3">
           {entries('foot')}
-          <button onClick={logout} className={ROW + ' w-full'}>
-            <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
-            Se déconnecter
-          </button>
-          {version && <p className="px-3 pt-1 font-mono text-[11px] text-ink-faint" title="Version d’Intendia">Intendia v{version}</p>}
+          <div className="mt-2 flex items-center gap-2.5 border-t border-line px-2.5 pt-2.5">
+            <button onClick={logout} className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg text-sm text-ink-soft transition-colors hover:text-ink">
+              <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
+              <span className="truncate">Se déconnecter</span>
+            </button>
+            {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title="Version d’Intendia">v{version}</span>}
+          </div>
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto bg-sheet pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:m-2 md:h-[var(--card-h)] md:rounded-[14px] md:border md:border-line md:pb-0 md:shadow-[var(--shadow-card)]">
-        <div className="enter mx-auto max-w-[1440px]">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-sheet pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:h-[var(--card-h)] md:pb-0">
+        <div className="enter">
           <Outlet />
         </div>
       </main>
@@ -254,21 +229,21 @@ function FullLayout() {
       {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} />}
       <Approvals />
-      <MobileNav version={version} inst={inst} onSearch={openPalette} onChat={!onSession && inst ? openSide : undefined} isActive={(to) => alsoActive(to) || pathname === to || (to !== '/' && pathname.startsWith(`${to}/`))} />
+      <MobileNav version={version} inst={inst} onSearch={openPalette} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
   );
 }
 
-/** Small counter at the end of a sidebar entry; hidden for 0. */
-function Count({ n }: { n: number | undefined }) {
+/** Small counter at the end of a sidebar entry; hidden for 0; red for failures. */
+function Count({ n, bad, label }: { n?: number; bad?: boolean; label?: string }) {
   if (!n) return null;
-  return <span className="shrink-0 font-mono text-[11px] text-ink-faint" aria-label={`(${n})`}>{n}</span>;
+  return <span className={cx('shrink-0 text-xs', bad ? 'font-semibold text-bad' : 'text-ink-faint')} aria-label={`(${label ?? n})`} title={label}>{n}</span>;
 }
 
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
 const MOBILE_MAIN: string[] = ['home', 'workspaces', 'activity', 'agents'];
 
-function MobileNav({ isActive, onSearch, onChat, version, inst }: { isActive: (to: string) => boolean; onSearch: () => void; onChat?: () => void; version?: string; inst: string | null }) {
+function MobileNav({ current, onSearch, onChat, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
@@ -296,7 +271,7 @@ function MobileNav({ isActive, onSearch, onChat, version, inst }: { isActive: (t
             )}
             <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
             {rest.map((n) => (
-              <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} rounded-lg ${isActive(n.to) ? 'bg-raised text-accent' : 'text-ink-soft'}`}>
+              <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} rounded-lg ${current === n.key ? 'bg-raised font-medium text-ink' : 'text-ink-soft'}`}>
                 <n.icon className="size-5" strokeWidth={1.5} />
                 {n.label}
               </Link>
@@ -308,13 +283,13 @@ function MobileNav({ isActive, onSearch, onChat, version, inst }: { isActive: (t
       )}
       <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-line bg-sheet pb-[env(safe-area-inset-bottom)] md:hidden">
         {main.map((n) => (
-          <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} ${isActive(n.to) ? 'text-accent' : 'text-ink-faint'}`}>
+          <Link key={n.key} {...(navTarget(n, inst) as { to: string })} className={`${item} ${current === n.key ? 'font-medium text-ink' : 'text-ink-faint'}`}>
             <n.icon className="size-5" strokeWidth={1.5} />
             {n.label}
           </Link>
         ))}
         <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more}
-          className={`${item} ${more || rest.some((n) => isActive(n.to)) ? 'text-accent' : 'text-ink-faint'}`}>
+          className={`${item} ${more || rest.some((n) => current === n.key) ? 'font-medium text-ink' : 'text-ink-faint'}`}>
           <Ellipsis className="size-5" strokeWidth={1.5} />
           Plus
         </button>
@@ -328,38 +303,21 @@ function NewSessionButton({ className, onClick }: { className?: string; onClick?
   return (
     <Link
       to="/" search={{ nouvelle: 1 }} onClick={onClick}
-      className={cx('flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-strong', className)}
+      className={cx('flex h-[34px] items-center justify-center gap-2 rounded-lg border border-accent-strong bg-accent px-3 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong', className)}
     >
-      <Plus className="size-4" strokeWidth={1.75} />
+      <PenLine className="size-4" strokeWidth={1.5} />
       Nouvelle session
     </Link>
   );
 }
 
-function NewSessionLink({ slug }: { slug: string }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const create = async () => {
-    const { session } = await api.createSession(slug);
-    await qc.invalidateQueries({ queryKey: ['sessions'] });
-    void qc.invalidateQueries({ queryKey: ['workspaces'] });
-    await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: session.id } });
-  };
-  return (
-    <button onClick={() => void create()} className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-faint transition-colors hover:bg-raised hover:text-ink">
-      <Plus className="size-3.5" strokeWidth={1.5} />
-      Nouvelle session
-    </button>
-  );
-}
-
 export function PageHeader({ title, subtitle, action, eyebrow }: { title: string; subtitle?: React.ReactNode; action?: React.ReactNode; eyebrow?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-6 pt-8 md:px-8 md:pt-10">
-      <div>
-        {eyebrow && <p className="mb-1.5 text-[13px] text-ink-faint">{eyebrow}</p>}
-        <h1 className="text-[28px] font-semibold leading-tight">{title}</h1>
-        {subtitle && <p className="mt-2 max-w-2xl text-sm text-ink-soft">{subtitle}</p>}
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 pb-5 pt-6 md:px-8 md:pt-7">
+      <div className="min-w-0">
+        {eyebrow && <p className="mb-1 text-[13px] text-ink-faint">{eyebrow}</p>}
+        <h1 className="text-[22px] font-semibold leading-tight">{title}</h1>
+        {subtitle && <p className="mt-1 max-w-2xl text-sm text-ink-faint">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -368,5 +326,5 @@ export function PageHeader({ title, subtitle, action, eyebrow }: { title: string
 
 /** Reading width of the form pages (Configuration, Réglages) and of the home page. */
 export function Narrow({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={['mx-auto w-full max-w-[960px]', className].filter(Boolean).join(' ')}>{children}</div>;
+  return <div className={['w-full max-w-[1000px]', className].filter(Boolean).join(' ')}>{children}</div>;
 }

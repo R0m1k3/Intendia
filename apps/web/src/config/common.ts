@@ -12,7 +12,7 @@ export interface TabProps {
   onSaved: (restart: boolean) => void;
 }
 
-export const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+export const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 export const ICON = 'size-4';
 
 export const configKey = (inst: string, profile: string, what: string) => ['config', inst, profile, what] as const;

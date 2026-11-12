@@ -59,7 +59,7 @@ export function NewWorkspace({ onCancel }: { onCancel?: () => void }) {
         )}
         <Field label="Agent" hint="Profil Hermes qui sert ce workspace">
           <select value={profile} onChange={(e) => setProfile(e.target.value)}
-            className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-accent focus:outline-none">
+            className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-ink focus:outline-none">
             <option value="default">default</option>
             {current?.profiles.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>

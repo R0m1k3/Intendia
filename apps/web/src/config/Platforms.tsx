@@ -25,10 +25,10 @@ export function ConfigPlatforms({ inst, profile }: TabProps) {
   if (platforms.isError) return <ErrorText error={platforms.error} />;
   const list = platforms.data ?? [];
   return (
-    <Panel title="Plateformes de messagerie" bodyClassName="divide-y divide-line">
+    <Panel title="Plateformes de messagerie" bodyClassName="divide-y divide-line/70 border-t border-line/70">
       {list.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucune plateforme.</p>}
       {list.map((p) => (
-        <div key={p.id} className="space-y-1 px-5 py-3">
+        <div key={p.id} className="space-y-1 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <Mark state={platformMark(p)} />
             <span className="flex-1 text-sm font-medium">{p.name}</span>
@@ -44,7 +44,7 @@ export function ConfigPlatforms({ inst, profile }: TabProps) {
           )}
         </div>
       ))}
-      <p className="px-5 py-3 text-xs text-ink-faint">Lecture seule : les jetons se règlent dans l’onglet Variables, puis la passerelle doit redémarrer.</p>
+      <p className="px-4 py-3 text-xs text-ink-faint">Lecture seule : les jetons se règlent dans l’onglet Variables, puis la passerelle doit redémarrer.</p>
     </Panel>
   );
 }

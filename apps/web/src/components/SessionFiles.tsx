@@ -7,7 +7,7 @@ import { DropZone } from '../files/DropZone';
 import { FileRows } from '../files/FileRows';
 import { baseName } from '../files/paths';
 import { absoluteUrl } from '../files/Preview';
-import { copyText, cx } from './ui';
+import { chipClass, copyText, cx } from './ui';
 import { workspaceScope } from '../files/scope';
 
 /** Links made by share_file (or the preview) for a file of this session's folder. */
@@ -67,13 +67,13 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-2 border-b border-line px-3 py-2.5">
+      <header className="flex min-h-16 items-center gap-2 border-b border-line/70 px-4 py-3">
         <h2 className="sr-only">Fichiers de la session</h2>
-        <div role="tablist" aria-label="Fichiers de la session" className="flex flex-1 gap-0.5">
+        <div role="tablist" aria-label="Fichiers de la session" className="flex flex-1 gap-1.5">
           {([['files', 'Fichiers'], ['shared', 'Partagés']] as const).map(([k, label]) => (
             <button
               key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={cx('h-8 rounded-lg px-3 text-[13px] font-medium transition-colors', tab === k ? 'bg-raised text-ink' : 'text-ink-soft hover:text-ink')}
+              className={chipClass(tab === k)}
             >
               {label}
             </button>
@@ -91,7 +91,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
       {tab === 'shared' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {shared.length ? (
-            <ul className="divide-y divide-line">{shared.map((l) => <SharedRow key={l.token} l={l} />)}</ul>
+            <ul className="divide-y divide-line/70">{shared.map((l) => <SharedRow key={l.token} l={l} />)}</ul>
           ) : links.isSuccess ? (
             <p className="px-4 py-3 text-sm text-ink-soft">Aucun lien partagé pour un fichier de cette session</p>
           ) : null}

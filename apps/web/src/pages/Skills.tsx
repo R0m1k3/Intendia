@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ChevronDown, Download, FileText, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Trash2, X } from 'lucide-react';
+import { Download, Layers, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Trash2, Wrench, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type ActionStatus, type HubResult, type Scan, type Skill } from '../api';
-import { PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
+import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLabel, ListLink, ListPane, listItemClass, SplitView } from '../components/Panes';
+import { pickSelected } from '../components/selection';
+import { Button, Chips, cx, ErrorText, Mark, Tag } from '../components/ui';
 import {
   ACTION_POLL_MS, actionState, failureLine, loadActions, saveActions, STATE_TEXT, type ActionState, type PendingAction,
 } from '../skills/action';
@@ -20,9 +21,9 @@ const OPTIONAL: OptionalOp[] = [
   ['skills', 'toolsets', "Outils de l'agent"],
 ];
 const ICON = 'size-4';
-const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+const SELECT = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-sheet px-2 text-[13px] transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 
-export interface SkillsSearch { profile?: string }
+export interface SkillsSearch { profile?: string; skill?: string }
 
 // ---------------------------------------------------------------- actions
 
@@ -87,7 +88,7 @@ function ActionsStrip({ actions }: { actions: Actions }) {
   const done = Object.entries(actions.outcomes);
   if (!actions.pending.length && !done.length) return null;
   return (
-    <ul className="space-y-1.5 card px-5 py-3" aria-label="Actions" role="status">
+    <ul className="space-y-1.5 rounded-[10px] bg-paper px-4 py-3" aria-label="Actions" role="status">
       {actions.pending.map((p) => (
         <li key={p.action} className="flex items-center gap-2 font-mono text-[12px] text-ink-soft">
           <Mark state="readonly" className="animate-pulse" />{p.label} : en cours…
@@ -105,155 +106,6 @@ function ActionsStrip({ actions }: { actions: Actions }) {
     </ul>
   );
 }
-
-// ---------------------------------------------------------------- installed
-
-function SkillRow({ skill, inst, profile, can, actions }: {
-  skill: Skill; inst: string; profile: string; can: (op: string) => boolean; actions: Actions;
-}) {
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const content = useQuery({
-    queryKey: ['skill-content', inst, profile, skill.name], queryFn: () => api.skillContent(inst, profile, skill.name), enabled: open && can('content'),
-  });
-  const toggle = useMutation({
-    mutationFn: () => api.setSkillEnabled(inst, profile, skill.name, !skill.enabled),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills', inst, profile] }),
-  });
-  const uninstall = useMutation({
-    mutationFn: () => api.uninstallSkill(inst, profile, skill.name),
-    onSuccess: ({ action }) => actions.track(action, `Désinstallation de ${skill.name}`, skill.name),
-  });
-  const busy = actions.busy(skill.name);
-  const canToggle = can('toggle') && skill.enabled !== null;
-
-  return (
-    <li className="px-5 py-3.5">
-      <div className="flex items-start gap-3">
-        <Mark state={skill.enabled === false ? null : 'full'} className="mt-1.5" />
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => can('content') && setOpen((o) => !o)} aria-expanded={open}
-          title={can('content') ? 'Lire le SKILL.md' : undefined}>
-          <span className={cx('font-mono text-[13px]', skill.enabled === false ? 'text-ink-soft' : 'text-ink')}>{skill.name}</span>
-          <span className="ml-2 text-[12px] text-ink-faint">{provenanceLabel(skill.provenance)}{skill.usage ? ` · ${skill.usage} usage${skill.usage > 1 ? 's' : ''}` : ''}</span>
-          {skill.description && <span className="mt-0.5 block text-sm text-ink-soft">{skill.description}</span>}
-        </button>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {skill.provenance === 'hub' && can('uninstall') && can('actionStatus') && (
-            <Button variant="ghost" className="px-2.5" disabled={busy || uninstall.isPending} aria-label={`Désinstaller ${skill.name}`} title="Désinstaller"
-              onClick={async () => { if (await ask({ title: `Désinstaller ${skill.name} de cet agent ?`, confirmLabel: 'Désinstaller', danger: true })) uninstall.mutate(); }}>
-              <Trash2 className={ICON} strokeWidth={1.5} />
-            </Button>
-          )}
-          {canToggle && (
-            <Button className="w-28" disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>
-              {skill.enabled ? 'Désactiver' : 'Activer'}
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="mt-2 space-y-2 pl-5 empty:hidden">
-        <ErrorText error={toggle.error ?? uninstall.error} />
-        {open && (
-          content.data ? (
-            <div>
-              <pre className="max-h-96 overflow-auto rounded-lg border border-line bg-raised/40 p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-ink-soft">{content.data.content}</pre>
-              {content.data.truncated && <p className="mt-1 text-xs text-ink-faint">Contenu tronqué à 200 000 caractères.</p>}
-            </div>
-          ) : content.error ? <ErrorText error={content.error} /> : <p className="text-sm text-ink-faint">Chargement…</p>
-        )}
-      </div>
-    </li>
-  );
-}
-
-function Toolsets({ inst, profile }: { inst: string; profile: string }) {
-  const [open, setOpen] = useState(false);
-  const q = useQuery({ queryKey: ['toolsets', inst, profile], queryFn: () => api.toolsets(inst, profile).then((r) => r.toolsets), enabled: open });
-  const on = q.data?.filter((t) => t.enabled).length;
-  return (
-    <Panel bodyClassName="p-0" title={
-      <button type="button" className="flex items-center gap-2 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <ChevronDown className={cx(ICON, 'transition-transform', !open && '-rotate-90')} strokeWidth={1.5} />
-        Outils de l’agent
-      </button>
-    } action={q.data ? <span className="font-mono text-[11px] text-ink-faint">{on}/{q.data.length} actifs</span> : undefined}>
-      {open && (
-        q.data ? (
-          <ul className="divide-y divide-line">
-            {q.data.map((t) => (
-              <li key={t.name} className="flex items-start gap-3 px-5 py-3">
-                <Mark state={t.enabled ? 'full' : null} className="mt-1.5" />
-                <div className="min-w-0">
-                  <p className="text-sm"><span className={t.enabled ? 'text-ink' : 'text-ink-soft'}>{t.label}</span>
-                    <span className="ml-2 font-mono text-[11px] text-ink-faint">{t.name}{t.configured === false ? ' · non configuré' : ''}</span></p>
-                  {t.tools.length > 0 && <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{t.tools.join(' · ')}</p>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : <div className="px-5 py-4 empty:hidden">{q.error ? <ErrorText error={q.error} /> : <p className="text-sm text-ink-faint">Chargement…</p>}</div>
-      )}
-    </Panel>
-  );
-}
-
-function Installed({ inst, profile, can, actions, onHub }: {
-  inst: string; profile: string; can: (op: string) => boolean; actions: Actions; onHub: () => void;
-}) {
-  const skills = useQuery({ queryKey: ['skills', inst, profile], queryFn: () => api.skills(inst, profile).then((r) => r.skills) });
-  const [f, setF] = useState<SkillFilter>({ text: '', category: '', state: 'all' });
-  const update = useMutation({
-    mutationFn: () => api.updateSkills(inst, profile),
-    onSuccess: ({ action }) => actions.track(action, 'Mise à jour des skills du hub', '*'),
-  });
-  const all = skills.data ?? [];
-  const shown = useMemo(() => groupByCategory(filterSkills(all, f)), [all, f]);
-  const count = shown.reduce((n, g) => n + g.skills.length, 0);
-  const canUpdate = can('update') && can('actionStatus') && all.some((s) => s.provenance === 'hub');
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-56"><Input placeholder="Filtrer" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} aria-label="Filtrer les skills" /></div>
-        <select className={SELECT} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} aria-label="Catégorie">
-          <option value="">Toutes les catégories</option>
-          {categories(all).map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className={SELECT} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as StateFilter })} aria-label="État">
-          <option value="all">Actifs et inactifs</option>
-          <option value="on">Actifs</option>
-          <option value="off">Inactifs</option>
-        </select>
-        {canUpdate && (
-          <Button className="ml-auto" disabled={actions.busy('*') || update.isPending} onClick={() => update.mutate()}>
-            <RefreshCw className={ICON} strokeWidth={1.5} />Mettre à jour les skills du hub
-          </Button>
-        )}
-      </div>
-      <div className="empty:hidden"><ErrorText error={update.error ?? skills.error} /></div>
-      <Panel bodyClassName="p-0" title="Skills de l’agent" action={<span className="font-mono text-[11px] text-ink-faint">{count === all.length ? all.length : `${count}/${all.length}`}</span>}>
-        {skills.isSuccess && all.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <p className="text-sm text-ink-soft">Aucun skill pour cet agent</p>
-            {can('hubOfficial') && <Button variant="primary" className="mt-4" onClick={onHub}><Search className={ICON} strokeWidth={1.5} />Chercher dans le hub</Button>}
-          </div>
-        ) : skills.isSuccess ? (
-          count ? shown.map((g) => (
-            <section key={g.category || '-'}>
-              <h3 className="border-b border-line bg-raised/30 px-5 py-1.5 font-mono text-[11px] text-ink-faint">{g.category || 'sans catégorie'}</h3>
-              <ul className="divide-y divide-line">
-                {g.skills.map((s) => <SkillRow key={s.name} skill={s} inst={inst} profile={profile} can={can} actions={actions} />)}
-              </ul>
-            </section>
-          )) : <p className="px-5 py-10 text-center text-sm text-ink-faint">Aucun skill ne correspond au filtre</p>
-        ) : <p className="px-5 py-10 text-center text-sm text-ink-faint">Chargement…</p>}
-      </Panel>
-      {can('toolsets') && <Toolsets inst={inst} profile={profile} />}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- hub
 
 const VERDICT: Record<string, { text: string; icon: typeof ShieldCheck; cls: string }> = {
   allow: { text: 'Scan sans alerte', icon: ShieldCheck, cls: 'text-ok' },
@@ -280,7 +132,7 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
   const counts = s ? Object.entries(s.counts).filter(([, n]) => n > 0) : [];
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-raised/30 p-4 text-sm">
+    <div className="card p-4 text-sm">
       {scan.isPending && !s ? <p className="text-ink-faint">Scan de sécurité en cours…</p> : scan.error && !s ? <ErrorText error={scan.error} /> : s && v && (
         <div className="space-y-3">
           <p className={cx('flex items-center gap-2 font-medium', v.cls)}><v.icon className={ICON} strokeWidth={1.5} />{v.text}</p>
@@ -297,7 +149,7 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
           )}
           {s.policy === 'ask' && (
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
               J’ai lu les constats
             </label>
           )}
@@ -309,7 +161,7 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
                 {install.isPending ? 'Analyse et lancement…' : s.policy === 'ask' ? 'Installer quand même' : 'Installer'}
               </Button>
             )}
-            <Button variant="ghost" onClick={onClose}>Fermer</Button>
+            <Button onClick={onClose}>Fermer</Button>
           </div>
         </div>
       )}
@@ -317,68 +169,134 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
   );
 }
 
-function HubRow({ result, inst, profile, canInstall, actions, open, onOpen }: {
-  result: HubResult; inst: string; profile: string; canInstall: boolean; actions: Actions; open: boolean; onOpen: (o: boolean) => void;
+
+// ---------------------------------------------------------------- detail views
+
+const SEARCH_BOX = 'flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-ink-faint focus-within:border-ink';
+const SEARCH_INPUT = 'w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint';
+
+function SkillDetail({ skill, inst, profile, can, actions }: {
+  skill: Skill; inst: string; profile: string; can: (op: string) => boolean; actions: Actions;
 }) {
-  const busy = actions.busy(result.identifier);
+  const qc = useQueryClient();
+  const content = useQuery({
+    queryKey: ['skill-content', inst, profile, skill.name], queryFn: () => api.skillContent(inst, profile, skill.name), enabled: can('content'),
+  });
+  const toggle = useMutation({
+    mutationFn: () => api.setSkillEnabled(inst, profile, skill.name, !skill.enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills', inst, profile] }),
+  });
+  const uninstall = useMutation({
+    mutationFn: () => api.uninstallSkill(inst, profile, skill.name),
+    onSuccess: ({ action }) => actions.track(action, `Désinstallation de ${skill.name}`, skill.name),
+  });
+  const busy = actions.busy(skill.name);
+  const canToggle = can('toggle') && skill.enabled !== null;
+  const facts = [provenanceLabel(skill.provenance), skill.category, skill.usage ? `${skill.usage} usage${skill.usage > 1 ? 's' : ''}` : null, skill.enabled === false ? 'inactif' : null]
+    .filter(Boolean).join(' · ');
+
   return (
-    <li className="px-5 py-3.5">
-      <div className="flex items-start gap-3">
-        <Mark state={result.installed ? 'full' : null} className="mt-1.5" />
-        <div className="min-w-0 flex-1">
-          <p><span className="font-mono text-[13px]">{result.name}</span>
-            <span className="ml-2 text-[12px] text-ink-faint">{result.source ?? ''}{result.trust ? ` · ${result.trust}` : ''}{result.installed ? ' · installé' : ''}</span></p>
-          {result.description && <p className="mt-0.5 text-sm text-ink-soft">{result.description}</p>}
-          <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{result.identifier}</p>
-        </div>
-        {canInstall && !result.installed && (
-          <Button className="shrink-0" disabled={busy} onClick={() => onOpen(!open)}>
-            {open ? <X className={ICON} strokeWidth={1.5} /> : <Download className={ICON} strokeWidth={1.5} />}{open ? 'Annuler' : 'Installer'}
-          </Button>
+    <article aria-label={skill.name} data-skill={skill.name}>
+      <DetailHeader
+        mono title={skill.name} sub={facts}
+        back={{ to: '/i/$inst/skills', params: { inst }, search: { profile: profile === 'default' ? undefined : profile } }}
+        actions={(
+          <>
+            {canToggle && (
+              skill.enabled
+                ? <Button variant="ghost" className="!text-bad hover:!bg-bad-soft" disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Désactiver</Button>
+                : <Button disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Activer</Button>
+            )}
+            {skill.provenance === 'hub' && can('uninstall') && can('actionStatus') && (
+              <Button variant="danger" disabled={busy || uninstall.isPending} aria-label={`Désinstaller ${skill.name}`}
+                onClick={async () => { if (await ask({ title: `Désinstaller ${skill.name} de cet agent ?`, confirmLabel: 'Désinstaller', danger: true })) uninstall.mutate(); }}>
+                <Trash2 className={ICON} strokeWidth={1.5} />Désinstaller
+              </Button>
+            )}
+          </>
         )}
-      </div>
-      {open && <div className="pl-5"><InstallPanel result={result} inst={inst} profile={profile} actions={actions} onClose={() => onOpen(false)} /></div>}
-    </li>
+      />
+      <DetailBody className="gap-4">
+        <div className="empty:hidden"><ErrorText error={toggle.error ?? uninstall.error} /></div>
+        {skill.description && <p className="text-[15px]">{skill.description}</p>}
+        {can('content') ? (
+          <section className="card overflow-hidden" aria-label="SKILL.md">
+            <div className="border-b border-line/70 px-4 py-2.5 font-mono text-xs text-ink-faint">skills/{skill.name}/SKILL.md</div>
+            {content.data ? (
+              <>
+                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-[12.5px] leading-[1.7]">{content.data.content}</pre>
+                {content.data.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Contenu tronqué à 200 000 caractères.</p>}
+              </>
+            ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <p className="p-4 text-sm text-ink-faint">Chargement…</p>}
+          </section>
+        ) : <p className="text-sm text-ink-faint">Lecture du SKILL.md indisponible sur cette instance</p>}
+      </DetailBody>
+    </article>
   );
 }
 
-function Hub({ inst, profile, can, actions }: { inst: string; profile: string; can: (op: string) => boolean; actions: Actions }) {
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
-  const official = useQuery({ queryKey: ['hub', inst, profile, 'official'], queryFn: () => api.hubOfficial(inst, profile), enabled: !q && can('hubOfficial') });
-  const search = useQuery({ queryKey: ['hub', inst, profile, 'search', q], queryFn: () => api.hubSearch(inst, profile, q), enabled: Boolean(q), staleTime: 60_000 });
-  const data = q ? search : official;
-  const canInstall = can('install') && can('hubScan') && can('actionStatus');
-  const results = data.data?.results ?? [];
-
+function Toolsets({ inst, profile, onClose }: { inst: string; profile: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: ['toolsets', inst, profile], queryFn: () => api.toolsets(inst, profile).then((r) => r.toolsets) });
+  const on = q.data?.filter((t) => t.enabled).length;
   return (
-    <div className="space-y-6">
-      {can('hubSearch') && (
-        <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setQ(text.trim()); }}>
-          <div className="w-full sm:w-80"><Input placeholder="Chercher un skill (pdf, notion, git…)" value={text} onChange={(e) => setText(e.target.value)} aria-label="Recherche dans le hub" maxLength={200} /></div>
-          <Button type="submit" disabled={!text.trim() || search.isFetching}><Search className={ICON} strokeWidth={1.5} />Chercher</Button>
-          {q && <Button type="button" variant="ghost" onClick={() => { setQ(''); setText(''); }}>Catalogue officiel</Button>}
-        </form>
-      )}
-      <ErrorText error={data.error} />
-      {(q || can('hubOfficial')) && (
-        <Panel bodyClassName="p-0" title={q ? <>Résultats pour <span className="font-mono">{q}</span></> : 'Catalogue officiel'}
-          action={data.data ? <span className="font-mono text-[11px] text-ink-faint">{results.length}</span> : undefined}>
-          {data.data?.timedOut.length ? <p className="border-b border-line px-5 py-2 text-[13px] text-warn">Sources sans réponse : {data.data.timedOut.join(', ')}</p> : null}
-          {data.isFetching && !data.data ? (
-            <p className="px-5 py-10 text-center text-sm text-ink-faint">{q ? 'Recherche dans le hub… (environ 10 secondes)' : 'Chargement…'}</p>
-          ) : results.length ? (
-            <ul className="divide-y divide-line">
-              {results.map((r) => (
-                <HubRow key={r.identifier} result={r} inst={inst} profile={profile} canInstall={canInstall} actions={actions}
-                  open={open === r.identifier} onOpen={(o) => setOpen(o ? r.identifier : null)} />
-              ))}
-            </ul>
-          ) : data.isSuccess ? <p className="px-5 py-10 text-center text-sm text-ink-faint">Aucun résultat</p> : null}
-        </Panel>
-      )}
-    </div>
+    <section aria-label="Outils de l’agent">
+      <DetailHeader
+        title="Outils de l’agent"
+        meta={q.data ? `${on}/${q.data.length} actifs · agent ${profile}` : `agent ${profile}`}
+        actions={<Button variant="ghost" className="w-[34px] px-0" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>}
+      />
+      <DetailBody>
+        {q.data ? (
+          <ul className="card overflow-hidden">
+            {q.data.map((t, i) => (
+              <li key={t.name} className={cx('flex items-start gap-3.5 px-4 py-3', i > 0 && 'border-t border-line/70')}>
+                <Mark state={t.enabled ? 'full' : null} className="mt-1.5" />
+                <div className="min-w-0">
+                  <p className="text-sm"><span className={t.enabled ? 'font-medium text-ink' : 'text-ink-soft'}>{t.label}</span>
+                    <span className="ml-2 font-mono text-[11px] text-ink-faint">{t.name}{t.configured === false ? ' · non configuré' : ''}</span></p>
+                  {t.tools.length > 0 && <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{t.tools.join(' · ')}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : q.error ? <ErrorText error={q.error} /> : <p className="text-sm text-ink-faint">Chargement…</p>}
+      </DetailBody>
+    </section>
+  );
+}
+
+function HubDetail({ result, inst, profile, canInstall, actions, onClose }: {
+  result: HubResult; inst: string; profile: string; canInstall: boolean; actions: Actions; onClose: () => void;
+}) {
+  const [installing, setInstalling] = useState(false);
+  const busy = actions.busy(result.identifier);
+  return (
+    <article aria-label={result.name} data-hub={result.identifier}>
+      <DetailHeader
+        mono title={result.name} meta={result.identifier}
+        actions={(
+          <>
+            {canInstall && !result.installed && !installing && (
+              <Button variant="primary" disabled={busy} onClick={() => setInstalling(true)}>
+                <Download className={ICON} strokeWidth={1.5} />Installer
+              </Button>
+            )}
+            {result.installed && <Tag className="text-ok">installé</Tag>}
+            <Button variant="ghost" className="w-[34px] px-0 md:hidden" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>
+          </>
+        )}
+      />
+      <DetailBody>
+        {result.description && <p className="text-[15px]">{result.description}</p>}
+        <Facts items={[
+          { label: 'Source', value: result.source ?? '-' },
+          { label: 'Confiance', value: result.trust ?? '-' },
+          ...(result.repo ? [{ label: 'Dépôt', value: result.repo, mono: true }] : []),
+          ...(result.tags.length ? [{ label: 'Étiquettes', value: result.tags.join(', ') }] : []),
+        ]} />
+        {installing && <InstallPanel result={result} inst={inst} profile={profile} actions={actions} onClose={() => setInstalling(false)} />}
+      </DetailBody>
+    </article>
   );
 }
 
@@ -388,55 +306,189 @@ export function SkillsPage() {
   const { inst } = useParams({ strict: false }) as { inst: string };
   const search = useSearch({ strict: false }) as SkillsSearch;
   const profile = search.profile ?? 'default';
-  return <SkillsView key={`${inst}:${profile}`} inst={inst} profile={profile} />;
+  return <SkillsView key={`${inst}:${profile}`} inst={inst} profile={profile} picked={search.skill} />;
 }
 
-function SkillsView({ inst, profile }: { inst: string; profile: string }) {
+function SkillsView({ inst, profile, picked }: { inst: string; profile: string; picked: string | undefined }) {
   const navigate = useNavigate();
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const profiles = useQuery({ queryKey: ['profiles', inst], queryFn: () => api.profiles(inst).then((r) => r.profiles) });
   const a = useModuleAvailability(inst, 'skills', REQUIRED, OPTIONAL);
+  const can = (op: string) => a.has('skills', op);
   const actions = useSkillActions(inst, profile);
   const [tab, setTab] = useState<'installed' | 'hub'>('installed');
-  const list = instances.data?.instances ?? [];
-  const current = list.find((i) => i.id === inst);
-  const can = (op: string) => a.has('skills', op);
+  const [tools, setTools] = useState(false);
   const names = profiles.data ?? ['default'];
   const options = names.includes(profile) ? names : [...names, profile];
+  const profileSearch = profile === 'default' ? undefined : profile;
+
+  // installed
+  const skills = useQuery({ queryKey: ['skills', inst, profile], queryFn: () => api.skills(inst, profile).then((r) => r.skills), enabled: a.available });
+  const [f, setF] = useState<SkillFilter>({ text: '', category: '', state: 'all' });
+  const update = useMutation({
+    mutationFn: () => api.updateSkills(inst, profile),
+    onSuccess: ({ action }) => actions.track(action, 'Mise à jour des skills du hub', '*'),
+  });
+  const all = skills.data ?? [];
+  const shown = useMemo(() => groupByCategory(filterSkills(all, f)), [all, f]);
+  const count = shown.reduce((n, g) => n + g.skills.length, 0);
+  const canUpdate = can('update') && can('actionStatus') && all.some((s) => s.provenance === 'hub');
+  const selected = pickSelected(all, picked, (s) => s.name);
+
+  // hub
+  const [hubText, setHubText] = useState('');
+  const [q, setQ] = useState('');
+  const [hubSel, setHubSel] = useState<string | null>(null);
+  const official = useQuery({ queryKey: ['hub', inst, profile, 'official'], queryFn: () => api.hubOfficial(inst, profile), enabled: tab === 'hub' && !q && can('hubOfficial') });
+  const hubSearch = useQuery({ queryKey: ['hub', inst, profile, 'search', q], queryFn: () => api.hubSearch(inst, profile, q), enabled: tab === 'hub' && Boolean(q), staleTime: 60_000 });
+  const hub = q ? hubSearch : official;
+  const results = hub.data?.results ?? [];
+  const canInstall = can('install') && can('hubScan') && can('actionStatus');
+  const hubPicked = results.find((r) => r.identifier === hubSel) ?? null;
+
+  const note = 'px-3.5 py-6 text-sm text-ink-faint';
+  const tabs = [
+    { key: 'installed' as const, label: 'Installés', count: skills.data ? all.length : undefined },
+    ...(can('hubOfficial') || can('hubSearch') ? [{ key: 'hub' as const, label: 'Hub' }] : []),
+  ];
+
+  const list = (
+    <ListPane
+      title="Skills"
+      action={options.length > 1 ? (
+        <select className={cx(SELECT, 'h-[34px] flex-none font-mono')} value={profile} aria-label="Agent"
+          onChange={(e) => void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value } })}>
+          {options.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      ) : undefined}
+      head={a.available ? (
+        <>
+          {tabs.length > 1 && <Chips role="tab" label="Skills" items={tabs} value={tab} onChange={(k) => { setTab(k); setTools(false); }} />}
+          {tab === 'installed' ? (
+            <>
+              <label className={SEARCH_BOX}>
+                <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+                <input type="search" placeholder="Filtrer" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} aria-label="Filtrer les skills" className={SEARCH_INPUT} />
+              </label>
+              <div className="flex gap-1.5">
+                <select className={SELECT} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} aria-label="Catégorie">
+                  <option value="">Toutes les catégories</option>
+                  {categories(all).map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select className={SELECT} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as StateFilter })} aria-label="État">
+                  <option value="all">Actifs et inactifs</option>
+                  <option value="on">Actifs</option>
+                  <option value="off">Inactifs</option>
+                </select>
+              </div>
+            </>
+          ) : can('hubSearch') ? (
+            <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); setQ(hubText.trim()); setHubSel(null); }}>
+              <label className={cx(SEARCH_BOX, 'min-w-0 flex-1')}>
+                <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+                <input type="search" placeholder="pdf, notion, git…" value={hubText} onChange={(e) => setHubText(e.target.value)} aria-label="Recherche dans le hub" maxLength={200} className={SEARCH_INPUT} />
+              </label>
+              <Button type="submit" disabled={!hubText.trim() || hubSearch.isFetching}>Chercher</Button>
+            </form>
+          ) : null}
+        </>
+      ) : undefined}
+      footer={a.available && tab === 'installed' && (can('toolsets') || canUpdate) ? (
+        <div className="sticky bottom-0 flex flex-col gap-0.5 border-t border-line/70 bg-sheet px-2 py-2">
+          {can('toolsets') && (
+            <button type="button" onClick={() => setTools(true)} aria-pressed={tools}
+              className={cx('flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink', tools && 'bg-raised text-ink')}>
+              <Wrench className={ICON} strokeWidth={1.5} />Outils de l’agent
+            </button>
+          )}
+          {canUpdate && (
+            <button type="button" disabled={actions.busy('*') || update.isPending} onClick={() => update.mutate()}
+              className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50">
+              <RefreshCw className={ICON} strokeWidth={1.5} />Mettre à jour les skills du hub
+            </button>
+          )}
+        </div>
+      ) : undefined}
+    >
+      {tab === 'installed' ? (
+        <>
+          <div className="empty:hidden"><ErrorText error={update.error ?? skills.error} /></div>
+          {skills.isPending && a.available && <p className={note}>Chargement…</p>}
+          {skills.isSuccess && all.length === 0 && <p className={note}>Aucun skill pour cet agent</p>}
+          {skills.isSuccess && all.length > 0 && count === 0 && <p className={note}>Aucun skill ne correspond au filtre</p>}
+          {shown.map((g) => (
+            <section key={g.category || '-'} aria-label={g.category || 'sans catégorie'}>
+              <ListLabel>{g.category || 'sans catégorie'}</ListLabel>
+              <ul className="flex flex-col gap-0.5">
+                {g.skills.map((s) => {
+                  const on = !tools && selected?.name === s.name;
+                  return (
+                    <li key={s.name} data-skill-item={s.name}>
+                      <ListLink link={{ to: '/i/$inst/skills', params: { inst }, search: { profile: profileSearch, skill: s.name } }} selected={on} onClick={() => setTools(false)}>
+                        <ListItemBody
+                          mono
+                          title={<span className={cx(s.enabled === false && 'text-ink-faint')}>{s.name}</span>}
+                          meta={<Tag className={cx(on && 'bg-sheet', s.enabled === false && 'text-ink-faint')}>{s.enabled === false ? 'inactif' : provenanceLabel(s.provenance)}</Tag>}
+                          sub={s.description}
+                        />
+                      </ListLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </>
+      ) : (
+        <>
+          {q && <ListLabel>Résultats pour <span className="font-mono">{q}</span> · <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => { setQ(''); setHubText(''); setHubSel(null); }}>catalogue officiel</button></ListLabel>}
+          {!q && can('hubOfficial') && <ListLabel>Catalogue officiel</ListLabel>}
+          <ErrorText error={hub.error} />
+          {hub.data?.timedOut.length ? <p className="px-3.5 py-2 text-[13px] text-warn">Sources sans réponse : {hub.data.timedOut.join(', ')}</p> : null}
+          {hub.isFetching && !hub.data && <p className={note}>{q ? 'Recherche dans le hub… (environ 10 secondes)' : 'Chargement…'}</p>}
+          {hub.isSuccess && results.length === 0 && <p className={note}>Aucun résultat</p>}
+          <ul className="flex flex-col gap-0.5" aria-label="Hub">
+            {results.map((r) => {
+              const on = hubPicked?.identifier === r.identifier;
+              return (
+                <li key={r.identifier} data-hub-item={r.identifier}>
+                  <button type="button" className={listItemClass(on)} aria-current={on ? 'true' : undefined} onClick={() => setHubSel(r.identifier)}>
+                    <ListItemBody
+                      mono title={r.name}
+                      meta={<Tag className={cx(on && 'bg-sheet', r.installed && 'text-ok')}>{r.installed ? 'installé' : r.trust ?? r.source ?? 'hub'}</Tag>}
+                      sub={r.description}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </ListPane>
+  );
+
+  const detail = tools ? (
+    <Toolsets inst={inst} profile={profile} onClose={() => setTools(false)} />
+  ) : tab === 'hub' ? (
+    hubPicked
+      ? <HubDetail key={hubPicked.identifier} result={hubPicked} inst={inst} profile={profile} canInstall={canInstall} actions={actions} onClose={() => setHubSel(null)} />
+      : <Empty icon={<Download strokeWidth={1.5} />} title="Le hub des skills">Choisissez un skill dans la liste pour lire sa fiche et l’installer ; un scan de sécurité passe avant chaque installation.</Empty>
+  ) : selected ? (
+    <SkillDetail key={selected.name} skill={selected} inst={inst} profile={profile} can={can} actions={actions} />
+  ) : skills.isSuccess && all.length === 0 ? (
+    <Empty icon={<Layers strokeWidth={1.5} />} title="Aucun skill pour cet agent"
+      actions={can('hubOfficial') ? <Button variant="primary" onClick={() => setTab('hub')}><Search className={ICON} strokeWidth={1.5} />Chercher dans le hub</Button> : undefined}>
+      Un skill apprend une méthode à l’agent : installez-en depuis le hub.
+    </Empty>
+  ) : null;
 
   return (
-    <div>
-      <PageHeader
-        title="Skills"
-        subtitle={<>Les skills de l’agent <span className="font-mono text-ink">{profile}</span> sur {current ? <span className="text-ink">{current.label}</span> : 'l’instance'}, et le hub pour en installer.</>}
-        action={options.length > 1 ? (
-          <select className={SELECT} value={profile} aria-label="Agent"
-            onChange={(e) => void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value } })}>
-            {options.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        ) : undefined}
-      />
-      <div className="space-y-6 px-5 pb-10 md:px-8">
-        <div className="empty:hidden">
-          <ModuleNotice instanceId={inst} module="skills" title="La console des skills" required={REQUIRED} optional={OPTIONAL} explainMissing />
-        </div>
-        {a.available && (
-          <>
-            <ActionsStrip actions={actions} />
-            <div className="flex gap-1 border-b border-line" role="tablist">
-              {([['installed', 'Installés', FileText], ['hub', 'Hub', Search]] as const).map(([id, label, Icon]) => (
-                <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                  className={cx('-mb-px flex h-10 items-center gap-2 border-b-2 px-2.5 text-sm font-medium transition-colors', tab === id ? 'border-ink text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
-                  <Icon className={ICON} strokeWidth={1.5} />{label}
-                </button>
-              ))}
-            </div>
-            {tab === 'installed'
-              ? <Installed inst={inst} profile={profile} can={can} actions={actions} onHub={() => setTab('hub')} />
-              : <Hub inst={inst} profile={profile} can={can} actions={actions} />}
-          </>
-        )}
+    <SplitView label="Skills" list={list} selected={Boolean(picked) || tools || (tab === 'hub' && hubPicked !== null)}>
+      <div className="px-4 pt-5 empty:hidden md:px-6">
+        <ModuleNotice instanceId={inst} module="skills" title="La console des skills" required={REQUIRED} optional={OPTIONAL} explainMissing />
       </div>
-    </div>
+      <div className="px-4 pt-4 empty:hidden md:px-6"><ActionsStrip actions={actions} /></div>
+      {a.available && detail}
+    </SplitView>
   );
 }

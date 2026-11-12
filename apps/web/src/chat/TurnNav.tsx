@@ -7,12 +7,12 @@ import type { OutlineItem } from './turns';
 export const OUTLINE_MIN = 4;
 
 /** « Plan » of the session header: the user's questions, a click goes to one. */
-export function TurnPlan({ items, onJump }: { items: OutlineItem[]; onJump: (key: string) => void }) {
+export function TurnPlan({ items, onJump, triggerClass }: { items: OutlineItem[]; onJump: (key: string) => void; triggerClass?: string }) {
   return (
     <Popover
       title="Plan de la conversation" placement="below" align="end" width={380}
       trigger={<ListTree className="size-4" strokeWidth={1.5} />}
-      triggerClass="flex size-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+      triggerClass={triggerClass ?? 'flex size-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink'}
     >
       {(close) => (
         <ol className="max-h-[60vh]">

@@ -26,8 +26,8 @@ export function DropZone({ onFiles, label, children, className }: {
     >
       {children}
       {over && (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-paper/85">
-          <p className="flex items-center gap-2 text-sm font-medium text-accent">
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-ink bg-sheet/85">
+          <p className="flex items-center gap-2 text-sm font-medium text-ink">
             <Upload className="size-4" strokeWidth={1.5} />{label}
           </p>
         </div>

@@ -1,14 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
 import { api, ApiError, type Cron, type CronInput } from '../api';
 import {
   DAYS, defaultForm, describeForm, FORM_KINDS, fromSchedule, toSchedule, validate, type ScheduleForm,
 } from '../crons/schedule';
 import { Button, cx, ErrorText, Field, Input } from './ui';
 
-const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-accent focus:outline-none';
+const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 
 function ScheduleFields({ form, onChange }: { form: ScheduleForm; onChange: (f: ScheduleForm) => void }) {
   const time = 'time' in form && (
@@ -67,9 +66,11 @@ function Row({ children }: { children: ReactNode }) {
   return <div className="space-y-2">{children}</div>;
 }
 
-/** Create or edit a cron: side panel on desktop, full screen on mobile. */
-export function CronEditor({ instanceId, cron, offset, onClose }: {
+/** Create or edit a cron, in the detail pane of the Crons page. */
+export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
   instanceId: string; cron: Cron | null; offset: string | null; onClose: () => void;
+  /** The saved cron, when Hermes returns it (a new cron becomes the selection). */
+  onSaved?: (c: Cron | null) => void;
 }) {
   const qc = useQueryClient();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
@@ -100,44 +101,45 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
       const changed = !(initialForm.kind === 'cron' && !initialForm.expr) && schedule !== toSchedule(initialForm);
       return api.updateCron(instanceId, cron.id, cron.profile, changed ? { ...input, schedule } : input);
     },
-    onSuccess: async () => {
+    onSuccess: async (r) => {
       await qc.invalidateQueries({ queryKey: ['crons', instanceId] });
       await qc.invalidateQueries({ queryKey: ['crons-overview'] });
+      onSaved?.(r.cron ?? null);
       onClose();
     },
   });
   const err = save.error instanceof ApiError ? save.error.data as { field?: string; detail?: string } | undefined : undefined;
   const fieldError = err?.field === 'schedule' ? err.detail : null;
 
-  // portal: the page wrapper is animated (transform), which would make `fixed` relative to it
-  return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => { e.preventDefault(); if (!scheduleError) save.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[520px] md:border-l md:border-line"
-        aria-label={cron ? 'Modifier le cron' : 'Nouveau cron'}
-      >
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
-          <h2 className="text-[15px] font-medium">{cron ? 'Modifier le cron' : 'Nouveau cron'}</h2>
-          <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label="Fermer">
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); if (!scheduleError) save.mutate(); }}
+      className="flex flex-col"
+      aria-label={cron ? 'Modifier le cron' : 'Nouveau cron'}
+    >
+        <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-line/70 px-4 py-3 md:px-6">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold">{cron ? 'Modifier le cron' : 'Nouveau cron'}</h2>
+            {cron && <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{cron.name}</p>}
+          </div>
+          <Button type="button" variant="ghost" className="w-[34px] px-0" onClick={onClose} aria-label="Fermer">
             <X className="size-4" strokeWidth={1.5} />
           </Button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        <div className="max-w-[720px] space-y-5 px-4 py-6 md:px-6">
           <Field label="Nom">
             <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} placeholder="Rapport du lundi" autoFocus />
           </Field>
 
           <Field label="Prompt" hint="Ce que l’agent doit faire à chaque exécution">
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} required maxLength={20_000} rows={6}
-              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-accent focus:outline-none"
+              className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
               placeholder="Fais le point des ventes de la semaine et range le tableau dans le workspace." />
           </Field>
 
           <Row>
-            <span className="block text-sm font-medium">Planning</span>
+            <span className="block text-[13px] font-medium">Planning</span>
             <div className="flex flex-wrap items-center gap-2">
               <select value={form.kind} onChange={(e) => setForm(defaultForm(e.target.value as ScheduleForm['kind']))} className={SELECT} aria-label="Type de planning">
                 {FORM_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
@@ -187,7 +189,7 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
 
           {!cron && (
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+              <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
               Créer en pause
             </label>
           )}
@@ -195,14 +197,12 @@ export function CronEditor({ instanceId, cron, offset, onClose }: {
           {save.error && !fieldError ? <ErrorText error={save.error} /> : null}
         </div>
 
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <footer className="flex max-w-[720px] justify-end gap-2 px-4 pb-8 md:px-6">
           <Button type="button" onClick={onClose}>Annuler</Button>
           <Button type="submit" variant="primary" disabled={save.isPending || Boolean(scheduleError) || !name.trim() || !prompt.trim()}>
             {save.isPending ? 'Enregistrement…' : cron ? 'Enregistrer' : 'Créer le cron'}
           </Button>
         </footer>
-      </form>
-    </div>,
-    document.body,
+    </form>
   );
 }

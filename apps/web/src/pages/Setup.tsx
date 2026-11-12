@@ -27,7 +27,7 @@ function PasswordStep() {
 
   return (
     <Shell>
-      <h1 className="text-[28px] font-medium leading-tight">Premier lancement</h1>
+      <h1 className="text-[26px] font-semibold leading-tight">Premier lancement</h1>
       <p className="mt-2 text-sm text-ink-soft">
         Le code d’installation est affiché dans les logs du conteneur (<code className="font-mono text-xs">docker logs intendia</code>).
       </p>
@@ -55,9 +55,9 @@ export function SetupPage() {
   if (!setup.data) return null;
   if (setup.data.needsPassword) return <PasswordStep />;
   return (
-    <div className="enter mx-auto max-w-3xl p-5 md:p-10">
+    <div className="min-h-full bg-sheet"><div className="enter mx-auto max-w-3xl p-5 md:p-10">
       <div className="mb-10"><Wordmark size="lg" /></div>
-      <h1 className="text-[28px] font-medium leading-tight">Ajouter une instance Hermes</h1>
+      <h1 className="text-[26px] font-semibold leading-tight">Ajouter une instance Hermes</h1>
       <p className="mt-2 max-w-xl text-sm text-ink-soft">
         Intendia teste chaque module contre l’instance avant d’enregistrer. Les clés sont chiffrées dans la base et ne
         sont jamais renvoyées au navigateur.
@@ -66,6 +66,6 @@ export function SetupPage() {
         <InstanceForm onSaved={async () => { await qc.invalidateQueries(); await navigate({ to: '/' }); }} />
       </div>
       <Button variant="ghost" className="mt-4" onClick={() => navigate({ to: '/' })}>Plus tard</Button>
-    </div>
+    </div></div>
   );
 }

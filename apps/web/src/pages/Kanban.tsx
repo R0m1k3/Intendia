@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type KanbanTask, type KanbanWorkflow } from '../api';
 import { PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, cx, ErrorText, Field, Input, Mark } from '../components/ui';
+import { Button, chipClass, cx, ErrorText, Field, Input, Mark, Tag } from '../components/ui';
 import { canMove, moveLocally, moveTargets, statusLabel } from '../kanban/moves';
 import { Sheet, SELECT, TEXTAREA } from '../kanban/Sheet';
 import { TaskPanel } from '../kanban/TaskPanel';
@@ -43,15 +43,15 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
   return (
     <li draggable={draggable}
       onDragStart={(e) => { e.dataTransfer.setData('text/x-kanban-task', task.id); e.dataTransfer.setData(`text/x-from-${task.status}`, ''); e.dataTransfer.effectAllowed = 'move'; }}
-      className={cx('group rounded-xl border border-line bg-sheet px-3 py-2.5 text-sm shadow-[0_1px_0_var(--color-line)]', draggable && 'cursor-grab active:cursor-grabbing')}>
+      className={cx('group rounded-xl border border-line bg-sheet px-3.5 py-3 transition-colors hover:border-ink-faint/50', draggable && 'cursor-grab active:cursor-grabbing')}>
       <button type="button" onClick={onOpen} className="block w-full text-left">
         <span className="flex items-start gap-2">
           {running && <Mark state="readonly" className="mt-1 animate-pulse" />}
-          <span className="min-w-0 flex-1 font-medium leading-snug group-hover:text-accent">{task.title}</span>
+          <span className="min-w-0 flex-1 font-medium leading-snug">{task.title}</span>
         </span>
-        <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-          <span className={task.assignee ? 'text-ink-soft' : undefined}>{task.assignee ?? 'sans agent'}</span>
-          {task.priority ? <span className="font-mono">p{task.priority}</span> : null}
+        <span className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-faint">
+          <Tag className={task.assignee ? undefined : 'text-ink-faint'}>{task.assignee ?? 'sans agent'}</Tag>
+          {task.priority ? <Tag>p{task.priority}</Tag> : null}
           {task.commentCount > 0 && <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" strokeWidth={1.5} />{task.commentCount}</span>}
           {task.parents + task.children > 0 && <span className="inline-flex items-center gap-1"><GitBranch className="size-3" strokeWidth={1.5} />{task.parents + task.children}</span>}
           {task.progress && <span className="font-mono">{task.progress.done}/{task.progress.total}</span>}
@@ -61,7 +61,7 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
       </button>
       {targets.length > 0 && (
         <select value="" onChange={(e) => e.target.value && onMove(e.target.value)} aria-label={`Déplacer « ${task.title} » vers…`}
-          className="mt-2 h-7 w-full rounded-md border border-line bg-paper px-1.5 text-xs text-ink-soft focus:border-accent focus:outline-none md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100">
+          className="mt-2 h-7 w-full rounded-md border border-line bg-paper px-1.5 text-xs text-ink-soft focus:border-ink focus:outline-none md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100">
           <option value="">Déplacer vers…</option>
           {targets.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
@@ -70,9 +70,9 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
   );
 }
 
-function Column({ col, workflow, canWrite, dragging, onOpen, onMove }: {
+function Column({ col, workflow, canWrite, dragging, onOpen, onMove, onAdd }: {
   col: KanbanColumn; workflow: KanbanWorkflow; canWrite: boolean; dragging: string | null;
-  onOpen: (id: string) => void; onMove: (id: string, from: string, to: string) => void;
+  onOpen: (id: string) => void; onMove: (id: string, from: string, to: string) => void; onAdd?: () => void;
 }) {
   const [over, setOver] = useState(false);
   const accepts = dragging !== null && col.dragTarget && canMove(workflow.manual, dragging, col.key);
@@ -85,19 +85,24 @@ function Column({ col, workflow, canWrite, dragging, onOpen, onMove }: {
         const id = e.dataTransfer.getData('text/x-kanban-task');
         if (id && accepts && dragging) onMove(id, dragging, col.key);
       }}
-      className={cx('flex w-full shrink-0 flex-col rounded-2xl border bg-raised/50 md:w-[272px]', over ? 'border-accent' : accepts ? 'border-accent/40 border-dashed' : 'border-transparent',
+      className={cx('flex w-full shrink-0 flex-col gap-2 rounded-xl border p-1 md:w-[264px]', over ? 'border-ink bg-paper' : accepts ? 'border-ink/40 border-dashed' : 'border-transparent',
         dragging !== null && !accepts && 'opacity-60')}>
-      <header className="flex items-center justify-between px-3 pt-3 pb-2">
-        <h2 className="text-[13px] font-medium">{statusLabel(col.key, col.label)}</h2>
-        <span className="font-mono text-[11px] text-ink-faint">{col.tasks.length}</span>
+      <header className="flex items-center gap-2 px-1 pt-0.5">
+        <h2 className="text-[15px] font-semibold">{statusLabel(col.key, col.label)}</h2>
+        <span className="font-mono text-xs text-ink-faint">{col.tasks.length}</span>
       </header>
-      <ul className="min-h-16 space-y-2 px-2 pb-3" data-status={col.key}>
+      <ul className="min-h-12 space-y-2" data-status={col.key}>
         {col.tasks.map((t) => (
           <Card key={t.id} task={t} draggable={canWrite && moveTargets(workflow.manual, t.status).length > 0}
             targets={canWrite ? moveTargets(workflow.manual, t.status) : []}
             onOpen={() => onOpen(t.id)} onMove={(to) => onMove(t.id, t.status, to)} />
         ))}
       </ul>
+      {onAdd && (
+        <button type="button" onClick={onAdd} className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-sm text-ink-faint transition-colors hover:bg-raised hover:text-ink">
+          <Plus className="size-3.5" strokeWidth={1.5} />Ajouter
+        </button>
+      )}
     </section>
   );
 }
@@ -247,11 +252,11 @@ function Orchestration({ inst, assignees, onClose }: { inst: string; assignees: 
           <Field label="Agent orchestrateur" hint="Celui qui découpe les tâches en triage">{sel(f.orchestrator, (v) => setF({ ...f, orchestrator: v }), 'Agent orchestrateur')}</Field>
           <Field label="Agent par défaut" hint="Donné aux tâches prêtes qui n’en ont pas">{sel(f.assignee, (v) => setF({ ...f, assignee: v }), 'Agent par défaut')}</Field>
           <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={f.decompose} onChange={(e) => setF({ ...f, decompose: e.target.checked })} />
+            <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.decompose} onChange={(e) => setF({ ...f, decompose: e.target.checked })} />
             <span>Découper automatiquement<span className="block text-xs text-ink-faint">Hermes découpe les tâches en triage et lance les morceaux</span></span>
           </label>
           <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={f.promote} onChange={(e) => setF({ ...f, promote: e.target.checked })} />
+            <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.promote} onChange={(e) => setF({ ...f, promote: e.target.checked })} />
             <span>Lancer les sous-tâches dès que possible<span className="block text-xs text-ink-faint">Une sous-tâche passe en « prête » quand ses dépendances sont finies</span></span>
           </label>
           <p className="text-xs text-ink-faint">
@@ -329,7 +334,7 @@ export function KanbanPage() {
         ) : undefined}
       />
       <div className="space-y-5 pb-10">
-        <div className="space-y-4 px-5 md:px-8">
+        <div className="space-y-4 px-4 md:px-8">
           <div className="empty:hidden">
             <ModuleNotice instanceId={inst} module="kanban" title="Le kanban" required={REQUIRED} optional={OPTIONAL} />
           </div>
@@ -347,21 +352,22 @@ export function KanbanPage() {
         {a.available && wf && view.data && (
           <>
             {!wide ? (
-              <div className="space-y-3 px-5">
+              <div className="space-y-3 px-4">
                 <div className="-mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Colonnes">
                   {columns.map((c) => (
                     <button key={c.key} type="button" role="tab" aria-selected={c.key === shownCol?.key} onClick={() => setMobileCol(c.key)}
-                      className={cx('h-8 shrink-0 rounded-lg border px-3 text-[13px]', c.key === shownCol?.key ? 'border-accent text-ink' : 'border-line text-ink-soft')}>
-                      {statusLabel(c.key, c.label)} <span className="font-mono text-[11px] text-ink-faint">{c.tasks.length}</span>
+                      className={cx(chipClass(c.key === shownCol?.key), 'shrink-0 gap-1.5')}>
+                      {statusLabel(c.key, c.label)} <span className="font-mono text-[11px] opacity-70">{c.tasks.length}</span>
                     </button>
                   ))}
                 </div>
                 {shownCol && <Column col={shownCol} workflow={wf} canWrite={can('updateTask')} dragging={null} onOpen={(id) => go({ task: id })} onMove={(id, _f, to) => move.mutate({ id, to })} />}
               </div>
             ) : (
-              <div className="flex gap-3 overflow-x-auto px-8 pb-4" aria-label="Colonnes">
-                {columns.map((c) => (
+              <div className="flex items-start gap-3 overflow-x-auto px-7 pb-4" aria-label="Colonnes">
+                {columns.map((c, i) => (
                   <Column key={c.key} col={c} workflow={wf} canWrite={can('updateTask')} dragging={dragging}
+                    onAdd={i === 0 && can('createTask') ? () => setDialog('task') : undefined}
                     onOpen={(id) => go({ task: id })} onMove={(id, _from, to) => move.mutate({ id, to })} />
                 ))}
               </div>

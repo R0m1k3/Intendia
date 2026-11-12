@@ -74,7 +74,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
   return (
     <div className="space-y-4">
       {conflict && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
           <span>{CHANGED_TEXT}</span>
           <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />Recharger en gardant mes changements</Button>
         </div>
@@ -102,13 +102,13 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
                   className={cx('flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-left text-sm transition-colors',
                     !needle && c === cat ? 'bg-raised text-ink' : 'text-ink-soft hover:bg-raised hover:text-ink')}>
                   <span className="truncate font-mono text-[12.5px]">{c}</span>
-                  {n > 0 && <span className="text-xs text-accent">{n}</span>}
+                  {n > 0 && <span className="text-xs text-accent-ink">{n}</span>}
                 </button>
               );
             })}
           </div>
         </nav>
-        <Panel title={needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line">
+        <Panel title={needle ? `Résultats pour « ${q.trim()} »` : <span className="font-mono">{cat}</span>} bodyClassName="divide-y divide-line/70 border-t border-line/70">
           {paths.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucun réglage.</p>}
           {paths.map((path) => (
             <FieldRow key={path} path={path} field={data.schema[path]!} original={data.values[path]}
@@ -124,7 +124,7 @@ export function ConfigForm({ inst, profile, can, onSaved }: TabProps) {
               <h3 className="text-sm font-medium">{changes.length} changement{changes.length > 1 ? 's' : ''} à enregistrer</h3>
               <ul className="max-h-60 space-y-1 overflow-auto font-mono text-[12.5px]">
                 {changes.map((c) => (
-                  <li key={c.path}><span className="text-ink">{c.path}</span> : <span className="text-ink-faint line-through">{display(c.before)}</span> → <span className="text-accent">{display(c.after)}</span></li>
+                  <li key={c.path}><span className="text-ink">{c.path}</span> : <span className="text-ink-faint line-through">{display(c.before)}</span> → <span className="text-accent-ink">{display(c.after)}</span></li>
                 ))}
               </ul>
               <ErrorText error={save.error && errorCode(save.error) !== 'config_changed' ? save.error : null} />
@@ -163,14 +163,14 @@ function FieldRow({ path, field, original, value, text, error, disabled, onText,
   const id = `f-${path}`;
   const description = field.description && !field.description.includes('→') ? field.description : null;
   return (
-    <div className="grid gap-2 px-5 py-3 md:grid-cols-[1fr_minmax(0,320px)] md:items-center">
+    <div className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_minmax(0,320px)] md:items-center">
       <label htmlFor={id} className="min-w-0">
-        <span className={cx('block break-all font-mono text-[12.5px]', changed ? 'text-accent' : 'text-ink')}>{path}</span>
+        <span className={cx('block break-all font-mono text-[12.5px]', changed ? 'text-accent-ink' : 'text-ink')}>{path}</span>
         {description && <span className="mt-0.5 block text-xs text-ink-faint">{description}</span>}
       </label>
       <div className="min-w-0">
         {kind === 'boolean' && (
-          <input id={id} type="checkbox" className="size-4 accent-[var(--color-accent)]" checked={value === true} disabled={disabled}
+          <input id={id} type="checkbox" className="size-4 accent-[var(--color-ink)]" checked={value === true} disabled={disabled}
             onChange={(e) => onValue(path, e.target.checked)} />
         )}
         {kind === 'select' && (
@@ -187,7 +187,7 @@ function FieldRow({ path, field, original, value, text, error, disabled, onText,
         )}
         {kind === 'lines' && (
           <textarea id={id} rows={Math.min(6, Math.max(2, (text ?? toText(kind, value)).split('\n').length))} disabled={disabled}
-            className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-accent focus:outline-none"
+            className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-ink focus:outline-none"
             value={text ?? toText(kind, value)} placeholder="une valeur par ligne" onChange={(e) => onText(path, kind, e.target.value, original)} />
         )}
         {kind === 'readonly' && (

@@ -10,18 +10,19 @@ export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
 }
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'dark' | 'secondary' | 'ghost' | 'danger';
 export function Button({ variant = 'secondary', className, ...p }: ComponentProps<'button'> & { variant?: Variant }) {
   // a px-* given by the caller replaces the default padding (both would be in the class list otherwise)
-  const pad = /(^|\s)px-/.test(className ?? '') ? '' : 'px-4';
+  const pad = /(^|\s)px-/.test(className ?? '') ? '' : 'px-3.5';
   return (
     <button
       {...p}
       className={cx(
-        'inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-medium [&>svg]:shrink-0 transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex h-[34px] items-center justify-center gap-2 whitespace-nowrap rounded-lg text-[13.5px] font-medium [&>svg]:shrink-0 transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
         pad,
-        variant === 'primary' && 'bg-accent text-on-accent hover:bg-accent-strong',
-        variant === 'secondary' && 'border border-line bg-sheet text-ink hover:bg-raised',
+        variant === 'primary' && 'border border-accent-strong bg-accent text-on-accent hover:bg-accent-strong',
+        variant === 'dark' && 'border border-ink bg-ink text-sheet hover:opacity-90',
+        variant === 'secondary' && 'border border-line bg-sheet text-ink hover:bg-paper',
         variant === 'ghost' && 'text-ink-soft hover:bg-raised hover:text-ink',
         variant === 'danger' && 'border border-line bg-sheet text-bad hover:border-bad/50 hover:bg-bad-soft',
         className,
@@ -35,7 +36,7 @@ export function Input({ className, ...p }: ComponentProps<'input'>) {
     <input
       {...p}
       className={cx(
-        'h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-accent focus:outline-none',
+        'h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none',
         className,
       )}
     />
@@ -45,7 +46,7 @@ export function Input({ className, ...p }: ComponentProps<'input'>) {
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
     </label>
@@ -58,12 +59,12 @@ export function Panel({ title, action, children, className, bodyClassName }: {
   return (
     <section className={cx('card', className)}>
       {(title || action) && (
-        <header className="flex min-h-14 items-center justify-between gap-4 border-b border-line px-5 py-3">
+        <header className="flex min-h-12 items-center justify-between gap-4 px-4 py-3">
           <h2 className="text-[15px] font-semibold">{title}</h2>
           {action}
         </header>
       )}
-      <div className={bodyClassName ?? 'p-5'}>{children}</div>
+      <div className={bodyClassName ?? (title || action ? 'border-t border-line/70 p-4' : 'p-4')}>{children}</div>
     </section>
   );
 }
@@ -121,12 +122,51 @@ export function ErrorText({ error }: { error: unknown }) {
   return <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{(error as Error).message}</p>;
 }
 
+/** Black rounded square with an orange I, then the name. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
     <span className="flex items-center gap-2.5">
-      <img src="/favicon.svg" alt="" className={size === 'lg' ? 'size-8' : 'size-7'} />
+      <span aria-hidden className={cx('grid shrink-0 place-items-center rounded-[7px] bg-[#0e0e10] font-semibold text-accent dark:ring-1 dark:ring-line', size === 'lg' ? 'size-8 text-[15px]' : 'size-6 text-[13px]')}>I</span>
       <span className={cx('font-semibold', size === 'lg' ? 'text-lg' : 'text-base')}>Intendia</span>
     </span>
+  );
+}
+
+/** Small mono label on a grey ground (`cron · H1`, `default`, `ok`). */
+export function Tag({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
+  return (
+    <span title={title} className={cx('inline-block whitespace-nowrap rounded px-1.5 py-px font-mono text-[11px] leading-[18px] text-ink-soft bg-raised', className)}>
+      {children}
+    </span>
+  );
+}
+
+/** Rounded filter chips; the active one is filled with ink. `role="radiogroup"`, each chip a radio. */
+export function Chips<K extends string>({ items, value, onChange, label, className, role = 'radio' }: {
+  items: readonly { key: K; label: ReactNode; count?: number }[]; value: K; onChange: (k: K) => void; label: string;
+  className?: string; role?: 'radio' | 'tab';
+}) {
+  return (
+    <div role={role === 'tab' ? 'tablist' : 'radiogroup'} aria-label={label} className={cx('flex flex-wrap gap-1.5', className)}>
+      {items.map((it) => (
+        <button
+          key={it.key} type="button" role={role}
+          {...(role === 'tab' ? { 'aria-selected': value === it.key } : { 'aria-checked': value === it.key })}
+          onClick={() => onChange(it.key)}
+          className={chipClass(value === it.key)}
+        >
+          {it.label}
+          {it.count !== undefined && <span className="ml-1.5 font-mono text-[11px] opacity-70">{it.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function chipClass(on: boolean): string {
+  return cx(
+    'inline-flex h-7 items-center whitespace-nowrap rounded-full border px-2.5 text-[12.5px] transition-colors',
+    on ? 'border-ink bg-ink text-sheet' : 'border-line bg-sheet text-ink-soft hover:bg-paper hover:text-ink',
   );
 }
 
@@ -160,10 +200,10 @@ export async function copyText(text: string, label: string): Promise<void> {
 /** A settings section: title and explanation on the left third (≥ 768 px), content on the right; rule above but the first. */
 export function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
   return (
-    <section className="grid gap-4 border-t border-line py-8 first:border-t-0 first:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-8">
+    <section className="grid gap-4 border-t border-line py-7 first:border-t-0 first:pt-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-8">
       <div>
         <h2 className="text-[15px] font-semibold">{title}</h2>
-        {description && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{description}</p>}
+        {description && <p className="mt-1 text-[13px] leading-relaxed text-ink-faint">{description}</p>}
       </div>
       <div className="min-w-0">{children}</div>
     </section>

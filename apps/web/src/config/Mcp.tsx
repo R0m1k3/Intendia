@@ -19,7 +19,7 @@ export function ConfigMcp({ inst, profile, can, onSaved }: TabProps) {
     <div className="space-y-4">
       {left && <p className="text-sm text-warn">La variable {left} garde encore le jeton : supprimez-la dans l’onglet Variables si elle ne sert plus.</p>}
       {can('addMcp') && <AddMcp inst={inst} profile={profile} existing={list.map((s) => s.name)} onSaved={() => onSaved(true)} />}
-      <Panel title="Serveurs" bodyClassName="divide-y divide-line">
+      <Panel title="Serveurs" bodyClassName="divide-y divide-line/70 border-t border-line/70">
         {list.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucun serveur MCP.</p>}
         {list.map((s) => <McpRow key={s.name} s={s} inst={inst} profile={profile} can={can} onSaved={() => onSaved(true)} onTokenLeft={setLeft} />)}
       </Panel>
@@ -42,7 +42,7 @@ function McpRow({ s, inst, profile, can, onSaved, onTokenLeft }: {
   });
   const managed = !!s.plugin;
   return (
-    <div className="space-y-2 px-5 py-3">
+    <div className="space-y-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <Mark state={s.enabled ? 'full' : 'unavailable'} />
         <div className="min-w-0 flex-1">
@@ -111,7 +111,7 @@ function AddMcp({ inst, profile, existing, onSaved }: { inst: string; profile: s
       ) : (
         <div className="space-y-2">
           <Input className="font-mono text-[12.5px]" placeholder="npx" value={command} onChange={(e) => setCommand(e.target.value)} aria-label="Commande" />
-          <textarea rows={3} className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-accent focus:outline-none"
+          <textarea rows={3} className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-[12.5px] focus:border-ink focus:outline-none"
             placeholder="un argument par ligne" value={args} onChange={(e) => setArgs(e.target.value)} aria-label="Arguments" />
         </div>
       )}
