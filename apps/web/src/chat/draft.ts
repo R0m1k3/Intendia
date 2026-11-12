@@ -43,6 +43,21 @@ export function saveDraft(key: string, text: string, now = Date.now()): void {
   }
 }
 
+// Texts still waiting for their 400 ms save. The side chat's iframe can be removed at any moment (closed, expanded,
+// another session) without its React tree being unmounted, so the page around it asks for an immediate save first.
+const pending = new Set<() => void>();
+
+/** Registers a save-now function; returns its removal. */
+export function onFlush(save: () => void): () => void {
+  pending.add(save);
+  return () => { pending.delete(save); };
+}
+
+/** Saves every draft being written right now. */
+export function flushDrafts(): void {
+  for (const save of pending) save();
+}
+
 export function clearDraft(key: string): void {
   try { localStorage.removeItem(key); } catch { /* storage off */ }
 }
