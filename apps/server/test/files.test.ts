@@ -244,6 +244,10 @@ describe('files', () => {
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'inbox' })).status).toBe(400);
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'sessions' })).status).toBe(400);
     expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/doc.pdf', to: 'AGENTS.md' })).status).toBe(400);
+    // a name Hermes hides (not listed, so not seen as taken) is refused before anything is written
+    writeFileSync(join(t.ws, 'files', '.env'), 'GARDER=1');
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/autre', to: 'files/.env' })).status).toBe(400);
+    expect(readFileSync(join(t.ws, 'files', '.env'), 'utf8')).toBe('GARDER=1');
   });
 
   it('move a folder: a link inside → 403, too many files → 413, nothing written', async () => {
@@ -267,6 +271,15 @@ describe('files', () => {
     expect(res.json.error).toContain('a changé pendant le déplacement');
     expect(existsSync(join(t.ws, 'inbox', 'sub'))).toBe(false);
     expect(readFileSync(join(t.ws, 'files', 'sub', 'a.txt'), 'utf8')).toBe('changé');
+  });
+
+  it('move a folder: dropping a failed copy only removes what the move wrote', async () => {
+    let t: Awaited<ReturnType<typeof setup>>;
+    // a folder of the same name shows up during the copy, with a file of its own: kept
+    t = await setup({ fileOpts: { afterCopy: async () => { writeFileSync(join(t.ws, 'inbox', 'sub', 'autre.txt'), 'x'); writeFileSync(join(t.ws, 'files', 'sub', 'a.txt'), 'changé'); } } });
+    expect((await t.request('PATCH', `${t.F}/move`, { from: 'files/sub', to: 'inbox/sub' })).status).toBe(409);
+    expect(readFileSync(join(t.ws, 'inbox', 'sub', 'autre.txt'), 'utf8')).toBe('x');
+    expect(existsSync(join(t.ws, 'inbox', 'sub', 'a.txt'))).toBe(false);
   });
 
   it('move a folder: files Hermes hides or added after the check stay, their folder in leftover', async () => {

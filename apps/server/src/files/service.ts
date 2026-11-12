@@ -282,6 +282,8 @@ export class FileService {
     if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', `${to} est un nom réservé à la racine du workspace`);
     if (to === from || to.startsWith(`${from}/`)) throw new WorkspaceFsError('invalid', 'Un dossier ne peut pas aller dans lui-même');
     checkName(nameOf(to));
+    // Hermes does not list these names: the check below would not see an existing one
+    if (hiddenByHermes(this.vol(c, to))) throw new WorkspaceFsError('invalid', `${nameOf(to)} : Hermes cache ce nom, Intendia n'y écrit pas`);
     const src = await this.mustEntry(c, from);
     if (src.isLink) throw new WorkspaceFsError('outside', `${from} : c'est un lien symbolique ; Intendia ne le modifie pas`);
     const parent = await c.fs.entry(this.vol(c, parentOf(to)));
@@ -321,19 +323,33 @@ export class FileService {
     });
   }
 
+  /**
+   * Removes a copy made by moveDir: only the files it wrote, then its folders deepest first, never recursively (a
+   * folder that appeared meanwhile under the same name, or got other files, keeps them).
+   */
+  private async dropCopy(c: WsCtx, to: string, dirs: string[], written: string[]): Promise<void> {
+    for (const f of written) await c.fs.remove(this.vol(c, under(to, f)), false).catch(() => undefined);
+    for (const d of [...dirs].sort((a, b) => b.split('/').length - a.split('/').length)) {
+      await c.fs.remove(this.vol(c, under(to, d)), false).catch(() => undefined);
+    }
+    await c.fs.remove(this.vol(c, to), false).catch(() => undefined);
+  }
+
   private async moveDir(c: WsCtx, from: string, to: string): Promise<{ path: string; leftover?: string[] }> {
     const before = await this.walkDir(c, from);
     // copy: folders first (empty ones too), then the files one at a time; a failure drops the partial copy
+    const written: string[] = [];
     try {
       await c.fs.mkdir(this.vol(c, to));
       for (const d of before.dirs) await c.fs.mkdir(this.vol(c, under(to, d)));
       for (const f of before.files) {
         const { body } = await c.fs.read(this.vol(c, under(from, f.rel)));
         await c.fs.create(this.vol(c, under(to, f.rel)), idleGuard(body), { overwrite: false });
+        written.push(f.rel);
       }
       await this.opts.afterCopy?.();
     } catch (err) {
-      await c.fs.remove(this.vol(c, to), true).catch(() => undefined);
+      await this.dropCopy(c, to, before.dirs, written);
       throw err;
     }
     // the source must be as it was walked, otherwise nothing is moved
@@ -345,7 +361,7 @@ export class FileService {
       after = null;
     }
     if (!after || !sameTree(before, after)) {
-      await c.fs.remove(this.vol(c, to), true).catch(() => undefined);
+      await this.dropCopy(c, to, before.dirs, written);
       throw new WorkspaceFsError('exists', `${from} a changé pendant le déplacement : rien n'a été déplacé, réessayer`);
     }
     this.links.rewritePaths(c.inst.id, this.vol(c, from), this.vol(c, to));
