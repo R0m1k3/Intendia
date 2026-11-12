@@ -330,6 +330,13 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - Every action carries the job's `profile` (`?profile=`); Hermes answers 404 when the job is not in it.
 - The browser builds the schedule (`apps/web/src/crons/schedule.ts`, plain French forms → `every Nm`, cron
   expressions or an ISO timestamp) and follows "Run now" by polling every 2 s until `last_run_at` changes.
+- Advanced options (`crons/Advanced.tsx`, `crons/advanced.ts`): repeat, time zone, allowed toolsets, catch-up and
+  grace, context of other crons of the same profile (checked by the server). A new cron sends the non-empty ones; an
+  edit sends only the changed ones (an untouched `repeat` never restarts Hermes' count), an emptied one as `null`
+  (`repeat`: `"forever"`); `enabled_toolsets` is never `[]`.
+- Templates (`crons/Blueprints.tsx`, `crons/blueprint-form.ts`): Hermes' blueprints of a profile, a form generated
+  from their fields, `instantiate` with the explicit profile; with a workspace the server then frames the cron
+  (`PUT` prompt + workdir) and says `attached: false` when that second call fails (the cron stays, unframed).
 
 ## Skills
 
@@ -341,6 +348,9 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   `provenance`; `/v1/toolsets` needs a per-profile key). The API server stays as a fallback; a list without
   `enabled` hides the toggle.
 - Enabling checks the name first: Hermes accepts any name and adds it to its disabled list.
+- Writing (`skills/SkillEditor.tsx`): « Nouveau skill » (Intendia writes the front matter with `yaml` `stringify`),
+  edit of the whole SKILL.md and archive for `provenance: agent` only, lock for any skill. The SKILL.md is shown
+  masked (`Masker.text`); saving puts the secrets back with `restoreText` on the content read again.
 - Install, uninstall and update are background actions in Hermes (`{ name }` at once, then
   `/api/actions/{name}/status`). Intendia scans before installing and only starts on `policy: allow`, or `ask` with
   `acknowledged: true` (Hermes' `--yes` would accept `ask` silently); anything else is a 409 `scan_refused` with the

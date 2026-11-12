@@ -5,6 +5,8 @@ import { api, ApiError, type Cron, type CronInput } from '../api';
 import {
   DAYS, defaultForm, describeForm, FORM_KINDS, fromSchedule, toSchedule, validate, type ScheduleForm,
 } from '../crons/schedule';
+import { Advanced } from '../crons/Advanced';
+import { advancedError, advancedInput, advancedOf, type AdvancedForm } from '../crons/advanced';
 import { Button, cx, ErrorText, Field, Input } from './ui';
 
 const SELECT = 'h-9 rounded-lg border border-line bg-sheet px-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
@@ -84,10 +86,15 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
   const [skills, setSkills] = useState((cron?.skills ?? []).join(', '));
   const [model, setModel] = useState(cron?.model ?? '');
   const [paused, setPaused] = useState(false);
+  const [initialAdvanced] = useState(() => advancedOf(cron));
+  const [advanced, setAdvanced] = useState<AdvancedForm>(initialAdvanced);
 
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === instanceId);
   const ws = mine.find((w) => w.slug === workspace);
   const scheduleError = validate(form);
+  const optionsError = advancedError(advanced);
+  // a new cron belongs to its workspace's agent (default without workspace)
+  const profile = cron?.profile ?? ws?.profile ?? 'default';
 
   const save = useMutation({
     mutationFn: () => {
@@ -95,6 +102,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
       const input: CronInput = {
         name: name.trim(), prompt, deliver: deliver.trim() || 'local', model: model.trim() || null, workspace: workspace || null,
         skills: skills.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean),
+        ...advancedInput(advanced, cron ? initialAdvanced : null),
       };
       if (!cron) return api.createCron(instanceId, { ...input, schedule, paused });
       // unchanged schedule: not sent, so Hermes keeps its next run
@@ -113,7 +121,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (!scheduleError) save.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); if (!scheduleError && !optionsError) save.mutate(); }}
       className="flex flex-col"
       aria-label={cron ? 'Modifier le cron' : 'Nouveau cron'}
     >
@@ -187,6 +195,8 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
             <Input value={model} onChange={(e) => setModel(e.target.value)} className="font-mono" placeholder={ws?.model ?? 'modèle par défaut'} spellCheck={false} />
           </Field>
 
+          <Advanced key={profile} instanceId={instanceId} profile={profile} cron={cron} form={advanced} onChange={setAdvanced} error={optionsError} />
+
           {!cron && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={paused} onChange={(e) => setPaused(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
@@ -199,7 +209,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
 
         <footer className="flex max-w-[720px] justify-end gap-2 px-4 pb-8 md:px-6">
           <Button type="button" onClick={onClose}>Annuler</Button>
-          <Button type="submit" variant="primary" disabled={save.isPending || Boolean(scheduleError) || !name.trim() || !prompt.trim()}>
+          <Button type="submit" variant="primary" disabled={save.isPending || Boolean(scheduleError) || Boolean(optionsError) || !name.trim() || !prompt.trim()}>
             {save.isPending ? 'Enregistrement…' : cron ? 'Enregistrer' : 'Créer le cron'}
           </Button>
         </footer>

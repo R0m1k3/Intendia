@@ -61,6 +61,8 @@ export interface PublicBlueprintField {
   default: string | null;
   options: { value: string; label: string }[];
   optional: boolean;
+  /** false: the options are only suggestions */
+  strict: boolean;
   help: string | null;
 }
 
@@ -366,7 +368,8 @@ export class CronService {
         default: f.default === undefined || f.default === null ? null : String(f.default),
         options: (f.options ?? []).map((o) => (typeof o === 'string' ? { value: o, label: o } : { value: String(o.value), label: o.label ?? String(o.value) })),
         optional: f.optional ?? false,
-        help: f.help ?? null,
+        strict: f.strict ?? true,
+        help: f.help || null,
       })),
     }));
   }

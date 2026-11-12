@@ -75,6 +75,8 @@ export const BlueprintFieldSchema = z.looseObject({
   default: z.unknown().optional(),
   options: z.array(z.union([z.string(), z.looseObject({ value: z.unknown(), label: z.string().nullish() })])).nullish(),
   optional: z.boolean().nullish(),
+  /** false: the options are suggestions, any value is accepted (Hermes' `deliver` slot) */
+  strict: z.boolean().nullish(),
   help: z.string().nullish(),
 });
 export const BlueprintSchema = z.looseObject({

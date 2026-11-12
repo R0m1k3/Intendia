@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Download, Layers, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Trash2, Wrench, X } from 'lucide-react';
+import { Archive, Download, Layers, Lock, LockOpen, Plus, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Trash2, Wrench, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type ActionStatus, type HubResult, type Scan, type Skill } from '../api';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
@@ -12,14 +12,18 @@ import {
 } from '../skills/action';
 import { categories, filterSkills, groupByCategory, provenanceLabel, type SkillFilter, type StateFilter } from '../skills/filter';
 import { ask } from '../components/Dialog';
+import { NewSkill, SkillContent } from '../skills/SkillEditor';
 
 const REQUIRED: OpRef[] = [['skills', 'list']];
 const OPTIONAL: OptionalOp[] = [
   ['skills', 'toggle', 'Activer ou désactiver'], ['skills', 'content', 'Lire le SKILL.md'], ['skills', 'hubOfficial', 'Catalogue officiel'],
   ['skills', 'hubSearch', 'Rechercher dans le hub'], ['skills', 'hubScan', 'Installer'], ['skills', 'install', 'Installer'],
   ['skills', 'uninstall', 'Désinstaller'], ['skills', 'update', 'Mettre à jour'], ['skills', 'actionStatus', 'Installer, désinstaller, mettre à jour'],
-  ['skills', 'toolsets', "Outils de l'agent"],
+  ['skills', 'toolsets', "Outils de l'agent"], ['skills', 'create', 'Nouveau skill'], ['skills', 'putContent', 'Modifier un skill'],
+  ['skills', 'lock', 'Verrouiller'], ['skills', 'archive', 'Archiver'],
 ];
+/** Hermes' provenance of the skills written by the user or by the agent: the only ones edited and archived here. */
+const OWN = 'agent';
 const ICON = 'size-4';
 const SELECT = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-sheet px-2 text-[13px] transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none';
 
@@ -179,9 +183,7 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
   skill: Skill; inst: string; profile: string; can: (op: string) => boolean; actions: Actions;
 }) {
   const qc = useQueryClient();
-  const content = useQuery({
-    queryKey: ['skill-content', inst, profile, skill.name], queryFn: () => api.skillContent(inst, profile, skill.name), enabled: can('content'),
-  });
+  const navigate = useNavigate();
   const toggle = useMutation({
     mutationFn: () => api.setSkillEnabled(inst, profile, skill.name, !skill.enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['skills', inst, profile] }),
@@ -190,9 +192,21 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
     mutationFn: () => api.uninstallSkill(inst, profile, skill.name),
     onSuccess: ({ action }) => actions.track(action, `Désinstallation de ${skill.name}`, skill.name),
   });
+  const lock = useMutation({
+    mutationFn: () => api.lockSkill(inst, profile, skill.name, !skill.locked),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['skills', inst, profile] }),
+  });
+  const archive = useMutation({
+    mutationFn: () => api.archiveSkill(inst, profile, skill.name),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['skills', inst, profile] });
+      void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: profile === 'default' ? undefined : profile } });
+    },
+  });
+  const own = skill.provenance === OWN;
   const busy = actions.busy(skill.name);
   const canToggle = can('toggle') && skill.enabled !== null;
-  const facts = [provenanceLabel(skill.provenance), skill.category, skill.usage ? `${skill.usage} usage${skill.usage > 1 ? 's' : ''}` : null, skill.enabled === false ? 'inactif' : null]
+  const facts = [provenanceLabel(skill.provenance), skill.category, skill.usage ? `${skill.usage} usage${skill.usage > 1 ? 's' : ''}` : null, skill.enabled === false ? 'inactif' : null, skill.locked ? 'verrouillé' : null]
     .filter(Boolean).join(' · ');
 
   return (
@@ -207,6 +221,23 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
                 ? <Button variant="ghost" className="!text-bad hover:!bg-bad-soft" disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Désactiver</Button>
                 : <Button disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Activer</Button>
             )}
+            {can('lock') && (
+              <Button disabled={lock.isPending || busy} onClick={() => lock.mutate()}
+                title={skill.locked ? 'L’agent pourra de nouveau le modifier' : 'L’agent et le curateur ne pourront plus le modifier ; vous, si'}>
+                {skill.locked ? <><LockOpen className={ICON} strokeWidth={1.5} />Déverrouiller</> : <><Lock className={ICON} strokeWidth={1.5} />Verrouiller</>}
+              </Button>
+            )}
+            {own && can('archive') && (
+              <Button variant="danger" disabled={busy || archive.isPending} aria-label={`Archiver ${skill.name}`}
+                onClick={async () => {
+                  if (await ask({
+                    title: `Archiver ${skill.name} ?`, confirmLabel: 'Archiver', danger: true,
+                    message: 'Il sera retiré de l’agent. Hermes le garde dans skills/.archive (restauration par hermes curator restore).',
+                  })) archive.mutate();
+                }}>
+                <Archive className={ICON} strokeWidth={1.5} />Archiver
+              </Button>
+            )}
             {skill.provenance === 'hub' && can('uninstall') && can('actionStatus') && (
               <Button variant="danger" disabled={busy || uninstall.isPending} aria-label={`Désinstaller ${skill.name}`}
                 onClick={async () => { if (await ask({ title: `Désinstaller ${skill.name} de cet agent ?`, confirmLabel: 'Désinstaller', danger: true })) uninstall.mutate(); }}>
@@ -217,18 +248,10 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
         )}
       />
       <DetailBody className="gap-4">
-        <div className="empty:hidden"><ErrorText error={toggle.error ?? uninstall.error} /></div>
+        <div className="empty:hidden"><ErrorText error={toggle.error ?? uninstall.error ?? lock.error ?? archive.error} /></div>
         {skill.description && <p className="text-[15px]">{skill.description}</p>}
         {can('content') ? (
-          <section className="card overflow-hidden" aria-label="SKILL.md">
-            <div className="border-b border-line/70 px-4 py-2.5 font-mono text-xs text-ink-faint">skills/{skill.name}/SKILL.md</div>
-            {content.data ? (
-              <>
-                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-[12.5px] leading-[1.7]">{content.data.content}</pre>
-                {content.data.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Contenu tronqué à 200 000 caractères.</p>}
-              </>
-            ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <p className="p-4 text-sm text-ink-faint">Chargement…</p>}
-          </section>
+          <SkillContent inst={inst} profile={profile} name={skill.name} editable={own && can('putContent')} />
         ) : <p className="text-sm text-ink-faint">Lecture du SKILL.md indisponible sur cette instance</p>}
       </DetailBody>
     </article>
@@ -317,6 +340,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
   const actions = useSkillActions(inst, profile);
   const [tab, setTab] = useState<'installed' | 'hub'>('installed');
   const [tools, setTools] = useState(false);
+  const [creating, setCreating] = useState(false);
   const names = profiles.data ?? ['default'];
   const options = names.includes(profile) ? names : [...names, profile];
   const profileSearch = profile === 'default' ? undefined : profile;
@@ -392,8 +416,14 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
           ) : null}
         </>
       ) : undefined}
-      footer={a.available && tab === 'installed' && (can('toolsets') || canUpdate) ? (
+      footer={a.available && tab === 'installed' && (can('toolsets') || canUpdate || can('create')) ? (
         <div className="sticky bottom-0 flex flex-col gap-0.5 border-t border-line/70 bg-sheet px-2 py-2">
+          {can('create') && (
+            <button type="button" onClick={() => setCreating(true)}
+              className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
+              <Plus className={ICON} strokeWidth={1.5} />Nouveau skill
+            </button>
+          )}
           {can('toolsets') && (
             <button type="button" onClick={() => setTools(true)} aria-pressed={tools}
               className={cx('flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink', tools && 'bg-raised text-ink')}>
@@ -478,7 +508,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
   ) : skills.isSuccess && all.length === 0 ? (
     <Empty icon={<Layers strokeWidth={1.5} />} title="Aucun skill pour cet agent"
       actions={can('hubOfficial') ? <Button variant="primary" onClick={() => setTab('hub')}><Search className={ICON} strokeWidth={1.5} />Chercher dans le hub</Button> : undefined}>
-      Un skill apprend une méthode à l’agent : installez-en depuis le hub.
+      Un skill apprend une méthode à l’agent : installez-en depuis le hub{can('create') ? ', ou écrivez le vôtre' : ''}.
     </Empty>
   ) : null;
 
@@ -489,6 +519,12 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
       </div>
       <div className="px-4 pt-4 empty:hidden md:px-6"><ActionsStrip actions={actions} /></div>
       {a.available && detail}
+      {creating && (
+        <NewSkill inst={inst} profile={profile} onClose={() => setCreating(false)} onCreated={(sk) => {
+          setCreating(false); setTab('installed'); setTools(false);
+          void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: profileSearch, skill: sk.name } });
+        }} />
+      )}
     </SplitView>
   );
 }

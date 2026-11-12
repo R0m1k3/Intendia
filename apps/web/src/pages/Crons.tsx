@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { CalendarClock, FolderOpen, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CalendarClock, FolderOpen, LayoutTemplate, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, type Cron } from '../api';
 import { CronEditor } from '../components/CronEditor';
@@ -10,6 +10,7 @@ import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from
 import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLink, ListPane, SplitView } from '../components/Panes';
 import { cronKey, pickSelected } from '../components/selection';
 import { Button, cx, ErrorText, Tag } from '../components/ui';
+import { Blueprints } from '../crons/Blueprints';
 import { snapshot, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { describe, hermesParts, offsetOf, whenFr } from '../crons/schedule';
 import type { CronsSearch } from '../main';
@@ -18,7 +19,8 @@ const REQUIRED: OpRef[] = [['crons', 'list']];
 const OPTIONAL: OptionalOp[] = [
   ['crons', 'create', 'Créer'], ['crons', 'update', 'Modifier'], ['crons', 'pause', 'Mettre en pause'],
   ['crons', 'resume', 'Mettre en pause'], ['crons', 'trigger', 'Lancer'], ['crons', 'cancel', 'Annuler un run'],
-  ['crons', 'runs', 'Historique'], ['crons', 'remove', 'Supprimer'],
+  ['crons', 'runs', 'Historique'], ['crons', 'remove', 'Supprimer'], ['crons', 'blueprints', 'Depuis un modèle'],
+  ['crons', 'instantiate', 'Depuis un modèle'],
 ];
 
 const ICON = 'size-4';
@@ -57,8 +59,24 @@ function StateTag({ cron, running, selected }: { cron: Cron; running: boolean; s
   return <Tag className={ground}>{cron.lastStatus === null ? 'jamais lancé' : last.label}</Tag>;
 }
 
-function CronDetail({ cron, instanceLabel, can, follow, result, onFollow, onEdit, onRemoved }: {
-  cron: Cron; instanceLabel: string; can: (op: string) => boolean; follow: FollowSnapshot | null; result: FollowResult | null;
+/** The advanced options set on a cron, for the detail facts (context crons by name when known). */
+function advancedFacts(cron: Cron, all: Cron[]): { label: string; value: string; mono?: boolean }[] {
+  const out: { label: string; value: string; mono?: boolean }[] = [];
+  if (cron.repeat) out.push({ label: 'Répétition', value: `${cron.repeatCompleted} / ${cron.repeat} runs` });
+  if (cron.timezone) out.push({ label: 'Fuseau horaire', value: cron.timezone, mono: true });
+  if (cron.enabledToolsets?.length) out.push({ label: 'Outils permis', value: cron.enabledToolsets.join(', '), mono: true });
+  if (cron.catchUp !== null || cron.graceMinutes !== null) {
+    const what = cron.catchUp === null ? 'par défaut' : cron.catchUp ? 'oui' : 'non';
+    out.push({ label: 'Rattrapage', value: `${what}${cron.graceMinutes !== null ? ` · grâce ${cron.graceMinutes} min` : ''}` });
+  }
+  if (cron.contextFrom.length) {
+    out.push({ label: 'Contexte de', value: cron.contextFrom.map((id) => all.find((c) => c.id === id && c.profile === cron.profile)?.name || id).join(', ') });
+  }
+  return out;
+}
+
+function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, onEdit, onRemoved }: {
+  cron: Cron; all: Cron[]; instanceLabel: string; can: (op: string) => boolean; follow: FollowSnapshot | null; result: FollowResult | null;
   onFollow: (s: FollowSnapshot) => void; onEdit: () => void; onRemoved: () => void;
 }) {
   const qc = useQueryClient();
@@ -136,6 +154,7 @@ function CronDetail({ cron, instanceLabel, can, follow, result, onFollow, onEdit
           { label: 'Livraison', value: cron.deliver ?? 'local', mono: true },
           ...(cron.model ? [{ label: 'Modèle', value: cron.model, mono: true }] : []),
           ...(cron.skills.length ? [{ label: 'Skills', value: cron.skills.join(', '), mono: true }] : []),
+          ...advancedFacts(cron, all),
           ...(cron.workspace ? [{
             label: 'Workspace',
             value: cron.workspace.missing
@@ -168,7 +187,9 @@ export function CronsPage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const a = useModuleAvailability(inst, 'crons', REQUIRED, OPTIONAL);
   const crons = useQuery({ queryKey: ['crons', inst], queryFn: () => api.crons(inst).then((r) => r.crons), enabled: a.available });
-  const [editing, setEditing] = useState<Cron | 'new' | null>(null);
+  const [editing, setEditing] = useState<Cron | 'new' | 'blueprint' | null>(null);
+  // a template cron whose workspace framing failed: said above its detail
+  const [unattached, setUnattached] = useState<{ key: string; workspace: string } | null>(null);
   // another instance chosen while editing: the form belonged to the previous one, close it
   const [editingInst, setEditingInst] = useState(inst);
   if (editingInst !== inst) { setEditingInst(inst); setEditing(null); }
@@ -184,15 +205,25 @@ export function CronsPage() {
   const needle = text.trim().toLowerCase();
   const shown = needle ? items.filter((c) => `${c.name} ${c.prompt}`.toLowerCase().includes(needle)) : items;
   const selected = pickSelected(items, search.cron, cronKey);
+  const canBlueprints = can('blueprints') && can('instantiate');
   const select = (c: Cron | null) => void navigate({ to: '/i/$inst/crons', params: { inst }, search: c ? { cron: cronKey(c) } : {}, replace: true });
 
   const list = (
     <ListPane
       title="Crons"
-      action={can('create') && a.available ? (
-        <Button variant="primary" onClick={() => setEditing('new')}>
-          <Plus className={ICON} strokeWidth={1.5} />Nouveau
-        </Button>
+      action={a.available && (can('create') || canBlueprints) ? (
+        <span className="flex gap-1.5">
+          {canBlueprints && (
+            <Button onClick={() => setEditing('blueprint')} title="Depuis un modèle" aria-label="Depuis un modèle" className="w-[34px] px-0">
+              <LayoutTemplate className={ICON} strokeWidth={1.5} />
+            </Button>
+          )}
+          {can('create') && (
+            <Button variant="primary" onClick={() => setEditing('new')}>
+              <Plus className={ICON} strokeWidth={1.5} />Nouveau
+            </Button>
+          )}
+        </span>
       ) : undefined}
       head={items.length > 0 ? (
         <label className="flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-ink-faint focus-within:border-ink">
@@ -243,14 +274,28 @@ export function CronsPage() {
             setResults((x) => ({ ...x, [k]: r }));
           }} />
       ))}
-      {editing ? (
+      {editing === 'blueprint' ? (
+        <Blueprints key={inst} instanceId={inst} onClose={() => setEditing(null)} onCreated={(c, attached, workspace) => {
+          setEditing(null);
+          setUnattached(workspace && !attached ? { key: cronKey(c), workspace } : null);
+          select(c);
+        }} />
+      ) : editing ? (
         <CronEditor key={`${inst}:${editing === 'new' ? 'new' : cronKey(editing)}`} instanceId={inst} cron={editing === 'new' ? null : editing} offset={offset}
           onClose={() => setEditing(null)} onSaved={(c) => { if (c && editing === 'new') select(c); }} />
       ) : (
         <>
           {notice}
+          {selected && unattached?.key === cronKey(selected) && (
+            <div className="px-4 pt-4 md:px-6">
+              <p role="alert" className="flex items-start gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
+                <span className="flex-1">Cron créé, mais pas rattaché au workspace « {unattached.workspace} » : modifiez-le pour le rattacher.</span>
+                <button type="button" aria-label="Masquer" onClick={() => setUnattached(null)}><X className="size-3.5" strokeWidth={1.5} /></button>
+              </p>
+            </div>
+          )}
           {selected ? (
-            <CronDetail
+            <CronDetail all={items}
               key={cronKey(selected)} cron={selected} instanceLabel={current?.label ?? inst} can={can}
               follow={follows[cronKey(selected)]?.snap ?? null} result={results[cronKey(selected)] ?? null}
               onFollow={(snap) => {
@@ -265,7 +310,12 @@ export function CronsPage() {
             <Empty
               icon={<CalendarClock strokeWidth={1.5} />}
               title="Aucun cron pour l’instant"
-              actions={can('create') ? <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />Créer un cron</Button> : undefined}
+              actions={can('create') || canBlueprints ? (
+                <>
+                  {can('create') && <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />Créer un cron</Button>}
+                  {canBlueprints && <Button onClick={() => setEditing('blueprint')}><LayoutTemplate className={ICON} strokeWidth={1.5} />Depuis un modèle</Button>}
+                </>
+              ) : undefined}
             >
               Une tâche planifiée envoie une consigne à l’agent à heure fixe{offset ? ` (heure d’Hermes, ${offset})` : ''}, et livre le résultat où vous voulez.
             </Empty>

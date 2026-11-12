@@ -67,16 +67,26 @@ const BLUEPRINTS = [
   {
     key: 'morning-brief', title: 'Morning brief', description: 'A short summary of your day every morning.', category: 'daily', tags: ['daily'],
     fields: [
-      { name: 'time', type: 'time', label: 'Time', default: '08:00', optional: false, help: 'When to send it' },
-      { name: 'style', type: 'select', label: 'Style', default: 'short', options: [{ value: 'short', label: 'Short' }, { value: 'detailed', label: 'Detailed' }], optional: false },
+      { name: 'time', type: 'time', label: 'Time', default: '08:00', options: [], optional: false, strict: true, help: 'When to send it' },
+      { name: 'recurrence', type: 'weekdays', label: 'Repeat on', default: 'everyday', options: ['everyday', 'weekdays', 'weekends'], optional: false, strict: true, help: '' },
+      { name: 'style', type: 'enum', label: 'Style', default: 'short', options: ['short', 'detailed'], optional: false, strict: true, help: '' },
+      // like Hermes' deliver slot: options are suggestions, any value is accepted
+      { name: 'deliver', type: 'enum', label: 'Where to deliver?', default: 'origin', options: ['origin', 'local'], optional: false, strict: false, help: 'origin = the chat you set this up from' },
     ],
-    source: 'builtin', plugin: null, schedule: '{minute} {hour} * * *', scheduleHuman: 'Every day at the chosen time', command: 'hermes cron add …', appUrl: '/cron?blueprint=morning-brief',
+    source: 'builtin', plugin: null, schedule: '{minute} {hour} * * {dow}', scheduleHuman: 'daily at 08:00', command: 'hermes cron add …', appUrl: '/cron?blueprint=morning-brief',
     prompt: (v: Record<string, string>) => `Write a ${v.style ?? 'short'} morning brief.`,
-    sched: (v: Record<string, string>) => { const [h, m] = (v.time ?? '08:00').split(':'); return `${Number(m)} ${Number(h)} * * *`; },
+    sched: (v: Record<string, string>) => {
+      const [h, m] = (v.time ?? '08:00').split(':');
+      const dow = ({ everyday: '*', weekdays: '1-5', weekends: '0,6' } as Record<string, string>)[v.recurrence ?? 'everyday'] ?? '*';
+      return `${Number(m)} ${Number(h)} * * ${dow}`;
+    },
   },
   {
     key: 'price-watch', title: 'Price watch', description: 'Checks a product page and reports price changes.', category: 'shopping', tags: [],
-    fields: [{ name: 'url', type: 'text', label: 'Product URL', default: '', optional: false, help: 'Page to watch' }, { name: 'note', type: 'text', label: 'Note', optional: true }],
+    fields: [
+      { name: 'url', type: 'text', label: 'Product URL', default: '', options: [], optional: false, strict: true, help: 'Page to watch' },
+      { name: 'note', type: 'text', label: 'Note', default: null, options: [], optional: true, strict: true, help: '' },
+    ],
     source: 'builtin', plugin: null, schedule: 'every 6h', scheduleHuman: 'Every 6 hours', command: null, appUrl: null,
     prompt: (v: Record<string, string>) => `Check the price at ${v.url ?? ''}.`,
     sched: () => 'every 6h',
@@ -232,11 +242,18 @@ export class CronStore {
       const bp = BLUEPRINTS.find((x) => x.key === b.blueprint);
       if (!bp) return json({ detail: `Unknown blueprint: ${String(b.blueprint)}` }, 404);
       const values = (b.values ?? {}) as Record<string, string>;
+      // Hermes' fill_blueprint errors are 422 with a text detail
+      const unknown = Object.keys(values).filter((k) => !bp.fields.some((f) => f.name === k));
+      if (unknown.length) return json({ detail: `unknown slot: ${unknown.join(', ')}` }, 422);
       for (const f of bp.fields) {
-        if (!f.optional && !(values[f.name] ?? f.default)) return json({ detail: [{ loc: ['values', f.name], msg: 'Field required' }] }, 422);
+        const v = values[f.name] ?? f.default;
+        if (!f.optional && !v) return json({ detail: `missing required value: ${f.name} (${f.label})` }, 422);
+        if (f.type === 'enum' && f.strict && v && !(f.options as string[]).includes(String(v))) {
+          return json({ detail: `${f.name}='${String(v)}' not allowed — one of ${(f.options as string[]).join(', ')}` }, 422);
+        }
       }
       // like Hermes: ?profile= absent means "default", not the active profile
-      const job = this.newJob({ name: bp.title, prompt: bp.prompt({ ...Object.fromEntries(bp.fields.map((f) => [f.name, String(f.default ?? '')])), ...values }), schedule: bp.sched(values), deliver: 'origin' }, query.profile || 'default');
+      const job = this.newJob({ name: bp.title, prompt: bp.prompt({ ...Object.fromEntries(bp.fields.map((f) => [f.name, String(f.default ?? '')])), ...values }), schedule: bp.sched(values), deliver: values.deliver ?? 'origin' }, query.profile || 'default');
       return job instanceof Response ? job : json(job);
     }
     const base = via === 'dash' ? '/api/cron/jobs' : '/api/jobs';

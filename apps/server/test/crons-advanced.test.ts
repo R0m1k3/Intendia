@@ -56,8 +56,10 @@ describe('crons: blueprints (lot 8 C)', () => {
     const bps = res.json.blueprints;
     expect(bps.map((b: any) => b.key)).toEqual(['morning-brief', 'price-watch', 'plugin-x']);
     expect(bps[0].fields).toEqual([
-      { name: 'time', type: 'time', label: 'Time', default: '08:00', options: [], optional: false, help: 'When to send it' },
-      { name: 'style', type: 'select', label: 'Style', default: 'short', options: [{ value: 'short', label: 'Short' }, { value: 'detailed', label: 'Detailed' }], optional: false, help: null },
+      { name: 'time', type: 'time', label: 'Time', default: '08:00', options: [], optional: false, strict: true, help: 'When to send it' },
+      { name: 'recurrence', type: 'weekdays', label: 'Repeat on', default: 'everyday', options: ['everyday', 'weekdays', 'weekends'].map((v) => ({ value: v, label: v })), optional: false, strict: true, help: null },
+      { name: 'style', type: 'enum', label: 'Style', default: 'short', options: [{ value: 'short', label: 'short' }, { value: 'detailed', label: 'detailed' }], optional: false, strict: true, help: null },
+      { name: 'deliver', type: 'enum', label: 'Where to deliver?', default: 'origin', options: [{ value: 'origin', label: 'origin' }, { value: 'local', label: 'local' }], optional: false, strict: false, help: 'origin = the chat you set this up from' },
     ]);
     expect(bps[2]).toMatchObject({ source: 'plugin', plugin: 'fake-plugin' });
     expect(JSON.stringify(bps)).not.toMatch(/appUrl|command|prompt/);
@@ -90,5 +92,11 @@ describe('crons: blueprints (lot 8 C)', () => {
     expect(broken.status).toBe(201);
     expect(broken.json.attached).toBe(false);
     expect((await t.request('POST', `${BASE}/blueprints/plugin-x`, { values: {} })).status).toBe(400);
+    const bad = await t.request('POST', `${BASE}/blueprints/morning-brief?profile=default`, { values: { style: 'long' } });
+    expect(bad.status).toBe(400);
+    expect(bad.json.detail).toContain('not allowed');
+    // a non-strict enum takes any value
+    const free = await t.request('POST', `${BASE}/blueprints/morning-brief?profile=default`, { values: { deliver: 'telegram' } });
+    expect(free.json.cron.deliver).toBe('telegram');
   });
 });
