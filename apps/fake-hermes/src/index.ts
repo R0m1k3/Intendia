@@ -51,7 +51,8 @@ import { ProfileStore } from './profiles.js';
 import { ConfigStore } from './config.js';
 import { FilesStore } from './files.js';
 import { GitStore, type GitFakeOptions } from './git.js';
-export { OPENROUTER_MODELS } from './config.js';
+import { MonitorStore, type MonitorFakeOptions } from './monitor.js';
+export { FAKE_SECRETS, OPENROUTER_MODELS } from './config.js';
 import { SkillStore } from './skills.js';
 
 /**
@@ -74,6 +75,8 @@ export interface FakeOptions {
   fixturesDir: string;
   /** Git routes (`/api/fs/git-root`, `/api/git/*`): see git.ts. */
   git?: GitFakeOptions;
+  /** Stats, logs and host metrics: see monitor.ts. */
+  monitor?: MonitorFakeOptions;
   /** Keyed by "api GET /path" or "dash GET /path" (paths without the /p/<profile> prefix). */
   breaks?: Record<string, Break>;
   /** Hide entries of /v1/capabilities `endpoints` or dashboard OpenAPI routes ("METHOD /path"). */
@@ -573,7 +576,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore }
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -622,6 +625,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
     if (method === 'GET' && path === '/_fake/git/calls') return c.json({ calls: stores.git.calls });
+    if (method === 'GET' && path === '/_fake/monitor/calls') return c.json({ calls: stores.monitor.calls });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
     if (via === 'api' && method === 'GET' && path === '/_fake/pool') return c.json({ entries: config.providers.poolOf(c.req.query('profile') ?? 'default') });
     if (via === 'api' && method === 'POST' && path === '/_fake/pool/seed') {
@@ -658,6 +662,10 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       if (copied) return copied;
     }
 
+    if (via === 'dash') {
+      const mon = stores.monitor.handle(method, path, c.req.query());
+      if (mon) return c.json(mon.body, mon.status as 200);
+    }
     const prof = profiles.handle(via, method, path, body);
     if (prof) return prof;
     const kb = kanban.handle(via, method, path, c.req.query(), body);
@@ -948,11 +956,12 @@ export function createFakeHermes(opts: FakeOptions) {
   const profiles = new ProfileStore(opts.fixturesDir);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
   const git = new GitStore(opts.git);
-  const stores: Stores = { crons, skills, config, profiles, kanban, files, git };
+  const monitor = new MonitorStore(opts.monitor);
+  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
-    requests, sim, crons, skills, config, profiles, kanban, files, git,
+    requests, sim, crons, skills, config, profiles, kanban, files, git, monitor,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */

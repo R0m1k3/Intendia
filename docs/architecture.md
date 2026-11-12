@@ -293,6 +293,22 @@ Accepted limit: the repository's own configuration (`.git/config`, written by th
 
 The fake runs the real `git` (`apps/fake-hermes/src/git.ts`, without confinement, like Hermes): the only way to test that Intendia bounds paths and to test staging and commits.
 
+## Suivi (usage, logs, server metrics)
+
+Module `monitor` (`connectors/monitor/index.ts`): `usage` (`GET /api/analytics/usage`) is required, `sessionStats`,
+`logs` and `system` are options. `MonitorService` (`monitor/service.ts`), routes `/i/:inst/monitor/{usage,logs,system}`,
+page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
+
+- Usage is per profile (Hermes has no all-profile total); periods 7/30/90 days. A failed `sessionStats` gives
+  `sources: null` and `partial: ['sources']`, the rest still shows.
+- Logs: file, level, component and line count are checked against fixed lists before calling Hermes. Every line goes
+  through `Masker.text()`, then `Masker.known()` (exact values of the profile's config secrets,
+  `ConfigService.knownSecrets`, 60 s cache), then `hostPaths()` (absolute host paths cut to their last segment).
+  `mcp`, `update`, `desktop` and `handoff` logs are not redacted by Hermes: the page says so.
+- Server metrics: no profile; only listed fields are passed on; 5 s cache (Hermes blocks ~100 ms per call). In a
+  container they are the host's.
+- Refusals of the admin screens use `AdminError(code, status)` (`admin-error.ts`), rendered by `app.onError`.
+
 ## Crons
 
 - `src/crons/service.ts` (`CronService`) calls the `crons` connector; `src/routes/crons.ts` serves

@@ -5,6 +5,7 @@ import { ActionStatusSchema, lastRunLines } from '../connectors/actions.js';
 import {
   AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, GATEWAY_RESTART_ACTION, McpServersSchema,
   McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, mcpTokenEnv,
+  configModule,
 } from '../connectors/config/index.js';
 import { callOp, HermesError, hermesDetail, type CallOptions } from '../connectors/runtime.js';
 import { decrypt, encrypt } from '../crypto.js';
@@ -14,7 +15,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { checkEndpoint, HERMES_ALIASES, keyEnvFor, readCustomProviders, slugFor, withoutProvider, type PublicCustomProvider } from './custom-providers.js';
 import { declaredModels, editableShape, type Declared } from './declared.js';
-import { Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
+import { KNOWN_MIN, Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
 
 /**
@@ -173,9 +174,12 @@ export function toConfigError(mask: Masker, err: unknown, what = 'Introuvable', 
   return new HermesError('http', `Hermes a répondu ${status} : ${detail}`, err.detail);
 }
 
+const KNOWN_TTL_MS = 60_000;
+
 export class ConfigService {
   private readonly mask: Masker;
   private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly knownCache = new Map<string, { at: number; values: string[] }>();
 
   constructor(
     private readonly compat: CompatService,
@@ -207,6 +211,9 @@ export class ConfigService {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
       throw toConfigError(this.mask, err, what, scrub);
+    } finally {
+      // a write may add or change a secret: the logs must not wait for the cache to expire to mask it
+      if (configModule.ops[op]?.kind === 'write') this.knownCache.delete(`${ctx.instanceId}:${ctx.profile}`);
     }
   }
 
@@ -220,6 +227,25 @@ export class ConfigService {
       if (err instanceof HermesError && err.kind === 'http') return null;
       throw err;
     }
+  }
+
+  /**
+   * Secret values of the profile's config file (what the masking rules hide), to mask their exact copies in texts
+   * Hermes does not redact (logs). Cached 60 s; [] when the raw config cannot be read.
+   */
+  async knownSecrets(instanceId: string, profile: string): Promise<string[]> {
+    const key = `${instanceId}:${profile}`;
+    const hit = this.knownCache.get(key);
+    if (hit && Date.now() - hit.at < KNOWN_TTL_MS) return hit.values;
+    let values: string[] = [];
+    try {
+      const raw = await this.readRaw(this.ctx(instanceId, profile));
+      if (raw) values = [...new Set(this.mask.sources(raw).values())].filter((v) => v.length >= KNOWN_MIN);
+    } catch {
+      values = [];
+    }
+    this.knownCache.set(key, { at: Date.now(), values });
+    return values;
   }
 
   private async locked<T>(key: string, fn: () => Promise<T>): Promise<T> {

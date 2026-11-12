@@ -23,6 +23,9 @@ import { CronsPage } from './pages/Crons';
 import { KanbanPage, type KanbanSearch } from './pages/Kanban';
 import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
+import { MONITOR_TABS, MonitorPage, type MonitorSearch, type MonitorTab } from './pages/Monitor';
+import { LOG_FILES } from './monitor/Logs';
+import { PERIODS, type Period } from './monitor/Usage';
 import { ExternalSessionPage } from './pages/ExternalSession';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { GitPage, type GitSearch } from './pages/Git';
@@ -204,6 +207,17 @@ const configRoute = createRoute({
     key: typeof s.key === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(s.key) ? s.key : undefined,
   }),
 });
+/** /suivi: the current instance */
+const monitorIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/suivi', beforeLoad: () => toCurrent('suivi') });
+const monitorRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/suivi', component: MonitorPage,
+  validateSearch: (s: Record<string, unknown>): MonitorSearch => ({
+    tab: typeof s.tab === 'string' && (MONITOR_TABS as readonly string[]).includes(s.tab) ? (s.tab as MonitorTab) : undefined,
+    days: (PERIODS as readonly unknown[]).includes(Number(s.days)) ? (Number(s.days) as Period) : undefined,
+    file: typeof s.file === 'string' && (LOG_FILES as readonly string[]).includes(s.file) ? s.file : undefined,
+    profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+  }),
+});
 /** /agents: the current instance */
 const agentsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/agents', beforeLoad: () => toCurrent('agents') });
 const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents', component: AgentsPage });
@@ -221,7 +235,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

@@ -17,6 +17,8 @@ import { chatRoutes } from './routes/chat.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { GitError } from './git/service.js';
+import { AdminError } from './admin-error.js';
+import { monitorRoutes } from './routes/monitor.js';
 import { linkRoutes, publicLinkRoute } from './routes/links.js';
 import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
@@ -90,6 +92,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof CopyError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof TitleError) return c.json({ error: err.message, code: err.code }, err.status);
     if (err instanceof GitError) return c.json({ error: err.message, code: err.code }, err.status);
+    if (err instanceof AdminError) return c.json({ ...err.extra, error: err.message, code: err.code }, err.status);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
     if (err instanceof ArchiveError) return c.json({ error: err.message, code: ARCHIVE_CODE[err.code] }, ARCHIVE_STATUS[err.code]);
     if (err instanceof WorkspaceFsError) {
@@ -232,6 +235,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', configRoutes(deps.services.config, deps.services.providers));
   priv.route('/', agentRoutes(deps.services.agents));
   priv.route('/', activityRoutes(deps.services.activity));
+  priv.route('/', monitorRoutes(deps.services.monitor));
   priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
 
   x.route('/', priv);
