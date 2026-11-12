@@ -171,6 +171,12 @@ describe('revert', () => {
     const replay = await t.request('POST', `${base}/rewrite`, { key: 'cle-annul-003', before: null, mode: 'replace' });
     expect(replay.status).toBe(200);
     expect(replay.json).toMatchObject({ session: { id: res.json.session.id }, undoUntil: null });
+    // dropped once purged at Hermes: still found from the key
+    t.db.delete(sessionWorkspace).where(eq(sessionWorkspace.sessionId, s.id)).run();
+    const later = await t.request('POST', `${base}/rewrite`, { key: 'cle-annul-003', before: null, mode: 'replace' });
+    expect(later.status).toBe(200);
+    expect(later.json).toMatchObject({ session: { id: res.json.session.id }, replaced: s.id, undoUntil: null });
+    expect((await t.request('POST', `${base}/rewrite`, { key: 'cle-autre-001', before: null, mode: 'replace' })).status).toBe(404);
   });
 
   it('the purger leaves the original alone while the revert waits', async () => {

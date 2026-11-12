@@ -282,16 +282,8 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
     }),
     onSuccess: async ({ a, res }) => {
       const copy = res.session;
-      if ((a.action === 'edit' || a.action === 'retry') && a.text) {
-        try {
-          const sent = await api.send(inst!, copy.id, a.text);
-          setHandoff({ inst: inst!, sessionId: copy.id, runId: sent.runId, text: a.text, ts: Date.now() / 1000 });
-        } catch (err) {
-          // the copy is made: the text waits in its composer, with the reason
-          setDraft({ inst: inst!, sessionId: copy.id, text: a.text, error: (err as Error).message });
-        }
-      }
-      if (a.action === 'undo' && a.text) setDraft({ inst: inst!, sessionId: copy.id, text: a.text });
+      // the banner first: starting the new run may take longer than the undo window
+      let undone = false;
       if (a.action !== 'branch' && res.undoUntil) {
         const original = sessionId;
         showUndo({
@@ -304,11 +296,24 @@ function SessionView({ slug, sessionId }: { slug: string; sessionId: string }) {
               const back = err instanceof ApiError && err.status === 409 && await api.session(inst!, original).then(() => true, () => false);
               if (!back) throw err;
             }
+            undone = true;
             await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
             await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: original } });
           },
         });
       }
+      if (a.action === 'undo' && a.text) setDraft({ inst: inst!, sessionId: copy.id, text: a.text });
+      if ((a.action === 'edit' || a.action === 'retry') && a.text) {
+        try {
+          const sent = await api.send(inst!, copy.id, a.text);
+          setHandoff({ inst: inst!, sessionId: copy.id, runId: sent.runId, text: a.text, ts: Date.now() / 1000 });
+        } catch (err) {
+          // the copy is made: the text waits in its composer, with the reason
+          setDraft({ inst: inst!, sessionId: copy.id, text: a.text, error: (err as Error).message });
+        }
+      }
+      // « Annuler » clicked while the run was starting: the original is open, stay there
+      if (undone) return;
       await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: copy.id } });
     },

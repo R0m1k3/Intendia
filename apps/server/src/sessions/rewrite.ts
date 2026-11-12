@@ -28,12 +28,14 @@ export async function rewriteSession(
 ): Promise<RewriteResult> {
   const { workspaces, compat } = deps;
   const row = workspaces.rowOf(inst, id);
-  if (!row) throw new NotFoundError(`Session inconnue : ${id}`);
-  const newId = copyId(inst, row.workspaceSlug, o.key);
-  // the same key again (a retry after a lost answer): the first result, nothing asked to Hermes
-  const done = workspaces.rowOf(inst, newId);
+  // the same key again (a retry after a lost answer): the first result, nothing asked to Hermes. The original's row
+  // gives the workspace of the copy; once the purger dropped it, the copy is looked for in each workspace.
+  const slugs = row ? [row.workspaceSlug] : workspaces.listWorkspaces().filter((w) => w.instanceId === inst).map((w) => w.slug);
+  const done = slugs.map((slug) => workspaces.rowOf(inst, copyId(inst, slug, o.key))).find((r) => r !== null) ?? null;
+  if (done && done.replacesId !== id && !row) throw new NotFoundError(`Session inconnue : ${id}`);
   if (done) {
     if (done.deletedAt !== null) throw new CopyError('reverted', 'Action déjà annulée', 409);
+    const newId = done.sessionId;
     const original = done.replacesId ? workspaces.rowOf(inst, done.replacesId) : null;
     const undoUntil = original?.deletedAt ? original.deletedAt + UNDO_MS : null;
     return {
@@ -41,6 +43,8 @@ export async function rewriteSession(
       ...(done.replacesId ? { replaced: done.replacesId, undoUntil } : {}),
     };
   }
+  if (!row) throw new NotFoundError(`Session inconnue : ${id}`);
+  const newId = copyId(inst, row.workspaceSlug, o.key);
   // alive only: a tab left open on a replaced session does not make a second replacement
   const ctx = workspaces.getSession(inst, id);
   const s = ctx.session;
