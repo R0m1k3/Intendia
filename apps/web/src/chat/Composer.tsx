@@ -467,10 +467,9 @@ export function Composer({
             filter={promptFilter} text={text} disabled={disabled} onInsert={insertText}
           />
         )}
-        <div className="hidden min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint @2xl:block">{hint}</div>
-        {/* narrow: the options get their own line above the buttons */}
+        <div className="min-w-0 flex-1 truncate px-1 text-[11px] text-ink-faint">{hint}</div>
+        {/* narrow: the options get their own line above the buttons, the hint stays on the buttons' line */}
         <div data-composer-options className="order-first flex min-w-0 basis-full overflow-x-auto [scrollbar-width:none] @2xl:order-none @2xl:basis-auto @2xl:flex-none">{options}</div>
-        <div className="flex-1 @2xl:hidden" />
         {running && onSteer && (
           <button type="button" onClick={() => void steer()} disabled={!canSteer} aria-label="Réorienter"
             title={steerBlock ?? 'Réorienter : donner ce texte à l’agent tout de suite, après ses outils en cours'}
