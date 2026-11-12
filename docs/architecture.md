@@ -434,6 +434,14 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   French label, help, when it applies), only those present in the instance's schema, the others named below. A field
   Hermes types `string` because its default is None takes `null` from the form (« no limit »); `saveForm` refuses
   `null` for any other type. Hermes has no pause and no token limit per run (see `docs/hermes-api-notes.md`).
+- First run (option 58): after the instance, `/installation` goes on with three full pages, children of the root route
+  (signed in, `?inst=` = the instance just saved, profile `default`, each step skippable): `fournisseur`
+  (`ConfigProviders` as in the Fournisseurs tab, without the Variables link), `modele` (`GET config/recommended-model
+  ?provider=` = Hermes' `recommended-default`, « Utiliser ce modèle » through `setModel` with the same confirmation;
+  « Choisir un autre » = `MainModel` of `config/Models.tsx`), `workspace` (`NewWorkspace` with `instanceId`). The public
+  `/x/setup` reads nothing from Hermes; the home page's « Terminer l’installation » notice reads `GET config/model-info`
+  (only `model/info`, which never writes; error → no notice). `recommended-default`, like `model/options` behind every
+  model selector, may write the discovered models of custom endpoints into the file: accepted.
 - No secret reaches the browser: `mask.ts` (`Masker`) replaces each one with `«secret:<id>»` (HMAC of the value) in
   values, YAML text and every text that comes from Hermes; the YAML editor puts them back by id on save and refuses a
   secret moved under a key shown in clear (`secret_moved`).
