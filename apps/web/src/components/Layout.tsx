@@ -213,9 +213,9 @@ function FullLayout() {
           <div className="mt-2 flex items-center gap-2.5 border-t border-line px-2.5 pt-2.5">
             <button onClick={logout} className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg text-sm text-ink-soft transition-colors hover:text-ink">
               <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
-              Se déconnecter
+              <span className="truncate">Se déconnecter</span>
             </button>
-            {version && <span className="font-mono text-[11px] text-ink-faint" title="Version d’Intendia">v{version}</span>}
+            {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title="Version d’Intendia">v{version}</span>}
           </div>
         </div>
       </aside>
