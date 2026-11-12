@@ -178,6 +178,13 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
         return c.json({ error: `Profil sans clé sur cette instance : ${body.profile}`, code: 'no_key' }, 400);
       }
     }
+    if (body.autoApprove === true) {
+      // relaunches with every action approved by itself: only within a budget (chat/goal.ts)
+      const goal = deps.services.goals.get(inst, id);
+      if (goal && goal.status !== 'done' && goal.budgetUsd === null) {
+        return c.json({ error: 'Fixez d’abord un budget à l’objectif de cette session', code: 'goal_budget_required' }, 400);
+      }
+    }
     const session = workspaces.updateSession(inst, id, body);
     if (body.title !== undefined) await pushTitle(deps, workspaces.getSession(inst, id), session.title);
     return c.json({ session });

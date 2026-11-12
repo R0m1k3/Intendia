@@ -2,7 +2,7 @@
 // sent to the agent. Only the commands the page can run now are offered (`disabled` gives the reason otherwise); any
 // other text starting with « / » is an ordinary message.
 
-export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt' | 'use';
+export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt' | 'use' | 'goal';
 
 export interface Command {
   name: CommandName;
@@ -24,6 +24,7 @@ export const COMMANDS: { name: CommandName; args?: string; label: string }[] = [
   { name: 'stop', label: 'Arrêter l’agent' },
   { name: 'prompt', args: '[titre]', label: 'Insérer un prompt enregistré' },
   { name: 'use', args: '<skill>', label: 'Utiliser un skill pour ce message' },
+  { name: 'goal', args: '[objectif]', label: 'Fixer un objectif (relances automatiques)' },
 ];
 
 /** Commands offered while the name is typed: text = « / » then letters only (no space yet). Null = no menu. */

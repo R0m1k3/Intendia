@@ -769,6 +769,24 @@ export interface PublicSystemStats {
   process: { rss: number | null; threads: number | null } | null;
 }
 
+/** Persistent goal of a session (option 7): relaunched by Intendia's server after each run (chat/goal.ts). */
+export type GoalReason = 'user' | 'button' | 'click' | 'blocked' | 'failed' | 'stopped' | 'lost' | 'limit' | 'budget' | 'start_failed' | 'gone' | 'cost_unknown';
+export interface SessionGoal {
+  text: string;
+  status: 'active' | 'paused' | 'done';
+  mode: 'auto' | 'click';
+  maxRelaunches: number;
+  relaunches: number;
+  budgetUsd: number | null;
+  reason: GoalReason | null;
+  reasonDetail: string | null;
+  spent: { usd: number; pending: boolean; priceUnknown: boolean; unpriced: number };
+  /** the session's last run: a relaunch started by the server makes it change */
+  lastRunId: string | null;
+  updatedAt: number;
+}
+export interface GoalSettings { text: string; maxRelaunches: number; budgetUsd: number | null; mode: 'auto' | 'click' }
+
 export const api = {
   setup: () => call<SetupState>('GET', '/setup'),
   setPassword: (code: string, password: string) => call<{ ok: true }>('POST', '/setup/password', { code, password }),
@@ -831,6 +849,12 @@ export const api = {
   setModes: (inst: string, profile: string, modes: RunMode[]) => call<{ modes: RunMode[] }>('PUT', instPath(inst, `modes?profile=${enc(profile)}`), { modes }),
   toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),
   sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
+  goal: (inst: string, id: string) => call<{ goal: SessionGoal | null }>('GET', `${sessionPath(inst, id)}/goal`),
+  createGoal: (inst: string, id: string, g: GoalSettings) => call<{ runId: string; goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal`, g),
+  editGoal: (inst: string, id: string, g: Partial<GoalSettings>) => call<{ goal: SessionGoal }>('PATCH', `${sessionPath(inst, id)}/goal`, g),
+  pauseGoal: (inst: string, id: string, reason: 'user' | 'button') => call<{ goal: SessionGoal | null }>('POST', `${sessionPath(inst, id)}/goal/pause`, { reason }),
+  resumeGoal: (inst: string, id: string) => call<{ goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal/resume`, {}),
+  clearGoal: (inst: string, id: string) => call<{ goal: null }>('DELETE', `${sessionPath(inst, id)}/goal`),
   runStatus: (inst: string, id: string, runId: string) => call<RunStatus>('GET', `${sessionPath(inst, id)}/runs/${enc(runId)}`),
   stop: (inst: string, id: string, runId: string) => call<unknown>('POST', `${sessionPath(inst, id)}/runs/${enc(runId)}/stop`, {}),
   approve: (inst: string, id: string, runId: string, choice: ApprovalChoice, requestId?: string) =>

@@ -144,3 +144,25 @@ export const kanbanMissions = sqliteTable('kanban_missions', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+/** Persistent goal of an Intendia session (option 7, chat/goal.ts); times in ms. */
+export const sessionGoals = sqliteTable(
+  'session_goals',
+  {
+    instanceId: text('instance_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    text: text('text').notNull(),
+    status: text('status').notNull(),
+    mode: text('mode').notNull(),
+    maxRelaunches: integer('max_relaunches').notNull(),
+    relaunches: integer('relaunches').notNull().default(0),
+    budgetUsd: real('budget_usd'),
+    costSince: integer('cost_since').notNull(),
+    handledRunId: text('handled_run_id'),
+    reason: text('reason'),
+    reasonDetail: text('reason_detail'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
+);

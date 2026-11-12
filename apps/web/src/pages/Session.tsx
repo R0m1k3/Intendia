@@ -43,6 +43,9 @@ import { formatTokens } from '../chat/format';
 import { Menu, Picker } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
+import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
+import { GoalDialog } from '../chat/GoalDialog';
+import type { GoalSettings } from '../api';
 import { workspaceScope } from '../files/scope';
 
 const REREAD_TOOLS = new Set(['todo_list', 'write_file', 'patch']);
@@ -220,6 +223,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     setActive(null);
     setRunCount((n) => n + 1);
     void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+    void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
   }, [qc, inst, sessionId]);
 
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
@@ -242,6 +246,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     try {
       const res = await api.send(inst, sessionId, text, skills);
       setNotice(res.notice ?? null);
+      // the server paused an active goal (the user writes)
+      void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
       const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
       setActive({ id: res.runId, createdAt: status?.createdAt ?? null, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
@@ -559,6 +565,23 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // « /usage »: a line under the composer, closed by × or the next message
   const [usageOpen, setUsageOpen] = useState(false);
 
+  // persistent goal (option 7): relaunched by the server; the bar above the composer, the dialog of /goal
+  const goalQ = useGoal(inst, sessionId);
+  const [goalDialog, setGoalDialog] = useState<{ editing: boolean; initial: Partial<GoalSettings> } | null>(null);
+  const saveGoal = async (g: GoalSettings) => {
+    if (!inst) return;
+    if (goalDialog?.editing) await api.editGoal(inst, sessionId, g);
+    else {
+      const res = await api.createGoal(inst, sessionId, g);
+      // the first turn leaves with the goal's text: follow it like a sent message
+      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: { ...old.session, lastRunId: res.runId } });
+      setActive({ id: res.runId, createdAt: null, seed: [{ kind: 'user', key: `u-${res.runId}`, text: g.text, ts: Date.now() / 1000 }] });
+      void invalidateSessionLists(qc);
+    }
+    await qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
+    await qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+  };
+
   // slash commands of the composer: the same actions as the menu and the thread, with the reason when not possible
   const rewriteWhy = !sentOnce ? 'La conversation est vide' : running ? 'L’agent travaille' : queued > 0 ? 'Des messages attendent dans la file'
     : !canCopy ? 'Indisponible sur cette instance' : rewrite.isPending ? 'Une action est en cours' : undefined;
@@ -575,6 +598,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       stop: running ? undefined : 'Aucun travail en cours',
       prompt: undefined,
       use: skillNames.length ? undefined : 'Aucun skill activé pour cet agent',
+      goal: undefined,
     } satisfies Record<CommandName, string | undefined>)[c.name];
     return disabled ? { ...c, disabled } : c;
   });
@@ -602,6 +626,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         case 'stop': await stop(); return true;
         case 'prompt': composer.current?.openPrompts(arg); return true;
         case 'use': return true; // handled by the composer (a pill)
+        case 'goal': {
+          const g = goalQ.data;
+          // « /goal » alone on a goal not finished: edit it; else a new goal (the text after /goal prefilled)
+          if (!arg && g && g.status !== 'done') setGoalDialog({ editing: true, initial: g });
+          else setGoalDialog({ editing: false, initial: { text: arg } });
+          return true;
+        }
       }
     } catch (err) {
       setError(err);
@@ -889,6 +920,18 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             <div className="absolute bottom-full right-4 mb-1 md:right-6"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
           )}
           {todos && todos.length > 0 && <Todos todos={todos} />}
+          {inst && goalQ.data && (
+            <GoalBar
+              inst={inst} sessionId={sessionId} sessionLastRunId={lastRunId} goal={goalQ.data}
+              onEdit={() => setGoalDialog({ editing: true, initial: goalQ.data! })}
+            />
+          )}
+          {goalDialog && (
+            <GoalDialog
+              initial={goalDialog.initial} editing={goalDialog.editing} autoApprove={Boolean(sess.data?.session.autoApprove)}
+              onSubmit={saveGoal} onClose={() => setGoalDialog(null)}
+            />
+          )}
           <div className="mb-2 empty:hidden"><ErrorText error={error} /></div>
           <Composer
             ref={composer}
@@ -905,7 +948,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             onCommand={onCommand}
             running={running}
             disabled={!chat.available || !inst}
-            onQueue={(text, sk) => setQueue((q) => enqueue(q, text, sk))}
+            onQueue={(text, sk) => {
+              setQueue((q) => enqueue(q, text, sk));
+              // a message waiting is the user writing: an active goal pauses before the loop relaunches
+              if (inst && goalQ.data?.status === 'active') {
+                void api.pauseGoal(inst, sessionId, 'user').then(() => qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) }), () => {});
+              }
+            }}
             onSteer={steer}
             steerDisabled={steerDisabled}
             queue={{

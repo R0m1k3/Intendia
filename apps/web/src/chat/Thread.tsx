@@ -303,6 +303,20 @@ function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: Th
   const [editing, setEditing] = useState(false);
   const times = useContext(Times);
   if (t.kind === 'delegation') return <Delivery entry={t.entry} clock={clock(t.entry.ts, Boolean(times))} footers={t.footers} />;
+  if (t.kind === 'user' && t.entry.relaunch) {
+    // sent by Intendia's goal loop, not by the user: a quiet line, no bubble
+    const { n, max } = t.entry.relaunch;
+    return (
+      <div className="flex flex-col items-center gap-1" data-turn="user" data-relaunch={`${n}/${max}`} data-key={t.key}>
+        <div className="flex items-center gap-2 text-[12px] text-ink-faint" title={t.entry.text}>
+          <span className="h-px w-8 bg-line" />
+          <span>Relance automatique {n}/{max}</span>
+          <span className="h-px w-8 bg-line" />
+        </div>
+        {t.footers.length > 0 && <div className="flex flex-col items-center">{t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
+      </div>
+    );
+  }
   if (t.kind === 'user') {
     const editable = Boolean(actions?.canEdit(t.key));
     if (editing && actions) {
