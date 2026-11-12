@@ -16,17 +16,20 @@ export interface Availability {
   has: (module: string, op: string) => boolean;
   /** an op of the page is not checked yet by this version of Intendia (old report) */
   pending: boolean;
+  /** only unchecked required ops keep the page closed (no real failure): neutral notice, not « indisponible » */
+  onlyPending: boolean;
   checkError: string | undefined;
 }
 
 /**
  * Availability from the operations a page uses (possibly from several modules), not from the module
  * state: a missing optional write must warn, a missing required read must block. An op the report does not
- * know yet (`unchecked`) is neither: it is pending until the next full check.
+ * know yet (`unchecked`) is pending until the next full check: a required one keeps the page closed (its data
+ * queries start once it is checked), without counting as a failure.
  */
 export function availability(report: CompatReport | undefined, module: ModuleId, required: OpRef[], optional: OptionalOp[], explainMissing = false): Availability {
   const has = (m: string, o: string) => (report ? Boolean(op(report, m, o)?.ok) : true);
-  if (!report) return { available: true, missing: [], reasons: [], link: undefined, has, pending: false, checkError: undefined };
+  if (!report) return { available: true, missing: [], reasons: [], link: undefined, has, pending: false, onlyPending: false, checkError: undefined };
   const unchecked = new Set(report.unchecked ?? []);
   const known = ([m, o]: OpRef | OptionalOp) => !unchecked.has(`${m}.${o}`);
   const blocked = required.filter(known).filter(([m, o]) => !op(report, m, o)?.ok);
@@ -36,8 +39,9 @@ export function availability(report: CompatReport | undefined, module: ModuleId,
     : explainMissing ? missingOps.flatMap(([m, o]) => op(report, m, o)?.notes.slice(-1) ?? []) : [];
   const link = report.modules.find((m) => m.id === module)?.dashboardLink;
   const pending = [...required, ...optional].some((r) => !known(r));
+  const requiredPending = required.some((r) => !known(r));
   return {
-    available: blocked.length === 0, missing: [...new Set(missingOps.map(([, , l]) => l))], reasons: [...new Set(reasons)], link, has,
+    available: blocked.length === 0 && !requiredPending, onlyPending: blocked.length === 0 && requiredPending, missing: [...new Set(missingOps.map(([, , l]) => l))], reasons: [...new Set(reasons)], link, has,
     pending, checkError: pending ? report.checkError : undefined,
   };
 }

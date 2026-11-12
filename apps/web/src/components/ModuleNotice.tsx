@@ -27,14 +27,15 @@ export function ModuleNotice({ instanceId, module, title, required, optional, ex
       <Link to="/etat" className="font-medium text-accent-ink hover:text-ink">Page État</Link>
     </div>
   );
-  if (a.available && a.missing.length === 0) {
+  const soft = a.available || a.onlyPending;
+  if (soft && a.missing.length === 0) {
     return pendingLine ? <div className="rounded-[10px] bg-raised px-3.5 py-3 text-[13.5px]">{pendingLine}</div> : null;
   }
   return (
-    <div className={a.available ? 'rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13.5px] text-warn' : 'rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13.5px] text-bad'}>
+    <div className={soft ? 'rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13.5px] text-warn' : 'rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13.5px] text-bad'}>
       <div className="flex items-center gap-2 font-medium">
-        <Mark state={a.available ? 'readonly' : 'unavailable'} />
-        {a.available ? `Indisponible sur cette instance : ${a.missing.join(', ').toLowerCase()}` : `${title} est indisponible sur cette instance`}
+        <Mark state={soft ? 'readonly' : 'unavailable'} />
+        {soft ? `Indisponible sur cette instance : ${a.missing.join(', ').toLowerCase()}` : `${title} est indisponible sur cette instance`}
       </div>
       {a.reasons.length > 0 && <ul className="mt-2 space-y-1 text-ink-soft">{a.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
       {pendingLine}

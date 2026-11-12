@@ -31,9 +31,11 @@ describe('availability', () => {
     expect(a.pending).toBe(false);
   });
 
-  it('a required op not checked yet does not block the page; the failed check is given', () => {
+  it('a required op not checked yet keeps the page closed without counting as a failure', () => {
     const a = availability(report({ unchecked: ['config.guard'], checkError: 'boom' }), 'config', [['config', 'guard']], []);
-    expect(a.available).toBe(true);
+    expect(a.available).toBe(false);
+    expect(a.onlyPending).toBe(true);
+    expect(a.reasons).toEqual([]);
     expect(a.pending).toBe(true);
     expect(a.checkError).toBe('boom');
   });
