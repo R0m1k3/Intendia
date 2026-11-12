@@ -147,7 +147,7 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
       <Button disabled={cancel.isPending || launch.isPending} onClick={async () => {
         if (await ask({ title: 'Annuler la mission ?', message: 'La tâche racine et les tâches retenues sont archivées chez Hermes.', confirmLabel: 'Annuler la mission', cancelLabel: 'Garder', danger: true })) cancel.mutate();
       }}><X className={ICON} strokeWidth={1.5} />Annuler la mission</Button>
-      <Button variant="primary" disabled={launch.isPending || !m.children.some((c) => c.held)} onClick={() => launch.mutate()}>
+      <Button variant="primary" disabled={launch.isPending || cancel.isPending || !m.children.some((c) => c.held)} onClick={() => launch.mutate()}>
         <Play className={ICON} strokeWidth={1.5} />Lancer la mission
       </Button>
     </>

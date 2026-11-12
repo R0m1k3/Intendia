@@ -20,6 +20,8 @@ export const SETTLE_MS = 210_000;
 const SETTLE_EVERY_MS = 10_000;
 const DECOMPOSE_TIMEOUT_MS = 190_000;
 const HELD_STATES = new Set(['todo', 'ready']);
+const HOLD_TRIES = 3;
+const HOLD_RETRY_MS = 1000;
 /** checked before anything is written: the split runs detached, a missing op would only show later */
 const MISSION_OPS = ['createTask', 'decompose', 'task', 'updateTask', 'dispatch', 'workers'];
 
@@ -56,6 +58,8 @@ export class MissionService {
   private readonly log: (msg: string) => void;
   /** detached work per mission (decompose / settle), awaited by the tests */
   private readonly jobs = new Map<string, Promise<void>>();
+  /** one action at a time per mission (launch, cancel, remove): two tabs, or a double click */
+  private readonly acting = new Set<string>();
 
   constructor(private readonly db: Db, private readonly kanban: KanbanService, deps: MissionDeps = {}) {
     this.now = deps.now ?? Date.now;
@@ -153,17 +157,41 @@ export class MissionService {
     return { root, kids };
   }
 
-  /** Parks every child Hermes may launch; a child already running is left alone (« déjà lancée »). */
+  /**
+   * Parks every child Hermes may launch; a child already running is left alone (« déjà lancée »). A refused PATCH is
+   * re-read: still `todo`/`ready` (network error, 5xx) → tried again; after HOLD_TRIES the mission fails and what
+   * could start is archived (root first), so that nothing runs without the review.
+   */
   private async hold(m: MissionRow): Promise<void> {
     const { kids } = await this.children(m);
+    const stuck: string[] = [];
     for (const k of kids) {
-      if (!HELD_STATES.has(k.task.status)) continue;
-      try {
-        await this.kanban.updateTask(m.instanceId, m.board, k.task.id, { status: 'scheduled', blockReason: HOLD_REASON });
-      } catch (err) {
-        // refused: the dispatcher took it in between; it shows as « déjà lancée »
-        this.log(`${m.id}: ${k.task.id} not held (${err instanceof Error ? err.message : String(err)})`);
+      let status = k.task.status;
+      let last: unknown = null;
+      for (let i = 0; i < HOLD_TRIES && HELD_STATES.has(status); i++) {
+        try {
+          await this.kanban.updateTask(m.instanceId, m.board, k.task.id, { status: 'scheduled', blockReason: HOLD_REASON });
+          status = 'scheduled';
+        } catch (err) {
+          last = err;
+          if (i < HOLD_TRIES - 1) await this.sleep(HOLD_RETRY_MS);
+          // the dispatcher may have taken it in between: then it shows as « déjà lancée »
+          status = await this.kanban.task(m.instanceId, m.board, k.task.id).then((d) => d.task.status, () => status);
+        }
       }
+      if (HELD_STATES.has(status)) {
+        stuck.push(k.task.title);
+        this.log(`${m.id}: ${k.task.id} not held (${last instanceof Error ? last.message : String(last)})`);
+      }
+    }
+    if (stuck.length) {
+      await this.archive(m, m.rootId!).catch(() => {});
+      for (const k of kids) {
+        const now = await this.kanban.task(m.instanceId, m.board, k.task.id).then((d) => d.task.status, () => 'unknown');
+        if (HELD_STATES.has(now) || now === 'scheduled') await this.archive(m, k.task.id).catch(() => {});
+      }
+      this.set(m.id, { state: 'failed', error: `Hermes n’a pas retenu « ${stuck[0]} » : mission arrêtée et ses tâches archivées` });
+      return;
     }
     if (this.stateOf(m.id) === 'decomposing') this.set(m.id, { state: kids.length ? 'held' : 'failed', error: kids.length ? null : 'Hermes n’a créé aucune tâche' });
   }
@@ -230,6 +258,16 @@ export class MissionService {
     };
   }
 
+  private async exclusive<T>(id: string, work: () => Promise<T>): Promise<T> {
+    if (this.acting.has(id)) throw new KanbanError('mission_state', 'Une autre action est en cours sur cette mission');
+    this.acting.add(id);
+    try {
+      return await work();
+    } finally {
+      this.acting.delete(id);
+    }
+  }
+
   private async heldMission(instanceId: string, id: string): Promise<Mission> {
     const m = await this.get(instanceId, id);
     if (m.state !== 'held') throw new KanbanError('mission_state', 'Cette mission n’est plus en relecture');
@@ -240,52 +278,61 @@ export class MissionService {
 
   /** Drops a held child (archived at Hermes), before the launch only. */
   async remove(instanceId: string, id: string, childId: string): Promise<Mission> {
-    const m = await this.heldMission(instanceId, id);
-    const child = m.children.find((c) => c.id === childId && c.held);
-    if (!child) throw new NotFoundError('Tâche retenue introuvable dans cette mission');
-    const waiting = m.children.filter((c) => c.held && c.after.includes(childId));
-    if (waiting.length) {
-      throw new KanbanError('mission_dependency', `« ${waiting[0]!.title} » attend cette tâche : retirez-la d’abord`);
-    }
-    if (m.children.filter((c) => c.held).length === 1) {
-      throw new KanbanError('mission_last', 'C’est la dernière tâche retenue : annulez plutôt la mission');
-    }
-    await this.kanban.updateTask(instanceId, m.board, childId, { status: 'archived' });
-    return this.get(instanceId, id);
+    return this.exclusive(id, async () => {
+      const m = await this.heldMission(instanceId, id);
+      const child = m.children.find((c) => c.id === childId && c.held);
+      if (!child) throw new NotFoundError('Tâche retenue introuvable dans cette mission');
+      const waiting = m.children.filter((c) => c.held && c.after.includes(childId));
+      if (waiting.length) {
+        throw new KanbanError('mission_dependency', `« ${waiting[0]!.title} » attend cette tâche : retirez-la d’abord`);
+      }
+      if (m.children.filter((c) => c.held).length === 1) {
+        throw new KanbanError('mission_last', 'C’est la dernière tâche retenue : annulez plutôt la mission');
+      }
+      await this.kanban.updateTask(instanceId, m.board, childId, { status: 'archived' });
+      return this.get(instanceId, id);
+    });
   }
 
   /** Held children to `ready` (Hermes puts back in `todo` those whose parents are not done), then one dispatch. */
   async launch(instanceId: string, id: string): Promise<Mission> {
-    const m = await this.heldMission(instanceId, id);
-    for (const c of m.children.filter((x) => x.held)) await this.kanban.updateTask(instanceId, m.board, c.id, { status: 'ready' });
-    this.set(id, { state: 'launched' });
-    try {
-      await this.kanban.dispatch(instanceId, m.board, false);
-    } catch (err) {
-      // the dispatcher passes by itself every 60 s
-      this.log(`${id}: dispatch failed (${err instanceof Error ? err.message : String(err)})`);
-    }
-    return this.get(instanceId, id);
+    return this.exclusive(id, async () => {
+      const m = await this.heldMission(instanceId, id);
+      for (const c of m.children.filter((x) => x.held)) await this.kanban.updateTask(instanceId, m.board, c.id, { status: 'ready' });
+      this.set(id, { state: 'launched' });
+      try {
+        await this.kanban.dispatch(instanceId, m.board, false);
+      } catch (err) {
+        // the dispatcher passes by itself every 60 s
+        this.log(`${id}: dispatch failed (${err instanceof Error ? err.message : String(err)})`);
+      }
+      return this.get(instanceId, id);
+    });
   }
 
   /** Root archived first (else it would turn ready between two calls), then the held children. */
   async cancel(instanceId: string, id: string): Promise<MissionRow> {
-    const m = this.row(instanceId, id);
-    if (m.state !== 'held' && m.state !== 'failed') throw new KanbanError('mission_state', 'Seule une mission en relecture ou en échec s’annule ici');
-    if (m.rootId) {
-      const held = m.state === 'held' ? (await this.get(instanceId, id)).children.filter((c) => c.held) : [];
-      await this.archive(m, m.rootId);
-      for (const c of held) await this.archive(m, c.id);
-    }
-    this.set(id, { state: 'cancelled' });
-    return this.row(instanceId, id);
+    return this.exclusive(id, async () => {
+      const m = this.row(instanceId, id);
+      if (m.state !== 'held' && m.state !== 'failed') throw new KanbanError('mission_state', 'Seule une mission en relecture ou en échec s’annule ici');
+      if (m.rootId) {
+        const held = m.state === 'held' ? (await this.get(instanceId, id)).children.filter((c) => c.held) : [];
+        await this.archive(m, m.rootId);
+        for (const c of held) await this.archive(m, c.id);
+      }
+      this.set(id, { state: 'cancelled' });
+      return this.row(instanceId, id);
+    });
   }
 
   private async archive(m: MissionRow, taskId: string): Promise<void> {
     try {
       await this.kanban.updateTask(m.instanceId, m.board, taskId, { status: 'archived' });
     } catch (err) {
-      if (!(err instanceof NotFoundError)) throw err;
+      if (err instanceof NotFoundError) return;
+      // already archived (a failed hold archived it): nothing left to do
+      const now = await this.kanban.task(m.instanceId, m.board, taskId).then((d) => d.task.status, () => null);
+      if (now !== 'archived') throw err;
     }
   }
 }

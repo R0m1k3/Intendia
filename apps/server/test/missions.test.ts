@@ -176,3 +176,49 @@ describe('supervised missions', () => {
     expect((await t.request('GET', `${K}/missions/pas-une-mission`)).status).toBe(400);
   });
 });
+
+describe('supervised missions: holding is never assumed', () => {
+  const flaky = (t: T, failures: number) => {
+    const orig = t.fake.kanban.handle.bind(t.fake.kanban);
+    let left = failures;
+    t.fake.kanban.handle = (via, method, path, query, body) => {
+      if (method === 'PATCH' && (body as any)?.status === 'scheduled' && left > 0) {
+        left -= 1;
+        return new Response(JSON.stringify({ detail: 'database is locked' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return orig(via, method, path, query, body);
+    };
+  };
+
+  it('a PATCH refused by a passing error is tried again', async () => {
+    const t = await testApp();
+    flaky(t, 2);
+    const svc = new MissionService(t.db, t.services.kanban, { ...clock(), log: () => {} });
+    const row = svc.create('fake', 'default', { goal: 'Mission fragile' });
+    await svc.idle(row.id);
+    const m = await svc.get('fake', row.id);
+    expect(m.state).toBe('held');
+    expect(m.children.every((c) => c.held)).toBe(true);
+  });
+
+  it('a child that cannot be held: the mission fails and nothing is left to start', async () => {
+    const t = await testApp();
+    flaky(t, 100);
+    const svc = new MissionService(t.db, t.services.kanban, { ...clock(), log: () => {} });
+    const row = svc.create('fake', 'default', { goal: 'Mission bloquée' });
+    await svc.idle(row.id);
+    const m = await svc.get('fake', row.id);
+    expect(m.state).toBe('failed');
+    expect(m.error).toMatch(/n’a pas retenu/);
+    expect(board(t).tasks.every((x) => x.status === 'archived')).toBe(true);
+    // cancelling the failed mission goes through (root already archived)
+    expect((await svc.cancel('fake', row.id)).state).toBe('cancelled');
+  });
+
+  it('launch and cancel at once: one of them is refused', async () => {
+    const t = await testApp();
+    const m = await mission(t, 'Mission disputée');
+    const [a, b] = await Promise.all([t.request('POST', `${K}/missions/${m.id}/launch`), t.request('POST', `${K}/missions/${m.id}/cancel`)]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+  });
+});
