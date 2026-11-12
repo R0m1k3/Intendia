@@ -5,6 +5,7 @@ import { GatewayService } from './gateway.js';
 import {
   AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema,
   McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, mcpTokenEnv,
+  configModule,
 } from '../connectors/config/index.js';
 import { callOp, HermesError, hermesDetail, type CallOptions } from '../connectors/runtime.js';
 import { decrypt, encrypt } from '../crypto.js';
@@ -213,6 +214,9 @@ export class ConfigService {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
       throw toConfigError(this.mask, err, what, scrub);
+    } finally {
+      // a write may add or change a secret: the logs must not wait for the cache to expire to mask it
+      if (configModule.ops[op]?.kind === 'write') this.knownCache.delete(`${ctx.instanceId}:${ctx.profile}`);
     }
   }
 
