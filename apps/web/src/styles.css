@@ -1,98 +1,95 @@
 @import "tailwindcss";
 
 /*
- * Intendia: quiet grey frame, white work card, one navy accent for actions and selection;
- * module states are dots: full, half, empty.
+ * Intendia, "inbox" theme: white work area, light grey sidebar, near-black ink, one orange accent for the
+ * main actions and the selection; tabular figures and mono labels for times, paths and tags.
  */
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Spline Sans Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  --color-paper: #f5f6f7;
+  --color-paper: #f7f7f8;
   --color-sheet: #ffffff;
-  --color-raised: #eef0f2;
-  --color-line: #e3e6ea;
-  --color-ink: #16181b;
-  --color-ink-soft: #464a50;
-  --color-ink-faint: #646971;
-  --color-accent: #1f4e79;
-  --color-accent-strong: #183f63;
-  --color-accent-soft: #e7eef5;
-  --color-on-accent: #ffffff;
-
-  --color-ok: #24704a;
-  --color-ok-soft: #ddf0e5;
-  --color-dot-ok: #2f8f5b;
-  --color-warn: #8a5a12;
-  --color-warn-soft: #f8ecd4;
-  --color-bad: #9b2c1f;
-  --color-bad-soft: #fbeae7;
+  --color-raised: #f0f0f2;
+  --color-line: #e6e6e9;
+  --color-ink: #0e0e10;
+  --color-ink-soft: #4b4b52;
+  --color-ink-faint: #6a6a72;
+  --color-accent: #ff7a1a;
+  --color-accent-strong: #f26d0d;
+  --color-accent-soft: #ffefe3;
+  --color-on-accent: #0e0e10;
+  --color-accent-ink: #b5480c;
+  --color-ok: #2b5a0c;
+  --color-ok-soft: #e9f5e4;
+  --color-dot-ok: #3b7a16;
+  --color-warn: #6b4100;
+  --color-warn-soft: #fff6e5;
+  --color-bad: #b42318;
+  --color-bad-soft: #feeceb;
 
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-/* Inner card: rounded sheet with a hairline and a light shadow (none in the dark theme). */
+/* Bordered block (the mockup's `.box`): hairline, 12 px radius, no shadow. */
 @utility card {
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
   border: 1px solid var(--color-line);
   background-color: var(--color-sheet);
-  box-shadow: var(--shadow-soft);
 }
 
 @layer base {
-  /* Shell geometry (desktop card: 8 px margin, 1 px border) and its shadow; not Tailwind theme values. */
+  /* Full-height work area: `main` scrolls, list columns are sticky at this height. --shadow-card: popovers only. */
   :root {
-    --card-h: calc(100dvh - 1rem);
-    --content-h: calc(var(--card-h) - 2px);
-    --shadow-card: 0 1px 2px rgb(22 24 27 / 0.03), 0 12px 32px -16px rgb(22 24 27 / 0.12);
-    /* Inner cards (utility `card`): a light lift in the light theme, none in the dark one. */
-    --shadow-soft: 0 1px 2px rgb(22 24 27 / 0.04), 0 2px 6px -2px rgb(22 24 27 / 0.06);
+    --card-h: 100dvh;
+    --content-h: 100dvh;
+    --shadow-card: 0 12px 32px -12px rgb(14 14 16 / 0.18), 0 2px 6px -2px rgb(14 14 16 / 0.06);
   }
   :root.dark {
-    --color-paper: #0e1012;
-    --color-sheet: #16191c;
-    --color-raised: #20242a;
-    --color-line: #2a2f35;
-    --color-ink: #e7e9ec;
-    --color-ink-soft: #b3b8bf;
-    --color-ink-faint: #8b929b;
-    --color-accent: #8db5dd;
-    --color-accent-strong: #a8c8e8;
-    --color-accent-soft: #1b2a39;
-    --color-on-accent: #0e1012;
-    --color-ok: #74c69d;
-    --color-ok-soft: #1a2c23;
-    --color-dot-ok: #4fb67f;
-    --color-warn: #dcae62;
-    --color-warn-soft: #33291a;
-    --color-bad: #ee8e80;
-    --color-bad-soft: #3a2220;
-    --shadow-card: none;
-    --shadow-soft: none;
+    --color-paper: #0f0f11;
+    --color-sheet: #161618;
+    --color-raised: #222226;
+    --color-line: #2c2c31;
+    --color-ink: #ededef;
+    --color-ink-soft: #b9b9c0;
+    --color-ink-faint: #8e8e96;
+    --color-accent: #ff7a1a;
+    --color-accent-strong: #ff8f3d;
+    --color-accent-soft: #3a2312;
+    --color-on-accent: #0e0e10;
+    --color-accent-ink: #ff9a4d;
+    --color-ok: #8fd16a;
+    --color-ok-soft: #1b2a14;
+    --color-dot-ok: #6bbf3a;
+    --color-warn: #e8b860;
+    --color-warn-soft: #33281a;
+    --color-bad: #f08a80;
+    --color-bad-soft: #3a1f1c;
+    --shadow-card: 0 12px 32px -12px rgb(0 0 0 / 0.6), 0 0 0 1px var(--color-line);
   }
   /* Same values as :root.dark: keep both blocks identical. */
   @media (prefers-color-scheme: dark) {
     :root:not(.light) {
-      --color-paper: #0e1012;
-      --color-sheet: #16191c;
-      --color-raised: #20242a;
-      --color-line: #2a2f35;
-      --color-ink: #e7e9ec;
-      --color-ink-soft: #b3b8bf;
-      --color-ink-faint: #8b929b;
-      --color-accent: #8db5dd;
-      --color-accent-strong: #a8c8e8;
-      --color-accent-soft: #1b2a39;
-      --color-on-accent: #0e1012;
-      --color-ok: #74c69d;
-      --color-ok-soft: #1a2c23;
-      --color-dot-ok: #4fb67f;
-      --color-warn: #dcae62;
-      --color-warn-soft: #33291a;
-      --color-bad: #ee8e80;
-      --color-bad-soft: #3a2220;
-      --shadow-card: none;
-      --shadow-soft: none;
+      --color-paper: #0f0f11;
+      --color-sheet: #161618;
+      --color-raised: #222226;
+      --color-line: #2c2c31;
+      --color-ink: #ededef;
+      --color-ink-soft: #b9b9c0;
+      --color-ink-faint: #8e8e96;
+      --color-accent: #ff7a1a;
+      --color-accent-strong: #ff8f3d;
+      --color-accent-soft: #3a2312;
+      --color-on-accent: #0e0e10;
+      --color-accent-ink: #ff9a4d;
+      --color-ok: #8fd16a;
+      --color-ok-soft: #1b2a14;
+      --color-dot-ok: #6bbf3a;
+      --color-warn: #e8b860;
+      --color-warn-soft: #33281a;
+      --color-bad: #f08a80;
+      --color-bad-soft: #3a1f1c;
+      --shadow-card: 0 12px 32px -12px rgb(0 0 0 / 0.6), 0 0 0 1px var(--color-line);
     }
   }
 
@@ -103,10 +100,10 @@
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
-    font-feature-settings: "tnum" 1;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
   }
-  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+  :focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; border-radius: 4px; }
 }
 
 /* One entrance: the page content fades and rises a few pixels. */
@@ -132,13 +129,13 @@
 }
 
 /* Agent answers (react-markdown, no raw HTML). */
-.md { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.md { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
 .md > * + * { margin-top: 0.75em; }
-.md h1, .md h2, .md h3 { font-weight: 500; line-height: 1.3; margin-top: 1.25em; }
+.md h1, .md h2, .md h3 { font-weight: 600; line-height: 1.3; margin-top: 1.25em; }
 .md h1 { font-size: 18px; } .md h2 { font-size: 16px; } .md h3 { font-size: 15px; }
 .md ul { list-style: disc; padding-left: 1.25em; } .md ol { list-style: decimal; padding-left: 1.25em; }
 .md li + li { margin-top: 0.25em; }
-.md a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.md a { color: var(--color-ink); text-decoration: underline; text-underline-offset: 2px; }
 .md code { font-family: var(--font-mono); font-size: 12.5px; background: var(--color-raised); border-radius: 4px; padding: 1px 4px; }
 .md pre { background: var(--color-sheet); border: 1px solid var(--color-line); border-radius: 8px; padding: 12px; overflow-x: auto; }
 .md pre code { background: none; padding: 0; }
@@ -155,6 +152,6 @@
   background: var(--color-sheet); color: var(--color-ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   text-decoration: none; transition: border-color 150ms, background-color 150ms;
 }
-.md a.file-chip:hover { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.md a.file-chip:hover { border-color: var(--color-ink-faint); background: var(--color-raised); }
 .md .file-chip span, .file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md code:has(> a.file-chip) { background: none; padding: 0; }

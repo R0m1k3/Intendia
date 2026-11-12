@@ -60,7 +60,7 @@ export function PromptPicker({ open, onOpenChange, filter, text, onInsert, disab
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && shown[0]) { e.preventDefault(); onInsert(shown[0].body); close(); }
               }}
-              className="h-8 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm focus:border-accent focus:outline-none"
+              className="h-8 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm focus:border-ink focus:outline-none"
             />
             <div className="max-h-72 overflow-y-auto">
               {list.isPending && <p className="px-2.5 py-2 text-sm text-ink-faint">Chargement…</p>}
@@ -135,7 +135,7 @@ function PromptEditor({ prompt }: { prompt: Prompt }) {
   return (
     <section data-prompt-editor={prompt.title} className="space-y-2 border-b border-line pb-5 last:border-0">
       <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} aria-label="Titre du prompt"
-        className="h-9 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm font-medium focus:border-accent focus:outline-none" />
+        className="h-9 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm font-medium focus:border-ink focus:outline-none" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} maxLength={20_000} aria-label="Texte du prompt" className={cx(TEXTAREA, 'resize-y')} />
       <ErrorText error={save.error ?? remove.error} />
       <div className="flex justify-end gap-2">

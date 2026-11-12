@@ -103,7 +103,7 @@ function InstanceTimeline({ label, crons, now, many, open }: { label: string | n
           })}
         </div>
         {rows.length > MOBILE_ROWS && (
-          <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent hover:underline md:hidden">
+          <Link to="/crons" className="mt-3 block text-[13px] font-medium text-accent-ink hover:underline md:hidden">
             et {rows.length - MOBILE_ROWS} autres
           </Link>
         )}
@@ -121,7 +121,7 @@ export function CronTimeline({ crons }: { crons: OverviewCron[] }) {
   for (const c of crons) byInstance.set(c.instanceId, [...(byInstance.get(c.instanceId) ?? []), c]);
   const many = byInstance.size > 1;
   return (
-    <section className="card px-5 py-4" aria-labelledby="timeline-title" data-collapsed={open ? undefined : ''}>
+    <section className="card px-4 py-3" aria-labelledby="timeline-title" data-collapsed={open ? undefined : ''}>
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-2">
           <h2 id="timeline-title" className="text-[15px] font-semibold">Aujourd’hui</h2>

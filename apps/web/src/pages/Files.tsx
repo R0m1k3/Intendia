@@ -68,8 +68,9 @@ export function FilesPage() {
   return (
     <div>
       <PageHeader
+        eyebrow={<Link to="/w/$slug" params={{ slug }} className="hover:text-ink">{ws.data?.workspace.name ?? slug}</Link>}
         title="Fichiers"
-        subtitle={<span className="font-mono text-xs">{ws.data?.workspace.name ?? slug} · le disque du workspace, partagé avec l’agent</span>}
+        subtitle="Le dossier du workspace, partagé avec l’agent"
         action={
           <div className="flex items-center gap-2">
             <input ref={input} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) void upload(f); }} />
@@ -79,10 +80,11 @@ export function FilesPage() {
           </div>
         }
       />
-      <div className={cx('grid gap-6 px-5 pb-10 md:px-8', open && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]')}>
+      <div className={cx('grid gap-5 px-4 pb-14 md:px-8', open ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]' : 'max-w-[1000px]')}>
         <DropZone onFiles={(f) => void upload(f)} label={`Déposer dans ${target}/`} className="min-w-0">
           <Panel
-            bodyClassName="p-0"
+            className="overflow-hidden"
+            bodyClassName="border-t border-line/70"
             title={
               <nav aria-label="Dossier" className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
                 <Link to="/w/$slug" params={{ slug }} className="text-ink-faint hover:text-ink">{slug}</Link>
@@ -106,21 +108,21 @@ export function FilesPage() {
               </div>
             }
           >
-            <div className="px-5 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
-            {debounced && <p className="px-5 pt-3 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
+            <div className="px-4 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
+            {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
             {entries.length > 0 ? (
               <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} />
             ) : (tree.isSuccess && !debounced) ? (
-              <div className="px-5 py-12 text-center">
-                <p className="text-sm">Aucun fichier ici</p>
-                <p className="mt-1 text-sm text-ink-soft">Glissez-en un dans cette zone, ou utilisez Déposer</p>
+              <div className="px-4 py-12 text-center">
+                <p className="text-sm font-medium">Aucun fichier ici</p>
+                <p className="mt-1 text-sm text-ink-faint">Glissez-en un dans cette zone, ou utilisez Déposer</p>
               </div>
             ) : null}
-            {tree.data?.truncated && !debounced && <p className="border-t border-line px-5 py-2 text-xs text-ink-faint">Dossier coupé à 2 000 éléments : utilisez la recherche</p>}
+            {tree.data?.truncated && !debounced && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Dossier coupé à 2 000 éléments : utilisez la recherche</p>}
           </Panel>
         </DropZone>
         {open && (
-          <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:rounded-xl lg:border lg:border-line">
+          <section className="fixed inset-0 z-30 bg-sheet lg:sticky lg:top-6 lg:z-auto lg:h-[calc(var(--content-h)-3rem)] lg:overflow-hidden lg:rounded-xl lg:border lg:border-line">
             <Preview scope={workspaceScope(slug)} path={open} onClose={() => void go({ path: dir || undefined })} />
           </section>
         )}

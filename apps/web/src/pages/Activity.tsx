@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { api, type ActiveRun, type KanbanWorker } from '../api';
 import { useCurrentInstance } from '../instance/current';
 import { PageHeader } from '../components/Layout';
-import { Button, cx, ErrorText, Mark, Panel, timeAgo } from '../components/ui';
+import { Button, ErrorText, Mark, Panel, Tag, timeAgo } from '../components/ui';
 import { ask } from '../components/Dialog';
 
 const ICON = 'size-4';
@@ -23,20 +23,20 @@ function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: string 
   });
   const waiting = run.status === 'waiting_for_approval';
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm">
+    <li className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-4 py-3 text-sm">
       <Mark state="readonly" className={waiting ? undefined : 'animate-pulse'} />
       <div className="min-w-0 flex-1">
-        <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }} className="font-medium hover:text-accent">
+        <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }} className="font-medium hover:text-accent-ink">
           {run.title || 'Session sans titre'}
         </Link>
-        <p className="text-xs text-ink-soft">
+        <p className="text-[13px] text-ink-faint">
           {run.workspaceName}{instanceLabel ? ` · ${instanceLabel}` : ''}{run.profile !== 'default' ? ` · ${run.profile}` : ''} · {timeAgo(run.lastActiveAt)}
         </p>
       </div>
-      <span className={cx('text-xs', waiting ? 'text-warn' : 'text-ink-faint')}>{RUN_STATUS[run.status] ?? run.status}</span>
+      <Tag className={waiting ? 'bg-warn-soft text-warn' : undefined}>{RUN_STATUS[run.status] ?? run.status}</Tag>
       {waiting ? (
         <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }}
-          className="inline-flex h-8 items-center gap-2 rounded-lg bg-accent px-3 text-[13px] text-on-accent transition-colors hover:bg-accent-strong">
+          className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-strong bg-accent px-3 text-[13px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
           <MessageSquareReply className={ICON} strokeWidth={1.5} />Répondre
         </Link>
       ) : (
@@ -60,13 +60,13 @@ function WorkerRow({ worker, instanceLabel, onStopped }: { worker: KanbanWorker;
     onSettled: () => qc.invalidateQueries({ queryKey: ['activity'] }),
   });
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm">
+    <li className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-4 py-3 text-sm">
       <Mark state="readonly" className="animate-pulse" />
       <div className="min-w-0 flex-1">
-        <Link to="/i/$inst/kanban" params={{ inst: worker.instance }} search={{ board: worker.board, task: worker.taskId }} className="block truncate font-medium hover:text-accent">
+        <Link to="/i/$inst/kanban" params={{ inst: worker.instance }} search={{ board: worker.board, task: worker.taskId }} className="block truncate font-medium hover:text-accent-ink">
           {title}
         </Link>
-        <p className="text-xs text-ink-soft">
+        <p className="text-[13px] text-ink-faint">
           {worker.assignee ?? 'agent inconnu'} · tableau <span className="font-mono">{worker.board}</span>{instanceLabel ? ` · ${instanceLabel}` : ''}
           {worker.startedAt ? ` · ${timeAgo(worker.startedAt * 1000)}` : ''}
         </p>
@@ -91,10 +91,10 @@ export function ActivityPage() {
   return (
     <div>
       <PageHeader title="Activité" subtitle={`Runs lancés depuis Intendia ces dernières 24 h, et tâches du kanban en cours${instance && instances.length > 1 ? `, sur ${instance.label}` : ''}.`} />
-      <div className="space-y-6 px-5 pb-10 md:px-8">
+      <div className="max-w-[1000px] space-y-5 px-4 pb-14 md:px-8">
         <ErrorText error={activity.error} />
         {stopped.length > 0 && (
-          <ul role="status" className="space-y-1.5 card px-5 py-3">
+          <ul role="status" className="space-y-1.5 card px-4 py-3">
             {stopped.map((t, i) => (
               <li key={i} className="flex items-center gap-2 text-sm text-ink-soft">
                 <Mark state="unavailable" /><span className="min-w-0 flex-1">{t}</span>
@@ -110,23 +110,23 @@ export function ActivityPage() {
             {label(e.instance) ?? e.instance} : {e.message}
           </p>
         ))}
-        <Panel bodyClassName="p-0" title="Conversations" action={<span className="font-mono text-[11px] text-ink-faint">{data?.runs.length ?? ''}</span>}>
+        <Panel bodyClassName="p-0" title="Conversations" action={<span className="font-mono text-xs text-ink-faint">{data?.runs.length ?? ''}</span>}>
           {data?.runs.length ? (
-            <ul className="divide-y divide-line">
+            <ul className="divide-y divide-line/70 border-t border-line/70">
               {data.runs.map((r) => <RunRow key={`${r.instance}:${r.runId}`} run={r} instanceLabel={label(r.instance)} />)}
             </ul>
           ) : (
-            <p className="px-5 py-6 text-sm text-ink-faint">{data ? 'Aucune réponse en cours' : 'Chargement…'}</p>
+            <p className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{data ? 'Aucune réponse en cours' : 'Chargement…'}</p>
           )}
         </Panel>
-        <Panel bodyClassName="p-0" title="Workers du kanban" action={<span className="font-mono text-[11px] text-ink-faint">{data?.workers.length ?? ''}</span>}>
+        <Panel bodyClassName="p-0" title="Workers du kanban" action={<span className="font-mono text-xs text-ink-faint">{data?.workers.length ?? ''}</span>}>
           {data?.workers.length ? (
-            <ul className="divide-y divide-line">
+            <ul className="divide-y divide-line/70 border-t border-line/70">
               {data.workers.map((w) => <WorkerRow key={`${w.instance}:${w.board}:${w.runId}`} worker={w} instanceLabel={label(w.instance)}
                 onStopped={(t) => setStopped((l) => [...l, t])} />)}
             </ul>
           ) : (
-            <p className="px-5 py-6 text-sm text-ink-faint">{data ? 'Aucune tâche en cours' : 'Chargement…'}</p>
+            <p className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{data ? 'Aucune tâche en cours' : 'Chargement…'}</p>
           )}
         </Panel>
       </div>

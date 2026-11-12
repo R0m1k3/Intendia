@@ -30,7 +30,7 @@ function Item({ a, onDone, onLater }: { a: PendingApproval; onDone: () => void; 
   };
   const choose = (choice: ApprovalChoice) => send(() => api.approve(a.instanceId, a.sessionId, a.runId, choice, a.requestId ?? undefined));
   const answer = (text: string) => send(() => api.clarify(a.instanceId, a.sessionId, a.runId, text, a.requestId ?? undefined));
-  const link = 'text-[13px] font-medium text-accent hover:underline';
+  const link = 'text-[13px] font-medium text-accent-ink hover:underline';
   const footer = (
     <>
       <ErrorText error={error} />

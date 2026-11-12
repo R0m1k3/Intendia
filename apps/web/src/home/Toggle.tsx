@@ -9,9 +9,9 @@ export function Toggle({ open, onToggle, controls }: { open: boolean; onToggle: 
       onClick={onToggle}
       aria-expanded={open}
       aria-controls={controls}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-medium text-ink-soft transition-colors hover:bg-raised hover:text-ink"
+      className="inline-flex h-7 items-center gap-1 rounded-full border border-line px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-paper hover:text-ink"
     >
-      <ChevronDown className={cx('size-4 transition-transform', !open && '-rotate-90')} strokeWidth={1.5} aria-hidden />
+      <ChevronDown className={cx('size-3.5 transition-transform', !open && '-rotate-90')} strokeWidth={1.5} aria-hidden />
       {open ? 'Réduire' : 'Agrandir'}
     </button>
   );

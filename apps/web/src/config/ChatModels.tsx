@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, type ModelProvider } from '../api';
-import { Button, ErrorText, Input, Section } from '../components/ui';
+import { Button, ErrorText, Input } from '../components/ui';
+import { ConfigBox } from './Box';
 import { addChoices } from './chat-models-edit';
 import { configKey, ICON } from './common';
 
@@ -16,16 +17,16 @@ export function ChatModels({ inst, profile, providers, writable, onYaml, onProvi
 }) {
   const withKey = providers.filter((p) => p.authenticated);
   return (
-    <Section title="Modèles du chat" description="Les modèles proposés dans le chat, par fournisseur. Sans modèle choisi, le chat propose tout le catalogue du fournisseur. La liste est écrite dans la configuration d’Hermes.">
+    <ConfigBox id="cf-c" title="Modèles du chat" description="Les modèles proposés dans le chat, par fournisseur. Sans modèle choisi, le chat propose tout le catalogue du fournisseur. La liste est écrite dans la configuration d’Hermes.">
       {withKey.length === 0
         ? (
           <p className="text-sm text-ink-soft">
             Aucun fournisseur n’est connecté : le chat propose seulement « Auto ». Ajoutez un abonnement ou une clé dans l’onglet{' '}
-            {onProviders ? <button type="button" className="text-accent underline-offset-2 hover:underline" onClick={onProviders}>Fournisseurs</button> : 'Fournisseurs'}.
+            {onProviders ? <button type="button" className="text-accent-ink underline-offset-2 hover:underline" onClick={onProviders}>Fournisseurs</button> : 'Fournisseurs'}.
           </p>
         )
         : <div className="space-y-3">{withKey.map((p) => <ProviderBlock key={p.slug} inst={inst} profile={profile} p={p} writable={writable} onYaml={onYaml} />)}</div>}
-    </Section>
+    </ConfigBox>
   );
 }
 
@@ -47,7 +48,7 @@ function ProviderBlock({ inst, profile, p, writable, onYaml }: { inst: string; p
   const found = q.trim() ? addChoices(p.models, p.declared, q) : [];
 
   return (
-    <div className="card p-4" data-provider-models={p.slug}>
+    <div className="rounded-[10px] border border-line p-4" data-provider-models={p.slug}>
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-medium">{p.name}</h3>
         <span className="font-mono text-xs text-ink-faint">{p.slug}</span>

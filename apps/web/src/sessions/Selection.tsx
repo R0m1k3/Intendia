@@ -99,13 +99,13 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
         const allOn = ids.every((id) => selected.has(id));
         return (
           <section key={g.label} aria-label={g.label}>
-            <div className="flex h-9 items-center gap-3 bg-raised/40 px-5 text-xs font-medium text-ink-soft">
+            <div className="flex h-9 items-center gap-3 bg-paper px-4 text-xs font-medium text-ink-soft">
               <input type="checkbox" aria-label={`Tout sélectionner : ${g.label}`} checked={allOn} onChange={(e) => toggle(ids, e.target.checked)} className="accent-accent" />
               <span>{g.label}</span>
             </div>
             <ul className="divide-y divide-line">
               {g.items.map((s) => (
-                <li key={s.id} className={cx('flex h-12 items-center gap-3 pl-5 text-sm transition-colors hover:bg-raised/50', selected.has(s.id) && 'bg-raised/60')}>
+                <li key={s.id} className={cx('flex h-12 items-center gap-3 pl-4 text-sm transition-colors hover:bg-paper', selected.has(s.id) && 'bg-raised/60')}>
                   <input
                     type="checkbox" aria-label={`Sélectionner ${s.title || 'Nouvelle session'}`} checked={selected.has(s.id)}
                     onChange={(e) => toggle([s.id], e.target.checked)} className="accent-accent"

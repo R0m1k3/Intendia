@@ -34,11 +34,11 @@ export function ConfigHistory({ inst, profile, can, onSaved }: TabProps) {
 
   return (
     <div className="grid gap-4 md:grid-cols-[280px_1fr]">
-      <Panel title="Copies" bodyClassName="divide-y divide-line">
+      <Panel title="Copies" bodyClassName="divide-y divide-line/70 border-t border-line/70">
         {list.length === 0 && <p className="p-5 text-sm text-ink-soft">Aucune copie : Intendia en garde une avant chaque enregistrement (dix au plus).</p>}
         {list.map((v) => (
           <button key={v.id} type="button" disabled={!v.readable} onClick={() => { setSelected(v.id); restore.reset(); }}
-            className={cx('flex w-full items-center justify-between gap-3 px-5 py-3 text-left text-sm transition-colors disabled:opacity-50',
+            className={cx('flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors disabled:opacity-50',
               selected === v.id ? 'bg-raised' : 'hover:bg-raised/60')}>
             <span>
               <span className="block">{new Date(v.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}</span>

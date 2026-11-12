@@ -153,7 +153,7 @@ export function Preview({ scope, path, onClose }: { scope: FileScope; path: stri
         ) : (
           <div className="p-6 text-sm text-ink-soft">
             <p>{tooBig ? 'Fichier trop gros pour l’aperçu.' : 'Pas d’aperçu pour ce type de fichier.'}</p>
-            <a href={scope.raw(path, true)} className="mt-3 inline-flex items-center gap-2 text-accent hover:underline">
+            <a href={scope.raw(path, true)} className="mt-3 inline-flex items-center gap-2 text-accent-ink hover:underline">
               <Download className="size-4" strokeWidth={1.5} />Télécharger
             </a>
           </div>
