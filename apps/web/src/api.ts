@@ -599,6 +599,21 @@ export interface Activity {
   workers: KanbanWorker[];
   errors: { instance: string; message: string }[];
 }
+/** A run launched from Intendia that ended in the last 24 h (Centre, « Terminé »). */
+export interface FinishedRun {
+  instance: string;
+  workspace: string;
+  workspaceName: string;
+  sessionId: string;
+  title: string | null;
+  runId: string;
+  status: string;
+  /** ms */
+  startedAt: number;
+  /** ms */
+  endedAt: number;
+  costUsd: number | null;
+}
 export interface KanbanBoard { slug: string; name: string; total: number }
 export interface KanbanTask {
   id: string;
@@ -887,6 +902,10 @@ export const api = {
   setAgentDescription: (inst: string, name: string, description: string) =>
     call<{ description: string }>('PUT', instPath(inst, `agents/${enc(name)}/description`), { description }),
   activity: (inst: string) => call<Activity>('GET', instPath(inst, 'activity')),
+  /** Runs in progress and kanban workers of every instance (Centre, « Toutes les instances »). */
+  activityAll: () => call<Activity>('GET', '/activity'),
+  /** Runs ended in the last 24 h: one instance, or all without `inst`. */
+  finishedRuns: (inst?: string) => call<{ runs: FinishedRun[] }>('GET', inst ? `/activity/finished?instance=${enc(inst)}` : '/activity/finished'),
   monitorUsage: (inst: string, profile: string, days: number) => call<PublicUsage>('GET', instPath(inst, 'monitor/usage', profile, { days: String(days) })),
   monitorLogs: (inst: string, profile: string, q: LogQuery) => call<PublicLogs>('GET', instPath(inst, 'monitor/logs', profile, Object.fromEntries(
     Object.entries({ file: q.file, lines: String(q.lines), level: q.level, component: q.component, search: q.search }).filter((e): e is [string, string] => Boolean(e[1])),

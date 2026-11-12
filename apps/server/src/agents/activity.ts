@@ -143,7 +143,17 @@ export class ActivityService {
     return result;
   }
 
-  private async computeList(instanceId: string, now: number): Promise<Activity> {
+  private allListing: Promise<Activity> | null = null;
+
+  /** Same as `list` for every instance at once (one pass over the recent runs, then each instance's workers); shared too. */
+  listAll(now = Date.now()): Promise<Activity> {
+    if (this.allListing) return this.allListing;
+    const result = this.computeList(undefined, now).finally(() => { this.allListing = null; });
+    this.allListing = result;
+    return result;
+  }
+
+  private async computeList(instanceId: string | undefined, now: number): Promise<Activity> {
     const errors: Activity['errors'] = [];
     const fail = (instance: string, err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
@@ -152,7 +162,7 @@ export class ActivityService {
     const runs: ActiveRun[] = (await this.running(now, instanceId, fail)).map(({ controls: _controls, ...r }) => r);
 
     const workers: PublicWorker[] = [];
-    for (const inst of this.store.list().filter((i) => i.id === instanceId)) {
+    for (const inst of this.store.list().filter((i) => instanceId === undefined || i.id === instanceId)) {
       if (!this.kanban.can(inst.id, 'workers') || !this.kanban.can(inst.id, 'boards')) continue;
       try {
         workers.push(...(await this.kanban.workers(inst.id)));
