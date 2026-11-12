@@ -52,9 +52,11 @@ import { ConfigStore } from './config.js';
 import { FilesStore } from './files.js';
 import { GitStore, type GitFakeOptions } from './git.js';
 import { MemoryStore } from './memory.js';
+import { PluginStore } from './plugins.js';
 import { MonitorStore, type MonitorFakeOptions } from './monitor.js';
 export { FAKE_SECRETS, OPENROUTER_MODELS } from './config.js';
 export { FAKE_MEMORY_LIMITS, FAKE_MEMORY_SEED, fingerprint as memoryFingerprint } from './memory.js';
+export { FAKE_PLUGIN_CATALOG } from './plugins.js';
 import { SkillStore } from './skills.js';
 
 /**
@@ -79,6 +81,8 @@ export interface FakeOptions {
   git?: GitFakeOptions;
   /** Stats, logs and host metrics: see monitor.ts. */
   monitor?: MonitorFakeOptions;
+  /** Delay of a plugin install in ms (default FAKE_PLUGIN_INSTALL_MS or 2000): see plugins.ts. */
+  pluginInstallMs?: number;
   /** Keyed by "api GET /path" or "dash GET /path" (paths without the /p/<profile> prefix). */
   breaks?: Record<string, Break>;
   /** Hide entries of /v1/capabilities `endpoints` or dashboard OpenAPI routes ("METHOD /path"). */
@@ -578,7 +582,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore }
+interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -672,6 +676,8 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       // before skills: /api/learning/node serves memory ids here, skill ids in the skills store
       const mem = stores.memory.handle(method, path, c.req.query(), body);
       if (mem) return c.json(mem.body, mem.status as 200);
+      const plug = await stores.plugins.handle(method, path, body);
+      if (plug) return c.json(plug.body, plug.status as 200);
     }
     const prof = profiles.handle(via, method, path, body, c.req.query());
     if (prof) return prof;
@@ -969,7 +975,8 @@ export function createFakeHermes(opts: FakeOptions) {
     ...skills.skills.slice(0, 4).map((s, i) => ({ name: s.name, category: s.category || 'general', useCount: 4 - i, createdBy: 'bundled', pinned: i === 0 })),
     ...skills.skills.filter((s) => s.provenance === 'agent').map((s) => ({ name: s.name, category: s.category || 'general', useCount: 0, createdBy: 'agent', pinned: false })),
   ]);
-  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor, memory };
+  const plugins = new PluginStore(opts.pluginInstallMs);
+  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),

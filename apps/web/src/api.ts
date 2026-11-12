@@ -1,7 +1,7 @@
 // Typed client for the Intendia server (/x/*). Mirrors apps/server/src/connectors/types.ts.
 
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
-export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor' | 'memory';
+export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor' | 'memory' | 'plugins';
 
 export interface ResolvedOp {
   ok: boolean;
@@ -367,6 +367,25 @@ export interface LearnedSkill {
   related: string[]; memories: string[];
 }
 export interface MemoryUsage { bytes: number; limit: number }
+export interface Plugin {
+  name: string; version: string | null; description: string; source: string | null; status: string | null;
+  canRemove: boolean; authRequired: boolean; authCommand: string | null; hidden: boolean; removedReason: string | null;
+}
+export interface PluginCatalogEntry {
+  name: string; title: string; description: string; maintainer: string | null; tier: string | null; category: string | null;
+  version: string | null; shaShort: string; docsUrl: string | null; requiresHermes: string | null; platforms: string[];
+  tools: string[]; hooks: string[]; middleware: string[]; requiresEnv: string[]; knownIssues: string[];
+  installed: boolean; updateAvailable: boolean;
+}
+export interface PluginCatalog { entries: PluginCatalogEntry[]; removed: { name: string; reason: string | null }[]; generatedAt: string | null }
+export interface PluginInstallResult {
+  state: 'installed' | 'consent'; plugin: string | null; enabled: boolean; restartRequired: boolean; gatewayReloaded: boolean;
+  missingEnv: string[]; warnings: string[]; knownIssues: string[]; message: string | null;
+}
+export interface PluginJob {
+  id: string; name: string; state: 'running' | 'done' | 'failed'; startedAt: number; finishedAt: number | null;
+  result: PluginInstallResult | null; error: string | null;
+}
 export interface MemoryOverview {
   active: string | null;
   usage: { memory: MemoryUsage | null; user: MemoryUsage | null };
@@ -869,6 +888,13 @@ export const api = {
   lockSkill: (inst: string, profile: string, name: string, locked: boolean) =>
     call<{ skill: Skill }>('PUT', instPath(inst, 'skills/lock', profile), { name, locked }),
   archiveSkill: (inst: string, profile: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `skills/${enc(name)}`, profile)),
+  plugins: (inst: string) => call<{ plugins: Plugin[] }>('GET', instPath(inst, 'plugins')),
+  pluginCatalog: (inst: string) => call<PluginCatalog>('GET', instPath(inst, 'plugins/catalog')),
+  installPlugin: (inst: string, name: string) => call<{ job: PluginJob }>('POST', instPath(inst, 'plugins/install'), { name }),
+  pluginJobs: (inst: string) => call<{ job: PluginJob | null }>('GET', instPath(inst, 'plugins/jobs')),
+  pluginJob: (inst: string, id: string) => call<PluginJob>('GET', instPath(inst, `plugins/jobs/${enc(id)}`)),
+  setPluginEnabled: (inst: string, name: string, enabled: boolean) => call<{ ok: true }>('POST', instPath(inst, `plugins/${enc(name)}/${enabled ? 'enable' : 'disable'}`)),
+  removePlugin: (inst: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `plugins/${enc(name)}`)),
   memory: (inst: string, profile: string) => call<MemoryOverview>('GET', instPath(inst, 'memory', profile)),
   memoryEntry: (inst: string, profile: string, id: string) => call<{ id: string; content: string }>('GET', instPath(inst, 'memory/entry', profile, { id })),
   putMemoryEntry: (inst: string, profile: string, id: string, content: string) => call<{ ok: true }>('PUT', instPath(inst, 'memory/entry', profile), { id, content }),
