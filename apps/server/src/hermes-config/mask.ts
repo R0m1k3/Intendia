@@ -135,9 +135,15 @@ export class Masker {
     let out = text.replace(URL_ANY_RE, (u) => this.url(u, found));
     out = out.replace(/\b(Bearer|Basic|Token)(\s+)([A-Za-z0-9._~+/=-]{6,})/g, (m, a: string, sp: string, v: string) =>
       (v.startsWith(PLACEHOLDER_START) ? m : `${a}${sp}${this.token(v, found)}`));
-    // command-line flags: `--token abc`, `--api-key=abc` (auth commands of plugins, MCP servers)
-    out = out.replace(/(?<![\w-])(--?[A-Za-z][A-Za-z0-9_-]*)(\s+|=)(["']?)([^\s"'«-][^\s"']*)/g, (m, flag: string, sep: string, q: string, v: string) =>
-      (isSecretKey(flag.replace(/^-+/, '').replace(/-/g, '_')) && !/^\d+$/.test(v) ? `${flag}${sep}${q}${this.token(v, found)}` : m));
+    // command-line flags: `--token abc`, `--api-key=abc`, `--password "a b c"` (auth commands of plugins, MCP servers);
+    // a quoted value is masked whole, spaces included
+    out = out.replace(/(?<![\w-])(--?[A-Za-z][A-Za-z0-9_-]*)(\s+|=)(?:"([^"]*)"|'([^']*)'|([^\s"'«-][^\s"']*))/g,
+      (m, flag: string, sep: string, dq: string | undefined, sq: string | undefined, bare: string | undefined) => {
+        const v = dq ?? sq ?? bare ?? '';
+        if (!v || v.startsWith('«') || !isSecretKey(flag.replace(/^-+/, '').replace(/-/g, '_')) || /^\d+$/.test(v)) return m;
+        const q = dq !== undefined ? '"' : sq !== undefined ? "'" : '';
+        return `${flag}${sep}${q}${this.token(v, found)}${q}`;
+      });
     // (?<!«): the «secret:<id>» placeholders written above are not a `secret: value` pair
     out = out.replace(/(?<![«A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*)(\s*[=:]\s*)(["']?)([^\s"',;&)]+)/g, (m, key: string, sep: string, q: string, v: string) => {
       if (!isSecretKey(key.split('.').pop()!) || /^\d+(\.\d+)?$/.test(v) || v.includes('«') || /^(Bearer|Basic|Token)$/.test(v)) return m;
