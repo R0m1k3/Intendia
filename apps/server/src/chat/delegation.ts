@@ -145,9 +145,9 @@ export interface DelegationMessage {
 }
 
 export interface OpenDelegations {
-  /** unit id → timestamp (seconds) of its ticket */
-  open: Map<string, number | null>;
-  /** tasks not refused of the open units */
+  /** unit id → timestamp (seconds) of its ticket and its tasks not refused */
+  open: Map<string, { ts: number | null; tasks: number }>;
+  /** tasks of the open units */
   openTasks: number;
   /** seconds: newest ticket still open */
   since: number | null;
@@ -158,29 +158,30 @@ export interface OpenDelegations {
  * page's `delegationState` (web/src/chat/deliveries.ts), which keeps what the cards need.
  */
 export function delegationState(messages: readonly DelegationMessage[]): OpenDelegations {
-  const open = new Map<string, number | null>();
-  const tasks = new Map<string, number>();
+  const open = new Map<string, { ts: number | null; tasks: number }>();
   const delivered = new Set<string>();
   for (const m of messages) {
     if (m.role === 'tool' && m.ticket) {
       const t = m.ticket;
       if (t.units.length) {
         for (const u of t.units) {
-          if (delivered.has(u.id)) continue;
-          open.set(u.id, m.timestamp);
-          tasks.set(u.id, u.tasks.filter((i) => !t.refused.includes(i)).length);
+          if (!delivered.has(u.id)) open.set(u.id, { ts: m.timestamp, tasks: u.tasks.filter((i) => !t.refused.includes(i)).length });
         }
       } else if (t.delegationId && !delivered.has(t.delegationId)) {
-        open.set(t.delegationId, m.timestamp);
         const all = t.goals.length || 1;
-        tasks.set(t.delegationId, Math.max(0, all - t.refused.filter((i) => i < all).length));
+        open.set(t.delegationId, { ts: m.timestamp, tasks: Math.max(0, all - t.refused.filter((i) => i < all).length) });
       }
     } else if (m.role === 'delegation' && m.delegation?.id && m.delegation.failedTask === null) {
       delivered.add(m.delegation.id);
       open.delete(m.delegation.id);
-      tasks.delete(m.delegation.id);
     }
   }
-  const times = [...open.values()].filter((v): v is number => v !== null);
-  return { open, openTasks: [...tasks.values()].reduce((a, b) => a + b, 0), since: times.length ? Math.max(...times) : null };
+  return summarizeOpen(open);
+}
+
+/** Totals of a set of open units (also used on the units still recent enough to wait for). */
+export function summarizeOpen(open: Map<string, { ts: number | null; tasks: number }>): OpenDelegations {
+  const units = [...open.values()];
+  const times = units.map((u) => u.ts).filter((v): v is number => v !== null);
+  return { open, openTasks: units.reduce((a, u) => a + u.tasks, 0), since: times.length ? Math.max(...times) : null };
 }

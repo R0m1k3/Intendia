@@ -38,6 +38,7 @@ function main() {
   services.purger.start();
   services.autoApprover.start();
   services.goalRunner.start();
+  services.watcher.start();
   // splits cut by a stop of Intendia: Hermes may have finished them
   services.missions.resume();
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
@@ -64,6 +65,7 @@ function main() {
     services.purger.stop();
     services.autoApprover.stop();
     services.goalRunner.stop();
+    services.watcher.stop();
     const closed = (s: { close: (cb: () => void) => unknown }) => new Promise<void>((r) => { s.close(() => r()); });
     void Promise.all([closed(server), closed(mcpServer)]).then(() => {
       db.$client.close();

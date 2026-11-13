@@ -62,6 +62,12 @@ export function relaunchInput(n: number, max: number): string {
 /** A text that would pass for one of Intendia's relaunches (refused from the user). */
 export const isRelaunchText = (s: string): boolean => s.trimStart().startsWith(RELAUNCH_PREFIX);
 
+/** Start of the message the server sends when background sub-agents delivered (chat/wake.ts). */
+export const WAKE_PREFIX = '[Intendia] Reprise automatique';
+export const isWakeText = (s: string): boolean => s.trimStart().startsWith(WAKE_PREFIX);
+/** Starts reserved to Intendia's own messages (relaunch of a goal, wake after sub-agents): refused from the user. */
+export const isReservedText = (s: string): boolean => isRelaunchText(s) || isWakeText(s);
+
 /** The end marker on the last non-empty line of a reply (bold, italics, final dot tolerated); null = none. */
 export function readMarker(output: string | null | undefined): { kind: 'done' } | { kind: 'blocked'; detail: string } | null {
   const last = (output ?? '').split('\n').map((l) => l.trim()).filter(Boolean).at(-1);

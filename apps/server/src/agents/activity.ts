@@ -1,6 +1,7 @@
 import type { CompatService } from '../compat/service.js';
 import { RunStatusSchema, TERMINAL_STATUSES, type PendingControl } from '../connectors/chat/index.js';
 import { finishFields } from '../chat/run-stats.js';
+import type { WorkingSubagents } from '../chat/wake.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
@@ -58,6 +59,8 @@ const APPROVALS_TTL_MS = 5_000;
 export interface Activity {
   runs: ActiveRun[];
   workers: PublicWorker[];
+  /** sessions whose background sub-agents still work (chat/wake.ts) */
+  subagents: WorkingSubagents[];
   errors: { instance: string; message: string }[];
 }
 
@@ -80,6 +83,7 @@ export class ActivityService {
     private readonly store: InstanceStore,
     private readonly workspaces: WorkspaceService,
     private readonly kanban: KanbanService,
+    private readonly working: (instanceId?: string) => WorkingSubagents[] = () => [],
   ) {}
 
   private markDone(key: string) {
@@ -179,7 +183,7 @@ export class ActivityService {
         fail(inst.id, err);
       }
     }
-    return { runs, workers, errors };
+    return { runs, workers, subagents: this.working(instanceId), errors };
   }
 
   private shared: { at: number; result: Promise<{ approvals: PendingApproval[] }> } | null = null;
