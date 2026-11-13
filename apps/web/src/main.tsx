@@ -132,13 +132,12 @@ const sessionRoute = createRoute({
   getParentRoute: () => inboxRoute, path: '/w/$slug/s/$sessionId', component: ChatPage,
   validateSearch: (s: Record<string, unknown>): { avec?: string } => ({ avec: typeof s.avec === 'string' && s.avec ? s.avec : undefined }),
 });
-/** « Chat » of the sidebar: this tab's active chat of the current instance, else the sessions. */
+/** « Chat » of the sidebar: this tab's active chat (of any instance), else the sessions. */
 const chatRoute = createRoute({
   getParentRoute: () => appRoute, path: '/chat',
   beforeLoad: () => {
-    const inst = currentTab();
-    const c = inst ? loadChat(inst) : null;
-    const active = c?.open.find((x) => x.id === c.active);
+    const c = loadChat();
+    const active = c.open.find((x) => x.id === c.active);
     if (active) throw redirect({ to: '/w/$slug/s/$sessionId', params: { slug: active.slug, sessionId: active.id } } as never);
     throw redirect({ to: '/' });
   },
@@ -156,11 +155,11 @@ async function createChat(): Promise<{ slug: string; id: string } | null> {
     const inst = resolveCurrent({ ids: instances.map((i) => i.id), tab: currentTab() });
     if (!inst) return null;
     const { workspaces } = await queryClient.fetchQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-    const slug = pickWorkspace({ workspaces, inst, chat: loadChat(inst), last: localStorage.getItem('intendia-last-workspace') });
+    const slug = pickWorkspace({ workspaces, inst, chat: loadChat(), last: localStorage.getItem('intendia-last-workspace') });
     if (!slug) return null;
     const { session } = await api.createSession(slug);
     void invalidateSessionLists(queryClient);
-    updateChat(inst, (c) => openBeside(c, { slug, id: session.id }));
+    updateChat((c) => openBeside(c, { slug, id: session.id }));
     return { slug, id: session.id };
   } catch (err) {
     console.error('Nouvelle session', err);

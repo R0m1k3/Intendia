@@ -115,27 +115,39 @@ describe('withPanel', () => {
 describe('store', () => {
   const mem = () => {
     const m = new Map<string, string>();
-    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m } as unknown as Storage & { m: Map<string, string> };
+    return {
+      getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k), key: (i: number) => [...m.keys()][i] ?? null,
+      get length() { return m.size; }, m,
+    } as unknown as Storage & { m: Map<string, string> };
   };
   const g = globalThis as { sessionStorage?: Storage; localStorage?: Storage };
   beforeEach(() => { g.sessionStorage = mem(); g.localStorage = mem(); resetChatCache(); });
 
-  it('reads the tab first, then the copy; writes both; per instance', () => {
-    g.localStorage!.setItem('intendia-chat:i', JSON.stringify(chat(['l'])));
-    expect(ids(loadChat('i'))).toEqual(['l']);
+  it('reads the tab first, then the copy; writes both; one state for every instance', () => {
+    g.localStorage!.setItem('intendia-chat', JSON.stringify(chat(['l'])));
+    expect(ids(loadChat())).toEqual(['l']);
     resetChatCache();
-    g.sessionStorage!.setItem('intendia-chat:i', JSON.stringify(chat(['s'])));
-    expect(ids(loadChat('i'))).toEqual(['s']);
-    updateChat('i', (x) => openBeside(x, c('n')));
-    expect(JSON.parse(g.sessionStorage!.getItem('intendia-chat:i')!).open).toHaveLength(2);
-    expect(JSON.parse(g.localStorage!.getItem('intendia-chat:i')!).open).toHaveLength(2);
-    expect(loadChat('j')).toEqual(EMPTY);
+    g.sessionStorage!.setItem('intendia-chat', JSON.stringify(chat(['s'])));
+    expect(ids(loadChat())).toEqual(['s']);
+    updateChat((x) => openBeside(x, c('n', 'autre-instance')));
+    expect(JSON.parse(g.sessionStorage!.getItem('intendia-chat')!).open).toHaveLength(2);
+    expect(JSON.parse(g.localStorage!.getItem('intendia-chat')!).open).toHaveLength(2);
+  });
+  it('drops the per-instance states of older versions, without carrying them over', () => {
+    g.sessionStorage!.setItem('intendia-chat:i', JSON.stringify(chat(['a'])));
+    g.localStorage!.setItem('intendia-chat:j', JSON.stringify(chat(['b'])));
+    g.localStorage!.setItem('intendia-instance', 'i');
+    expect(loadChat()).toEqual(EMPTY);
+    expect(g.sessionStorage!.getItem('intendia-chat:i')).toBeNull();
+    expect(g.localStorage!.getItem('intendia-chat:j')).toBeNull();
+    expect(g.localStorage!.getItem('intendia-instance')).toBe('i');
   });
   it('invalid JSON or shape gives EMPTY; bad entries are dropped', () => {
-    g.sessionStorage!.setItem('intendia-chat:i', '{oops');
-    expect(loadChat('i')).toEqual(EMPTY);
+    g.sessionStorage!.setItem('intendia-chat', '{oops');
+    expect(loadChat()).toEqual(EMPTY);
     resetChatCache();
-    g.sessionStorage!.setItem('intendia-chat:i', JSON.stringify({ open: [{ slug: 'p', id: 'a' }, { id: 3 }, { slug: 'p', id: 'a' }], active: 'zz', layout: 'odd', widths: { a: 'x' } }));
-    expect(loadChat('i')).toEqual({ open: [c('a', 'p')], active: 'a', layout: 'one', widths: {} });
+    g.sessionStorage!.setItem('intendia-chat', JSON.stringify({ open: [{ slug: 'p', id: 'a' }, { id: 3 }, { slug: 'p', id: 'a' }], active: 'zz', layout: 'odd', widths: { a: 'x' } }));
+    expect(loadChat()).toEqual({ open: [c('a', 'p')], active: 'a', layout: 'one', widths: {} });
   });
 });

@@ -1,7 +1,7 @@
-// Chats open side by side on the Chat page, per instance and per browser tab.
-// The tab's value lives in sessionStorage (`intendia-chat:<inst>`), copied to localStorage on each write: a new tab
-// starts from the copy, a tab never changes another one's columns (as instance/current.ts). A session is never in two
-// columns, so a session id names its column.
+// Chats open side by side on the Chat page, per browser tab, sessions of any instance (a column's instance is its
+// workspace's). The tab's value lives in sessionStorage (`intendia-chat`), copied to localStorage on each write: a new
+// tab starts from the copy, a tab never changes another one's columns (as instance/current.ts). A session is never in
+// two columns, and session ids are unique across instances (`iw-<slug>-…`), so a session id names its column.
 
 import { useSyncExternalStore } from 'react';
 
@@ -123,7 +123,9 @@ export function withPanel(set: ReadonlySet<string>, id: string, open: boolean): 
 
 // ---- store ----
 
-const key = (inst: string) => `intendia-chat:${inst}`;
+const KEY = 'intendia-chat';
+/** Before every instance shared one state: one key per instance. */
+const OLD_PREFIX = 'intendia-chat:';
 
 function parse(raw: string | null): Chat | null {
   if (!raw) return null;
@@ -149,35 +151,58 @@ const read = (store: Storage | undefined, k: string): string | null => {
   try { return store?.getItem(k) ?? null; } catch { return null; }
 };
 
-const cache = new Map<string, Chat>();
+let cache: Chat | null = null;
+let purged = false;
 const listeners = new Set<() => void>();
 
-/** This tab's chats of an instance: sessionStorage, else the copy of the last tab that wrote, else none. */
-export function loadChat(inst: string): Chat {
-  const hit = cache.get(inst);
-  if (hit) return hit;
+const storages = (): (Storage | undefined)[] => {
   const g = globalThis as { sessionStorage?: Storage; localStorage?: Storage };
-  const v = parse(read(g.sessionStorage, key(inst))) ?? parse(read(g.localStorage, key(inst))) ?? EMPTY;
-  cache.set(inst, v);
-  return v;
+  return [g.sessionStorage, g.localStorage];
+};
+
+/** The per-instance states of older versions: dropped, not carried over (columns to reopen once). */
+function purgeOld(): void {
+  if (purged) return;
+  purged = true;
+  for (const store of storages()) {
+    try {
+      if (!store) continue;
+      const old: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i);
+        if (k?.startsWith(OLD_PREFIX)) old.push(k);
+      }
+      for (const k of old) store.removeItem(k);
+    } catch { /* storage blocked */ }
+  }
 }
 
-export function updateChat(inst: string, f: (c: Chat) => Chat): Chat {
-  const before = loadChat(inst);
+/** This tab's chats: sessionStorage, else the copy of the last tab that wrote, else none. */
+export function loadChat(): Chat {
+  if (cache) return cache;
+  purgeOld();
+  const [own, shared] = storages();
+  cache = parse(read(own, KEY)) ?? parse(read(shared, KEY)) ?? EMPTY;
+  return cache;
+}
+
+export function updateChat(f: (c: Chat) => Chat): Chat {
+  const before = loadChat();
   const next = f(before);
   if (next === before) return before;
-  cache.set(inst, next);
+  cache = next;
   const raw = JSON.stringify(next);
-  const g = globalThis as { sessionStorage?: Storage; localStorage?: Storage };
-  try { g.sessionStorage?.setItem(key(inst), raw); } catch { /* kept in memory for this page */ }
-  try { g.localStorage?.setItem(key(inst), raw); } catch { /* new tabs start empty */ }
+  const [own, shared] = storages();
+  try { own?.setItem(KEY, raw); } catch { /* kept in memory for this page */ }
+  try { shared?.setItem(KEY, raw); } catch { /* new tabs start empty */ }
   listeners.forEach((l) => l());
   return next;
 }
 
 /** Tests: forget what was read. */
 export function resetChatCache(): void {
-  cache.clear();
+  cache = null;
+  purged = false;
 }
 
 const subscribe = (l: () => void) => {
@@ -185,7 +210,7 @@ const subscribe = (l: () => void) => {
   return () => { listeners.delete(l); };
 };
 
-/** This tab's chats of an instance (EMPTY without one), re-rendered on every change. */
-export function useChat(inst: string | null): Chat {
-  return useSyncExternalStore(subscribe, () => (inst ? loadChat(inst) : EMPTY));
+/** This tab's chats (EMPTY when not `enabled`), re-rendered on every change. */
+export function useChat(enabled = true): Chat {
+  return useSyncExternalStore(subscribe, () => (enabled ? loadChat() : EMPTY));
 }

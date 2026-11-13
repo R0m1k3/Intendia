@@ -6,6 +6,7 @@ import { configKey } from '../config/common';
 import { Panel } from '../components/ui';
 import { Ask } from '../home/Ask';
 import { useCurrentInstance } from '../instance/current';
+import { InstancePick } from '../chat/InstancePick';
 
 /**
  * Screen of the session list when no session is open: an empty chat, the box to write at the bottom like in a session
@@ -13,12 +14,13 @@ import { useCurrentInstance } from '../instance/current';
  */
 export function HomePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const { id, instance } = useCurrentInstance();
+  const { id, instance, select } = useCurrentInstance();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const search = useSearch({ from: '/app/inbox/' });
   const navigate = useNavigate();
   const list = instances.data?.instances ?? [];
   const ws = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === id);
+  const pickable = list.map((i) => ({ id: i.id, label: i.label, workspaces: (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === i.id).length }));
   const focused = useCallback(() => { void navigate({ to: '/', search: {}, replace: true }); }, [navigate]);
   // no main model on the current instance: the setup was skipped (model/info only: never writes; error → nothing)
   const info = useQuery({ queryKey: configKey(id ?? '', 'default', 'model-info'), queryFn: () => api.modelInfo(id!), enabled: Boolean(id), retry: false, staleTime: 60_000 });
@@ -37,6 +39,10 @@ export function HomePage() {
         </div>
       )}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 text-center">
+        {/* where the first message goes; outside the branches below, so it stays when the instance has no workspace */}
+        {workspaces.isSuccess && pickable.length > 1 && (
+          <div className="mb-5"><InstancePick value={id} instances={pickable} allowEmpty onPick={select} /></div>
+        )}
         {instances.isSuccess && list.length === 0 ? (
           <Panel>
             <p className="text-sm text-ink-soft">Intendia n’est relié à aucune instance Hermes pour l’instant</p>

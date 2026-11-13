@@ -4,7 +4,6 @@ import { EMBEDDED } from '../chat/embed';
 import { SplitView } from '../components/Panes';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { openBeside, updateChat, useChat, withPanel } from '../chat/columns';
-import { useCurrentInstance } from '../instance/current';
 import { SessionsPane } from './SessionsPane';
 
 interface Inbox {
@@ -30,19 +29,17 @@ export function InboxLayout() {
   const inSession = Boolean(params.sessionId);
   // an Intendia session = the Chat page (chat/ChatPage.tsx): the list stays beside it unless folded
   const inChat = inSession && Boolean(params.slug);
-  const { id: inst } = useCurrentInstance();
   const navigate = useNavigate();
   const onBeside = useCallback((slug: string, id: string) => {
-    if (!inst) return;
-    updateChat(inst, (c) => openBeside(c, { slug, id }));
+    updateChat((c) => openBeside(c, { slug, id }));
     void navigate({ to: '/w/$slug/s/$sessionId', params: { slug, sessionId: id } });
-  }, [inst, navigate]);
+  }, [navigate]);
   const [panels, setPanels] = useState<ReadonlySet<string>>(() => new Set());
   const setPanelOpen = useCallback((id: string, open: boolean) => setPanels((p) => withPanel(p, id, open)), []);
   const panelOpen = panels.size > 0;
   const [folded, setFolded] = useStoredFlag('intendia-inbox-full');
   // several chats side by side need the width: the list folds by itself, and shows only when asked (its own flag)
-  const chat = useChat(inChat ? inst : null);
+  const chat = useChat(inChat);
   const multi = inChat && chat.layout !== 'one' && chat.open.length > 1;
   const [listInMulti, setListInMulti] = useStoredFlag('intendia-chat-list');
   const full = multi ? !listInMulti : folded;
