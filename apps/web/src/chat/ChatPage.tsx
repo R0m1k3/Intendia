@@ -46,8 +46,8 @@ function ChatColumns() {
   const { avec } = useSearch({ strict: false }) as { avec?: string };
   const navigate = useNavigate();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
-  const inst = workspaces.data?.workspaces.find((w) => w.slug === slug)?.instanceId ?? null;
-  const stored = useChat(inst);
+  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
+  const stored = useChat();
   const here = useMemo(() => ({ slug, id: sessionId }), [slug, sessionId]);
   // shown at once, before the stored state takes the address's session
   const chat: Chat = useMemo(() => openHere(stored, here), [stored, here]);
@@ -56,27 +56,28 @@ function ChatColumns() {
   const approvals = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), staleTime: 5_000 });
   const [reports, setReports] = useState<Record<string, Report>>({});
 
-  // The address: the session it names becomes the active chat; a copied link (?avec=) replaces the tab's chats
+  // The address: the session it names becomes the active chat; a copied link (?avec=) replaces the tab's chats.
+  // Columns of every instance stay; only those of a workspace that no longer exists go.
   useEffect(() => {
-    if (!inst || !workspaces.data) return;
-    const mine = new Set(workspaces.data.workspaces.filter((w) => w.instanceId === inst).map((w) => w.slug));
+    if (!workspaces.data) return;
+    const known = new Set(workspaces.data.workspaces.map((w) => w.slug));
     if (avec !== undefined) {
-      const others = fromAvec(avec).filter((c) => mine.has(c.slug) && c.id !== here.id);
+      const others = fromAvec(avec).filter((c) => known.has(c.slug) && c.id !== here.id);
       const open = [here, ...others].slice(0, MAX);
-      updateChat(inst, (c) => ({ ...c, open, active: here.id, layout: open.length > 1 ? (c.layout === 'one' ? 'cols' : c.layout) : 'one', widths: {} }));
+      updateChat((c) => ({ ...c, open, active: here.id, layout: open.length > 1 ? (c.layout === 'one' ? 'cols' : c.layout) : 'one', widths: {} }));
       void navigate({ ...sessionPath(here), search: {}, replace: true } as never);
       return;
     }
-    updateChat(inst, (c) => {
-      const kept = c.open.filter((x) => mine.has(x.slug));
+    updateChat((c) => {
+      const kept = c.open.filter((x) => known.has(x.slug));
       const base = kept.length === c.open.length ? c : { ...c, open: kept, active: kept.some((x) => x.id === c.active) ? c.active : kept[0]?.id ?? null };
       return openHere(base, here);
     });
-  }, [inst, workspaces.data, here, avec, navigate]);
+  }, [workspaces.data, here, avec, navigate]);
 
   // what the columns do, through refs so the contexts stay stable
-  const latest = useRef({ inst, here, navigate });
-  latest.current = { inst, here, navigate };
+  const latest = useRef({ here, navigate });
+  latest.current = { here, navigate };
 
   const go = useCallback((c: Col | null, replace = true) => {
     const { navigate: nav } = latest.current;
@@ -85,18 +86,17 @@ function ChatColumns() {
   }, []);
 
   const focus = useCallback((id: string) => {
-    const { inst: i, here: h } = latest.current;
-    if (!i || id === h.id) return;
-    const target = loadChat(i).open.find((x) => x.id === id);
+    const { here: h } = latest.current;
+    if (id === h.id) return;
+    const target = loadChat().open.find((x) => x.id === id);
     if (!target) return;
-    updateChat(i, (c) => activate(c, id));
+    updateChat((c) => activate(c, id));
     go(target);
   }, [go]);
 
   const closeCol = useCallback((id: string, emptyTo?: string) => {
-    const { inst: i, here: h, navigate: nav } = latest.current;
-    if (!i) return;
-    const next = updateChat(i, (c) => close(c, id));
+    const { here: h, navigate: nav } = latest.current;
+    const next = updateChat((c) => close(c, id));
     if (id !== h.id) return;
     const active = next.open.find((x) => x.id === next.active) ?? null;
     if (active) go(active);
@@ -105,11 +105,10 @@ function ChatColumns() {
   }, [go]);
 
   const replaceCol = useCallback((from: string, col: Col) => {
-    const { inst: i, here: h } = latest.current;
-    if (!i) { go(col, false); return; }
-    const r = replaceIn(loadChat(i), from, col);
+    const { here: h } = latest.current;
+    const r = replaceIn(loadChat(), from, col);
     if (!r) { go(col, false); return; }
-    updateChat(i, () => r);
+    updateChat(() => r);
     if (from === h.id) go(r.open.find((x) => x.id === r.active) ?? col, false);
   }, [go]);
 
@@ -120,11 +119,16 @@ function ChatColumns() {
     });
   }, []);
 
-  const change = useCallback((f: (c: Chat) => Chat) => { if (latest.current.inst) updateChat(latest.current.inst, f); }, []);
+  const change = useCallback((f: (c: Chat) => Chat) => { updateChat(f); }, []);
 
   const layout: ChatLayout = phone ? 'one' : chat.layout;
   const visible = (id: string) => layout !== 'one' || id === sessionId;
   const shown = chat.open.filter((x) => visible(x.id));
+  // sessions of several instances open: each tab names its instance (the sidebar shows the active one's)
+  const instOf = (s: string) => workspaces.data?.workspaces.find((w) => w.slug === s)?.instanceId;
+  const tabInst = new Set(chat.open.map((x) => instOf(x.slug)).filter(Boolean)).size > 1
+    ? (s: string) => instances.data?.instances.find((x) => x.id === instOf(s))?.label ?? null
+    : () => null;
   const waitingFeed = new Set((approvals.data?.approvals ?? []).map((a) => a.sessionId));
 
   const copyLink = () => {
@@ -145,6 +149,7 @@ function ChatColumns() {
           const r = reports[c.id];
           const waiting = Boolean(r?.waiting) || waitingFeed.has(c.id);
           const on = c.id === sessionId;
+          const instLabel = tabInst(c.slug);
           return (
             <div key={c.id} data-chat-tab={c.id} className={cx(
               'flex h-8 min-w-0 max-w-[220px] shrink-0 items-center rounded-lg border text-[13px]',
@@ -154,6 +159,7 @@ function ChatColumns() {
                 className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-2.5 pr-1">
                 <span aria-hidden data-state={waiting ? 'waiting' : r?.running ? 'running' : 'idle'}
                   className={cx('size-[7px] shrink-0 rounded-full', waiting ? 'bg-bad' : r?.running ? 'bg-accent' : 'bg-line')} />
+                {instLabel && <span data-tab-inst className="shrink-0 font-mono text-[11px] text-ink-faint">{instLabel}</span>}
                 <span className="truncate">{r?.title ?? '…'}</span>
                 {waiting && <span className="sr-only">(attend votre réponse)</span>}
                 {!waiting && r?.running && <span className="sr-only">(en cours)</span>}

@@ -19,7 +19,11 @@ const LAST = 'intendia-last-workspace';
  * session page, which follows the run (it plugs into a run in progress; the message is handed over to show at once).
  * The session starts from the workspace's last model choice. `focus` puts the cursor in it ("Nouvelle session").
  */
-export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[]; focus?: boolean; onFocused?: () => void }) {
+export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
+  workspaces: Workspace[]; focus?: boolean; onFocused?: () => void;
+  /** files waiting to be sent (the home page's instance card is locked meanwhile: changing instance remounts this box) */
+  onAttachmentsChange?: (count: number) => void;
+}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const composer = useRef<ComposerHandle>(null);
@@ -64,6 +68,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
   const extract = useCallback<ExtractArchive>((path) => api.extractArchive(slug, path), [slug]);
   // the files are already in this workspace's inbox/: the workspace stays while there are attachments
   const [attached, setAttached] = useState(0);
+  const onFiles = useCallback((n: number) => { setAttached(n); onAttachmentsChange?.(n); }, [onAttachmentsChange]);
 
   return (
     <div className="space-y-2">
@@ -77,7 +82,7 @@ export function Ask({ workspaces, focus, onFocused }: { workspaces: Workspace[];
         extract={extract}
         prompts
         draftKey={homeDraftKey}
-        onAttachmentsChange={setAttached}
+        onAttachmentsChange={onFiles}
         placeholder="Demander quelque chose à Hermes…"
         hint="Entrée pour envoyer · une nouvelle session est créée"
         leading={(
