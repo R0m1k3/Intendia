@@ -1,13 +1,15 @@
 // Run events → thread entries. No React here: unit-tested in events.test.ts.
 import type { ChatMessage, DelegationInfo, TicketInfo } from '../api';
 import { deliverySummary, EMPTY_DELIVERY } from './deliveries';
-import { parseRelaunch } from './goal';
+import { isWake, parseRelaunch } from './goal';
 
 export type ToolState = 'running' | 'ok' | 'failed';
 
 export type Entry =
   /** steer: given to the agent during its run (reorientation); relaunch: sent by Intendia's goal loop (chat/goal.ts) */
-  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean; relaunch?: { n: number; max: number } }
+  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean; relaunch?: { n: number; max: number };
+      /** wake: sent by Intendia's server once background sub-agents delivered (server: chat/wake.ts) */
+      wake?: boolean }
   | { kind: 'assistant'; key: string; text: string; ts: number | null; streaming?: boolean }
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
@@ -343,7 +345,7 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
       out.push({ kind: 'delegation', key: k, text: m.content, info, summary: deliverySummary(info), ts: m.timestamp });
     } else if (m.role === 'user') {
       const relaunch = parseRelaunch(m.content);
-      out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}), ...(relaunch ? { relaunch } : {}) });
+      out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}), ...(relaunch ? { relaunch } : {}), ...(isWake(m.content) ? { wake: true } : {}) });
     }
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });

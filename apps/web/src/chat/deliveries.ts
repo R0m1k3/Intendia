@@ -2,7 +2,7 @@
 // a ticket; the result comes later as a delivery row (role `delegation`, read by the server). Pure functions:
 // which units are still open, the status of each card's tasks once delivered, the live activity of their child
 // sessions, and how often the page re-reads.
-import type { ChatMessage, DelegationInfo, SubagentChild } from '../api';
+import type { ChatMessage, DelegationInfo, SubagentChild, SubagentsSummary } from '../api';
 import type { Entry, SubagentNode } from './events';
 import { formatDuration } from './format';
 
@@ -136,10 +136,15 @@ export function deliverySummary(info: DelegationInfo): string {
   return info.durationSeconds ? `${s} · ${formatDuration(info.durationSeconds * 1000)}` : s;
 }
 
-/** How often the page re-reads while a unit is open: 15 s for 10 min, then 60 s up to 24 h. */
-export function pollDelay(state: DelegationState, nowSec: number): number | false {
-  if (state.open.size === 0 || state.since === null) return false;
-  const age = nowSec - state.since;
+/**
+ * How often the page re-reads, from the server's summary: every 3 s while the server is about to wake the agent (the
+ * new run is followed as soon as it starts), else while a unit is open 15 s for 10 min, then 60 s up to 24 h.
+ */
+export function pollDelay(summary: SubagentsSummary | null | undefined, nowSec: number): number | false {
+  if (!summary) return false;
+  if (summary.wakePending) return 3_000;
+  if (summary.openTasks === 0 || summary.since === null) return false;
+  const age = nowSec - summary.since;
   if (age < 600) return 15_000;
   if (age < 86_400) return 60_000;
   return false;

@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api';
 import { FinishedList } from '../centre/FinishedList';
-import { RunRow, WorkerRow } from '../centre/RunRow';
+import { RunRow, SubagentsRow, WorkerRow } from '../centre/RunRow';
 import { PageHeader } from '../components/Layout';
 import { PendingItem } from '../components/PendingItem';
 import { ErrorText, Mark, Panel } from '../components/ui';
@@ -48,6 +48,8 @@ export function CentrePage() {
   // the instance name on each line only when several are shown
   const label = (id: string): string | null => (all ? instances.find((i) => i.id === id)?.label ?? id : null);
   const data = activity.data;
+  // background sub-agents of a session with no run going on (a run of the same session is listed above)
+  const subagents = (data?.subagents ?? []).filter((x) => !data?.runs.some((r) => r.instance === x.instance && r.sessionId === x.sessionId));
   const waiting = (approvals.data?.approvals ?? []).filter((a) => (all || a.instanceId === inst) && !answered.has(a.key));
   const subtitle = all ? 'Toutes les instances.' : `${instance && instances.length > 1 ? `${instance.label}. ` : ''}Runs lancés depuis Intendia et tâches du kanban.`;
 
@@ -93,10 +95,11 @@ export function CentrePage() {
           ) : empty(Boolean(approvals.data), 'Aucune question en attente')}
         </Panel>
 
-        <Panel bodyClassName="p-0" title="En cours" action={count(data ? data.runs.length + data.workers.length : undefined)}>
-          {data && (data.runs.length || data.workers.length) ? (
+        <Panel bodyClassName="p-0" title="En cours" action={count(data ? data.runs.length + data.workers.length + subagents.length : undefined)}>
+          {data && (data.runs.length || data.workers.length || subagents.length) ? (
             <ul className="divide-y divide-line/70 border-t border-line/70" data-centre-group="running">
               {data.runs.map((r) => <RunRow key={`${r.instance}:${r.runId}`} run={r} instanceLabel={label(r.instance)} />)}
+              {subagents.map((x) => <SubagentsRow key={`${x.instance}:${x.sessionId}`} item={x} instanceLabel={label(x.instance)} />)}
               {data.workers.map((w) => <WorkerRow key={`${w.instance}:${w.board}:${w.runId}`} worker={w} instanceLabel={label(w.instance)}
                 onStopped={(t) => setStopped((l) => [...l, t])} />)}
             </ul>

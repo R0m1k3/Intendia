@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { CornerDownRight, MessageSquareReply, Square } from 'lucide-react';
 import { useState } from 'react';
-import { api, ApiError, type ActiveRun, type KanbanWorker } from '../api';
+import { api, ApiError, type ActiveRun, type KanbanWorker, type WorkingSubagents } from '../api';
+import { subagentsLabel } from '../sessions/SessionRow';
 import { ask } from '../components/Dialog';
 import { useModuleAvailability } from '../components/ModuleNotice';
 import { Button, ErrorText, Input, Mark, Tag, timeAgo } from '../components/ui';
@@ -108,6 +109,25 @@ export function WorkerRow({ worker, instanceLabel, onStopped }: { worker: Kanban
         <Square className="size-3.5" strokeWidth={1.5} />Arrêter
       </Button>
       {stop.error && <div className="w-full"><ErrorText error={stop.error} /></div>}
+    </li>
+  );
+}
+
+/** A session whose background sub-agents still work: no run to stop, the server wakes the agent once they delivered. */
+export function SubagentsRow({ item, instanceLabel }: { item: WorkingSubagents; instanceLabel: string | null }) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-4 py-3 text-sm" data-centre-subagents={item.sessionId}>
+      <Mark state="readonly" className="animate-pulse" />
+      <div className="min-w-0 flex-1">
+        <Link to="/w/$slug/s/$sessionId" params={{ slug: item.workspace, sessionId: item.sessionId }} className="font-medium hover:text-accent-ink">
+          {item.title || 'Session sans titre'}
+        </Link>
+        <p className="text-[13px] text-ink-faint">
+          {item.workspaceName}{instanceLabel ? ` · ${instanceLabel}` : ''}{item.profile !== 'default' ? ` · ${item.profile}` : ''}
+          {item.since !== null ? ` · lancés ${timeAgo(item.since * 1000)}` : ''} · l’agent reprendra à leur fin
+        </p>
+      </div>
+      <Tag>{subagentsLabel(item.tasks)}</Tag>
     </li>
   );
 }

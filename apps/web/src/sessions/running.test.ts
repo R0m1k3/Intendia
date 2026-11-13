@@ -44,3 +44,20 @@ describe('withRunning', () => {
     expect(ids(withRunning(groups, runMarks([], [wait('q')], 'i'), 'i', true))[0]).toBe(`${RUNNING_LABEL}: q`);
   });
 });
+
+describe('runMarks: background sub-agents', () => {
+  const sub = (sessionId: string, tasks: number, instance = 'i') => ({
+    instance, sessionId, workspace: 'perso', workspaceName: 'Personnel', title: `S ${sessionId}`, profile: 'default', tasks, since: 100,
+  });
+  it('marked « subagents » with their count, below a run going on and a question of the agent', () => {
+    const m = runMarks([run('b', 2)], [wait('c')], 'i', [sub('a', 2), sub('b', 1), sub('c', 3), sub('x', 1, 'j')]);
+    expect(m.get('a')).toMatchObject({ state: 'subagents', subagents: 2, at: 100_000, title: 'S a' });
+    expect(m.get('b')?.state).toBe('running');
+    expect(m.get('c')?.state).toBe('waiting');
+    expect(m.has('x')).toBe(false);
+  });
+  it('the session goes to « En cours »', () => {
+    const m = runMarks([], [], 'i', [sub('a', 2)]);
+    expect(ids(withRunning([{ label: 'Aujourd’hui', items: [row('a', 5), row('z', 4)] }], m, 'i', true))).toEqual([`${RUNNING_LABEL}: a`, 'Aujourd’hui: z']);
+  });
+});
