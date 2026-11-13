@@ -28,6 +28,7 @@ import { KanbanPage, type KanbanSearch } from './pages/Kanban';
 import { SkillsPage, type SkillsSearch } from './pages/Skills';
 import { CONFIG_TABS, ConfigPage, type ConfigSearch, type ConfigTab } from './pages/Config';
 import { MEMORY_TABS, MemoryPage, type MemorySearch, type MemoryTab } from './pages/Memory';
+import { ACCESS_KINDS, AccessPage, type AccessSearch } from './pages/Access';
 import { MONITOR_TABS, MonitorPage, type MonitorSearch, type MonitorTab } from './pages/Monitor';
 import { LOG_FILES } from './monitor/Logs';
 import { PERIODS, type Period } from './monitor/Usage';
@@ -243,6 +244,27 @@ const memoryRoute = createRoute({
     skill: typeof s.skill === 'string' && s.skill.length > 0 && s.skill.length <= 200 ? s.skill : undefined,
   }),
 });
+/** /acces: the current instance (credential vault of Hermes) */
+const accessIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/acces', beforeLoad: () => toCurrent('acces') });
+const accessRoute = createRoute({
+  getParentRoute: () => appRoute, path: '/i/$inst/acces', component: AccessPage,
+  validateSearch: (s: Record<string, unknown>): AccessSearch => {
+    let origin: string | undefined;
+    if (typeof s.origin === 'string' && s.origin.length <= 2048) {
+      try {
+        const u = new URL(s.origin);
+        if (u.protocol === 'http:' || u.protocol === 'https:') origin = `${u.protocol}//${u.host}`;
+      } catch { /* not a site: left out */ }
+    }
+    return {
+      profile: typeof s.profile === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(s.profile) ? s.profile : undefined,
+      item: typeof s.item === 'string' && /^vault_[0-9a-f]{6,40}$/.test(s.item) ? s.item : undefined,
+      add: typeof s.add === 'string' && (ACCESS_KINDS as readonly string[]).includes(s.add) ? (s.add as AccessSearch['add']) : undefined,
+      origin,
+      proposed: s.proposed === '1' || s.proposed === 1 ? '1' : undefined,
+    };
+  },
+});
 /** /agents: the current instance */
 const agentsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/agents', beforeLoad: () => toCurrent('agents') });
 const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: '/i/$inst/agents', component: AgentsPage });
@@ -260,7 +282,7 @@ const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/acti
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
 

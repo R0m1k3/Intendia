@@ -77,7 +77,9 @@ export interface CompatReport {
    */
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
-  socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean };
+  socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean;
+    /** credential vault (`vault.list|add|remove`); absent from reports saved by Intendia 0.1.0 and before */
+    vault?: boolean };
   /**
    * Operations known to this version of Intendia but absent from the report (`module.op`), set on a report saved by
    * an older version until the next full check. Never stored.

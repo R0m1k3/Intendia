@@ -117,6 +117,11 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
             <span className="text-ink-faint"> · {report.socket.note}</span>
           </span>
         )}
+        {report.socket?.vault !== undefined && (
+          <span data-socket-vault={report.socket.vault ? 'on' : 'off'}>
+            <span className="text-ink-faint">Coffre (WebSocket)</span> {report.socket.vault ? 'disponible' : 'indisponible'}
+          </span>
+        )}
         <span className="font-mono text-xs text-ink-faint">Hermes {report.hermesVersion ?? '?'}</span>
         {report.checkError
           ? <span className="text-bad" data-check-error>Vérification échouée : {report.checkError}</span>

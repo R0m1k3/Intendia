@@ -55,6 +55,7 @@ import { workspaceScope } from '../files/scope';
 
 const REREAD_TOOLS = new Set(['todo_list', 'write_file', 'patch']);
 import { useInbox } from '../sessions/InboxLayout';
+import { useVaultAvailable } from './Access';
 
 /** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
 export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg border border-line bg-sheet text-ink transition-colors hover:bg-paper';
@@ -120,6 +121,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const sess = useQuery({ queryKey: ['session', inst, sessionId], queryFn: () => api.session(inst!, sessionId), enabled: Boolean(inst) });
   // activated skills of the session's agent, offered by /use
   const agentProfile = sess.data?.profile ?? 'default';
+  // the credential vault can be managed: a browser_vault call that could not ask for a login gets a link to « Accès »
+  const vaultOn = useVaultAvailable(inst ?? '') === true;
   const skillList = useQuery({ queryKey: ['skills', inst, agentProfile], queryFn: () => api.skills(inst!, agentProfile).then((r) => r.skills), enabled: Boolean(inst && sess.data), staleTime: 60_000 });
   const skillNames = useMemo(() => (skillList.data ?? []).filter((x) => x.enabled !== false).map((x) => x.name), [skillList.data]);
   // why the last run went without its personality (shown under the composer until the next send)
@@ -973,7 +976,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} />
+        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined} />
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && deferred && (
           <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.</p>

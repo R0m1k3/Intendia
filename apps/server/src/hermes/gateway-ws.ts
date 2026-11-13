@@ -93,20 +93,73 @@ export async function oneshot(
   return text;
 }
 
+const VAULT_TIMEOUT_MS = 10_000;
+const str = z.string().nullish().catch(null);
+/** One item of `vault.list` (Hermes 0.23, tui_gateway/methods_vault.py): metadata only, never a secret. */
+export const VaultItemSchema = z.looseObject({
+  id: z.string(),
+  kind: z.enum(['login', 'payment', 'address']),
+  label: z.string(),
+  origin: str,
+  created_at: str,
+  identifier: str,
+  identifier_type: str,
+  has_otp: z.boolean().nullish().catch(null),
+  /** `local` = the vault of Hermes; `onepassword` / `bitwarden` = an unlocked external password manager */
+  backend: str,
+});
+export type HermesVaultItem = z.infer<typeof VaultItemSchema>;
+export interface HermesVaultAdd { kind: 'login' | 'payment' | 'address'; label: string; origin: string; secret: Record<string, string> }
+type VaultOpts = { factory?: WsFactory; timeoutMs?: number };
+
+/** `vault.list` of a profile; unreadable items are skipped. */
+export async function vaultList(instance: InstanceConfig, profile: string, opts: VaultOpts = {}): Promise<HermesVaultItem[]> {
+  const res = await callGatewaySocket(instance, 'vault.list', { profile }, { timeoutMs: VAULT_TIMEOUT_MS, ...opts });
+  const raw = res && typeof res === 'object' ? (res as { items?: unknown }).items : null;
+  if (!Array.isArray(raw)) throw new GatewaySocketError(null, 'Réponse de vault.list illisible');
+  return raw.flatMap((item) => {
+    const r = VaultItemSchema.safeParse(item);
+    return r.success ? [r.data] : [];
+  });
+}
+
+/** `vault.add`: the secret goes straight to Hermes' encrypted store. Answer: the new item's handle. */
+export async function vaultAdd(instance: InstanceConfig, profile: string, body: HermesVaultAdd, opts: VaultOpts = {}): Promise<string> {
+  const res = await callGatewaySocket(instance, 'vault.add', { profile, ...body }, { timeoutMs: VAULT_TIMEOUT_MS, ...opts });
+  const id = res && typeof res === 'object' ? (res as { id?: unknown }).id : null;
+  if (typeof id !== 'string') throw new GatewaySocketError(null, 'Réponse de vault.add illisible');
+  return id;
+}
+
+/** `vault.remove`: true when an item of the local vault was removed. */
+export async function vaultRemove(instance: InstanceConfig, profile: string, id: string, opts: VaultOpts = {}): Promise<boolean> {
+  const res = await callGatewaySocket(instance, 'vault.remove', { profile, id }, { timeoutMs: VAULT_TIMEOUT_MS, ...opts });
+  return Boolean(res && typeof res === 'object' && (res as { removed?: unknown }).removed === true);
+}
+
 /**
- * The WebSocket methods Intendia uses, each checked on its own: `session.stats` (see probeSessionStats) and
- * `llm.oneshot` (called without parameters: 4030 = present, -32601 = absent, no answer = absent).
+ * Is a JSON-RPC method there? Called with parameters it refuses (no side effect): any JSON-RPC error other than
+ * -32601 = present; -32601 or no answer = absent.
  */
-export async function probeSocket(instance: InstanceConfig, opts?: { factory?: WsFactory; timeoutMs?: number }): Promise<{ sessionStats: boolean; oneshot: boolean; note: string }> {
-  const stats = await probeSessionStats(instance, opts);
-  let one = false;
+async function hasMethod(instance: InstanceConfig, method: string, opts?: VaultOpts): Promise<boolean> {
   try {
-    await callGatewaySocket(instance, 'llm.oneshot', {}, opts);
-    one = true;
+    await callGatewaySocket(instance, method, {}, opts);
+    return true;
   } catch (err) {
-    one = (err as GatewaySocketError).code !== null && (err as GatewaySocketError).code !== -32601;
+    return (err as GatewaySocketError).code !== null && (err as GatewaySocketError).code !== -32601;
   }
-  return { ...stats, oneshot: one };
+}
+
+/**
+ * The WebSocket methods Intendia uses, each checked on its own: `session.stats` (see probeSessionStats),
+ * `llm.oneshot` (called without parameters: 4030 = present) and the credential vault (`vault.remove {}`: 5095).
+ */
+export async function probeSocket(instance: InstanceConfig, opts?: { factory?: WsFactory; timeoutMs?: number }): Promise<{ sessionStats: boolean; oneshot: boolean; vault: boolean; note: string }> {
+  const stats = await probeSessionStats(instance, opts);
+  const one = await hasMethod(instance, 'llm.oneshot', opts);
+  // `vault.remove` without an id: 5095 "id is required" before the vault is opened (nothing read)
+  const vault = await hasMethod(instance, 'vault.remove', opts);
+  return { ...stats, oneshot: one, vault };
 }
 
 /**
