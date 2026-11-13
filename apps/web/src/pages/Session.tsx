@@ -488,6 +488,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const id = setInterval(() => void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }), 3_000);
     return () => { clearInterval(id); void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }); };
   }, [wakePending, qc, inst, sessionId]);
+  // the wake can start between two readings (pending never seen): sub-agents open or a wake expected, then nothing
+  // left = the delivery was answered; the session is re-read so a run started by the server is followed
+  const hadSubagents = useRef(false);
+  useEffect(() => {
+    const had = hadSubagents.current;
+    hadSubagents.current = subagents !== null;
+    if (inst && had && subagents === null) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+  }, [subagents, qc, inst, sessionId]);
   // sessions of the background sub-agents (last activity, tools, end), re-read at the same pace as the history
   const children = useQuery({
     queryKey: ['session-subagents', inst, sessionId], queryFn: () => api.sessionSubagents(inst!, sessionId),
