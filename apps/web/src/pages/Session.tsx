@@ -1010,7 +1010,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             commands={commands}
             onCommand={onCommand}
             running={running}
-            disabled={!chat.available || !inst}
+            // changing instance: nothing typed or sent here any more (the draft is being carried over)
+            disabled={!chat.available || !inst || switching}
             onQueue={(text, sk) => {
               setQueue((q) => enqueue(q, text, sk));
               // a message waiting is the user writing: an active goal pauses before the loop relaunches
