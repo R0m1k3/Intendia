@@ -408,6 +408,23 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   (learned skills, the skills and memories linked to them, a link to the Skills page). No server cache; 15 s in the
   browser.
 
+## Accès (credential vault of Hermes)
+
+- `src/vault/service.ts` (`VaultService`) and `src/routes/vault.ts`: `GET /x/i/:inst/vault?profile=`,
+  `POST /x/i/:inst/vault` (201 `{id}`), `POST /x/i/:inst/vault/:id/replace` (`{id, oldKept}`), `DELETE /x/i/:inst/vault/:id`
+  (204). Calls `vault.list|add|remove` on the dashboard WebSocket (`src/hermes/gateway-ws.ts`), only when the
+  compatibility check found them (`report.socket.vault`, probed by `vault.remove {}`, which never opens the vault).
+- Kinds: login (identifier, password, 2FA key), payment card, address. External managers (1Password, Bitwarden) are
+  not managed: their items are only counted (`external`). Replace = add the new item, then remove the old one.
+- Secrets: the body (16 kB max, read with `c.req.text()` so no parse error quotes it) goes straight to Hermes; never
+  stored, logged nor put in an error; responses are `no-store` and never carry a secret nor a text of Hermes (fixed
+  French messages, field names only, `src/vault/input.ts`). The browser keeps the values in the form's state only (no
+  `useMutation`, no draft), fields marked against password managers.
+- Page `/i/$inst/acces` (`pages/Access.tsx`, `access/AccessForm.tsx`, `access/fields.ts`), one vault per profile.
+  In the chat, a `browser_vault` result `prompt_unavailable` (the agent cannot ask for a login in an API session)
+  adds a link « Ajouter un accès » with the site prefilled and the warning « Site proposé par l’agent »
+  (`chat/vault-hint.ts`, `chat/Thread.tsx`). The address never holds a secret.
+
 ## Plugins (agent plugins of an instance)
 
 - `src/plugins/service.ts` (`PluginService`) calls the `plugins` connector; `src/routes/plugins.ts` serves

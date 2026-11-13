@@ -26,7 +26,7 @@ export interface CompatReport {
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
   files?: { workspaceRoot: string | null; reason: string | null };
   /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
-  socket?: { sessionStats: boolean; oneshot?: boolean; note: string };
+  socket?: { sessionStats: boolean; oneshot?: boolean; /** credential vault (`vault.*`); absent = not checked yet */ vault?: boolean; note: string };
   /** Ops this Intendia knows that the report has not checked yet (`module.op`; report saved by an older version). */
   unchecked?: string[];
   /** Last full check failed (short message). */
@@ -717,6 +717,8 @@ const cronsPath = (inst: string) => `/i/${enc(inst)}/crons`;
 const cronPath = (inst: string, id: string, profile: string, sub?: string) =>
   `${cronsPath(inst)}/${enc(id)}${sub ? `/${sub}` : ''}?profile=${enc(profile)}`;
 /** Per-instance console route with ?profile= (skills, agents). */
+/** `?profile=` left out for the default profile. */
+const profileParam = (profile: string) => (profile === 'default' ? undefined : profile);
 const instPath = (inst: string, sub: string, profile?: string, extra?: Record<string, string>) => {
   const q = new URLSearchParams({ ...(profile ? { profile } : {}), ...extra }).toString();
   return `/i/${enc(inst)}/${sub}${q ? `?${q}` : ''}`;
@@ -752,6 +754,21 @@ export interface GitStatus {
   truncated: boolean;
 }
 export type GitDiffWhich = 'staged' | 'unstaged' | 'all';
+
+export type VaultKind = 'login' | 'payment' | 'address';
+/** An item of the credential vault of Hermes: metadata only (Hermes never gives a secret back). */
+export interface VaultItem {
+  id: string;
+  kind: VaultKind;
+  label: string;
+  origin: string | null;
+  createdAt: string | null;
+  identifier: string | null;
+  identifierType: 'email' | 'phone' | 'username' | null;
+  hasOtp: boolean;
+}
+/** What the form sends: flat, one shape per kind (checked by the server, which names the wrong `field`). */
+export type VaultInput = { kind: VaultKind; label: string; origin: string } & Record<string, string>;
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly data?: unknown) {
@@ -1041,6 +1058,11 @@ export const api = {
   setPluginEnabled: (inst: string, name: string, enabled: boolean) => call<{ ok: true }>('POST', instPath(inst, `plugins/${enc(name)}/${enabled ? 'enable' : 'disable'}`)),
   removePlugin: (inst: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `plugins/${enc(name)}`)),
   memory: (inst: string, profile: string) => call<MemoryOverview>('GET', instPath(inst, 'memory', profile)),
+  vault: (inst: string, profile: string) => call<{ items: VaultItem[]; external: number }>('GET', instPath(inst, 'vault', profileParam(profile))),
+  vaultAdd: (inst: string, profile: string, input: VaultInput) => call<{ id: string }>('POST', instPath(inst, 'vault', profileParam(profile)), input),
+  vaultReplace: (inst: string, profile: string, id: string, input: VaultInput) =>
+    call<{ id: string; oldKept: boolean }>('POST', instPath(inst, `vault/${enc(id)}/replace`, profileParam(profile)), input),
+  vaultRemove: (inst: string, profile: string, id: string) => call<null>('DELETE', instPath(inst, `vault/${enc(id)}`, profileParam(profile))),
   memoryEntry: (inst: string, profile: string, id: string) => call<{ id: string; content: string }>('GET', instPath(inst, 'memory/entry', profile, { id })),
   putMemoryEntry: (inst: string, profile: string, id: string, content: string) => call<{ ok: true }>('PUT', instPath(inst, 'memory/entry', profile), { id, content }),
   deleteMemoryEntry: (inst: string, profile: string, id: string) => call<{ ok: true }>('DELETE', instPath(inst, 'memory/entry', profile, { id })),

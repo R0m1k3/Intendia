@@ -31,6 +31,7 @@
  * - "fond": delegate_task in the background (ticket, run ended), delivery row 6 s later outside any run (FAKE_BG_DELAY_MS),
  *   two child sessions moving meanwhile ("fond-alerte": early failure notice + hidden row; "fond-suivi": 40 s, FAKE_BG_SUIVI_MS;
  *   "fond-oublie": the children end, no delivery ever)
+ * - "coffre": browser_vault save_login answers `prompt_unavailable` for https://exemple.fr (API server session)
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
  *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
  * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
@@ -61,6 +62,8 @@ import { GitStore, type GitFakeOptions } from './git.js';
 import { MemoryStore } from './memory.js';
 import { PluginStore } from './plugins.js';
 import { MonitorStore, type MonitorFakeOptions } from './monitor.js';
+import { FakeVault, promptUnavailableResult, VaultRpcError, type FakeVaultMode } from './vault.js';
+export { promptUnavailableResult, type FakeVaultItem, type FakeVaultMode } from './vault.js';
 export { FAKE_SECRETS, OPENROUTER_MODELS } from './config.js';
 export { FAKE_MEMORY_LIMITS, FAKE_MEMORY_SEED, fingerprint as memoryFingerprint } from './memory.js';
 export { FAKE_PLUGIN_CATALOG } from './plugins.js';
@@ -134,6 +137,11 @@ export interface FakeOptions {
    * the input, `no_model` = 5030 as without a provider key, `off` = -32601 (method absent).
    */
   oneshot?: 'ok' | 'off' | 'no_model';
+  /**
+   * Credential vault on `/api/ws` (`vault.list|add|remove`): `on` (default), `off` (-32601), `external` (an unlocked
+   * 1Password item in the list), `list_fail` (`vault.list` → 5095), `remove_fail` (removing an existing item → 5095).
+   */
+  vault?: FakeVaultMode;
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
 }
@@ -354,6 +362,7 @@ class Simulator {
     if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
     if (/modifie/i.test(run.input)) return this.playModified(run, step);
     if (/fichier/i.test(run.input)) return this.playFile(run, step);
+    if (/coffre/i.test(run.input)) return this.playVault(run, step);
     if (/fond/i.test(run.input)) return this.playBackground(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
@@ -430,6 +439,21 @@ class Simulator {
     this.push(run, { event: 'tool.completed', tool: 'patch', duration: 0.08, error: false, preview: 'ok', call_id: 'call_p1' });
     await sleep(step);
     this.finish(run, 'J’ai modifié deux fichiers.');
+  }
+
+  /**
+   * "coffre" scenario: the agent asks for a login with browser_vault, which an API server session cannot do
+   * (Hermes 0.23: `prompt_unavailable`). The result row is written before tool.completed, like Hermes.
+   */
+  private async playVault(run: SimRun, step: number) {
+    const result = promptUnavailableResult('https://exemple.fr');
+    this.addMessage(run.sessionId, 'assistant', '', { tool_calls: [{ id: 'call_v1', type: 'function', function: { name: 'browser_vault', arguments: JSON.stringify({ action: 'save_login' }) } }] });
+    this.push(run, { event: 'tool.started', tool: 'browser_vault', preview: 'save_login', call_id: 'call_v1' });
+    await sleep(step);
+    this.addMessage(run.sessionId, 'tool', result, { tool_name: 'browser_vault' });
+    this.push(run, { event: 'tool.completed', tool: 'browser_vault', duration: 0.03, error: false, preview: result.slice(0, 500), call_id: 'call_v1' });
+    await sleep(step);
+    this.finish(run, 'Je ne peux pas vous demander l’accès ici.');
   }
 
   /** "delegue" scenario: two sub-agents, the second one a child of the first. */
@@ -715,7 +739,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
+interface Stores { vault: FakeVault; crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
 
 function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
@@ -763,6 +787,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input, instructions: last.instructions } : { run_id: null });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
+    // tests: the credential vault of a profile, secrets in clear (dashboard port, no token)
+    if (via === 'dash' && method === 'GET' && path === '/_fake/vault') return c.json({ items: stores.vault.list(c.req.query('profile') ?? 'default') });
+    if (via === 'dash' && method === 'DELETE' && path === '/_fake/vault') { stores.vault.clear(); return c.json({ ok: true }); }
     if (method === 'GET' && path === '/_fake/git/calls') return c.json({ calls: stores.git.calls });
     if (method === 'GET' && path === '/_fake/monitor/calls') return c.json({ calls: stores.monitor.calls });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
@@ -1147,11 +1174,12 @@ export function createFakeHermes(opts: FakeOptions) {
     ...skills.skills.filter((s) => s.provenance === 'agent').map((s) => ({ name: s.name, category: s.category || 'general', useCount: 0, createdBy: 'agent', pinned: false })),
   ]);
   const plugins = new PluginStore(opts.pluginInstallMs);
-  const stores: Stores = { crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
+  const vault = new FakeVault(opts.vault ?? 'on', (name) => profiles.has(name));
+  const stores: Stores = { vault, crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
   const requests: LoggedRequest[] = [];
   return {
     api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
-    requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory,
+    requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory, vault,
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */
@@ -1214,6 +1242,14 @@ export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => v
       return reply({ result: FAKE_SESSION_STATS });
     }
     if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
+    if (typeof msg.method === 'string' && msg.method.startsWith('vault.')) {
+      try {
+        return reply({ result: fake.vault.call(msg.method, (msg.params ?? {}) as Record<string, unknown>) });
+      } catch (err) {
+        if (err instanceof VaultRpcError) return reply({ error: { code: err.code, message: err.message } });
+        throw err;
+      }
+    }
     if (msg.method === 'llm.oneshot' && fake.oneshot !== 'off') {
       const template = typeof msg.params?.template === 'string' ? msg.params.template : '';
       if (template) {

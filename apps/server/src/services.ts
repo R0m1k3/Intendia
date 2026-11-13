@@ -9,6 +9,7 @@ import { InstanceFileService } from './files/instance-files.js';
 import { FileService, type FileServiceOpts } from './files/service.js';
 import { GitService } from './git/service.js';
 import { MemoryService } from './memory/service.js';
+import { VaultService } from './vault/service.js';
 import { PluginService } from './plugins/service.js';
 import { McpCatalogService } from './hermes-config/mcp-catalog.js';
 import { MonitorService } from './monitor/service.js';
@@ -51,6 +52,8 @@ export interface Services {
   git: GitService;
   monitor: MonitorService;
   memory: MemoryService;
+  /** credential vault of Hermes (logins, cards, addresses) */
+  vault: VaultService;
   plugins: PluginService;
   mcpCatalog: McpCatalogService;
   goals: GoalStore;
@@ -86,5 +89,5 @@ export function createServices(deps: {
   const wakes = new WakeStore(deps.db);
   const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));
-  return { goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
+  return { goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), vault: new VaultService(deps.compat, deps.store), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }

@@ -1,5 +1,6 @@
 import { thinkingState } from './thinking';
-import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, KeyRound, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +16,7 @@ import { splitArtifacts } from './artifacts';
 import { RunFooter } from './RunFooter';
 import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
 import { Delivery } from './Delivery';
+import { vaultHint } from './vault-hint';
 import { duration, Subagents } from './Subagents';
 import type { Stamp } from './timeline';
 
@@ -28,6 +30,42 @@ export function clock(ts: number | null, seconds = false): string {
 
 /** « Afficher les heures »: stamps of the entries by key (chat/timeline.ts); null = normal display. */
 const Times = createContext<Map<string, Stamp> | null>(null);
+/** Instance and effective profile of the session when the credential vault can be managed (link « Ajouter un accès »). */
+const VaultLink = createContext<{ inst: string; profile: string } | null>(null);
+
+/**
+ * Links to the "Accès" page for the browser_vault calls that could not ask for a login (one per site), shown under the
+ * header of the steps whether the card is open or folded.
+ */
+function VaultLinks({ tools }: { tools: ToolEntry[] }) {
+  const vault = useContext(VaultLink);
+  if (!vault) return null;
+  const seen = new Set<string>();
+  const hints = tools.flatMap((t) => {
+    const h = vaultHint(t.tool, t.result);
+    if (!h) return [];
+    const k = h.origin ?? '';
+    if (seen.has(k)) return [];
+    seen.add(k);
+    return [h];
+  });
+  if (!hints.length) return null;
+  return (
+    <div className="flex flex-col gap-1 px-1.5 pb-1 pt-1">
+      {hints.map((h) => (
+        <Link
+          key={h.origin ?? ''} data-vault-link
+          to="/i/$inst/acces" params={{ inst: vault.inst }}
+          search={{ add: 'login', origin: h.origin ?? undefined, proposed: '1', profile: vault.profile === 'default' ? undefined : vault.profile }}
+          className="inline-flex w-fit items-center gap-2 rounded-md px-1.5 py-1 text-[13px] font-medium text-accent-ink hover:bg-raised hover:text-ink"
+        >
+          <KeyRound className="size-3.5" strokeWidth={1.75} />
+          {h.origin ? `Ajouter un accès pour ${new URL(h.origin).host}` : 'Ajouter un accès'}
+        </Link>
+      ))}
+    </div>
+  );
+}
 /** This page re-reads the session while sub-agents work in the background (their result shows up by itself). */
 const LiveDeliveries = createContext(false);
 /** the server's summary of background sub-agents (undefined: a session Intendia does not wake, as an external one) and the last delivery */
@@ -134,6 +172,7 @@ function Steps({ tools }: { tools: ToolEntry[] }) {
         <ChevronDown className={cx('size-3.5 shrink-0 transition-transform duration-150', !open && '-rotate-90')} strokeWidth={1.75} />
         {stepsLabel(tools)}
       </button>
+      <VaultLinks tools={tools} />
       {open && <ul className="flex flex-col gap-0.5">{tools.map((t) => <Step key={t.key} e={t} />)}</ul>}
     </div>
   );
@@ -388,8 +427,10 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents }: {
+export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents, vault }: {
   entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions;
+  /** instance and effective profile when the vault can be managed: a browser_vault call without login gets a link */
+  vault?: { inst: string; profile: string };
   /** the server's summary (route of the messages); absent = a session Intendia does not wake */
   subagents?: SubagentsSummary | null;
   /** the page re-reads the session while sub-agents work in the background */
@@ -402,6 +443,7 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
   const wake = useMemo(() => ({ summary: subagents, lastKey }), [subagents, lastKey]);
   return (
     <Times.Provider value={times ?? null}>
+      <VaultLink.Provider value={vault ?? null}>
       <LiveDeliveries.Provider value={liveDeliveries}>
       <WakeInfo.Provider value={wake}>
         <div className="space-y-7">
@@ -409,6 +451,7 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
         </div>
       </WakeInfo.Provider>
       </LiveDeliveries.Provider>
+      </VaultLink.Provider>
     </Times.Provider>
   );
 }
