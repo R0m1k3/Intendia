@@ -497,14 +497,16 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const id = setInterval(() => void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }), 3_000);
     return () => { clearInterval(id); void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }); };
   }, [wakePending, qc, inst, sessionId]);
-  // the wake can start between two readings (pending never seen): sub-agents open or a wake expected, then nothing
-  // left = the delivery was answered; the session is re-read so a run started by the server is followed
-  const hadSubagents = useRef(false);
+  // the wake can start between two readings (pending never seen): sub-agents open or a wake expected, then neither
+  // (the summary gone, or only kept for a late result of a lost unit) = the delivery was answered; the session is
+  // re-read so a run started by the server is followed
+  const waiting = subagents !== null && (subagents.openTasks > 0 || subagents.wakePending || subagents.capped);
+  const hadWaiting = useRef(false);
   useEffect(() => {
-    const had = hadSubagents.current;
-    hadSubagents.current = subagents !== null;
-    if (inst && had && subagents === null) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-  }, [subagents, qc, inst, sessionId]);
+    const had = hadWaiting.current;
+    hadWaiting.current = waiting;
+    if (inst && had && !waiting) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+  }, [waiting, qc, inst, sessionId]);
   // « Ne plus attendre »: the server gives up the units shown open (a result that still comes is shown and wakes)
   const stopWaiting = async () => {
     if (!inst || !openUnits?.length) return;
