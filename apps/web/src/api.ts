@@ -182,6 +182,16 @@ export interface ChatMessage {
   steer?: true;
   /** role delegation */
   delegation?: DelegationInfo;
+  /** role tool: ticket of a delegate_task in the background, read by the server */
+  ticket?: TicketInfo;
+}
+/** Ticket of a delegate_task in the background (server: chat/delegation.ts). Indexes base 0. */
+export interface TicketInfo {
+  delegationId: string | null;
+  goals: string[];
+  refused: number[];
+  /** units (independent completions), each with its task indexes; empty = the call is the unit */
+  units: { id: string; tasks: number[] }[];
 }
 export interface RunStatus {
   status: string;

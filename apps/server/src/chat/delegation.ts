@@ -99,3 +99,88 @@ export function delegationInfo(metadata: unknown, text: string): DelegationInfo 
   info.durationSeconds = seconds(md.duration_seconds) ?? info.durationSeconds;
   return info;
 }
+
+// ---- Tickets: result of a delegate_task in the background (`{status: dispatched, mode: background, …}`)
+
+/** JSON form, sent to the page with the tool message (`ChatMessage.ticket`). */
+export interface TicketInfo {
+  delegationId: string | null;
+  goals: string[];
+  /** base 0: tasks Hermes refused (no child, no delivery) */
+  refused: number[];
+  /** unit ids (`delegation.independent_completions`), each with its task indexes; empty = one unit, the call */
+  units: { id: string; tasks: number[] }[];
+}
+
+const asObj = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+const index = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+
+export function readTicket(content: string): TicketInfo | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  const t = asObj(parsed);
+  if (!t || t.status !== 'dispatched' || t.mode !== 'background') return null;
+  const refused: number[] = [];
+  if (Array.isArray(t.refused)) for (const r of t.refused) { const i = index(asObj(r)?.task_index); if (i !== null && !refused.includes(i)) refused.push(i); }
+  const units = Array.isArray(t.units)
+    ? t.units.map(asObj).filter((u): u is Record<string, unknown> => !!u && typeof u.delegation_id === 'string' && !!u.delegation_id)
+      .map((u) => ({ id: u.delegation_id as string, tasks: Array.isArray(u.task_indexes) ? u.task_indexes.map(index).filter((n): n is number => n !== null) : [] }))
+    : [];
+  return {
+    delegationId: typeof t.delegation_id === 'string' && t.delegation_id ? t.delegation_id : null,
+    goals: Array.isArray(t.goals) ? t.goals.map((g) => (typeof g === 'string' ? g : '')) : [], refused, units,
+  };
+}
+
+/** What the server needs of a message to follow delegations (a subset of ChatMessage). */
+export interface DelegationMessage {
+  role: string;
+  timestamp: number | null;
+  ticket?: TicketInfo;
+  delegation?: DelegationInfo;
+}
+
+export interface OpenDelegations {
+  /** unit id → timestamp (seconds) of its ticket */
+  open: Map<string, number | null>;
+  /** tasks not refused of the open units */
+  openTasks: number;
+  /** seconds: newest ticket still open */
+  since: number | null;
+}
+
+/**
+ * Units still waiting for their full delivery (an early failure notice does not close a unit). Same rules as the
+ * page's `delegationState` (web/src/chat/deliveries.ts), which keeps what the cards need.
+ */
+export function delegationState(messages: readonly DelegationMessage[]): OpenDelegations {
+  const open = new Map<string, number | null>();
+  const tasks = new Map<string, number>();
+  const delivered = new Set<string>();
+  for (const m of messages) {
+    if (m.role === 'tool' && m.ticket) {
+      const t = m.ticket;
+      if (t.units.length) {
+        for (const u of t.units) {
+          if (delivered.has(u.id)) continue;
+          open.set(u.id, m.timestamp);
+          tasks.set(u.id, u.tasks.filter((i) => !t.refused.includes(i)).length);
+        }
+      } else if (t.delegationId && !delivered.has(t.delegationId)) {
+        open.set(t.delegationId, m.timestamp);
+        const all = t.goals.length || 1;
+        tasks.set(t.delegationId, Math.max(0, all - t.refused.filter((i) => i < all).length));
+      }
+    } else if (m.role === 'delegation' && m.delegation?.id && m.delegation.failedTask === null) {
+      delivered.add(m.delegation.id);
+      open.delete(m.delegation.id);
+      tasks.delete(m.delegation.id);
+    }
+  }
+  const times = [...open.values()].filter((v): v is number => v !== null);
+  return { open, openTasks: [...tasks.values()].reduce((a, b) => a + b, 0), since: times.length ? Math.max(...times) : null };
+}

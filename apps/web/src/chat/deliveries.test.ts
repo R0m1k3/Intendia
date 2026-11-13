@@ -6,7 +6,16 @@ import { historyEntries, withTrees, type Entry, type SubagentNode } from './even
 const msg = (id: number, role: string, content: string, ts = id, extra: Partial<ChatMessage> = {}): ChatMessage =>
   ({ id, role, content, toolName: null, toolCalls: [], timestamp: ts, ...extra });
 const call = (id: number, args: unknown, ts = id) => msg(id, 'assistant', '', ts, { toolCalls: [{ name: 'delegate_task', arguments: JSON.stringify(args) }] });
-const ticket = (id: number, t: Record<string, unknown>, ts = id) => msg(id, 'tool', JSON.stringify({ status: 'dispatched', mode: 'background', ...t }), ts, { toolName: 'delegate_task' });
+/** a ticket as the server serves it: Hermes' JSON in `content`, read in `ticket` (server: chat/delegation.ts readTicket) */
+const ticket = (id: number, t: Record<string, unknown>, ts = id) => msg(id, 'tool', JSON.stringify({ status: 'dispatched', mode: 'background', ...t }), ts, {
+  toolName: 'delegate_task',
+  ticket: {
+    delegationId: (t.delegation_id as string | undefined) ?? null,
+    goals: (t.goals as string[] | undefined) ?? [],
+    refused: ((t.refused as { task_index: number }[] | undefined) ?? []).map((r) => r.task_index),
+    units: ((t.units as { delegation_id: string; task_indexes: number[] }[] | undefined) ?? []).map((u) => ({ id: u.delegation_id, tasks: u.task_indexes })),
+  },
+});
 const info = (p: Partial<DelegationInfo>): DelegationInfo => ({ ...EMPTY_DELIVERY, ...p });
 const delivery = (id: number, p: Partial<DelegationInfo>, ts = id) => msg(id, 'delegation', 'texte', ts, { delegation: info(p) });
 

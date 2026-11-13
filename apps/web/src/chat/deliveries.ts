@@ -3,7 +3,7 @@
 // which units are still open, the status of each card's tasks once delivered, the live activity of their child
 // sessions, and how often the page re-reads.
 import type { ChatMessage, DelegationInfo, SubagentChild } from '../api';
-import { readTicket, type Entry, type SubagentNode } from './events';
+import type { Entry, SubagentNode } from './events';
 import { formatDuration } from './format';
 
 export const EMPTY_DELIVERY: DelegationInfo = {
@@ -31,7 +31,8 @@ export function delegationState(messages: ChatMessage[]): DelegationState {
   const unitOf = new Map<string, Map<number, string>>();
   for (const m of messages) {
     if (m.role === 'tool') {
-      const t = readTicket(m.content);
+      // read by the server (`ticket`): the only reader of Hermes' format
+      const t = m.ticket;
       if (!t) continue;
       if (t.units.length) {
         const map = new Map<number, string>();
