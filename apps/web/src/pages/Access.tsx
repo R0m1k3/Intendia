@@ -13,7 +13,7 @@ import { Button, ErrorText, host, Tag } from '../components/ui';
 
 export const ACCESS_KINDS = ['login', 'payment', 'address'] as const;
 /** The address never holds a secret: only the item shown, or a form to open with a site. */
-export interface AccessSearch { profile?: string; item?: string; add?: VaultKind; origin?: string; proposed?: '1' }
+export interface AccessSearch { profile?: string; item?: string; add?: VaultKind; origin?: string; proposed?: '1'; replace?: '1' }
 
 const ID_TYPE: Record<string, string> = { email: 'E-mail', username: 'Nom d’utilisateur', phone: 'Téléphone' };
 
@@ -39,13 +39,14 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
   const qc = useQueryClient();
   const available = useVaultAvailable(inst);
   const q = useQuery({ queryKey: ['vault', inst, profile], queryFn: () => api.vault(inst, profile), enabled: available === true, retry: false });
-  const [replacing, setReplacing] = useState<VaultItem | null>(null);
   const [notice, setNotice] = useState<{ text: string; oldId?: string } | null>(null);
   const p = profile === 'default' ? undefined : profile;
   const to = (s: Omit<AccessSearch, 'profile'>) => ({ to: '/i/$inst/acces' as const, params: { inst }, search: { profile: p, ...s } });
   const go = (s: Omit<AccessSearch, 'profile'>, replace = false) => void navigate({ ...to(s), replace });
   const items = q.data?.items ?? [];
   const item = search.item ? items.find((i) => i.id === search.item) ?? null : null;
+  // in the address, so the back link (and the browser's) leaves the form
+  const replacing = search.replace === '1' ? item : null;
   const adding = Boolean(search.add) && !replacing;
 
   const remove = async (it: VaultItem) => {
@@ -68,7 +69,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
         <>
           <ProfileSelect inst={inst} value={profile} onChange={(x) => void navigate({ to: '/i/$inst/acces', params: { inst }, search: { profile: x === 'default' ? undefined : x } })} />
           {available === true && (
-            <Button variant="secondary" className="px-2.5" aria-label="Ajouter un accès" title="Ajouter un accès" onClick={() => { setReplacing(null); go({ add: 'login' }); }}>
+            <Button variant="secondary" className="px-2.5" aria-label="Ajouter un accès" title="Ajouter un accès" onClick={() => go({ add: 'login' })}>
               <Plus className="size-4" strokeWidth={1.75} />
             </Button>
           )}
@@ -95,7 +96,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
           <div key={k} className="flex flex-col gap-0.5" data-group={k}>
             <ListLabel>{KIND_GROUP[k]}</ListLabel>
             {group.map((i) => (
-              <ListLink key={i.id} link={to({ item: i.id })} selected={search.item === i.id} onClick={() => setReplacing(null)}>
+              <ListLink key={i.id} link={to({ item: i.id })} selected={search.item === i.id}>
                 <ListItemBody
                   title={i.label}
                   meta={i.origin ? host(i.origin) : undefined}
@@ -149,10 +150,9 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
             initial={{ kind: search.add, origin: search.origin }} proposed={!replacing && search.proposed === '1'}
             onDone={(res) => {
               setNotice(res.oldKept ? { text: 'Nouvel accès enregistré ; l’ancien n’a pas pu être supprimé.', oldId: replacing?.id } : null);
-              setReplacing(null);
               go({ item: res.id }, true);
             }}
-            onCancel={() => { setReplacing(null); go(item ? { item: item.id } : {}, true); }}
+            onCancel={() => go(item ? { item: item.id } : {}, true)}
           />
         </DetailBody>
       </>
@@ -164,7 +164,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
           title={item.label} meta={item.origin ? host(item.origin) : undefined} back={to({})}
           actions={
             <>
-              <Button variant="secondary" onClick={() => setReplacing(item)}>Remplacer</Button>
+              <Button variant="secondary" onClick={() => go({ item: item.id, replace: '1' })}>Remplacer</Button>
               <Button variant="danger" onClick={() => void remove(item)}>Supprimer</Button>
             </>
           }
@@ -201,7 +201,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
   }
 
   return (
-    <SplitView label="Accès" list={list} selected={Boolean(search.item || search.add || replacing)}>
+    <SplitView label="Accès" list={list} selected={Boolean(search.item || search.add)}>
       {banner}
       {detail}
     </SplitView>

@@ -262,6 +262,7 @@ const accessRoute = createRoute({
       add: typeof s.add === 'string' && (ACCESS_KINDS as readonly string[]).includes(s.add) ? (s.add as AccessSearch['add']) : undefined,
       origin,
       proposed: s.proposed === '1' || s.proposed === 1 ? '1' : undefined,
+      replace: s.replace === '1' || s.replace === 1 ? '1' : undefined,
     };
   },
 });
