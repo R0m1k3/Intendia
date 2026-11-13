@@ -572,6 +572,17 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   {openTasks, since, capped, wakePending}`): bar « N sous-agents travaillent » above the composer, note of the last
   delivery, re-reading every 3 s while `wakePending`. `GET /activity` lists them (`subagents`): « En cours » of the
   session list and of the Centre.
+- Lost deliveries (`chat/wake.ts`): Hermes may drop a delivery for good (`async_delegations.delivery_state =
+  'dropped'`, no HTTP route to read it). While a session waits (`wait`) for a ticket older than the grace (300 s,
+  `INTENDIA_SUBAGENT_GRACE_S` on the test bench), the watcher reads its children (`listChildren`, out of the pass, one
+  read at a time per session, once a minute at most): none alive (no `ended_at` and active less than 15 min ago) and
+  nothing for the grace after their last sign or the newest ticket → the units are given up, rows `lost:<unit>` of
+  `delegation_wakes` (state `lost`, never read as a wake). « Ne plus attendre » on the bar does the same at once
+  (`POST /x/sessions/:inst/:id/subagents/stop-waiting {units}`, the ids the page showed; 409 `run_active`). A lost unit
+  younger than 24 h keeps the session read every 60 s (`lostRecent`, page and watcher): a late delivery still shows
+  and wakes; a wake that leaves a lost unit out says so (`WAKE_TEXT_PARTIAL`). The routes of the messages (Intendia and
+  external) return `openUnits`, the server's open units: the cards show the others, neither open nor delivered, as
+  « non livré ».
 - Tool results in the history go to the first open call of the same tool in the last assistant message with tool
   calls (Hermes writes them in call order), else to the last open call of that tool.
 - Agent task list (`chat/todos.ts`, `Todos.tsx`): the last `todo_list` result of the session (always the full list)

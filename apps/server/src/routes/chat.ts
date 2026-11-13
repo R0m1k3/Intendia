@@ -13,7 +13,7 @@ import { SESSION_ID_RE, sessionParams } from './workspaces.js';
 import { ModelInfoSchema } from '../connectors/config/index.js';
 import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
 import { toUsage } from '../chat/usage.js';
-import { readHistory, readRunStatus, type ChatMessage } from '../chat/history.js';
+import { readHistory, whenIdle, readRunStatus, type ChatMessage } from '../chat/history.js';
 import { listChildren } from '../chat/subagents.js';
 import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
 import { presets, Modes, Pins } from '../chat/presets.js';
@@ -37,6 +37,7 @@ const SendBody = z.object({
   // same names as the skills routes (`category/name` for same-tier duplicates), never a `..` segment
   skills: z.array(z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/).refine((n) => !n.split('/').includes('..'))).max(SKILLS_MAX).optional(),
 });
+const StopWaitingBody = z.object({ units: z.array(z.string().min(1).max(256)).max(50) });
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
 const SteerBody = z.object({ input: z.string().trim().min(1).max(16384) });
 const ApprovalBody = z.object({ choice: z.enum(['once', 'session', 'always', 'deny']), requestId: z.string().max(256).optional() });
@@ -129,11 +130,36 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     // the consumption rows are settled here: the page re-reads the messages when a run ends
     await settle(ctx, { known: h });
     // background sub-agents: the server's decision (chat/wake.ts), same window as its watcher
+    const d = decide(ctx, h.messages);
+    const subagents = summarize(d, d.key ? deps.services.wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, Date.now() / 1000);
+    return c.json({
+      messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
+      openUnits: d.openUnits.map((u) => u.id),
+    });
+  });
+
+  /** The watcher's decision on a session (lost units and last wake included). */
+  const decide = (ctx: SessionContext, list: readonly ChatMessage[]) => {
     const { wakes } = deps.services;
-    const nowSec = Date.now() / 1000;
-    const d = wakeDecision(h.messages, nowSec, wakes.prevChain(ctx.instance.id, ctx.session.id, ctx.session.lastRunId));
-    const subagents = summarize(d, d.key ? wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, nowSec);
-    return c.json({ messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents });
+    const inst = ctx.instance.id;
+    const sid = ctx.session.id;
+    return wakeDecision(list, Date.now() / 1000, wakes.prevChain(inst, sid, ctx.session.lastRunId), wakes.lostUnits(inst, sid), wakes.lastWakeAt(inst, sid));
+  };
+
+  // « Ne plus attendre »: the units the page showed open are given up (a later delivery is still shown and wakes)
+  r.post('/sessions/:inst/:id/subagents/stop-waiting', async (c) => {
+    const ctx = ctxOf(c);
+    const { units } = StopWaitingBody.parse(await c.req.json());
+    let lost = 0;
+    // session reserved meanwhile: no send starts between the reading and the writing
+    const idle = await whenIdle(compat, ctx, async () => {
+      const h = await history(ctx.instance.id, ctx.session.id, ctx.profile);
+      const open = new Set(decide(ctx, h.messages).openUnits.map((u) => u.id));
+      lost = deps.services.wakes.lose(ctx.instance.id, ctx.session.id, units.filter((u) => open.has(u)));
+    });
+    if (!idle) return c.json({ error: 'Un run est en cours', code: 'run_active' }, 409);
+    deps.services.watcher.refresh(ctx.instance.id, ctx.session.id);
+    return c.json({ lost });
   });
 
   // sessions of the session's sub-agents (live tracking of background ones)
@@ -297,7 +323,8 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const id = c.req.param('id');
     if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError('identifiant invalide');
     const profile = instanceProfile(inst, c.req.query('profile'));
-    return c.json({ messages: await messages(inst, id, profile) });
+    const list = await messages(inst, id, profile);
+    return c.json({ messages: list, openUnits: wakeDecision(list, Date.now() / 1000, 0).openUnits.map((u) => u.id) });
   });
 
   // a session born elsewhere (Telegram, CLI, cron…): deleted at Hermes now, no undo (the web confirms first).

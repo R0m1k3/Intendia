@@ -22,10 +22,16 @@ export interface DelegationState {
   deliveries: Map<string, DelegationInfo[]>;
   /** call id → (task index → unit id), when the call was split in units */
   unitOf: Map<string, Map<number, string>>;
+  /** units whose ticket is in the messages: one neither open nor delivered was given up (« non livré ») */
+  ticketed: Set<string>;
 }
 
-/** Computed on Hermes' messages alone (before withTrees): tickets, deliveries, units. */
-export function delegationState(messages: ChatMessage[]): DelegationState {
+/**
+ * Computed on Hermes' messages (before withTrees): tickets, deliveries, units. `openUnits` = the server's decision
+ * (route of the messages: lost units and the 24 h cut applied), which wins over the count made here.
+ */
+export function delegationState(messages: ChatMessage[], openUnits?: readonly string[]): DelegationState {
+  const ticketed = new Set<string>();
   const openAt = new Map<string, number | null>();
   const deliveries = new Map<string, DelegationInfo[]>();
   const unitOf = new Map<string, Map<number, string>>();
@@ -37,19 +43,27 @@ export function delegationState(messages: ChatMessage[]): DelegationState {
       if (t.units.length) {
         const map = new Map<number, string>();
         for (const u of t.units) {
+          ticketed.add(u.id);
           for (const i of u.tasks) map.set(i, u.id);
           if (!deliveries.has(u.id) || !deliveries.get(u.id)!.some((d) => d.failedTask === null)) openAt.set(u.id, m.timestamp);
         }
         if (t.delegationId) unitOf.set(t.delegationId, map);
-      } else if (t.delegationId) openAt.set(t.delegationId, m.timestamp);
+      } else if (t.delegationId) {
+        ticketed.add(t.delegationId);
+        openAt.set(t.delegationId, m.timestamp);
+      }
     } else if (m.role === 'delegation' && m.delegation?.id) {
       const d = m.delegation;
       deliveries.set(d.id!, [...(deliveries.get(d.id!) ?? []), d]);
       if (d.failedTask === null) openAt.delete(d.id!);
     }
   }
+  if (openUnits) {
+    const server = new Set(openUnits);
+    for (const id of [...openAt.keys()]) if (!server.has(id)) openAt.delete(id);
+  }
   const times = [...openAt.values()].filter((v): v is number => v !== null);
-  return { open: new Set(openAt.keys()), since: times.length ? Math.max(...times) : null, deliveries, unitOf };
+  return { open: new Set(openAt.keys()), since: times.length ? Math.max(...times) : null, deliveries, unitOf, ticketed };
 }
 
 function deliveredStatus(d: DelegationInfo, taskIndex: number): string {
@@ -76,6 +90,8 @@ export function applyDeliveries(entries: Entry[], state: DelegationState, runAct
       if (full) status = deliveredStatus(full, n.taskIndex);
       else if (list.some((d) => d.failedTask === n.taskIndex)) status = 'failed';
       else if (n.status === 'running' && !runActive && state.open.has(unit)) status = 'background';
+      // given up by the server (no delivery after its children ended, or « Ne plus attendre », or older than 24 h)
+      else if ((n.status === 'background' || (n.status === 'running' && !runActive)) && state.ticketed.has(unit) && !state.open.has(unit)) status = 'lost';
       if (status === n.status) return n;
       changed = true;
       const { activity: _a, ...rest } = n;
@@ -143,6 +159,8 @@ export function deliverySummary(info: DelegationInfo): string {
 export function pollDelay(summary: SubagentsSummary | null | undefined, nowSec: number): number | false {
   if (!summary) return false;
   if (summary.wakePending) return 3_000;
+  // a unit given up less than 24 h ago: its delivery may still come
+  if (summary.openTasks === 0 && summary.lostRecent) return 60_000;
   if (summary.openTasks === 0 || summary.since === null) return false;
   const age = nowSec - summary.since;
   if (age < 600) return 15_000;

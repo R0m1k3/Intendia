@@ -194,6 +194,8 @@ export interface SubagentsSummary {
   capped: boolean;
   /** the last sub-agent delivered: the server is about to wake the agent */
   wakePending: boolean;
+  /** a unit given up less than 24 h ago (no delivery): the page keeps re-reading in case it comes */
+  lostRecent?: boolean;
 }
 /** A session whose background sub-agents still work (GET /activity). */
 export interface WorkingSubagents {
@@ -884,7 +886,9 @@ export const api = {
     call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
-  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[]; subagents?: SubagentsSummary | null }>('GET', `${sessionPath(inst, id)}/messages`),
+  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  /** « Ne plus attendre »: the units the page showed open are given up (409 run_active while a run goes on) */
+  stopWaitingSubagents: (inst: string, id: string, units: string[]) => call<{ lost: number }>('POST', `${sessionPath(inst, id)}/subagents/stop-waiting`, { units }),
   sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
   send: (inst: string, id: string, input: string, skills?: string[]) =>
     call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
@@ -920,7 +924,7 @@ export const api = {
   deleteExternal: (inst: string, id: string, profile = 'default') =>
     call<{ ok: true }>('DELETE', `/i/${enc(inst)}/external/${enc(id)}?profile=${enc(profile)}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
-    call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
+    call<{ messages: ChatMessage[]; openUnits?: string[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
 
   tree: (slug: string, path = '') => call<FileTree>('GET', `${filesPath(slug)}/tree?path=${enc(path)}`),
   gitLocate: (slug: string, path: string) => call<{ repo: string | null; outside: boolean }>('GET', `${gitPath(slug)}/locate?path=${enc(path)}`),
