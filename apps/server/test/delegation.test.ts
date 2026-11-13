@@ -96,6 +96,13 @@ describe('export', () => {
     expect(md).toContain('## Sous-agents (résultat)');
     expect(md).not.toContain('## Vous');
   });
+
+  it('names a wake after sub-agents « Intendia (automatique) », not « Vous »', async () => {
+    const { toMarkdown } = await import('../src/sessions/export.js');
+    const md = toMarkdown({ title: 'T', startedAt: null, agent: 'Hermes' }, toChatMessages([{ id: 1, role: 'user', content: '[Intendia] Reprise automatique : tes sous-agents ont terminé.' }]));
+    expect(md).toContain('## Intendia (automatique)');
+    expect(md).not.toContain('## Vous');
+  });
 });
 
 describe('tickets (delegate_task in the background)', () => {
