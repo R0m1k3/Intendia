@@ -29,7 +29,8 @@
  * Skills: see skills.ts (in-memory list, hub, background actions; "lent" in a hub search delays it).
  * Profiles: see profiles.ts; kanban: see kanban.ts (workers, dispatch, terminate).
  * - "fond": delegate_task in the background (ticket, run ended), delivery row 6 s later outside any run (FAKE_BG_DELAY_MS),
- *   two child sessions moving meanwhile ("fond-alerte": early failure notice + hidden row; "fond-suivi": 40 s, FAKE_BG_SUIVI_MS)
+ *   two child sessions moving meanwhile ("fond-alerte": early failure notice + hidden row; "fond-suivi": 40 s, FAKE_BG_SUIVI_MS;
+ *   "fond-oublie": the children end, no delivery ever)
  * - "delegue": two sub-agents (subagent.start / subagent.complete), the second a child of the first; the
  *   delegate_task call and its result (`{results: [...]}`) are stored in the messages like Hermes does
  * - "artefact": writes rapport.html in the session folder (like "fichier") with a script that writes in the page and
@@ -518,6 +519,8 @@ class Simulator {
     clearInterval(tick);
     kids[0]!.ended_at = Date.now() / 1000;
     kids[0]!.end_reason = 'completed';
+    // "fond-oublie": the children end but Hermes never delivers (delivery_state 'dropped')
+    if (/fond-oublie/i.test(run.input)) return;
     const secs = Math.round(delay / 1000);
     const text = [
       `[ASYNC DELEGATION BATCH COMPLETE — ${deleg}]`,

@@ -20,7 +20,7 @@ export function ExternalSessionPage() {
   const messages = useQuery({ queryKey: ['external', inst, profile, sessionId], queryFn: () => api.externalMessages(inst, sessionId, profile) });
   const list = messages.data?.messages ?? [];
   // no re-reading here: background sub-agents show « rouvrez la session plus tard »
-  const entries = applyDeliveries(historyEntries(list), delegationState(list), false);
+  const entries = applyDeliveries(historyEntries(list), delegationState(list, messages.data?.openUnits), false);
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const label = instances.data?.instances.find((i) => i.id === inst)?.label;
   const agent = agentName(profile, label);

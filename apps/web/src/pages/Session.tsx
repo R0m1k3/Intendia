@@ -484,7 +484,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const t = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
     return () => clearTimeout(t);
   }, [doneTodoCalls, qc, inst, sessionId]);
-  const delegations = useMemo(() => delegationState(messages), [messages]);
+  const openUnits = history.data?.openUnits;
+  const delegations = useMemo(() => delegationState(messages, openUnits), [messages, openUnits]);
   // the server's decision on background sub-agents (chat/wake.ts on the server)
   const subagents = history.data?.subagents ?? null;
   const wakePending = Boolean(subagents?.wakePending);
@@ -504,6 +505,21 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     hadSubagents.current = subagents !== null;
     if (inst && had && subagents === null) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
   }, [subagents, qc, inst, sessionId]);
+  // « Ne plus attendre »: the server gives up the units shown open (a result that still comes is shown and wakes)
+  const stopWaiting = async () => {
+    if (!inst || !openUnits?.length) return;
+    if (!(await ask({
+      title: 'Ne plus attendre les sous-agents ?', confirmLabel: 'Ne plus attendre',
+      message: 'Intendia ne montrera plus ces sous-agents comme en cours. Si d’autres ont déjà livré, l’agent reprend avec leurs résultats. Un résultat qui arrive plus tard s’affichera quand même.',
+    }))) return;
+    try {
+      await api.stopWaitingSubagents(inst, sessionId, openUnits);
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 409 ? new Error('Un travail est en cours dans cette session : réessayez à sa fin.') : err);
+    }
+    await qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
+    invalidateSessionLists(qc);
+  };
   // sessions of the background sub-agents (last activity, tools, end), re-read at the same pace as the history
   const children = useQuery({
     queryKey: ['session-subagents', inst, sessionId], queryFn: () => api.sessionSubagents(inst!, sessionId),
@@ -1001,7 +1017,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             <div className="absolute bottom-full right-4 mb-1 md:right-6"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
           )}
           {todos && todos.length > 0 && <Todos todos={todos} />}
-          {subagents && subagents.openTasks > 0 && !active && <SubagentsBar summary={subagents} />}
+          {subagents && subagents.openTasks > 0 && !active && <SubagentsBar summary={subagents} onStop={() => void stopWaiting()} />}
           {inst && goalQ.data && (
             <GoalBar
               inst={inst} sessionId={sessionId} sessionLastRunId={lastRunId} goal={goalQ.data}

@@ -84,7 +84,7 @@ export function createServices(deps: {
   const goals = new GoalStore(deps.db);
   const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, config, prompts: new PromptService(deps.db), goals };
   const wakes = new WakeStore(deps.db);
-  const watcher = new DelegationWatcher({ ...runDeps, wakes });
+  const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));
   return { goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }

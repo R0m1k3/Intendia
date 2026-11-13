@@ -188,3 +188,24 @@ describe('pollDelay (summary of the server)', () => {
     expect(pollDelay(undefined, 1000)).toBe(false);
   });
 });
+
+describe('units given up by the server (openUnits)', () => {
+  it('open per the server: « en fond »; not open and not delivered: « non livré »; a delivery wins', () => {
+    const e = historyEntries(base);
+    expect(statuses(applyDeliveries(e, delegationState(base, ['d1']), false))).toEqual(['0:background', '1:background']);
+    expect(statuses(applyDeliveries(e, delegationState(base, []), false))).toEqual(['0:lost', '1:lost']);
+    const done = [...base, delivery(5, { id: 'd1', tasks: 2, failed: 0 })];
+    expect(statuses(applyDeliveries(historyEntries(done), delegationState(done, []), false))).toEqual(['0:completed', '1:completed']);
+  });
+
+  it('a unit the server does not know (ticket not read yet) is never taken for lost', () => {
+    const e = historyEntries(base);
+    const state = delegationState([], []);
+    expect(statuses(applyDeliveries(e, state, false))).toEqual(['0:background', '1:background']);
+  });
+
+  it('pollDelay: every 60 s while a unit given up recently may still deliver', () => {
+    expect(pollDelay({ openTasks: 0, since: null, capped: false, wakePending: false, lostRecent: true }, 1000)).toBe(60_000);
+    expect(pollDelay({ openTasks: 0, since: null, capped: false, wakePending: false, lostRecent: false }, 1000)).toBe(false);
+  });
+});

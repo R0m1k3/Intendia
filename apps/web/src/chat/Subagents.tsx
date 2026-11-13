@@ -6,7 +6,7 @@ import { STALE_AFTER_S } from './deliveries';
 import { subagentTree, type SubagentNode } from './events';
 import { formatDuration } from './format';
 
-const FAILED = ['failed', 'error', 'interrupted', 'cancelled', 'timeout', 'stalled', 'unknown'];
+const FAILED = ['failed', 'error', 'interrupted', 'cancelled', 'timeout', 'stalled', 'unknown', 'lost'];
 
 /** completed → full box, running / background / incomplete → half, failed / stopped → empty. */
 export function markOf(status: string): ModuleState {
@@ -16,7 +16,7 @@ export function markOf(status: string): ModuleState {
 
 export const STATUS_TEXT: Record<string, string> = {
   running: 'en cours', completed: 'terminé', failed: 'échec', error: 'erreur', interrupted: 'interrompu', cancelled: 'annulé', timeout: 'délai dépassé',
-  background: 'en fond', truncated: 'incomplet', stalled: 'bloqué', unknown: 'inconnu',
+  background: 'en fond', truncated: 'incomplet', stalled: 'bloqué', unknown: 'inconnu', lost: 'non livré',
 };
 
 /** Seconds now, re-read every 30 s while `on` (« En fond depuis », activity of a child). */

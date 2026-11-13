@@ -41,6 +41,8 @@ export type InstanceConfig = z.infer<typeof InstanceConfigSchema>;
 
 const EnvSchema = z.object({
   INTENDIA_PUBLIC_URL: z.url().optional(),
+  /** test bench: seconds without a delivery after the sub-agents' last sign before they are no longer waited for (300) */
+  INTENDIA_SUBAGENT_GRACE_S: z.coerce.number().int().min(5).optional(),
   INTENDIA_SECRET: z.string().min(32, 'INTENDIA_SECRET must be at least 32 characters (openssl rand -hex 32)'),
   INTENDIA_PASSWORD_HASH: z.string().startsWith('$argon2').optional(),
   INTENDIA_INSTANCES: z.string().optional(),
@@ -61,6 +63,8 @@ const EnvSchema = z.object({
 
 export interface AppConfig {
   publicUrl: string | undefined;
+  /** INTENDIA_SUBAGENT_GRACE_S (chat/wake.ts), undefined = 300 s */
+  subagentGraceS?: number;
   secret: string;
   passwordHash: string | undefined;
   envInstances: InstanceConfig[] | null;
@@ -102,6 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const e = parsed.data;
   return {
     publicUrl: e.INTENDIA_PUBLIC_URL?.replace(/\/$/, ''),
+    subagentGraceS: e.INTENDIA_SUBAGENT_GRACE_S,
     secret: e.INTENDIA_SECRET,
     passwordHash: e.INTENDIA_PASSWORD_HASH,
     envInstances: e.INTENDIA_INSTANCES ? parseInstances(e.INTENDIA_INSTANCES) : null,
