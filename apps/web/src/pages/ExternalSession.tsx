@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, MessageSquarePlus } from 'lucide-react';
+import { ArrowLeft, MessageSquarePlus, Trash2 } from 'lucide-react';
 import { askChoice } from '../components/Dialog';
 import { newKey, useCopyOps } from '../sessions/copies';
 import { SESSION_LIST_KEYS } from '../sessions/UndoBar';
+import { useRemoveSession } from '../sessions/remove';
 import { api, type RecentSession } from '../api';
 import { applyDeliveries, delegationState } from '../chat/deliveries';
 import { historyEntries } from '../chat/events';
@@ -54,6 +55,12 @@ export function ExternalSessionPage() {
       await navigate({ to: '/w/$slug/s/$sessionId', params: { slug: res.slug, sessionId: res.id } });
     },
   });
+  // deleted at Hermes after a confirmation (no undo), then back to the home page
+  const rm = useRemoveSession();
+  const remove = useMutation({
+    mutationFn: () => rm.remove({ kind: 'hermes', inst, profile, id: sessionId }),
+    onSuccess: async (res) => { if (res) await navigate({ to: '/', replace: true }); },
+  });
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
@@ -65,6 +72,9 @@ export function ExternalSessionPage() {
             <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{known?.title ?? 'Session externe'}</h2>
             <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{meta}</p>
           </div>
+          <Button variant="ghost" className="shrink-0" onClick={() => remove.mutate()} disabled={remove.isPending}>
+            <Trash2 className="size-4" strokeWidth={1.5} />Supprimer
+          </Button>
           {canCopy && (
             <Button variant="primary" className="shrink-0" onClick={() => carryOn.mutate()} disabled={carryOn.isPending || !messages.isSuccess}>
               <MessageSquarePlus className="size-4" strokeWidth={1.5} />Continuer dans Intendia
@@ -77,6 +87,7 @@ export function ExternalSessionPage() {
         <p className="mb-7 rounded-lg bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft">Lecture seule : cette session vient de Telegram, du CLI, de l’API, d’un cron ou du kanban</p>
         <ErrorText error={messages.error} />
         <ErrorText error={carryOn.error} />
+        <ErrorText error={remove.error} />
         {messages.isSuccess && entries.length === 0 && <p className="text-sm text-ink-faint">Aucun message</p>}
         <Thread entries={entries} agent={agent} />
       </div>

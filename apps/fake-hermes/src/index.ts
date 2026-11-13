@@ -224,7 +224,11 @@ class Simulator {
   /** Tests: session id → live session id reported by /messages (simulates a context compression). */
   liveAlias = new Map<string, string>();
   /** Tests: sessions born elsewhere (Telegram, cron…) added by POST /_fake/sessions. */
-  extraSessions = new Map<string, { id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[] }>();
+  extraSessions = new Map<string, {
+    id: string; source: string | null; title: string | null; started_at: number; messages: { role: string; content: string }[];
+    /** DELETE answers 409 with this code (Hermes: session_active_turn while a turn runs) */
+    busy?: string; parent_session_id?: string | null; _lineage_root_id?: string | null; is_internal_child?: boolean;
+  }>();
   /** Sessions of sub-agents ("fond" scenarios, POST /_fake/children). */
   children = new Map<string, ChildRow>();
   /** Delay between the end of a "fond" run and the delivery of its sub-agents ("fond-suivi": bgSuiviMs). */
@@ -789,6 +793,10 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
         messages: Array.isArray(b.messages)
           ? (b.messages as { role?: unknown; content?: unknown }[]).map((m) => ({ role: String(m.role ?? 'user'), content: String(m.content ?? '') }))
           : [],
+        ...(typeof b.busy === 'string' ? { busy: b.busy } : {}),
+        ...(typeof b.parent_session_id === 'string' ? { parent_session_id: b.parent_session_id } : {}),
+        ...(typeof b.lineage_root === 'string' ? { _lineage_root_id: b.lineage_root } : {}),
+        ...(b.internal_child === true ? { is_internal_child: true } : {}),
       });
       return c.json({ id });
     }
@@ -1062,6 +1070,18 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     const id = decodeURIComponent(m[1]!);
     const simulated = sim.messages.get(id);
     if (deleted.has(id)) return NOT_FOUND_SESSION(id);
+    // sessions born elsewhere: read with their lineage, deleted (or refused while "busy") like Hermes
+    if (!m[2] && !simulated && sim.extraSessions.has(id) && (method === 'GET' || method === 'DELETE')) {
+      const { messages, busy, ...e } = sim.extraSessions.get(id)!;
+      if (method === 'GET') return json({ object: 'hermes.session', session: { ...e, message_count: messages.length, is_internal_child: e.is_internal_child ?? false } });
+      if (busy) return json({ error: { message: `session '${id}' has an active turn lease`, type: 'invalid_request_error', param: null, code: busy } }, 409);
+      deleted.add(id);
+      sim.extraSessions.delete(id);
+      return json({ object: 'hermes.session.deleted', id, deleted: true });
+    }
+    if (!m[2] && method === 'GET' && !simulated && sim.children.has(id)) {
+      return json({ object: 'hermes.session', session: { ...sim.children.get(id)!, is_internal_child: sim.children.get(id)!.is_internal_child ?? true } });
+    }
     if (m[2] && method === 'GET' && !simulated && sim.extraSessions.has(id)) {
       const extra = sim.extraSessions.get(id)!;
       const data = extra.messages.map((msg, i) => ({

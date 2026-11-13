@@ -279,6 +279,53 @@ describe('sessions', () => {
     expect((await t.request('GET', '/x/i/fake/other-sessions?profile=inconnu')).status).toBe(400);
   });
 
+  it('deletes a session born elsewhere at Hermes, never an Intendia one or what continues it', async () => {
+    const { t, s, base } = await withWorkspace();
+    const seed = (body: Record<string, unknown>) => t.fake.api.request('/_fake/sessions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'telegram', title: null, ...body }),
+    });
+    await seed({ id: 'tg_1', messages: [{ role: 'user', content: 'Bonjour' }] });
+    const del = await t.request('DELETE', '/x/i/fake/external/tg_1');
+    expect(del.status).toBe(200);
+    expect(del.json).toEqual({ ok: true });
+    expect((await t.request('GET', '/x/i/fake/other-sessions')).json.sessions.map((x: any) => x.id)).not.toContain('tg_1');
+    const after = await t.request('GET', '/x/i/fake/external/tg_1/messages');
+    expect(after.status).toBe(200);
+    expect(after.json.messages).toEqual([]);
+    // already gone: the goal is reached
+    expect((await t.request('DELETE', '/x/i/fake/external/inconnue_1')).status).toBe(200);
+
+    // an Intendia session goes through the deletion with undo
+    const own = await t.request('DELETE', `/x/i/fake/external/${s.id}`);
+    expect(own.status).toBe(409);
+    expect(own.json.code).toBe('owned');
+    expect((await t.request('GET', base)).status).toBe(200);
+    // …and so does what continues it after compression
+    await seed({ id: 'suite_1', source: 'api_server', parent_session_id: s.id });
+    await seed({ id: 'suite_2', source: 'api_server', lineage_root: s.id });
+    for (const id of ['suite_1', 'suite_2']) {
+      const r = await t.request('DELETE', `/x/i/fake/external/${id}`);
+      expect(r.status).toBe(409);
+      expect(r.json.code).toBe('owned');
+    }
+    await seed({ id: 'enfant_1', source: 'subagent', internal_child: true });
+    const child = await t.request('DELETE', '/x/i/fake/external/enfant_1');
+    expect(child.status).toBe(409);
+    expect(child.json.code).toBe('child');
+
+    // a turn running: Hermes refuses, Intendia says why; another 409 stays a Hermes error
+    await seed({ id: 'tg_busy', busy: 'session_active_turn' });
+    const busy = await t.request('DELETE', '/x/i/fake/external/tg_busy');
+    expect(busy.status).toBe(409);
+    expect(busy.json.code).toBe('run_active');
+    await seed({ id: 'tg_other', busy: 'autre_code' });
+    expect((await t.request('DELETE', '/x/i/fake/external/tg_other')).status).toBe(502);
+    expect((await t.request('GET', '/x/i/fake/other-sessions')).json.sessions.map((x: any) => x.id)).toEqual(expect.arrayContaining(['tg_busy', 'tg_other', 'suite_1']));
+
+    expect((await t.request('DELETE', '/x/i/fake/external/mauvais%20id')).status).toBe(400);
+    expect((await t.request('DELETE', '/x/i/fake/external/tg_busy?profile=inconnu')).status).toBe(400);
+  });
+
   it('reads GET /api/sessions/{id} wrapped or flat', async () => {
     const { SessionGetSchema } = await import('../src/connectors/sessions/index.js');
     expect(SessionGetSchema.parse({ session: { id: 'a', title: 't' } })).toMatchObject({ id: 'a', title: 't' });

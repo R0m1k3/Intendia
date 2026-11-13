@@ -82,6 +82,10 @@ of the diff are empty lists (no session, no cron in that container).
   Intendia imports copies untitled, then sends the title, numbered « #N » at Hermes when taken (`workspaces/title.ts`).
 - `llm.oneshot {instructions, input, task, max_tokens, profile?}` on the dashboard WebSocket answers on a standalone
   dashboard too: `{text}`, 4030 for empty params, 5030 when no model is set for the task (« Titre par l'IA »).
+- `DELETE /api/sessions/{id}` (API server, read in the 0.23.0 source, 2026-11-13) deletes a session of any source of
+  the profile, its delegate children and its local compression chain; branches are kept, detached. 409
+  `session_active_turn` while a turn runs, 404 when unknown. No undo. `GET /api/sessions/{id}` gives
+  `parent_session_id`, `_lineage_root_id`, `is_internal_child`.
 
 ### Run options and consumption (read in the 0.23.0 source, 2026-11-10)
 

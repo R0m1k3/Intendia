@@ -300,5 +300,40 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return c.json({ messages: await messages(inst, id, profile) });
   });
 
+  // a session born elsewhere (Telegram, CLI, cron…): deleted at Hermes now, no undo (the web confirms first).
+  // Never an Intendia session nor what continues one after compression: those go through the deletion with undo.
+  r.delete('/i/:inst/external/:id', async (c) => {
+    const inst = c.req.param('inst');
+    const id = c.req.param('id');
+    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError('identifiant invalide');
+    const profile = instanceProfile(inst, c.req.query('profile'));
+    const owned = workspaces.ownedIds(inst);
+    if (owned.has(id)) return c.json({ error: 'Session d’Intendia : passez par la suppression avec annulation', code: 'owned' }, 409);
+    const gone = (err: unknown) => err instanceof HermesError && err.kind === 'http' && err.detail.status === 404;
+    let session: Record<string, unknown>;
+    try {
+      session = await callOp<Record<string, unknown>>(compat.http(inst), compat.get(inst), 'sessions', 'get', { params: { session_id: id }, profile });
+    } catch (err) {
+      if (gone(err)) return c.json({ ok: true });
+      throw err;
+    }
+    if (session.is_internal_child === true) {
+      return c.json({ error: 'Session de sous-agent : supprimez la session parente', code: 'child' }, 409);
+    }
+    if ([session.parent_session_id, session._lineage_root_id].some((p) => typeof p === 'string' && owned.has(p))) {
+      return c.json({ error: 'Cette session continue une session d’Intendia après compression : supprimez la session d’origine dans Intendia', code: 'owned' }, 409);
+    }
+    try {
+      await callOp(compat.http(inst), compat.get(inst), 'sessions', 'remove', { params: { session_id: id }, profile });
+    } catch (err) {
+      if (gone(err)) return c.json({ ok: true });
+      if (err instanceof HermesError && err.kind === 'http' && err.detail.status === 409 && /session_active_turn/.test(err.detail.body ?? '')) {
+        return c.json({ error: 'Un tour est en cours dans cette session : réessayez quand il est fini', code: 'run_active' }, 409);
+      }
+      throw err;
+    }
+    return c.json({ ok: true });
+  });
+
   return r;
 }
