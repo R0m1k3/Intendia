@@ -1,7 +1,7 @@
 {
   "name": "intendia",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Web UI to work with and administer Hermes Agent instances through their HTTP APIs only",
   "license": "MIT",
   "type": "module",
