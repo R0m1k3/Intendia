@@ -1,4 +1,4 @@
-import { Columns2 } from 'lucide-react';
+import { Columns2, Trash2 } from 'lucide-react';
 import type { RecentSession } from '../api';
 import type { RunState } from './running';
 import { ListItemBody, ListLink } from '../components/Panes';
@@ -40,10 +40,13 @@ function RunBadge({ run, subagents }: { run: RunState; subagents?: number }) {
  * One session of the inbox column: title, time, workspace or search hit, source tag; highlighted when open, tinted
  * with the agent's state while it works (`run`).
  */
-export function SessionRow({ s, open, onBeside, run, subagents }: {
+export function SessionRow({ s, open, onBeside, run, subagents, onRemove, busy }: {
   s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void; run?: RunState;
   /** run `subagents`: how many work */
   subagents?: number;
+  /** the trash shown on hover (disabled while the agent works or the deletion runs: `busy`) */
+  onRemove?: () => void;
+  busy?: boolean;
 }) {
   const link: { to: string; params: Record<string, string> } = s.kind === 'intendia' && s.workspace
     ? { to: '/w/$slug/s/$sessionId', params: { slug: s.workspace, sessionId: s.id } }
@@ -52,12 +55,13 @@ export function SessionRow({ s, open, onBeside, run, subagents }: {
   const ws = s.kind === 'intendia' ? s.workspace : null;
   const beside = onBeside && ws ? () => onBeside(ws, s.id) : null;
   return (
-    <li data-recent={s.source ?? 'hermes'} data-run={run} className={cx(beside && 'group relative', run && !open && 'rounded-[10px] bg-accent-soft/40')}>
+    <li data-recent={s.source ?? 'hermes'} data-run={run} className={cx('group relative', run && !open && 'rounded-[10px] bg-accent-soft/40')}>
       <ListLink link={link} selected={open}
         onClick={beside ? (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); beside(); } } : undefined}>
         <ListItemBody
           title={s.title}
-          meta={run ? <RunBadge run={run} subagents={subagents} /> : when(s.at)}
+          // the trash takes the place of the time on hover
+          meta={<span className={onRemove ? 'md:group-hover:invisible md:group-focus-within:invisible' : undefined}>{run ? <RunBadge run={run} subagents={subagents} /> : when(s.at)}</span>}
           sub={s.snippet ? <Snippet text={s.snippet} /> : s.sub}
           tag={<Tag className={open ? 'bg-sheet' : undefined}>{sourceLabel(s.source).toLowerCase()}</Tag>}
         />
@@ -67,6 +71,13 @@ export function SessionRow({ s, open, onBeside, run, subagents }: {
           className="absolute bottom-2 right-3 hidden items-center gap-1 rounded-md border border-line bg-sheet px-1.5 py-0.5 text-[11.5px] text-ink-soft shadow-sm hover:text-ink md:group-hover:flex md:group-focus-within:flex">
           <Columns2 className="size-3.5" strokeWidth={1.5} />
           À côté
+        </button>
+      )}
+      {onRemove && (
+        <button type="button" onClick={onRemove} disabled={Boolean(run) || busy} aria-label={`Supprimer la session ${s.title}`}
+          title={run ? 'L’agent travaille : attendez la fin pour supprimer' : 'Supprimer'}
+          className="absolute right-3 top-2 hidden rounded-md border border-line bg-sheet p-1 text-ink-soft shadow-sm hover:text-bad disabled:opacity-50 disabled:hover:text-ink-soft md:group-hover:flex md:group-focus-within:flex">
+          <Trash2 className="size-3.5" strokeWidth={1.5} />
         </button>
       )}
     </li>

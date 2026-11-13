@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions/UndoBar';
+import { useRemoveSession } from '../sessions/remove';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
@@ -408,14 +409,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     onError: setError,
   });
   // deleted at Hermes only once the undo window is over (banner « Annuler »)
+  // (the hook closes its Chat column; `leave` closing it again changes nothing)
+  const rm = useRemoveSession();
   const remove = useMutation({
-    mutationFn: () => api.deleteSession(inst!, sessionId),
-    onSuccess: async ({ undoUntil }) => {
-      showUndo({ inst: inst!, ids: [sessionId], undoUntil, label: 'Session supprimée' });
-      forgetSideSession(inst!, sessionId);
-      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      goTo.leave(slug);
-    },
+    mutationFn: () => rm.remove({ kind: 'intendia', inst: inst!, profile: agentProfile, id: sessionId, slug }),
+    onSuccess: () => goTo.leave(slug),
     onError: setError,
   });
 

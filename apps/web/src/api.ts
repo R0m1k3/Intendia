@@ -899,6 +899,9 @@ export const api = {
   agentModels: (inst: string, profile: string) => call<ChatModelList>('GET', `/i/${enc(inst)}/chat-models?profile=${enc(profile)}&for=agent`),
   otherSessions: (inst: string, profile = 'default', offset = 0) =>
     call<{ sessions: OtherSession[]; hasMore: boolean; nextOffset: number }>('GET', `/i/${enc(inst)}/other-sessions?profile=${enc(profile)}&offset=${offset}`),
+  /** A session born elsewhere, deleted at Hermes now (no undo); 409 `owned` / `child` / `run_active`. */
+  deleteExternal: (inst: string, id: string, profile = 'default') =>
+    call<{ ok: true }>('DELETE', `/i/${enc(inst)}/external/${enc(id)}?profile=${enc(profile)}`),
   externalMessages: (inst: string, id: string, profile = 'default') =>
     call<{ messages: ChatMessage[] }>('GET', `/i/${enc(inst)}/external/${enc(id)}/messages?profile=${enc(profile)}`),
 

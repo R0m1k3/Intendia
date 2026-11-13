@@ -1,8 +1,8 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearch } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Brush, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type SessionSource } from '../api';
+import { api, type RecentSession, type SessionSource } from '../api';
 import { ask } from '../components/Dialog';
 import { ListLabel, ListPane } from '../components/Panes';
 import { Button, Chips, ErrorText } from '../components/ui';
@@ -11,6 +11,7 @@ import { useCurrentInstance } from '../instance/current';
 import { sessionsCount } from './actions';
 import { groupByDay } from './days';
 import { runMarks, withRunning } from './running';
+import { afterRemoveRoute, useRemoveSession, type RemoveTarget } from './remove';
 import { SessionRow } from './SessionRow';
 import { SESSION_LIST_KEYS, showUndo } from './UndoBar';
 
@@ -62,6 +63,20 @@ export function SessionsPane({ openId, onBeside }: {
   const marks = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst, activity.data?.subagents ?? []) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
   const [cleanError, setCleanError] = useState<unknown>(null);
+  const navigate = useNavigate();
+  const rm = useRemoveSession();
+  const [removeError, setRemoveError] = useState<unknown>(null);
+  /** The row's trash: an Intendia session with « Annuler », one born elsewhere after a confirmation. */
+  const removeRow = async (s: RecentSession) => {
+    const target: RemoveTarget = { kind: s.kind, inst: s.instanceId, profile: s.profile, id: s.id, slug: s.workspace ?? undefined };
+    setRemoveError(null);
+    try {
+      const res = await rm.remove(target);
+      if (res && s.id === openId) await navigate({ ...afterRemoveRoute(res.chat, target), replace: true });
+    } catch (err) {
+      setRemoveError(err);
+    }
+  };
   const n = unused.data?.unused ?? 0;
   /** Never used Intendia sessions (nothing at Hermes), deleted with the same undo as a deletion. */
   const cleanUp = async () => {
@@ -112,6 +127,7 @@ export function SessionsPane({ openId, onBeside }: {
     >
       <ErrorText error={active.error} />
       <ErrorText error={cleanError} />
+      <ErrorText error={removeError} />
       {partial.map((name) => (
         <p key={name} data-partial className={`${note} text-ink-soft`}>
           Recherche dans le contenu indisponible sur {name} : seuls les titres des sessions Intendia y sont cherchés
@@ -124,7 +140,8 @@ export function SessionsPane({ openId, onBeside }: {
         <div key={g.label} role="group" aria-label={g.label}>
           <ListLabel>{g.label}</ListLabel>
           <ul className="flex flex-col gap-0.5">
-            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} run={s.instanceId === inst ? marks.get(s.id)?.state : undefined} subagents={s.instanceId === inst ? marks.get(s.id)?.subagents : undefined} />)}
+            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} run={s.instanceId === inst ? marks.get(s.id)?.state : undefined} subagents={s.instanceId === inst ? marks.get(s.id)?.subagents : undefined}
+              onRemove={() => void removeRow(s)} busy={rm.pending.has(s.id)} />)}
           </ul>
         </div>
       ))}
