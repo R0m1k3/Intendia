@@ -475,6 +475,18 @@ Sub-agents and runs (API server):
   goes through `build_models_payload`, so it may write the discovered models of custom endpoints (like `model/options`).
   Never probed by the compatibility check.
 
+## Credential vault (read in the 0.23.0 source, checked on 0.23.0, 2026-11-13)
+- One encrypted vault per profile (`<HERMES_HOME>/vault/`); the `browser_vault` tool fills forms without the model
+  seeing the secrets. In an API server session `save_login` answers `error_type: "prompt_unavailable"` (no prompt).
+- No HTTP route: JSON-RPC on the dashboard WebSocket `/api/ws?token=`, param `profile`. `vault.list` →
+  `{items:[{id, kind, label, origin, created_at, identifier?, identifier_type?, has_otp?, backend}]}` (never secrets);
+  `vault.add {kind, label, origin, secret}` → `{id}`; `vault.remove {id}` → `{removed}`.
+- `secret` fields: login `identifier_type` (email/phone/username), `identifier`, `password`, `otp_secret`; payment
+  `card_number`, `cardholder_name`, `exp_month`, `exp_year`, `cvc`, `billing_postal_code`; address `address_line1`,
+  `address_line2`, `city`, `state`, `postal_code`, `country`.
+- Errors: 5095 (validation and failures, the text may quote a field name), 4064 unknown profile, -32601 method absent.
+  `vault.remove {}` → 5095 « id is required » without opening the vault (compatibility probe).
+
 ## Official Docker image
 
 `nousresearch/hermes-agent:latest`, data in `/opt/data`, uid/gid 10000 by default (`HERMES_UID`/`HERMES_GID`),

@@ -21,6 +21,7 @@ import { GitError } from './git/service.js';
 import { AdminError } from './admin-error.js';
 import { SecretError } from './hermes-config/mask.js';
 import { memoryRoutes } from './routes/memory.js';
+import { vaultRoutes } from './routes/vault.js';
 import { pluginRoutes } from './routes/plugins.js';
 import { mcpCatalogRoutes, mcpOauthRoutes } from './routes/mcp-catalog.js';
 import { RateLimiter } from './auth/limiter.js';
@@ -248,6 +249,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', activityRoutes({ activity: deps.services.activity, workspaces: deps.services.workspaces, store: deps.store }));
   priv.route('/', monitorRoutes(deps.services.monitor));
   priv.route('/', memoryRoutes(deps.services.memory));
+  priv.route('/', vaultRoutes(deps.services.vault));
   priv.route('/', pluginRoutes(deps.services.plugins));
   priv.route('/', mcpCatalogRoutes(deps.services.mcpCatalog));
   priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, missions: deps.services.missions, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));

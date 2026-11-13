@@ -30,6 +30,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   ...(process.env.FAKE_BG_DELAY_MS ? { bgDelayMs: Number(process.env.FAKE_BG_DELAY_MS) } : {}),
   ...(process.env.FAKE_BG_SUIVI_MS ? { bgSuiviMs: Number(process.env.FAKE_BG_SUIVI_MS) } : {}),
   // FAKE_ONESHOT=off|no_model: `llm.oneshot` absent, or without a model for titles
+  // FAKE_VAULT=off|external|list_fail|remove_fail: credential vault absent, with a 1Password item, or failing
+  vault: (['off', 'external', 'list_fail', 'remove_fail'] as const).find((m) => m === process.env.FAKE_VAULT) ?? 'on',
   oneshot: process.env.FAKE_ONESHOT === 'off' ? 'off' : process.env.FAKE_ONESHOT === 'no_model' ? 'no_model' : 'ok',
   // FAKE_PROFILE_KEYS='{"<profil>":"<clé>"}': keys of the API server of other profiles (/p/<profil>/...)
   profileKeys: process.env.FAKE_PROFILE_KEYS ? JSON.parse(process.env.FAKE_PROFILE_KEYS) : undefined,
