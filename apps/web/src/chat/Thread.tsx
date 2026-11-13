@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, Loader2, P
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { rawUrl, type ApprovalChoice, type RunStat } from '../api';
+import { rawUrl, type ApprovalChoice, type RunStat, type SubagentsSummary } from '../api';
 import { Button, copyText, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
 import { baseName, fileKind } from '../files/paths';
@@ -30,6 +30,8 @@ export function clock(ts: number | null, seconds = false): string {
 const Times = createContext<Map<string, Stamp> | null>(null);
 /** This page re-reads the session while sub-agents work in the background (their result shows up by itself). */
 const LiveDeliveries = createContext(false);
+/** the server's summary of background sub-agents (undefined: a session Intendia does not wake, as an external one) and the last delivery */
+const WakeInfo = createContext<{ summary: SubagentsSummary | null | undefined; lastKey: string | null }>({ summary: undefined, lastKey: null });
 
 /** « 14:03:27 · +12 s » for an entry, or null (times off, entry without a time). */
 function useStamp(key: string): string | null {
@@ -299,18 +301,24 @@ function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel:
   );
 }
 
+function DeliveryTurn({ t, clock: at }: { t: Extract<Turn, { kind: 'delegation' }>; clock: string }) {
+  const wake = useContext(WakeInfo);
+  const summary = wake.summary === undefined ? undefined : t.entry.key === wake.lastKey ? wake.summary : null;
+  return <Delivery entry={t.entry} clock={at} footers={t.footers} summary={summary} />;
+}
+
 function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: ThreadActions }) {
   const [editing, setEditing] = useState(false);
   const times = useContext(Times);
-  if (t.kind === 'delegation') return <Delivery entry={t.entry} clock={clock(t.entry.ts, Boolean(times))} footers={t.footers} />;
-  if (t.kind === 'user' && t.entry.relaunch) {
-    // sent by Intendia's goal loop, not by the user: a quiet line, no bubble
-    const { n, max } = t.entry.relaunch;
+  if (t.kind === 'delegation') return <DeliveryTurn t={t} clock={clock(t.entry.ts, Boolean(times))} />;
+  if (t.kind === 'user' && (t.entry.relaunch || t.entry.wake)) {
+    // sent by Intendia's server (goal loop, wake after sub-agents), not by the user: a quiet line, no bubble
+    const r = t.entry.relaunch;
     return (
-      <div className="flex flex-col items-center gap-1" data-turn="user" data-relaunch={`${n}/${max}`} data-key={t.key}>
+      <div className="flex flex-col items-center gap-1" data-turn="user" {...(r ? { 'data-relaunch': `${r.n}/${r.max}` } : { 'data-wake': '' })} data-key={t.key}>
         <div className="flex items-center gap-2 text-[12px] text-ink-faint" title={t.entry.text}>
           <span className="h-px w-8 bg-line" />
-          <span>Relance automatique {n}/{max}</span>
+          <span>{r ? `Relance automatique ${r.n}/${r.max}` : 'Reprise automatique · sous-agents terminés'}</span>
           <span className="h-px w-8 bg-line" />
         </div>
         {t.footers.length > 0 && <div className="flex flex-col items-center">{t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
@@ -380,20 +388,26 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false }: {
+export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents }: {
   entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions;
+  /** the server's summary (route of the messages); absent = a session Intendia does not wake */
+  subagents?: SubagentsSummary | null;
   /** the page re-reads the session while sub-agents work in the background */
   liveDeliveries?: boolean;
   /** « Afficher les heures » (chat/timeline.ts); absent = normal display */
   times?: Map<string, Stamp>;
 }) {
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
+  const lastKey = useMemo(() => entries.filter((e) => e.kind === 'delegation').at(-1)?.key ?? null, [entries]);
+  const wake = useMemo(() => ({ summary: subagents, lastKey }), [subagents, lastKey]);
   return (
     <Times.Provider value={times ?? null}>
       <LiveDeliveries.Provider value={liveDeliveries}>
+      <WakeInfo.Provider value={wake}>
         <div className="space-y-7">
           {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
         </div>
+      </WakeInfo.Provider>
       </LiveDeliveries.Provider>
     </Times.Provider>
   );

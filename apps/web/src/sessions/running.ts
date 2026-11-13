@@ -1,9 +1,14 @@
 // Sessions whose agent is working, put forward in the session list (SessionsPane): an « En cours » group on top.
 
-import type { ActiveRun, RecentSession } from '../api';
+import type { ActiveRun, RecentSession, WorkingSubagents } from '../api';
 
-export type RunState = 'running' | 'waiting';
-export interface RunMark { state: RunState; at: number; title: string | null; workspace: string; workspaceName: string; profile: string }
+/** subagents: no run goes on, background sub-agents of the session still work (the server wakes the agent after) */
+export type RunState = 'running' | 'waiting' | 'subagents';
+export interface RunMark {
+  state: RunState; at: number; title: string | null; workspace: string; workspaceName: string; profile: string;
+  /** background sub-agents still working */
+  subagents?: number;
+}
 /** A group of the list, as `groupByDay` gives it. */
 export type Group<T> = { label: string; items: T[] };
 
@@ -18,8 +23,16 @@ export function runMarks(
   runs: readonly ActiveRun[],
   waiting: readonly { instanceId: string; sessionId: string; workspace: string; workspaceName: string; title: string | null }[],
   inst: string,
+  subagents: readonly WorkingSubagents[] = [],
 ): Map<string, RunMark> {
   const out = new Map<string, RunMark>();
+  // lowest priority: a run going on or a question of the agent replaces it
+  for (const w of subagents) {
+    if (w.instance !== inst) continue;
+    out.set(w.sessionId, {
+      state: 'subagents', at: (w.since ?? 0) * 1000, title: w.title, workspace: w.workspace, workspaceName: w.workspaceName, profile: w.profile, subagents: w.tasks,
+    });
+  }
   for (const r of runs) {
     if (r.instance !== inst) continue;
     out.set(r.sessionId, { state: 'running', at: r.lastActiveAt, title: r.title, workspace: r.workspace, workspaceName: r.workspaceName, profile: r.profile });

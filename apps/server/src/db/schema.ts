@@ -166,3 +166,17 @@ export const sessionGoals = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );
+
+export const delegationWakes = sqliteTable(
+  'delegation_wakes',
+  {
+    instanceId: text('instance_id').notNull(),
+    sessionId: text('session_id').notNull(),
+    deliveryKey: text('delivery_key').notNull(),
+    state: text('state').notNull(),
+    runId: text('run_id'),
+    chain: integer('chain').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.instanceId, t.sessionId, t.deliveryKey] })],
+);

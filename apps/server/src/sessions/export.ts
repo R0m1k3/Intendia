@@ -1,3 +1,4 @@
+import { isReservedText } from '../chat/goal.js';
 import type { ChatMessage } from '../chat/history.js';
 
 // Markdown and HTML exports of a session, made by Intendia from the messages the session page shows (Hermes only
@@ -9,7 +10,8 @@ export function agentName(profile: string, instanceLabel: string): string {
 }
 
 function who(m: ChatMessage, agent: string): string | null {
-  if (m.role === 'user') return 'Vous';
+  // a relaunch of the goal or a wake after sub-agents: sent by Intendia, not by the user
+  if (m.role === 'user') return isReservedText(m.content) ? 'Intendia (automatique)' : 'Vous';
   if (m.role === 'assistant') return agent;
   if (m.role === 'delegation') return 'Sous-agents (résultat)';
   if (m.role === 'tool') return `Outil ${m.toolName ?? ''}`.trim();

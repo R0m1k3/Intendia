@@ -1,6 +1,6 @@
 import { Check, Copy, GitBranch } from 'lucide-react';
 import { useState } from 'react';
-import type { DelegationInfo, ModuleState, RunStat } from '../api';
+import type { DelegationInfo, ModuleState, RunStat, SubagentsSummary } from '../api';
 import { Button, copyText, Mark } from '../components/ui';
 import type { Entry } from './events';
 import { RunFooter } from './RunFooter';
@@ -14,7 +14,23 @@ function markOfDelivery(info: DelegationInfo): ModuleState {
  * Result of background sub-agents (Hermes' delivery row): a full-width line, folded, with Hermes' text as is.
  * Not a message of the user: no action on it; the agent reads it with the next message.
  */
-export function Delivery({ entry, clock, footers }: { entry: Extract<Entry, { kind: 'delegation' }>; clock: string; footers: RunStat[] }) {
+/**
+ * What happens next, from the server's summary (route of the messages), on the last delivery only. Undefined: a
+ * session Intendia does not wake (external): the agent reads it with the next message.
+ */
+export function deliveryNote(summary: SubagentsSummary | null | undefined): string | null {
+  if (summary === undefined) return 'L’agent en tiendra compte à votre prochain message.';
+  if (!summary) return null;
+  if (summary.capped) return 'Reprise automatique arrêtée après 5 reprises : écrivez pour continuer.';
+  if (summary.wakePending) return 'L’agent reprend son travail.';
+  if (summary.openTasks > 0) return 'L’agent reprendra quand les autres sous-agents auront fini.';
+  return null;
+}
+
+export function Delivery({ entry, clock, footers, summary }: {
+  entry: Extract<Entry, { kind: 'delegation' }>; clock: string; footers: RunStat[]; summary?: SubagentsSummary | null;
+}) {
+  const note = deliveryNote(summary);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   return (
@@ -35,7 +51,7 @@ export function Delivery({ entry, clock, footers }: { entry: Extract<Entry, { ki
           </Button>
         </div>
       )}
-      <p className="mt-1 text-xs text-ink-faint">L’agent en tiendra compte à votre prochain message.</p>
+      {note && <p className="mt-1 text-xs text-ink-faint" data-delivery-note>{note}</p>}
       {footers.length > 0 && <div className="mt-1">{footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
     </div>
   );

@@ -2,7 +2,7 @@ import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { CompatService } from '../compat/service.js';
 import type { SessionContext } from '../workspaces/service.js';
-import { delegationInfo, type DelegationInfo } from './delegation.js';
+import { delegationInfo, readTicket, type DelegationInfo, type TicketInfo } from './delegation.js';
 
 // Messages and run status of an Intendia session, shared by the chat routes, the session actions and exports.
 
@@ -30,6 +30,8 @@ export interface ChatMessage {
   steer?: true;
   /** role `delegation`: the delivery of background sub-agents (Hermes' `async_delegation_complete` row) */
   delegation?: DelegationInfo;
+  /** role `tool`: the ticket of a delegate_task in the background (sub-agents dispatched, results delivered later) */
+  ticket?: TicketInfo;
 }
 
 function text(content: unknown): string {
@@ -52,6 +54,13 @@ function toolCalls(raw: unknown): ChatMessage['toolCalls'] {
  * Hermes messages → oldest first, without session_meta nor `hidden` rows (muted notices, compression handoffs).
  * A delivery of background sub-agents becomes Intendia's own role `delegation` (never a message of the user).
  */
+function ticketOf(content: string): { ticket?: TicketInfo } {
+  // cheap test first: most tool results are not tickets
+  if (!content.includes('dispatched')) return {};
+  const ticket = readTicket(content);
+  return ticket ? { ticket } : {};
+}
+
 export function toChatMessages(data: RawMessage[]): ChatMessage[] {
   return data
     .filter((m) => m.role !== 'session_meta' && m.display_kind !== 'hidden')
@@ -65,6 +74,7 @@ export function toChatMessages(data: RawMessage[]): ChatMessage[] {
         id: m.id, role: m.role, content, toolName: m.tool_name ?? null,
         toolCalls: toolCalls(m.tool_calls), timestamp: m.timestamp ?? null,
         ...(m.display_kind === 'steer' ? { steer: true as const } : {}),
+        ...(m.role === 'tool' ? ticketOf(content) : {}),
       };
     });
 }

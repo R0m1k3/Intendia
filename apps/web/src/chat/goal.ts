@@ -35,6 +35,11 @@ export function costLine(g: Pick<SessionGoal, 'budgetUsd' | 'spent'>): string {
 
 const RELAUNCH_RE = /^\s*\[Intendia\] Relance automatique (\d+)\/(\d+) :/;
 
+const WAKE_RE = /^\s*\[Intendia\] Reprise automatique :/;
+
+/** The message Intendia's server sends when background sub-agents delivered (server: chat/wake.ts). */
+export const isWake = (text: string): boolean => WAKE_RE.test(text);
+
 /** A relaunch message of Intendia; null = an ordinary message. */
 export function parseRelaunch(text: string): { n: number; max: number } | null {
   const m = RELAUNCH_RE.exec(text);

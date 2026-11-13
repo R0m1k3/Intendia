@@ -23,12 +23,15 @@ export function Snippet({ text }: { text: string }) {
   );
 }
 
-/** Where the agent stands, in place of the time: working (pulsing) or waiting for the user. */
-function RunBadge({ run }: { run: RunState }) {
+/** « 2 sous-agents » */
+export const subagentsLabel = (n: number | undefined): string => (n === 1 ? '1 sous-agent' : `${n ?? 0} sous-agents`);
+
+/** Where the agent stands, in place of the time: working (pulsing), its sub-agents working, or waiting for the user. */
+function RunBadge({ run, subagents }: { run: RunState; subagents?: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-ink">
       <span className={run === 'waiting' ? 'size-2 rounded-full bg-bad' : 'size-2 animate-pulse rounded-full bg-accent'} />
-      {run === 'waiting' ? 'Attend votre réponse' : 'En cours'}
+      {run === 'waiting' ? 'Attend votre réponse' : run === 'subagents' ? subagentsLabel(subagents) : 'En cours'}
     </span>
   );
 }
@@ -37,7 +40,11 @@ function RunBadge({ run }: { run: RunState }) {
  * One session of the inbox column: title, time, workspace or search hit, source tag; highlighted when open, tinted
  * with the agent's state while it works (`run`).
  */
-export function SessionRow({ s, open, onBeside, run }: { s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void; run?: RunState }) {
+export function SessionRow({ s, open, onBeside, run, subagents }: {
+  s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void; run?: RunState;
+  /** run `subagents`: how many work */
+  subagents?: number;
+}) {
   const link: { to: string; params: Record<string, string> } = s.kind === 'intendia' && s.workspace
     ? { to: '/w/$slug/s/$sessionId', params: { slug: s.workspace, sessionId: s.id } }
     : { to: '/i/$inst/p/$profile/s/$sessionId', params: { inst: s.instanceId, profile: s.profile, sessionId: s.id } };
@@ -50,7 +57,7 @@ export function SessionRow({ s, open, onBeside, run }: { s: RecentSession; open:
         onClick={beside ? (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); beside(); } } : undefined}>
         <ListItemBody
           title={s.title}
-          meta={run ? <RunBadge run={run} /> : when(s.at)}
+          meta={run ? <RunBadge run={run} subagents={subagents} /> : when(s.at)}
           sub={s.snippet ? <Snippet text={s.snippet} /> : s.sub}
           tag={<Tag className={open ? 'bg-sheet' : undefined}>{sourceLabel(s.source).toLowerCase()}</Tag>}
         />

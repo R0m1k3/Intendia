@@ -1,13 +1,15 @@
 // Run events → thread entries. No React here: unit-tested in events.test.ts.
-import type { ChatMessage, DelegationInfo } from '../api';
+import type { ChatMessage, DelegationInfo, TicketInfo } from '../api';
 import { deliverySummary, EMPTY_DELIVERY } from './deliveries';
-import { parseRelaunch } from './goal';
+import { isWake, parseRelaunch } from './goal';
 
 export type ToolState = 'running' | 'ok' | 'failed';
 
 export type Entry =
   /** steer: given to the agent during its run (reorientation); relaunch: sent by Intendia's goal loop (chat/goal.ts) */
-  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean; relaunch?: { n: number; max: number } }
+  | { kind: 'user'; key: string; text: string; ts: number | null; steer?: boolean; relaunch?: { n: number; max: number };
+      /** wake: sent by Intendia's server once background sub-agents delivered (server: chat/wake.ts) */
+      wake?: boolean }
   | { kind: 'assistant'; key: string; text: string; ts: number | null; streaming?: boolean }
   | { kind: 'reasoning'; key: string; text: string; ts: number | null }
   | { kind: 'tool'; key: string; callId: string | null; tool: string; preview: string; result: string | null; duration: number | null; state: ToolState; ts: number | null }
@@ -343,7 +345,7 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
       out.push({ kind: 'delegation', key: k, text: m.content, info, summary: deliverySummary(info), ts: m.timestamp });
     } else if (m.role === 'user') {
       const relaunch = parseRelaunch(m.content);
-      out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}), ...(relaunch ? { relaunch } : {}) });
+      out.push({ kind: 'user', key: k, text: m.content, ts: m.timestamp, ...(m.steer ? { steer: true } : {}), ...(relaunch ? { relaunch } : {}), ...(isWake(m.content) ? { wake: true } : {}) });
     }
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
@@ -366,7 +368,7 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
       }
       open.result = m.content;
       const nodes = open.tool === 'delegate_task'
-        ? delegationNodes(open.preview, m.content, open.key, open.ts) ?? dispatchedNodes(open.preview, m.content, open.key, m.timestamp ?? open.ts)
+        ? delegationNodes(open.preview, m.content, open.key, open.ts) ?? dispatchedNodes(open.preview, m.ticket, open.key, m.timestamp ?? open.ts)
         : null;
       if (nodes) out[out.indexOf(open)] = { kind: 'subagents', key: open.key, nodes, ts: open.ts };
     }
@@ -401,40 +403,15 @@ export function delegationNodes(argsJson: string, resultJson: string, key: strin
   });
 }
 
-export interface Ticket {
-  delegationId: string | null;
-  goals: string[];
-  refused: Set<number>;
-  /** unit ids (independent completions), each with its task indexes */
-  units: { id: string; tasks: number[] }[];
-}
-
-/** Result of a delegate_task in the background (`{status: dispatched, mode: background, …}`), else null. */
-export function readTicket(content: string): Ticket | null {
-  const t = obj(parse(content));
-  if (!t || t.status !== 'dispatched' || t.mode !== 'background') return null;
-  const refused = new Set<number>();
-  if (Array.isArray(t.refused)) for (const r of t.refused) { const i = num(obj(r)?.task_index); if (i !== null) refused.add(i); }
-  const units = Array.isArray(t.units)
-    ? t.units.map((u) => obj(u)).filter((u): u is Record<string, unknown> => !!u && typeof u.delegation_id === 'string' && !!u.delegation_id)
-      .map((u) => ({ id: u.delegation_id as string, tasks: Array.isArray(u.task_indexes) ? u.task_indexes.map(num).filter((n): n is number => n !== null) : [] }))
-    : [];
-  return {
-    delegationId: typeof t.delegation_id === 'string' && t.delegation_id ? t.delegation_id : null,
-    goals: Array.isArray(t.goals) ? t.goals.map((g) => str(g)) : [], refused, units,
-  };
-}
-
 /** Cards of a delegate_task in the background: one `background` node per task not refused by Hermes. */
-export function dispatchedNodes(argsJson: string, resultJson: string, key: string, ts: number | null): SubagentNode[] | null {
-  const t = readTicket(resultJson);
+export function dispatchedNodes(argsJson: string, t: TicketInfo | undefined, key: string, ts: number | null): SubagentNode[] | null {
   if (!t) return null;
   const args = obj(parse(argsJson || '{}')) ?? {};
   const tasks = Array.isArray(args.tasks) ? args.tasks : [];
   const goals = t.goals.length ? t.goals : tasks.length ? tasks.map((x) => str(obj(x)?.goal)) : [str(args.goal)];
   const nodes: SubagentNode[] = [];
   goals.forEach((goal, index) => {
-    if (t.refused.has(index)) return;
+    if (t.refused.includes(index)) return;
     nodes.push({
       id: `${key}-${index}`, parentId: null, depth: 1, goal: goal || str(obj(tasks[index])?.goal), model: null, status: 'background',
       startedAt: ts, duration: null, cost: null, inputTokens: null, outputTokens: null, toolCount: null, summary: null,

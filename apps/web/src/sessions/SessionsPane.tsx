@@ -59,7 +59,7 @@ export function SessionsPane({ openId, onBeside }: {
   // sessions whose agent works (or waits for the user): an « En cours » group on top (sessions/running.ts)
   const activity = useQuery({ queryKey: ['activity', inst], queryFn: () => api.activity(inst!), enabled: inst !== null, refetchInterval: 5_000, staleTime: 0 });
   const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: inst !== null, refetchInterval: 5_000 });
-  const marks = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst) : new Map();
+  const marks = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst, activity.data?.subagents ?? []) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
   const [cleanError, setCleanError] = useState<unknown>(null);
   const n = unused.data?.unused ?? 0;
@@ -124,7 +124,7 @@ export function SessionsPane({ openId, onBeside }: {
         <div key={g.label} role="group" aria-label={g.label}>
           <ListLabel>{g.label}</ListLabel>
           <ul className="flex flex-col gap-0.5">
-            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} run={s.instanceId === inst ? marks.get(s.id)?.state : undefined} />)}
+            {g.items.map((s) => <SessionRow key={`${s.instanceId}:${s.id}`} s={s} open={s.id === openId} onBeside={onBeside} run={s.instanceId === inst ? marks.get(s.id)?.state : undefined} subagents={s.instanceId === inst ? marks.get(s.id)?.subagents : undefined} />)}
           </ul>
         </div>
       ))}

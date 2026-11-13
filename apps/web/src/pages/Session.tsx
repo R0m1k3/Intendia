@@ -47,6 +47,7 @@ import { Menu, Picker } from '../components/Menu';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
+import { SubagentsBar } from '../chat/SubagentsBar';
 import { GoalDialog } from '../chat/GoalDialog';
 import type { GoalSettings } from '../api';
 import { workspaceScope } from '../files/scope';
@@ -130,8 +131,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     refetchInterval: (q) => {
       if (active) return false;
       if (costSettling(q.state.data?.runs)) return COST_POLL_MS;
-      // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at most)
-      return pollDelay(delegationState(q.state.data?.messages ?? []), Date.now() / 1000);
+      // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at
+      // most), then every 3 s until the server's wake starts
+      return pollDelay(q.state.data?.subagents, Date.now() / 1000);
     },
   });
   const lastRunId = sess.data?.session.lastRunId ?? null;
@@ -485,11 +487,30 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     return () => clearTimeout(t);
   }, [doneTodoCalls, qc, inst, sessionId]);
   const delegations = useMemo(() => delegationState(messages), [messages]);
+  // the server's decision on background sub-agents (chat/wake.ts on the server)
+  const subagents = history.data?.subagents ?? null;
+  const wakePending = Boolean(subagents?.wakePending);
+  // the server is about to wake the agent: the session is re-read with the messages, so its new run is followed
+  // (the effect on lastRun) as soon as it starts; once more when the wait ends
+  useEffect(() => {
+    if (!inst) return;
+    if (!wakePending) return;
+    const id = setInterval(() => void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }), 3_000);
+    return () => { clearInterval(id); void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }); };
+  }, [wakePending, qc, inst, sessionId]);
+  // the wake can start between two readings (pending never seen): sub-agents open or a wake expected, then nothing
+  // left = the delivery was answered; the session is re-read so a run started by the server is followed
+  const hadSubagents = useRef(false);
+  useEffect(() => {
+    const had = hadSubagents.current;
+    hadSubagents.current = subagents !== null;
+    if (inst && had && subagents === null) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+  }, [subagents, qc, inst, sessionId]);
   // sessions of the background sub-agents (last activity, tools, end), re-read at the same pace as the history
   const children = useQuery({
     queryKey: ['session-subagents', inst, sessionId], queryFn: () => api.sessionSubagents(inst!, sessionId),
     enabled: Boolean(inst) && delegations.open.size > 0, retry: false, refetchOnWindowFocus: false,
-    refetchInterval: () => pollDelay(delegations, Date.now() / 1000),
+    refetchInterval: () => pollDelay(subagents, Date.now() / 1000),
   });
   const entries: Entry[] = attachChildren(applyDeliveries(
     withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees),
@@ -954,7 +975,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries />
+        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} />
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && deferred && (
           <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.</p>
@@ -982,6 +1003,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             <div className="absolute bottom-full right-4 mb-1 md:right-6"><TurnJump onPrev={() => jump(-1)} onNext={() => jump(1)} /></div>
           )}
           {todos && todos.length > 0 && <Todos todos={todos} />}
+          {subagents && subagents.openTasks > 0 && !active && <SubagentsBar summary={subagents} />}
           {inst && goalQ.data && (
             <GoalBar
               inst={inst} sessionId={sessionId} sessionLastRunId={lastRunId} goal={goalQ.data}

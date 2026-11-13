@@ -21,7 +21,8 @@ import { PromptService } from '../prompts/service.js';
 import { listPersonalities } from '../sessions/personalities.js';
 import { SKILLS_MAX } from '../sessions/run-extras.js';
 import { RunBusyError, RunExtrasError, settle as settleRuns, startRun } from '../chat/start-run.js';
-import { isRelaunchText } from '../chat/goal.js';
+import { isReservedText } from '../chat/goal.js';
+import { summarize, wakeDecision } from '../chat/wake.js';
 import { profileOf } from './skills.js';
 
 export { toChatMessages, type ChatMessage } from '../chat/history.js';
@@ -49,6 +50,8 @@ function sseError(status: number, message: string): Response {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
 }
+
+const RESERVED = 'Ce début de message est réservé aux messages automatiques d’Intendia';
 
 export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
   const { workspaces, compat } = deps;
@@ -125,7 +128,12 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const h = await history(ctx.instance.id, ctx.session.id, ctx.profile);
     // the consumption rows are settled here: the page re-reads the messages when a run ends
     await settle(ctx, { known: h });
-    return c.json({ messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun) });
+    // background sub-agents: the server's decision (chat/wake.ts), same window as its watcher
+    const { wakes } = deps.services;
+    const nowSec = Date.now() / 1000;
+    const d = wakeDecision(h.messages, nowSec, wakes.prevChain(ctx.instance.id, ctx.session.id, ctx.session.lastRunId));
+    const subagents = summarize(d, d.key ? wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, nowSec);
+    return c.json({ messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents });
   });
 
   // sessions of the session's sub-agents (live tracking of background ones)
@@ -135,7 +143,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
     const { input, skills } = SendBody.parse(await c.req.json());
-    if (isRelaunchText(input)) return c.json({ error: 'Ce début de message est réservé aux relances automatiques', code: 'reserved_prefix' }, 400);
+    if (isReservedText(input)) return c.json({ error: RESERVED, code: 'reserved_prefix' }, 400);
     // the user writes: an active goal pauses first, so this run goes without the goal's block
     goals.pauseIfActive(ctx.instance.id, ctx.session.id, 'user');
     try {
@@ -236,6 +244,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
     const { input } = SteerBody.parse(await c.req.json());
+    if (isReservedText(input)) return c.json({ error: RESERVED, code: 'reserved_prefix' }, 400);
     try {
       const res = await callOp(http(ctx), report(ctx), 'chat', 'steer', { params: { run_id: runId }, profile: ctx.profile, body: { input } });
       // a reorientation is the user writing: an active goal pauses

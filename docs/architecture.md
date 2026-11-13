@@ -542,8 +542,19 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   the user (no edit, no retry, not a question, exported as « Sous-agents (résultat) »). `hidden` rows are dropped.
   While a unit is open, the session page re-reads the history and the children's session rows
   (`GET /x/sessions/:inst/:id/subagents`, from `GET /api/sessions?include_children=true`, up to 5 pages of 100) every 15 s for 10 min, then
-  60 s up to 24 h: each background node shows its child's last activity and tool count. Intendia never starts a run
-  at the delivery: the agent reads the result with the next message.
+  60 s up to 24 h: each background node shows its child's last activity and tool count. The server alone reads
+  tickets (`ChatMessage.ticket`, `readTicket` in `chat/delegation.ts`).
+- Wake after background sub-agents (`chat/wake.ts`, table `delegation_wakes`): Hermes opens no turn at a delivery, so
+  `DelegationWatcher` (server, every 15 s, every tab closed) reads the recent Intendia sessions that are not calm
+  (last 200 messages, after their run ended); once a full delivery ends the history and no unit younger than 24 h is
+  still open, it starts one run through `startRun` with `[Intendia] Reprise automatique : …` (reserved like the
+  relaunch prefix, at send and at steer; shown as a quiet line). One row per delivery answered (key: Hermes' message
+  id), written before the start (`starting` → `started` / `abandoned`; a start cut by a restart is never retried): a
+  wake run failing at Hermes keeps no message, the row stops a second wake. `chain` counts wakes with no other run
+  between: 5 at most (`capped`). The route of the messages adds the same decision for the page (`subagents:
+  {openTasks, since, capped, wakePending}`): bar « N sous-agents travaillent » above the composer, note of the last
+  delivery, re-reading every 3 s while `wakePending`. `GET /activity` lists them (`subagents`): « En cours » of the
+  session list and of the Centre.
 - Tool results in the history go to the first open call of the same tool in the last assistant message with tool
   calls (Hermes writes them in call order), else to the last open call of that tool.
 - Agent task list (`chat/todos.ts`, `Todos.tsx`): the last `todo_list` result of the session (always the full list)

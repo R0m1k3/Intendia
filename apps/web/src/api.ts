@@ -182,6 +182,33 @@ export interface ChatMessage {
   steer?: true;
   /** role delegation */
   delegation?: DelegationInfo;
+  /** role tool: ticket of a delegate_task in the background, read by the server */
+  ticket?: TicketInfo;
+}
+/** Background sub-agents of a session, as the server decides (server: chat/wake.ts); null = nothing open or expected. */
+export interface SubagentsSummary {
+  openTasks: number;
+  /** seconds: newest ticket still open */
+  since: number | null;
+  /** 5 automatic wakes in a row: none until the user writes */
+  capped: boolean;
+  /** the last sub-agent delivered: the server is about to wake the agent */
+  wakePending: boolean;
+}
+/** A session whose background sub-agents still work (GET /activity). */
+export interface WorkingSubagents {
+  instance: string; sessionId: string; workspace: string; workspaceName: string; title: string | null; profile: string;
+  tasks: number;
+  /** seconds */
+  since: number | null;
+}
+/** Ticket of a delegate_task in the background (server: chat/delegation.ts). Indexes base 0. */
+export interface TicketInfo {
+  delegationId: string | null;
+  goals: string[];
+  refused: number[];
+  /** units (independent completions), each with its task indexes; empty = the call is the unit */
+  units: { id: string; tasks: number[] }[];
 }
 export interface RunStatus {
   status: string;
@@ -603,6 +630,8 @@ export interface ActiveRun {
 export interface Activity {
   runs: ActiveRun[];
   workers: KanbanWorker[];
+  /** sessions whose background sub-agents still work (absent from an older server) */
+  subagents?: WorkingSubagents[];
   errors: { instance: string; message: string }[];
 }
 /** A run launched from Intendia that ended in the last 24 h (Centre, « Terminé »). */
@@ -838,7 +867,7 @@ export const api = {
     call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
-  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[]; subagents?: SubagentsSummary | null }>('GET', `${sessionPath(inst, id)}/messages`),
   sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
   send: (inst: string, id: string, input: string, skills?: string[]) =>
     call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),

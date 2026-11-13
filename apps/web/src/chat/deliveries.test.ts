@@ -6,7 +6,16 @@ import { historyEntries, withTrees, type Entry, type SubagentNode } from './even
 const msg = (id: number, role: string, content: string, ts = id, extra: Partial<ChatMessage> = {}): ChatMessage =>
   ({ id, role, content, toolName: null, toolCalls: [], timestamp: ts, ...extra });
 const call = (id: number, args: unknown, ts = id) => msg(id, 'assistant', '', ts, { toolCalls: [{ name: 'delegate_task', arguments: JSON.stringify(args) }] });
-const ticket = (id: number, t: Record<string, unknown>, ts = id) => msg(id, 'tool', JSON.stringify({ status: 'dispatched', mode: 'background', ...t }), ts, { toolName: 'delegate_task' });
+/** a ticket as the server serves it: Hermes' JSON in `content`, read in `ticket` (server: chat/delegation.ts readTicket) */
+const ticket = (id: number, t: Record<string, unknown>, ts = id) => msg(id, 'tool', JSON.stringify({ status: 'dispatched', mode: 'background', ...t }), ts, {
+  toolName: 'delegate_task',
+  ticket: {
+    delegationId: (t.delegation_id as string | undefined) ?? null,
+    goals: (t.goals as string[] | undefined) ?? [],
+    refused: ((t.refused as { task_index: number }[] | undefined) ?? []).map((r) => r.task_index),
+    units: ((t.units as { delegation_id: string; task_indexes: number[] }[] | undefined) ?? []).map((u) => ({ id: u.delegation_id, tasks: u.task_indexes })),
+  },
+});
 const info = (p: Partial<DelegationInfo>): DelegationInfo => ({ ...EMPTY_DELIVERY, ...p });
 const delivery = (id: number, p: Partial<DelegationInfo>, ts = id) => msg(id, 'delegation', 'texte', ts, { delegation: info(p) });
 
@@ -55,7 +64,6 @@ describe('delegationState', () => {
   it('pace of the newest open ticket: an old abandoned one does not stop the re-reading of a new one', () => {
     const s = delegationState([ticket(3, { delegation_id: 'old' }, 1000), ticket(5, { delegation_id: 'new' }, 1000 + 90_000)]);
     expect(s.since).toBe(1000 + 90_000);
-    expect(pollDelay(s, 1000 + 90_010)).toBe(15_000);
   });
 
   it('two units, one delivered: one open, unitOf filled', () => {
@@ -168,12 +176,15 @@ describe('deliverySummary', () => {
   });
 });
 
-describe('pollDelay', () => {
-  const s = (since: number | null, open = ['d']) => ({ open: new Set(open), since, deliveries: new Map(), unitOf: new Map() });
-  it('15 s, then 60 s, then stops after 24 h; nothing open → false', () => {
+describe('pollDelay (summary of the server)', () => {
+  const s = (since: number | null, openTasks = 2, wakePending = false) => ({ openTasks, since, capped: false, wakePending });
+  it('15 s, then 60 s, then stops after 24 h; nothing open → false; 3 s while a wake is expected', () => {
     expect(pollDelay(s(1000), 1000)).toBe(15_000);
     expect(pollDelay(s(1000), 1601)).toBe(60_000);
     expect(pollDelay(s(1000), 1000 + 86_401)).toBe(false);
-    expect(pollDelay(s(null, []), 1000)).toBe(false);
+    expect(pollDelay(s(null, 0), 1000)).toBe(false);
+    expect(pollDelay(s(null, 0, true), 1000)).toBe(3_000);
+    expect(pollDelay(null, 1000)).toBe(false);
+    expect(pollDelay(undefined, 1000)).toBe(false);
   });
 });

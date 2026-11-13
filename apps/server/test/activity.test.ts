@@ -48,7 +48,7 @@ describe('activity', () => {
     t.db.update(sessionWorkspace).set({ lastRunId: 'run_oublie', lastActiveAt: Date.now() }).where(eq(sessionWorkspace.sessionId, a.s.id)).run();
     t.db.update(sessionWorkspace).set({ lastRunId: 'run_vieux', lastActiveAt: Date.now() - 25 * 3600_000 }).where(eq(sessionWorkspace.sessionId, b.s.id)).run();
     const res = (await t.request('GET', '/x/i/fake/activity')).json;
-    expect(res).toEqual({ runs: [], workers: [], errors: [] });
+    expect(res).toEqual({ runs: [], workers: [], subagents: [], errors: [] });
     expect(runStatusCalls(t, 'run_vieux')).toBe(0);
     expect(runStatusCalls(t, 'run_oublie')).toBe(1);
     await t.request('GET', '/x/i/fake/activity');
@@ -256,5 +256,22 @@ describe('approvals of every instance', () => {
     expect((await t.request('GET', '/x/approvals')).json.approvals).toMatchObject([
       { key: `${runId}:attente`, command: null, description: null, choices: [], requestId: null },
     ]);
+  });
+});
+
+describe('activity: background sub-agents', () => {
+  it('a session whose sub-agents work is listed (instance and all), then no longer after the wake', async () => {
+    const t = await testApp({ bgDelayMs: 1_500 });
+    await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
+    const s = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    const base = `/x/sessions/fake/${s.id}`;
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
+    await t.services.watcher.pass();
+    const one = (await t.request('GET', '/x/i/fake/activity')).json;
+    expect(one.subagents).toMatchObject([{ instance: 'fake', sessionId: s.id, workspace: 'dev', workspaceName: 'Dev', tasks: 2 }]);
+    expect((await t.request('GET', '/x/activity')).json.subagents).toHaveLength(1);
+    await new Promise((r) => setTimeout(r, 1_800));
+    await t.services.watcher.pass(Date.now() + 20_000);
+    expect((await t.request('GET', '/x/i/fake/activity')).json.subagents).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { delegationInfo } from '../src/chat/delegation.js';
+import { delegationInfo, delegationState, readTicket } from '../src/chat/delegation.js';
 import { toChatMessages } from '../src/chat/history.js';
 import { cutBefore } from '../src/sessions/copy.js';
 
@@ -95,5 +95,56 @@ describe('export', () => {
     const md = toMarkdown({ title: 'T', startedAt: null, agent: 'Hermes' }, toChatMessages([{ id: 1, role: 'user', content: sample, display_kind: 'async_delegation_complete' }]));
     expect(md).toContain('## Sous-agents (résultat)');
     expect(md).not.toContain('## Vous');
+  });
+
+  it('names a wake after sub-agents « Intendia (automatique) », not « Vous »', async () => {
+    const { toMarkdown } = await import('../src/sessions/export.js');
+    const md = toMarkdown({ title: 'T', startedAt: null, agent: 'Hermes' }, toChatMessages([{ id: 1, role: 'user', content: '[Intendia] Reprise automatique : tes sous-agents ont terminé.' }]));
+    expect(md).toContain('## Intendia (automatique)');
+    expect(md).not.toContain('## Vous');
+  });
+});
+
+describe('tickets (delegate_task in the background)', () => {
+  const raw = (t: Record<string, unknown>) => JSON.stringify({ status: 'dispatched', mode: 'background', ...t });
+
+  it('readTicket: refused as an array, units, anything else null', () => {
+    const t = readTicket(raw({ delegation_id: 'd1', goals: ['a', 'b', 'c'], refused: [{ task_index: 2 }, { task_index: 2 }] }));
+    expect(t).toEqual({ delegationId: 'd1', goals: ['a', 'b', 'c'], refused: [2], units: [] });
+    expect(readTicket(raw({ delegation_id: 'd2', goals: ['a', 'b'], units: [{ delegation_id: 'd2-1', task_indexes: [0] }, { delegation_id: 'd2-2', task_indexes: [1] }] }))?.units)
+      .toEqual([{ id: 'd2-1', tasks: [0] }, { id: 'd2-2', tasks: [1] }]);
+    expect(readTicket(JSON.stringify({ status: 'dispatched', mode: 'sync' }))).toBeNull();
+    expect(readTicket('pas du json')).toBeNull();
+  });
+
+  it('toChatMessages: ticket on the tool message only', () => {
+    const out = toChatMessages([
+      { id: 1, role: 'tool', content: raw({ delegation_id: 'd1', goals: ['a'] }), tool_name: 'delegate_task' },
+      { id: 2, role: 'tool', content: '{"status":"ok"}', tool_name: 'terminal' },
+      { id: 3, role: 'assistant', content: raw({ delegation_id: 'd9' }) },
+    ]);
+    expect(out[0]!.ticket?.delegationId).toBe('d1');
+    expect(out[1]!.ticket).toBeUndefined();
+    expect(out[2]!.ticket).toBeUndefined();
+  });
+
+  it('delegationState: open units, open tasks without the refused ones, an early notice keeps the unit open', () => {
+    const t1 = readTicket(raw({ delegation_id: 'd1', goals: ['a', 'b', 'c'], refused: [{ task_index: 2 }] }))!;
+    const t2 = readTicket(raw({ delegation_id: 'd2', goals: ['x', 'y'], units: [{ delegation_id: 'd2-1', task_indexes: [0] }, { delegation_id: 'd2-2', task_indexes: [1] }] }))!;
+    const notice = { id: 'd1', tasks: null, completed: null, failed: null, durationSeconds: null, failedTask: 0, taskStatuses: [], allFailed: false };
+    const msgs = [
+      { role: 'tool', timestamp: 10, ticket: t1 },
+      { role: 'tool', timestamp: 20, ticket: t2 },
+      { role: 'delegation', timestamp: 30, delegation: notice },
+      { role: 'delegation', timestamp: 40, delegation: { ...notice, id: 'd2-1', failedTask: null } },
+    ];
+    const s = delegationState(msgs);
+    expect([...s.open.keys()].sort()).toEqual(['d1', 'd2-2']);
+    expect(s.openTasks).toBe(3);
+    expect(s.since).toBe(20);
+    const done = delegationState([...msgs, { role: 'delegation', timestamp: 50, delegation: { ...notice, failedTask: null } }, { role: 'delegation', timestamp: 60, delegation: { ...notice, id: 'd2-2', failedTask: null } }]);
+    expect(done.open.size).toBe(0);
+    expect(done.openTasks).toBe(0);
+    expect(done.since).toBeNull();
   });
 });
