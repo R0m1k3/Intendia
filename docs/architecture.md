@@ -183,9 +183,13 @@ keeps the goal itself (`session_goals`, `apps/server/src/chat/goal.ts`, routes `
 
 - A click on a session opens the Chat page (`/w/:slug/s/:id`, `web/src/chat/ChatPage.tsx`): tabs, layouts « Un seul »,
   « Colonnes », « Grille », at most 4 chats (`MAX`, a fifth replaces the active one). « À côté » or Ctrl/Cmd+click in
-  the list opens a column right of the active one. Columns are kept per instance and per browser tab
-  (`sessionStorage` `intendia-chat:<inst>`, copied to `localStorage` for new tabs, `chat/columns.ts`); the address
-  names the active one. « Copier le lien » adds `?avec=slug:id,…`, which replaces the tab's columns once opened, then
+  the list opens a column right of the active one. Columns are kept per browser tab, sessions of any
+  instance side by side (`sessionStorage` `intendia-chat`, copied to `localStorage` for new tabs, `chat/columns.ts`;
+  the per-instance keys of older versions are dropped); the address names the active one, so the sidebar and the
+  session list show the active column's instance, and tabs name their instance when several are open. An empty
+  session (never sent) shows an « Instance » card (`chat/InstancePick.tsx`, also on the home page): picking another
+  instance creates an empty session in one of its workspaces, carries the draft over, replaces the column and deletes
+  the old one unless a run started meanwhile. « Copier le lien » adds `?avec=slug:id,…`, which replaces the tab's columns once opened, then
   leaves the address. A session is never in two columns. On a phone, one chat at a time with the tabs above.
 - Each column renders the session page itself (`SessionView`) inside a `ColumnContext` (`chat/column-context.ts`):
   actions that open another session (agent change, copy, rewrite, undo, `/new`) change the column; archive or delete

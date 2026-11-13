@@ -94,7 +94,8 @@ function FullLayout() {
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
   const myCrons = (overview.data?.crons ?? []).filter((c) => c.instanceId === inst);
   const failed = failedCount(myCrons);
-  const openChats = useChat(inst).open.length;
+  // every open chat of this tab, whatever its instance
+  const openChats = useChat().open.length;
   const counts: Record<string, { n?: number; bad?: boolean; label?: string }> = {
     chat: { n: openChats || undefined, label: `${openChats} chat${openChats > 1 ? 's' : ''} ouvert${openChats > 1 ? 's' : ''}` },
     workspaces: { n: inst ? mine.length : undefined },

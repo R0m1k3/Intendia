@@ -8,7 +8,10 @@ import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, 
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
 import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
 import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
-import { sessionDraftKey } from '../chat/draft';
+import { clearDraft, flushDrafts, loadDraft, saveDraft, sessionDraftKey } from '../chat/draft';
+import { InstancePick } from '../chat/InstancePick';
+import { loadChat } from '../chat/columns';
+import { pickWorkspace } from '../chat/newSession';
 import { ContextGauge } from '../chat/ContextGauge';
 import { estimateTokens } from '../chat/estimate';
 import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
@@ -138,6 +141,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   });
   const [outcome, setOutcome] = useState<{ status: string; error: string | null; input: string | null } | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // a message on its way (before the run is known): the empty session must not change instance meanwhile
+  const [sending, setSending] = useState(false);
+  const [attached, setAttached] = useState(0);
+  const [switching, setSwitching] = useState(false);
   const [busy, setBusy] = useState(false);
   const chat = useChatAvailability(inst);
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
@@ -243,6 +250,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (!inst) return new Error('Instance inconnue');
     setError(null);
     setOutcome(null);
+    setSending(true);
     try {
       const res = await api.send(inst, sessionId, text, skills);
       setNotice(res.notice ?? null);
@@ -256,6 +264,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     } catch (err) {
       setError(err);
       return err;
+    } finally {
+      setSending(false);
     }
   };
 
@@ -501,6 +511,52 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const siblings = (allWorkspaces.data?.workspaces ?? [])
     .filter((w) => w.instanceId === inst && (w.profile ?? 'default') === agentOf);
   const neverSent = Boolean(sess.data && !sess.data.session.lastRunId && !sess.data.session.copiedFrom);
+  // « Instance » card: an empty session becomes an empty session of another instance (the server moves a session
+  // within its instance only): a new one in a workspace of `to`, the draft carried over, the column replaced, then the
+  // old one deleted (restorable on the server for the undo window) unless a run started meanwhile.
+  const pickable = (instances.data?.instances ?? []).map((i) => ({
+    id: i.id, label: i.label, workspaces: (allWorkspaces.data?.workspaces ?? []).filter((w) => w.instanceId === i.id).length,
+  }));
+  const switchInstance = async (to: string) => {
+    if (!inst || to === inst || switching) return;
+    setError(null);
+    const slugTo = pickWorkspace({
+      workspaces: allWorkspaces.data?.workspaces ?? [], inst: to, chat: loadChat(), last: localStorage.getItem('intendia-last-workspace'),
+    });
+    if (!slugTo) {
+      setError(new Error(`Aucun workspace sur ${pickable.find((i) => i.id === to)?.label ?? to}`));
+      return;
+    }
+    setSwitching(true);
+    const oldId = sessionId;
+    const oldKey = sessionDraftKey(inst, oldId);
+    try {
+      flushDrafts();
+      const text = loadDraft(oldKey);
+      const { session } = await api.createSession(slugTo);
+      if (text) {
+        saveDraft(sessionDraftKey(to, session.id), text);
+        clearDraft(oldKey);
+      }
+      void invalidateSessionLists(qc);
+      goTo.open(slugTo, session.id);
+    } catch (err) {
+      setError(err);
+      setSwitching(false);
+      return;
+    }
+    void (async () => {
+      try {
+        const fresh = await api.session(inst, oldId);
+        if (fresh.session.lastRunId) return;
+        await api.deleteSession(inst, oldId);
+        forgetSideSession(inst, oldId);
+        void invalidateSessionLists(qc);
+      } catch (err) {
+        console.error('Session vide non supprimée', err);
+      }
+    })();
+  };
   const moveTo = async (to: string | null) => {
     if (!to || to === slug || !inst) return;
     setError(null);
@@ -874,6 +930,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         <div className="mb-6 empty:hidden"><ChatNotice instanceId={inst} /></div>
         {history.isSuccess && entries.length === 0 && !running && !endNote && (
           <div className="py-16 text-center">
+            {neverSent && !EMBEDDED && inst && pickable.length > 1 && (
+              <div className="mb-5">
+                <InstancePick value={inst} instances={pickable} disabled={switching || sending || attached > 0}
+                  onPick={(id) => void switchInstance(id)} />
+              </div>
+            )}
             <p className="text-base font-semibold">Nouvelle session dans {ws.data?.workspace.name}</p>
             {neverSent && siblings.length > 1 && (
               <div className="mt-2 flex justify-center" data-move-empty>
@@ -939,6 +1001,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             extract={extract}
             prompts
             draftKey={inst ? sessionDraftKey(inst, sessionId) : undefined}
+            onAttachmentsChange={setAttached}
             onSend={(t, sk) => { setUsageOpen(false); return send(t, sk); }}
             skillNames={skillNames}
             notice={notice}
@@ -947,7 +1010,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             commands={commands}
             onCommand={onCommand}
             running={running}
-            disabled={!chat.available || !inst}
+            // changing instance: nothing typed or sent here any more (the draft is being carried over)
+            disabled={!chat.available || !inst || switching}
             onQueue={(text, sk) => {
               setQueue((q) => enqueue(q, text, sk));
               // a message waiting is the user writing: an active goal pauses before the loop relaunches

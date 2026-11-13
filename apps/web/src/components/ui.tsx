@@ -143,15 +143,15 @@ export function Tag({ children, className, title }: { children: ReactNode; class
 }
 
 /** Rounded filter chips; the active one is filled with ink. `role="radiogroup"`, each chip a radio. */
-export function Chips<K extends string>({ items, value, onChange, label, className, role = 'radio' }: {
-  items: readonly { key: K; label: ReactNode; count?: number }[]; value: K; onChange: (k: K) => void; label: string;
-  className?: string; role?: 'radio' | 'tab';
+export function Chips<K extends string>({ items, value, onChange, label, className, role = 'radio', disabled }: {
+  items: readonly { key: K; label: ReactNode; count?: number; disabled?: boolean; title?: string }[]; value: K | null;
+  onChange: (k: K) => void; label: string; className?: string; role?: 'radio' | 'tab'; disabled?: boolean;
 }) {
   return (
     <div role={role === 'tab' ? 'tablist' : 'radiogroup'} aria-label={label} className={cx('flex flex-wrap gap-1.5', className)}>
       {items.map((it) => (
         <button
-          key={it.key} type="button" role={role}
+          key={it.key} type="button" role={role} disabled={disabled || it.disabled} title={it.title}
           {...(role === 'tab' ? { 'aria-selected': value === it.key } : { 'aria-checked': value === it.key })}
           onClick={() => onChange(it.key)}
           className={chipClass(value === it.key)}
@@ -166,7 +166,7 @@ export function Chips<K extends string>({ items, value, onChange, label, classNa
 
 export function chipClass(on: boolean): string {
   return cx(
-    'inline-flex h-7 items-center whitespace-nowrap rounded-full border px-2.5 text-[12.5px] transition-colors',
+    'inline-flex h-7 items-center whitespace-nowrap rounded-full border px-2.5 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
     on ? 'border-ink bg-ink text-sheet' : 'border-line bg-sheet text-ink-soft hover:bg-paper hover:text-ink',
   );
 }
