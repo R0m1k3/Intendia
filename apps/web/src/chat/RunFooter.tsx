@@ -1,24 +1,24 @@
 import { Check, Square, X } from 'lucide-react';
 import type { RunStat } from '../api';
+import { locale, plural, t } from '../i18n';
 import { cacheShare, effortLabel, formatCost, formatDuration, formatShare, formatTokens, shortModel } from './format';
 
 /** Hover text: token detail and what was asked for. */
 function detail(r: RunStat): string {
   const parts: string[] = [];
   if (r.inputTokens !== null) {
-    const fr = (n: number) => n.toLocaleString('fr-FR');
-    parts.push(`Entrée : ${fr(r.inputTokens)} jetons dont ${fr(r.cacheReadTokens ?? 0)} lus du cache et ${fr(r.cacheWriteTokens ?? 0)} écrits dans le cache`);
-    if (r.outputTokens !== null) parts.push(`Sortie : ${fr(r.outputTokens)} jetons`);
+    const fr = (n: number) => n.toLocaleString(locale());
+    parts.push(t('Entrée : {n} jetons dont {read} lus du cache et {written} écrits dans le cache', { n: fr(r.inputTokens), read: fr(r.cacheReadTokens ?? 0), written: fr(r.cacheWriteTokens ?? 0) }));
+    if (r.outputTokens !== null) parts.push(t('Sortie : {n} jetons', { n: fr(r.outputTokens) }));
   } else {
-    parts.push('Jetons non communiqués par Hermes pour ce run');
+    parts.push(t('Jetons non communiqués par Hermes pour ce run'));
   }
   if (r.costRuns > 1) {
-    const prev = r.costRuns - 1 === 1 ? 'la précédente, envoyée' : `les ${r.costRuns - 1} précédentes, envoyées`;
-    parts.push(`Coût : cette réponse et ${prev} avant qu'Hermes ait compté leur coût`);
+    parts.push(plural(r.costRuns - 1, "Coût : cette réponse et la précédente, envoyée avant qu'Hermes ait compté leur coût", "Coût : cette réponse et les {n} précédentes, envoyées avant qu'Hermes ait compté leur coût"));
   }
-  parts.push(`Demandé : ${r.requestedModel ?? 'Auto'}, effort ${effortLabel(r.requestedEffort)}`);
-  if (fallback(r)) parts.push(`Servi par un modèle de secours : ${r.servedModel}`);
-  if (tokensPerSecond(r) !== null) parts.push('Débit : moyenne sur tout le run, outils compris');
+  parts.push(t('Demandé : {model}, effort {effort}', { model: r.requestedModel ?? 'Auto', effort: effortLabel(r.requestedEffort) }));
+  if (fallback(r)) parts.push(t('Servi par un modèle de secours : {model}', { model: r.servedModel ?? '' }));
+  if (tokensPerSecond(r) !== null) parts.push(t('Débit : moyenne sur tout le run, outils compris'));
   return parts.join('\n');
 }
 
@@ -35,28 +35,28 @@ export function fallback(r: RunStat): boolean {
 }
 
 const STATUS: Record<string, { icon: React.ReactNode; label: string }> = {
-  completed: { icon: <Check className="size-3.5 text-ok" strokeWidth={2} />, label: 'Terminé' },
-  failed: { icon: <X className="size-3.5 text-bad" strokeWidth={2} />, label: 'Échec' },
-  cancelled: { icon: <Square className="size-3 fill-current" strokeWidth={1.5} />, label: 'Arrêté' },
-  interrupted: { icon: <Square className="size-3 fill-current" strokeWidth={1.5} />, label: 'Interrompu' },
+  completed: { icon: <Check className="size-3.5 text-ok" strokeWidth={2} />, label: t('Terminé') },
+  failed: { icon: <X className="size-3.5 text-bad" strokeWidth={2} />, label: t('Échec') },
+  cancelled: { icon: <Square className="size-3 fill-current" strokeWidth={1.5} />, label: t('Arrêté') },
+  interrupted: { icon: <Square className="size-3 fill-current" strokeWidth={1.5} />, label: t('Interrompu') },
 };
 
 /** One line under a reply: status · model · duration · cost · input → output · cache share. */
 export function RunFooter({ r }: { r: RunStat }) {
   const items: string[] = [];
-  if (r.servedModel) items.push(shortModel(r.servedModel) + (fallback(r) ? ' (secours)' : ''));
-  else if (r.requestedModel) items.push(`${shortModel(r.requestedModel)} (demandé)`);
+  if (r.servedModel) items.push(fallback(r) ? t('{model} (secours)', { model: shortModel(r.servedModel) }) : shortModel(r.servedModel));
+  else if (r.requestedModel) items.push(t('{model} (demandé)', { model: shortModel(r.requestedModel) }));
   // Hermes dates interrupted / forgotten runs when it notices them: no meaningful duration
   if (r.endedAt !== null && r.status !== 'interrupted' && r.status !== 'unknown') items.push(formatDuration(r.endedAt - r.startedAt));
   // a cost covering previous replies too (sent before their cost was known) says so
-  if (r.costUsd) items.push(r.costRuns > 1 ? `${formatCost(r.costUsd)} (${r.costRuns} réponses)` : formatCost(r.costUsd));
+  if (r.costUsd) items.push(r.costRuns > 1 ? t('{cost} ({n} réponses)', { cost: formatCost(r.costUsd), n: r.costRuns }) : formatCost(r.costUsd));
   if (r.inputTokens !== null && r.outputTokens !== null) items.push(`${formatTokens(r.inputTokens)} → ${formatTokens(r.outputTokens)}`);
   const rate = tokensPerSecond(r);
-  if (rate !== null) items.push(`≈ ${rate} jetons/s`);
+  if (rate !== null) items.push(t('≈ {n} jetons/s', { n: rate }));
   const share = cacheShare(r);
   if (share !== null) items.push(`Cache ${formatShare(share)}`);
   // « Sans confirmation »: what Intendia approved by itself
-  if (r.autoApproved) items.push(r.autoApproved === 1 ? '1 approbation automatique' : `${r.autoApproved} approbations automatiques`);
+  if (r.autoApproved) items.push(plural(r.autoApproved, '{n} approbation automatique', '{n} approbations automatiques'));
   const st = STATUS[r.status];
   if (!items.length && !st) return null;
   return (

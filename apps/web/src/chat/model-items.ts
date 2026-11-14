@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { ChatModelList, ModelPin, RunMode } from '../api';
 import type { PickerItem } from '../components/Menu';
 import { shortModel } from './format';
@@ -49,13 +50,13 @@ export function modelItems(
   if (extras.modes?.length) {
     items.push({ heading: 'Modes' });
     for (const m of extras.modes) {
-      const what = [m.model ? shortModel(m.model) : 'Auto', m.effort ? `effort ${m.effort}` : null, m.personality ? 'personnalité' : null].filter(Boolean).join(' · ');
+      const what = [m.model ? shortModel(m.model) : 'Auto', m.effort ? t('effort {effort}', { effort: m.effort }) : null, m.personality ? t('personnalité') : null].filter(Boolean).join(' · ');
       items.push({ value: modeValue(m.id), label: m.name, hint: what });
     }
   }
-  items.push({ value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: 'Le modèle réglé pour l’agent' });
+  items.push({ value: null, label: auto ? `Auto · ${shortModel(auto.model)}` : 'Auto', hint: t('Le modèle réglé pour l’agent') });
   if (extras.pins?.length) {
-    items.push({ heading: 'Épinglés' });
+    items.push({ heading: t('Épinglés') });
     for (const p of extras.pins) items.push({ value: `${PIN}${encodeChoice(p.model, p.provider)}`, label: p.model, mono: true, ...(p.provider ? { hint: p.provider } : {}) });
   }
   const groups = list?.groups ?? [];
@@ -66,20 +67,20 @@ export function modelItems(
   if (current.model) {
     const inGroup = groups.some((g) => (current.provider === null || g.provider === current.provider) && g.models.includes(current.model!));
     if (!inGroup) {
-      items.push({ heading: 'Autre' });
+      items.push({ heading: t('Autre') });
       items.push({
         value: encodeChoice(current.model, current.provider), label: current.model, mono: true,
         // with a provider, the model is no longer offered (removed, or the provider lost its key)
-        ...(current.provider && list ? { hint: `${current.provider} · indisponible` } : {}),
+        ...(current.provider && list ? { hint: t('{provider} · indisponible', { provider: current.provider }) } : {}),
       });
     }
   }
   if (extras.togglePin && current.model) {
-    items.push({ action: extras.togglePin, label: isPinned(extras.pins, current) ? 'Retirer des épinglés' : 'Épingler ce modèle' });
+    items.push({ action: extras.togglePin, label: isPinned(extras.pins, current) ? t('Retirer des épinglés') : t('Épingler ce modèle') });
   }
-  if (extras.saveMode) items.push({ action: extras.saveMode, label: 'Enregistrer le réglage actuel comme mode…' });
-  if (extras.removeMode && extras.modes?.length) items.push({ action: extras.removeMode, label: 'Retirer un mode…' });
-  if (list?.managed) items.push({ action: manage, label: 'Gérer les modèles…' });
+  if (extras.saveMode) items.push({ action: extras.saveMode, label: t('Enregistrer le réglage actuel comme mode…') });
+  if (extras.removeMode && extras.modes?.length) items.push({ action: extras.removeMode, label: t('Retirer un mode…') });
+  if (list?.managed) items.push({ action: manage, label: t('Gérer les modèles…') });
   return items;
 }
 

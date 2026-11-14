@@ -1,6 +1,7 @@
 // Personality of a session (option 9): one of the profile's config (`hermes:<name>`) or one written in Intendia
 // (`intendia:<prompt id>`, table prompts). Hermes applies its own only through `/personality` of its chat (no HTTP
 // route), so Intendia adds the text to the instructions of each run.
+import { msg } from '../i18n/index.js';
 import type { ConfigService } from '../hermes-config/service.js';
 import type { PromptService } from '../prompts/service.js';
 
@@ -32,7 +33,7 @@ export async function listPersonalities(
       .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
     return { items: [...hermes, ...own] };
   } catch (err) {
-    return { items: own, error: `Personnalités de l’agent illisibles : ${(err as Error).message}` };
+    return { items: own, error: msg('Personnalités de l’agent illisibles : {why}', { why: (err as Error).message }) };
   }
 }
 
@@ -43,16 +44,16 @@ export async function resolvePersonality(
   const [kind, name] = [value.slice(0, value.indexOf(':')), value.slice(value.indexOf(':') + 1)];
   if (kind === 'intendia') {
     const p = prompts.list('personality').find((x) => x.id === name);
-    return p ? { label: p.title, text: p.body } : { notice: 'Personnalité introuvable dans Intendia : ignorée' };
+    return p ? { label: p.title, text: p.body } : { notice: msg('Personnalité introuvable dans Intendia : ignorée') };
   }
   let all: Record<string, unknown>;
   try {
     all = await config.personalities(instanceId, profile);
   } catch {
-    return { notice: 'Personnalités de l’agent illisibles : ignorée' };
+    return { notice: msg('Personnalités de l’agent illisibles : ignorée') };
   }
   const text = renderPersonality(all[name]);
-  return text ? { label: name, text } : { notice: `Personnalité ${name} introuvable chez l’agent : ignorée` };
+  return text ? { label: name, text } : { notice: msg('Personnalité {name} introuvable chez l’agent : ignorée', { name }) };
 }
 
 /** Whether a `hermes:<name>` personality exists at a profile (copy to another profile); intendia ones always do. */

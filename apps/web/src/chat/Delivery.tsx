@@ -2,6 +2,7 @@ import { Check, Copy, GitBranch } from 'lucide-react';
 import { useState } from 'react';
 import type { DelegationInfo, ModuleState, RunStat, SubagentsSummary } from '../api';
 import { Button, copyText, Mark } from '../components/ui';
+import { t } from '../i18n';
 import type { Entry } from './events';
 import { RunFooter } from './RunFooter';
 
@@ -19,11 +20,11 @@ function markOfDelivery(info: DelegationInfo): ModuleState {
  * session Intendia does not wake (external): the agent reads it with the next message.
  */
 export function deliveryNote(summary: SubagentsSummary | null | undefined): string | null {
-  if (summary === undefined) return 'L’agent en tiendra compte à votre prochain message.';
+  if (summary === undefined) return t('L’agent en tiendra compte à votre prochain message.');
   if (!summary) return null;
-  if (summary.capped) return 'Reprise automatique arrêtée après 5 reprises : écrivez pour continuer.';
-  if (summary.wakePending) return 'L’agent reprend son travail.';
-  if (summary.openTasks > 0) return 'L’agent reprendra quand les autres sous-agents auront fini.';
+  if (summary.capped) return t('Reprise automatique arrêtée après 5 reprises : écrivez pour continuer.');
+  if (summary.wakePending) return t('L’agent reprend son travail.');
+  if (summary.openTasks > 0) return t('L’agent reprendra quand les autres sous-agents auront fini.');
   return null;
 }
 
@@ -41,13 +42,13 @@ export function Delivery({ entry, clock, footers, summary }: {
         <span className="font-medium" data-delivery-summary>{entry.summary}</span>
         {clock && <span className="text-xs text-ink-faint">{clock}</span>}
         <span className="flex-1" />
-        <Button variant="ghost" className="h-7" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Masquer' : 'Voir le résultat'}</Button>
+        <Button variant="ghost" className="h-7" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? t('Masquer') : t('Voir le résultat')}</Button>
       </div>
       {open && (
         <div className="mt-2 space-y-1.5">
           <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-sheet p-3 font-mono text-[12px] text-ink-soft" data-delivery-text>{entry.text}</pre>
-          <Button variant="ghost" className="h-7" onClick={() => void copyText(entry.text, 'Texte').then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
-            {copied ? <Check className="size-3.5" strokeWidth={1.5} /> : <Copy className="size-3.5" strokeWidth={1.5} />}Copier le texte
+          <Button variant="ghost" className="h-7" onClick={() => void copyText(entry.text, t('Texte')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>
+            {copied ? <Check className="size-3.5" strokeWidth={1.5} /> : <Copy className="size-3.5" strokeWidth={1.5} />}{t('Copier le texte')}
           </Button>
         </div>
       )}

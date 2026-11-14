@@ -633,6 +633,28 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
   route a 409 without code before anything is written.
 
+## Interface language
+
+- Two languages, French and English. The web picks one when the page loads: the setting saved in the browser
+  (`localStorage['intendia-lang']`: `fr`, `en`, or nothing = automatic), else French when one of the browser languages
+  is French, English otherwise. Changing it in Settings reloads the page, so `t()` may be used in module constants.
+- The key of a text is its French source: `t('Supprimer')`, `t('Instance inconnue : {id}', { id })`,
+  `plural(n, '{n} ligne', '{n} lignes')` (Intl plural rules), `<T k="… {x} …" vars={{ x: <b/> }} />` for a sentence with
+  elements. One French word with two meanings gets a context after `|` (`'Tableau|vue'`), never shown. English lives in
+  `apps/web/src/i18n/en/<zone>.ts`, merged by `import.meta.glob`; `i18n.test.ts` fails on a non-literal key, a missing
+  or unused English text, or different placeholders. Dates and numbers use `locale()`.
+- The server always works in French: `msg()` returns French and marks the key (same completeness test in
+  `apps/server/test/i18n.test.ts`), so stored texts (compat report, mission errors) never depend on who triggered them.
+  The web writes the resolved language in the `intendia-lang` cookie; the first middleware of `app.ts`
+  (`translateResponses`) translates, for an English browser, the JSON fields listed in `TEXT_FIELDS` (`error`,
+  `reasons`, `notice`…) with `toLang`, which finds a French text back from the dictionary, variables included (each key
+  is a pattern), and leaves anything else as it is. Fields `title` and `name` (user data) are only translated on an
+  exact match. Raw files (`Content-Disposition`) are never touched; SSE frames and the HTML pages of `/f/*` and of the
+  MCP OAuth callback call `toLang` themselves. Without the cookie the server follows `Accept-Language`, and French when
+  there is none (tests, scripts).
+- Never translated: prompts and markers sent to Hermes (`[Intendia] …`, `OBJECTIF ATTEINT`), cron blocks, file
+  contents (session export, `_erreurs.txt`), logs, route paths.
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

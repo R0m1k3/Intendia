@@ -5,6 +5,7 @@ import { SplitView } from '../components/Panes';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { openBeside, updateChat, useChat, withPanel } from '../chat/columns';
 import { SessionsPane } from './SessionsPane';
+import { t } from '../i18n';
 
 interface Inbox {
   /** A session (page or column) has its files panel or a preview open: the list column steps aside while one has. */
@@ -50,7 +51,7 @@ export function InboxLayout() {
   return (
     <InboxContext.Provider value={value}>
       <SplitView
-        label="Sessions"
+        label={t('Sessions')}
         selected={inSession}
         phoneBoth={!inSession}
         listHidden={inSession ? (full || panelOpen ? true : inChat ? false : 'narrow') : false}

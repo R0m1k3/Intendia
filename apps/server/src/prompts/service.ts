@@ -5,6 +5,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { prompts } from '../db/schema.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export const PROMPT_KINDS = ['prompt', 'personality'] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
@@ -23,13 +24,13 @@ export interface Prompt {
 
 const clean = (title: string) => {
   const t = title.trim();
-  if (!t) throw new ValidationError('Titre vide');
-  if (t.length > PROMPT_TITLE_MAX) throw new ValidationError(`Titre de plus de ${PROMPT_TITLE_MAX} caractères`);
+  if (!t) throw new ValidationError(msg('Titre vide'));
+  if (t.length > PROMPT_TITLE_MAX) throw new ValidationError(msg('Titre de plus de {max} caractères', { max: PROMPT_TITLE_MAX }));
   return t;
 };
 const checkBody = (body: string) => {
-  if (!body.trim()) throw new ValidationError('Texte vide');
-  if (body.length > PROMPT_BODY_MAX) throw new ValidationError(`Texte de plus de ${PROMPT_BODY_MAX} caractères`);
+  if (!body.trim()) throw new ValidationError(msg('Texte vide'));
+  if (body.length > PROMPT_BODY_MAX) throw new ValidationError(msg('Texte de plus de {max} caractères', { max: PROMPT_BODY_MAX }));
   return body;
 };
 
@@ -44,12 +45,12 @@ export class PromptService {
 
   get(id: string, kind?: PromptKind): Prompt {
     const row = this.db.select().from(prompts).where(kind ? and(eq(prompts.id, id), eq(prompts.kind, kind)) : eq(prompts.id, id)).get();
-    if (!row) throw new NotFoundError('Prompt introuvable');
+    if (!row) throw new NotFoundError(msg('Prompt introuvable'));
     return row as Prompt;
   }
 
   create(input: { kind: PromptKind; title: string; body: string }): Prompt {
-    if (this.list().length >= PROMPTS_MAX) throw new ValidationError(`Plus de ${PROMPTS_MAX} prompts enregistrés`);
+    if (this.list().length >= PROMPTS_MAX) throw new ValidationError(msg('Plus de {max} prompts enregistrés', { max: PROMPTS_MAX }));
     const now = Date.now();
     const row: Prompt = { id: randomUUID(), kind: input.kind, title: clean(input.title), body: checkBody(input.body), createdAt: now, updatedAt: now };
     this.db.insert(prompts).values(row).run();

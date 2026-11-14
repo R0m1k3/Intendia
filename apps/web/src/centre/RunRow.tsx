@@ -8,11 +8,13 @@ import { ask } from '../components/Dialog';
 import { useModuleAvailability } from '../components/ModuleNotice';
 import { Button, ErrorText, Input, Mark, Tag, timeAgo } from '../components/ui';
 import { STEER_REFUSED } from './format';
+import { t } from '../i18n';
+import { T } from '../i18n/T';
 
 const ICON = 'size-4';
 
 const RUN_STATUS: Record<string, string> = {
-  queued: 'en attente', running: 'en cours', waiting_for_approval: 'attend votre accord', stopping: 'arrêt en cours',
+  queued: t('en attente'), running: t('en cours'), waiting_for_approval: t('attend votre accord'), stopping: t('arrêt en cours'),
 };
 
 export function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: string | null }) {
@@ -30,7 +32,7 @@ export function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: 
       <Mark state="readonly" className={waiting ? undefined : 'animate-pulse'} />
       <div className="min-w-0 flex-1">
         <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }} className="font-medium hover:text-accent-ink">
-          {run.title || 'Session sans titre'}
+          {run.title || t('Session sans titre')}
         </Link>
         <p className="text-[13px] text-ink-faint">
           {run.workspaceName}{instanceLabel ? ` · ${instanceLabel}` : ''}{run.profile !== 'default' ? ` · ${run.profile}` : ''} · {timeAgo(run.lastActiveAt)}
@@ -40,18 +42,18 @@ export function RunRow({ run, instanceLabel }: { run: ActiveRun; instanceLabel: 
       {waiting ? (
         <Link to="/w/$slug/s/$sessionId" params={{ slug: run.workspace, sessionId: run.sessionId }}
           className="inline-flex h-8 items-center gap-2 rounded-lg border border-accent-strong bg-accent px-3 text-[13px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
-          <MessageSquareReply className={ICON} strokeWidth={1.5} />Répondre
+          <MessageSquareReply className={ICON} strokeWidth={1.5} />{t('Répondre')}
         </Link>
       ) : (
         <>
         {canSteer && (
           <Button className="h-8" aria-expanded={steering} onClick={() => setSteering((v) => !v)}>
-            <CornerDownRight className="size-3.5" strokeWidth={1.5} />Réorienter
+            <CornerDownRight className="size-3.5" strokeWidth={1.5} />{t('Réorienter')}
           </Button>
         )}
         <Button className="h-8" disabled={stop.isPending || run.status === 'stopping'}
-          onClick={async () => { if (await ask({ title: 'Arrêter ce run ?', message: 'La réponse en cours sera interrompue.', confirmLabel: 'Arrêter', danger: true })) stop.mutate(); }}>
-          <Square className="size-3.5" strokeWidth={1.5} />Arrêter
+          onClick={async () => { if (await ask({ title: t('Arrêter ce run ?'), message: t('La réponse en cours sera interrompue.'), confirmLabel: t('Arrêter'), danger: true })) stop.mutate(); }}>
+          <Square className="size-3.5" strokeWidth={1.5} />{t('Arrêter')}
         </Button>
         </>
       )}
@@ -67,15 +69,15 @@ function Steer({ run, onDone }: { run: ActiveRun; onDone: () => void }) {
   const [note, setNote] = useState<string | null>(null);
   const send = useMutation({
     mutationFn: () => api.steer(run.instance, run.sessionId, run.runId, text.trim()),
-    onSuccess: () => { setText(''); setNote('Consigne transmise : l’agent la lira après ses outils en cours.'); setTimeout(onDone, 2500); },
+    onSuccess: () => { setText(''); setNote(t('Consigne transmise : l’agent la lira après ses outils en cours.')); setTimeout(onDone, 2500); },
   });
   const refused = send.error instanceof ApiError && send.error.status === 409;
   return (
     <form className="w-full space-y-1.5 pl-6" onSubmit={(e) => { e.preventDefault(); if (text.trim()) send.mutate(); }}>
       <div className="flex gap-2">
-        <Input autoFocus value={text} onChange={(e) => { setText(e.target.value); setNote(null); }} aria-label="Consigne pour l’agent"
-          placeholder="Nouvelle consigne pour l’agent" className="h-8 flex-1" disabled={send.isPending} />
-        <Button type="submit" variant="primary" className="h-8" disabled={!text.trim() || send.isPending}>Envoyer</Button>
+        <Input autoFocus value={text} onChange={(e) => { setText(e.target.value); setNote(null); }} aria-label={t('Consigne pour l’agent')}
+          placeholder={t('Nouvelle consigne pour l’agent')} className="h-8 flex-1" disabled={send.isPending} />
+        <Button type="submit" variant="primary" className="h-8" disabled={!text.trim() || send.isPending}>{t('Envoyer')}</Button>
       </div>
       {note && <p role="status" className="text-[13px] text-ink-soft">{note}</p>}
       {refused ? <p role="alert" className="text-[13px] text-bad">{STEER_REFUSED}</p> : <ErrorText error={send.error} />}
@@ -89,7 +91,9 @@ export function WorkerRow({ worker, instanceLabel, onStopped }: { worker: Kanban
   const stop = useMutation({
     mutationFn: () => api.stopWorker(worker.instance, worker.board, worker.runId),
     // the row leaves the list on the next read: the outcome is shown by the page
-    onSuccess: (r) => onStopped(`« ${title} » arrêtée : ${r.status === 'blocked' ? 'la tâche est bloquée' : r.status === 'review' ? 'la tâche est en revue' : `statut ${r.status}`}`),
+    onSuccess: (r) => onStopped(r.status === 'blocked' ? t('« {title} » arrêtée : la tâche est bloquée', { title })
+      : r.status === 'review' ? t('« {title} » arrêtée : la tâche est en revue', { title })
+        : t('« {title} » arrêtée : statut {status}', { title, status: r.status })),
     onSettled: () => qc.invalidateQueries({ queryKey: ['activity'] }),
   });
   return (
@@ -100,13 +104,13 @@ export function WorkerRow({ worker, instanceLabel, onStopped }: { worker: Kanban
           {title}
         </Link>
         <p className="text-[13px] text-ink-faint">
-          {worker.assignee ?? 'agent inconnu'} · tableau <span className="font-mono">{worker.board}</span>{instanceLabel ? ` · ${instanceLabel}` : ''}
+          <T k="{agent} · tableau {board}" vars={{ agent: worker.assignee ?? t('agent inconnu'), board: <span className="font-mono">{worker.board}</span> }} />{instanceLabel ? ` · ${instanceLabel}` : ''}
           {worker.startedAt ? ` · ${timeAgo(worker.startedAt * 1000)}` : ''}
         </p>
       </div>
       <Button className="h-8" disabled={stop.isPending || stop.isSuccess}
-        onClick={async () => { if (await ask({ title: 'Arrêter ce worker ?', message: 'La tâche passera en Bloquée, ou restera en Revue ; Débloquer la relancera.', confirmLabel: 'Arrêter', danger: true })) stop.mutate(); }}>
-        <Square className="size-3.5" strokeWidth={1.5} />Arrêter
+        onClick={async () => { if (await ask({ title: t('Arrêter ce worker ?'), message: t('La tâche passera en Bloquée, ou restera en Revue ; Débloquer la relancera.'), confirmLabel: t('Arrêter'), danger: true })) stop.mutate(); }}>
+        <Square className="size-3.5" strokeWidth={1.5} />{t('Arrêter')}
       </Button>
       {stop.error && <div className="w-full"><ErrorText error={stop.error} /></div>}
     </li>
@@ -120,11 +124,11 @@ export function SubagentsRow({ item, instanceLabel }: { item: WorkingSubagents; 
       <Mark state="readonly" className="animate-pulse" />
       <div className="min-w-0 flex-1">
         <Link to="/w/$slug/s/$sessionId" params={{ slug: item.workspace, sessionId: item.sessionId }} className="font-medium hover:text-accent-ink">
-          {item.title || 'Session sans titre'}
+          {item.title || t('Session sans titre')}
         </Link>
         <p className="text-[13px] text-ink-faint">
           {item.workspaceName}{instanceLabel ? ` · ${instanceLabel}` : ''}{item.profile !== 'default' ? ` · ${item.profile}` : ''}
-          {item.since !== null ? ` · lancés ${timeAgo(item.since * 1000)}` : ''} · l’agent reprendra à leur fin
+          {item.since !== null ? ` · ${t('lancés {when}', { when: timeAgo(item.since * 1000) })}` : ''} · {t('l’agent reprendra à leur fin')}
         </p>
       </div>
       <Tag>{subagentsLabel(item.tasks)}</Tag>

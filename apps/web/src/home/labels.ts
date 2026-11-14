@@ -1,9 +1,10 @@
 import type { RecentSession } from '../api';
+import { t } from '../i18n';
 
 export type RecentFilter = 'all' | 'intendia' | 'cli' | 'telegram' | 'discord' | 'cron' | 'kanban';
 
 export const FILTERS: { key: RecentFilter; label: string }[] = [
-  { key: 'all', label: 'Toutes' },
+  { key: 'all', label: t('Toutes') },
   { key: 'intendia', label: 'Intendia' },
   { key: 'cli', label: 'CLI' },
   { key: 'telegram', label: 'Telegram' },

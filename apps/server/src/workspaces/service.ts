@@ -8,6 +8,7 @@ import type { FinishFields } from '../chat/run-stats.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { FileRoots } from '../files/hermes-fs.js';
 import { createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd, readAgentsMd, writeAgentsMd } from './fs.js';
+import { msg } from '../i18n/index.js';
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
@@ -142,7 +143,7 @@ export class WorkspaceService {
 
   private instance(id: string): InstanceConfig {
     const inst = this.store.get(id);
-    if (!inst) throw new NotFoundError(`Instance inconnue : ${id}`);
+    if (!inst) throw new NotFoundError(msg('Instance inconnue : {id}', { id }));
     return inst;
   }
 
@@ -165,16 +166,16 @@ export class WorkspaceService {
 
   getWorkspace(slug: string): Workspace {
     const ws = this.db.select().from(workspaces).where(eq(workspaces.slug, slug)).get();
-    if (!ws) throw new NotFoundError(`Workspace inconnu : ${slug}`);
+    if (!ws) throw new NotFoundError(msg('Workspace inconnu : {slug}', { slug }));
     return ws;
   }
 
   async createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null }): Promise<Workspace> {
     const inst = this.instance(input.instanceId);
     const profile = input.profile && input.profile !== 'default' ? input.profile : null;
-    if (profile && !inst.profileKeys[profile]) throw new ValidationError(`Profil sans clé sur cette instance : ${profile}`);
+    if (profile && !inst.profileKeys[profile]) throw new ValidationError(msg('Profil sans clé sur cette instance : {profile}', { profile }));
     if (this.creating.has(input.slug) || this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
-      throw new WorkspaceFsError('exists', `Le workspace ${input.slug} existe déjà`);
+      throw new WorkspaceFsError('exists', msg('Le workspace {slug} existe déjà', { slug: input.slug }));
     }
     this.creating.add(input.slug);
     try {
@@ -292,7 +293,7 @@ export class WorkspaceService {
   getSession(instanceId: string, sessionId: string): SessionContext {
     const row = this.db.select().from(sessionWorkspace)
       .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId), alive)).get();
-    if (!row) throw new NotFoundError(`Session inconnue : ${sessionId}`);
+    if (!row) throw new NotFoundError(msg('Session inconnue : {id}', { id: sessionId }));
     const workspace = this.getWorkspace(row.workspaceSlug);
     return { session: toPublic(row), workspace, instance: this.instance(instanceId), profile: row.profile ?? workspace.profile ?? 'default' };
   }
@@ -406,7 +407,7 @@ export class WorkspaceService {
     const existing = this.db.select().from(sessionWorkspace)
       .where(and(eq(sessionWorkspace.instanceId, ws.instanceId), eq(sessionWorkspace.sessionId, id))).get();
     if (existing) {
-      if (existing.deletedAt !== null || existing.workspaceSlug !== slug) throw new NotFoundError(`Session inconnue : ${id}`);
+      if (existing.deletedAt !== null || existing.workspaceSlug !== slug) throw new NotFoundError(msg('Session inconnue : {id}', { id }));
       return { session: toPublic(existing), created: false };
     }
     try {
@@ -443,7 +444,7 @@ export class WorkspaceService {
     // the run options are also remembered as the workspace's last choice (start of its next sessions)
     const choice: Partial<Workspace> = {};
     // model and provider always change together: a model alone clears the provider
-    if (patch.provider && !patch.model) throw new ValidationError('fournisseur sans modèle');
+    if (patch.provider && !patch.model) throw new ValidationError(msg('fournisseur sans modèle'));
     if (patch.model !== undefined) {
       set.model = choice.model = patch.model || null;
       set.modelProvider = choice.modelProvider = (patch.model && patch.provider) || null;

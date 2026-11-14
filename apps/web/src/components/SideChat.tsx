@@ -7,6 +7,7 @@ import { embedUrl, flushFrame, forgetSideSession, setSideSession, sideSession, T
 import { shortcutLabel } from './CommandPalette';
 import { invalidateSessionLists } from '../sessions/UndoBar';
 import { Button } from './ui';
+import { t } from '../i18n';
 
 interface Ws { slug: string; name: string }
 
@@ -97,26 +98,26 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
   };
 
   return (
-    <aside aria-label="Chat latéral"
+    <aside aria-label={t('Chat latéral')}
       className="fixed inset-0 z-[60] flex flex-col bg-sheet md:static md:z-auto md:m-2 md:ml-0 md:h-[var(--card-h)] md:w-[420px] md:shrink-0 md:overflow-hidden md:rounded-[14px] md:border md:border-line md:shadow-[var(--shadow-card)]">
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line pl-4 pr-2">
-        <p className="flex-1 text-sm font-medium">Chat</p>
-        <Button variant="ghost" className="size-8 px-0" aria-label="Nouvelle session" title="Nouvelle session" disabled={!ready} onClick={() => void startNew()}>
+        <p className="flex-1 text-sm font-medium">{t('Chat')}</p>
+        <Button variant="ghost" className="size-8 px-0" aria-label={t('Nouvelle session')} title={t('Nouvelle session')} disabled={!ready} onClick={() => void startNew()}>
           <Plus className="size-4" strokeWidth={1.5} />
         </Button>
-        <Button variant="ghost" className="size-8 px-0" aria-label="Ouvrir en grand" title="Ouvrir en grand" disabled={!shown} onClick={expand}>
+        <Button variant="ghost" className="size-8 px-0" aria-label={t('Ouvrir en grand')} title={t('Ouvrir en grand')} disabled={!shown} onClick={expand}>
           <Maximize2 className="size-4" strokeWidth={1.5} />
         </Button>
-        <Button variant="ghost" className="size-8 px-0" aria-label="Fermer le chat" title={`Fermer (${shortcutLabel().replace('K', 'J')})`} onClick={onClose}>
+        <Button variant="ghost" className="size-8 px-0" aria-label={t('Fermer le chat')} title={t('Fermer ({key})', { key: shortcutLabel().replace('K', 'J') })} onClick={onClose}>
           <X className="size-4" strokeWidth={1.5} />
         </Button>
       </div>
       {!ready ? (
-        <p className="p-6 text-sm text-ink-soft">Créez d’abord un workspace sur cette instance.</p>
+        <p className="p-6 text-sm text-ink-soft">{t('Créez d’abord un workspace sur cette instance.')}</p>
       ) : error ? (
         <p className="p-6 text-sm text-bad">{error}</p>
       ) : shown ? (
-        <iframe ref={frame} key={shown.id} src={embedUrl(shown)} title="Session du chat latéral"
+        <iframe ref={frame} key={shown.id} src={embedUrl(shown)} title={t('Session du chat latéral')}
           className="min-h-0 w-full flex-1 border-0" onLoad={() => frame.current?.contentWindow?.focus()} />
       ) : null}
     </aside>

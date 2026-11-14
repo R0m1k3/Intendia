@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, ApiError } from '../api';
 import { Button } from '../components/ui';
+import { t } from '../i18n';
 
 /**
  * "Session supprimée · Annuler" banner. The server keeps a deleted session for its undo window (`undoUntil`);
@@ -38,8 +39,8 @@ export function UndoHost() {
   useEffect(() => {
     if (!undo) return;
     const left = undo.undoUntil - Date.now();
-    const t = setTimeout(() => setUndo((cur) => (cur === undo ? null : cur)), Math.max(0, left) + (state === 'idle' || state === 'busy' ? 0 : 2500));
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setUndo((cur) => (cur === undo ? null : cur)), Math.max(0, left) + (state === 'idle' || state === 'busy' ? 0 : 2500));
+    return () => clearTimeout(timer);
   }, [undo, state]);
   if (!undo) return null;
 
@@ -60,10 +61,10 @@ export function UndoHost() {
   return createPortal(
     <div role="status" data-undo className="enter fixed inset-x-0 bottom-20 z-[60] flex justify-center px-3 md:bottom-6">
       <div className="flex items-center gap-3 rounded-xl border border-line bg-ink px-4 py-2 text-sm text-paper shadow-[0_12px_32px_rgb(22_24_27/0.25)]">
-        <span>{state === 'late' ? 'Trop tard : la suppression est faite' : state === 'error' ? message : undo.label}</span>
+        <span>{state === 'late' ? t('Trop tard : la suppression est faite') : state === 'error' ? message : undo.label}</span>
         {(state === 'idle' || state === 'busy' || state === 'error') && (
           <Button variant="ghost" className="h-8 px-3 text-paper hover:bg-paper/10 hover:text-paper" onClick={() => void restore()} disabled={state === 'busy'}>
-            Annuler
+            {t('Annuler')}
           </Button>
         )}
       </div>

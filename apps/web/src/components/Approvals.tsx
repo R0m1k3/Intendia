@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { toNotify, visibleApprovals } from './approvals';
 import { canNotify, PendingItem } from './PendingItem';
+import { plural, t } from '../i18n';
 
 const MAX_SHOWN = 3;
 export const CENTRE_PATH = '/activite';
@@ -32,7 +33,7 @@ export function Approvals() {
     const fresh = toNotify(shown, notified.current);
     if (!document.hidden) return;
     for (const a of fresh) {
-      const n = new Notification(`${a.instanceLabel} : ${a.kind === 'clarify' ? 'Hermes vous pose une question' : 'Hermes attend votre accord'}`, { body: a.workspaceName, tag: a.key });
+      const n = new Notification(a.kind === 'clarify' ? t('{instance} : Hermes vous pose une question', { instance: a.instanceLabel }) : t('{instance} : Hermes attend votre accord', { instance: a.instanceLabel }), { body: a.workspaceName, tag: a.key });
       n.onclick = () => { window.focus(); n.close(); };
     }
   }, [shown]);
@@ -53,7 +54,7 @@ export function Approvals() {
       {shown.length > MAX_SHOWN && (
         <p className="flex items-center gap-2 self-end rounded-lg bg-sheet px-3 py-1.5 text-xs text-ink-soft shadow-[var(--shadow-card)]">
           <BellRing className="size-3.5" strokeWidth={1.5} />
-          {shown.length - MAX_SHOWN} autre{shown.length - MAX_SHOWN > 1 ? 's' : ''} en attente
+          {plural(shown.length - MAX_SHOWN, '{n} autre en attente', '{n} autres en attente')}
         </p>
       )}
     </div>,

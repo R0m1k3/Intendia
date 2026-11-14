@@ -1,4 +1,5 @@
 import type { HermesConfigField } from '../connectors/config/index.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * Hermes publishes its config schema as flat dotted paths (`terminal.backend`). These helpers move between
@@ -46,27 +47,27 @@ export function unflatten(changes: Record<string, unknown>): Record<string, unkn
 
 /** null when the value fits the field, else the reason. */
 export function checkValue(field: HermesConfigField, value: unknown, opts: { allowNull?: boolean } = {}): string | null {
-  if (value === null) return opts.allowNull ? null : 'valeur vide refusée';
+  if (value === null) return opts.allowNull ? null : msg('valeur vide refusée');
   switch (field.type) {
     case 'boolean':
-      return typeof value === 'boolean' ? null : 'booléen attendu';
+      return typeof value === 'boolean' ? null : msg('booléen attendu');
     case 'number':
-      return typeof value === 'number' && Number.isFinite(value) ? null : 'nombre attendu';
+      return typeof value === 'number' && Number.isFinite(value) ? null : msg('nombre attendu');
     case 'string':
       // Hermes types every field whose default is None as `string` (agent.max_turns holds 500): loose
       return typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
-        ? null : 'texte attendu';
+        ? null : msg('texte attendu');
     case 'select': {
       if (value === '' && field.clearable) return null;
       const options = (field.options ?? []).map((o) => (o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o));
-      return options.some((o) => o === value) ? null : 'valeur hors de la liste';
+      return options.some((o) => o === value) ? null : msg('valeur hors de la liste');
     }
     case 'list':
       return Array.isArray(value) && value.every((v) => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)))
-        ? null : 'liste de textes ou de nombres attendue';
+        ? null : msg('liste de textes ou de nombres attendue');
     default:
       // `object` and unknown types are not edited by the form
-      return 'champ non modifiable par le formulaire';
+      return msg('champ non modifiable par le formulaire');
   }
 }
 

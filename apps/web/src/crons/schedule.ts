@@ -1,5 +1,6 @@
 // Cron schedules in plain French. Hours are Hermes's (its configured time zone), never the browser's.
 import type { CronSchedule } from '../api';
+import { locale, t } from '../i18n';
 
 export type ScheduleForm =
   | { kind: 'minutes'; n: number }
@@ -12,19 +13,21 @@ export type ScheduleForm =
   | { kind: 'cron'; expr: string };
 
 export const FORM_KINDS: { kind: ScheduleForm['kind']; label: string }[] = [
-  { kind: 'daily', label: 'Chaque jour' },
-  { kind: 'weekdays', label: 'Du lundi au vendredi' },
-  { kind: 'weekly', label: 'Chaque semaine' },
-  { kind: 'monthly', label: 'Chaque mois' },
-  { kind: 'hours', label: 'Toutes les N heures' },
-  { kind: 'minutes', label: 'Toutes les N minutes' },
-  { kind: 'once', label: 'Une seule fois' },
-  { kind: 'cron', label: 'Expression cron' },
+  { kind: 'daily', label: t('Chaque jour') },
+  { kind: 'weekdays', label: t('Du lundi au vendredi') },
+  { kind: 'weekly', label: t('Chaque semaine') },
+  { kind: 'monthly', label: t('Chaque mois') },
+  { kind: 'hours', label: t('Toutes les N heures') },
+  { kind: 'minutes', label: t('Toutes les N minutes') },
+  { kind: 'once', label: t('Une seule fois') },
+  { kind: 'cron', label: t('Expression cron') },
 ];
 
 /** Sunday = 0, as in cron. */
-export const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+export const DAYS = Array.from({ length: 7 }, (_, i) =>
+  new Intl.DateTimeFormat(locale(), { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2023, 0, 1 + i))));
+const MONTHS = Array.from({ length: 12 }, (_, i) =>
+  new Intl.DateTimeFormat(locale(), { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(2023, i, 1))));
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,13 +48,13 @@ export function defaultForm(kind: ScheduleForm['kind'] = 'daily'): ScheduleForm 
 export function validate(f: ScheduleForm): string | null {
   const int = (n: number, min: number, max: number) => Number.isInteger(n) && n >= min && n <= max;
   switch (f.kind) {
-    case 'minutes': return int(f.n, 1, 1440) ? null : 'Entre 1 et 1440 minutes';
-    case 'hours': return int(f.n, 1, 168) ? null : 'Entre 1 et 168 heures';
-    case 'weekly': return !int(f.day, 0, 6) ? 'Jour invalide' : TIME_RE.test(f.time) ? null : 'Heure invalide (HH:MM)';
-    case 'monthly': return !int(f.day, 1, 31) ? 'Jour entre 1 et 31' : TIME_RE.test(f.time) ? null : 'Heure invalide (HH:MM)';
-    case 'once': return !DATE_RE.test(f.date) ? 'Date invalide' : TIME_RE.test(f.time) ? null : 'Heure invalide (HH:MM)';
-    case 'cron': return f.expr.trim().split(/\s+/).length === 5 ? null : 'Une expression cron a 5 champs : minute heure jour mois jour-de-semaine';
-    default: return TIME_RE.test(f.time) ? null : 'Heure invalide (HH:MM)';
+    case 'minutes': return int(f.n, 1, 1440) ? null : t('Entre 1 et 1440 minutes');
+    case 'hours': return int(f.n, 1, 168) ? null : t('Entre 1 et 168 heures');
+    case 'weekly': return !int(f.day, 0, 6) ? t('Jour invalide') : TIME_RE.test(f.time) ? null : t('Heure invalide (HH:MM)');
+    case 'monthly': return !int(f.day, 1, 31) ? t('Jour entre 1 et 31') : TIME_RE.test(f.time) ? null : t('Heure invalide (HH:MM)');
+    case 'once': return !DATE_RE.test(f.date) ? t('Date invalide') : TIME_RE.test(f.time) ? null : t('Heure invalide (HH:MM)');
+    case 'cron': return f.expr.trim().split(/\s+/).length === 5 ? null : t('Une expression cron a 5 champs : minute heure jour mois jour-de-semaine');
+    default: return TIME_RE.test(f.time) ? null : t('Heure invalide (HH:MM)');
   }
 }
 
@@ -118,34 +121,35 @@ export function fromSchedule(s: CronSchedule): ScheduleForm {
 
 export function frTime(time: string): string {
   const { h, m } = hm(time);
-  return m === 0 ? `${h} h` : `${h} h ${pad(m)}`;
+  return m === 0 ? t('{h} h', { h }) : t('{h} h {m}', { h, m: pad(m) });
 }
 
 export function frDate(p: { y: number; mo: number; d: number }, withYear = true): string {
-  return `${p.d === 1 ? '1er' : p.d} ${MONTHS[p.mo - 1]}${withYear ? ` ${p.y}` : ''}`;
+  const vars = { d: p.d === 1 ? t('1er') : p.d, month: MONTHS[p.mo - 1]!, year: p.y };
+  return withYear ? t('{d} {month} {year}', vars) : t('{d} {month}', vars);
 }
 
 /** Plain French for a form. */
 export function describeForm(f: ScheduleForm): string {
   switch (f.kind) {
-    case 'minutes': return f.n === 1 ? 'Toutes les minutes' : `Toutes les ${f.n} minutes`;
-    case 'hours': return f.n === 1 ? 'Toutes les heures' : `Toutes les ${f.n} heures`;
-    case 'daily': return `Tous les jours à ${frTime(f.time)}`;
-    case 'weekdays': return `Du lundi au vendredi à ${frTime(f.time)}`;
-    case 'weekly': return `Chaque ${DAYS[f.day]} à ${frTime(f.time)}`;
-    case 'monthly': return `Le ${f.day === 1 ? '1er' : f.day} de chaque mois à ${frTime(f.time)}`;
+    case 'minutes': return f.n === 1 ? t('Toutes les minutes') : t('Toutes les {n} minutes', { n: f.n });
+    case 'hours': return f.n === 1 ? t('Toutes les heures') : t('Toutes les {n} heures', { n: f.n });
+    case 'daily': return t('Tous les jours à {time}', { time: frTime(f.time) });
+    case 'weekdays': return t('Du lundi au vendredi à {time}', { time: frTime(f.time) });
+    case 'weekly': return t('Chaque {day} à {time}', { day: DAYS[f.day]!, time: frTime(f.time) });
+    case 'monthly': return f.day === 1 ? t('Le 1er de chaque mois à {time}', { time: frTime(f.time) }) : t('Le {day} de chaque mois à {time}', { day: f.day, time: frTime(f.time) });
     case 'once': {
       const [y, mo, d] = f.date.split('-').map(Number);
-      return `Une fois, le ${frDate({ y: y!, mo: mo!, d: d! })} à ${frTime(f.time)}`;
+      return t('Une fois, le {date} à {time}', { date: frDate({ y: y!, mo: mo!, d: d! }), time: frTime(f.time) });
     }
-    case 'cron': return `Expression cron ${f.expr}`;
+    case 'cron': return t('Expression cron {expr}', { expr: f.expr });
   }
 }
 
 /** Plain French for a Hermes schedule; Hermes's own text when no simple form matches. */
 export function describe(s: CronSchedule): string {
   const f = fromSchedule(s);
-  if (f.kind === 'cron') return s.display || (s.expr ? `Expression cron ${s.expr}` : 'Planning inconnu');
+  if (f.kind === 'cron') return s.display || (s.expr ? t('Expression cron {expr}', { expr: s.expr }) : t('Planning inconnu'));
   return describeForm(f);
 }
 
@@ -157,20 +161,28 @@ export function offsetOf(iso: string | null | undefined): string | null {
   return m[1] === 'Z' || m[1] === '+00:00' ? 'UTC' : `UTC${m[1]}`;
 }
 
-/** "demain à 9 h", "le 12 nov. à 8 h 30", in Hermes's offset; `now` for tests. */
-export function whenFr(iso: string | null, now = Date.now()): string {
-  if (!iso) return '-';
+/** Days from today to the date of `iso`, both in Hermes's offset (0 = today), with the current year; null if unreadable. */
+export function hermesDayDiff(iso: string, now = Date.now()): { diff: number; year: number } | null {
   const p = hermesParts(iso);
-  if (!p) return iso;
+  if (!p) return null;
   const off = /([+-])(\d{2}):(\d{2})$/.exec(iso);
   const offMin = off ? (off[1] === '-' ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
   const local = new Date(now + offMin * 60_000); // now, as Hermes's wall clock (read in UTC)
   const today = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
   const day = Date.UTC(p.y, p.mo - 1, p.d);
-  const diff = Math.round((day - today) / 86_400_000);
-  const t = frTime(p.time);
-  if (diff === 0) return `aujourd’hui à ${t}`;
-  if (diff === 1) return `demain à ${t}`;
-  if (diff === -1) return `hier à ${t}`;
-  return `le ${frDate(p, p.y !== local.getUTCFullYear())} à ${t}`;
+  return { diff: Math.round((day - today) / 86_400_000), year: local.getUTCFullYear() };
+}
+
+/** "demain à 9 h", "le 12 nov. à 8 h 30", in Hermes's offset; `now` for tests. */
+export function whenFr(iso: string | null, now = Date.now()): string {
+  if (!iso) return '-';
+  const p = hermesParts(iso);
+  const dd = hermesDayDiff(iso, now);
+  if (!p || !dd) return iso;
+  const { diff } = dd;
+  const time = frTime(p.time);
+  if (diff === 0) return t('aujourd’hui à {time}', { time });
+  if (diff === 1) return t('demain à {time}', { time });
+  if (diff === -1) return t('hier à {time}', { time });
+  return t('le {date} à {time}', { date: frDate(p, p.y !== dd.year), time });
 }

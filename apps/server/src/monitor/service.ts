@@ -5,6 +5,7 @@ import type { ConfigService } from '../hermes-config/service.js';
 import { hostPaths, Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export const USAGE_DAYS = [7, 30, 90] as const;
 export const LOG_FILES = ['agent', 'errors', 'gateway', 'gui', 'desktop', 'update', 'handoff', 'mcp'] as const;
@@ -78,7 +79,7 @@ function toUsage(days: number, u: HermesUsage): Omit<PublicUsage, 'sources' | 'p
 }
 
 function oneOf<T extends string | number>(list: readonly T[], value: T, what: string): T {
-  if (!list.includes(value)) throw new ValidationError(`${what} invalide`);
+  if (!list.includes(value)) throw new ValidationError(msg('{name} invalide', { name: what }));
   return value;
 }
 
@@ -91,7 +92,7 @@ export class MonitorService {
   }
 
   private ctx(instanceId: string) {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
   }
 
@@ -103,16 +104,16 @@ export class MonitorService {
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http') {
         const detail = hostPaths(this.mask.text(hermesDetail(err)));
-        if (err.detail.status === 404) throw new NotFoundError(`Introuvable : ${detail}`);
-        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Requête refusée par Hermes : ${detail}`);
-        throw new HermesError('http', `Hermes : ${detail}`, err.detail);
+        if (err.detail.status === 404) throw new NotFoundError(msg('{what} : {detail}', { what: msg('Introuvable'), detail }));
+        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Requête refusée par Hermes : {detail}', { detail }));
+        throw new HermesError('http', msg('Hermes : {detail}', { detail }), err.detail);
       }
       throw err;
     }
   }
 
   async usage(instanceId: string, profile: string, days: number): Promise<PublicUsage> {
-    oneOf(USAGE_DAYS, days as 7, 'période');
+    oneOf(USAGE_DAYS, days as 7, msg('période'));
     const [usage, stats] = await Promise.allSettled([
       this.call<unknown>(instanceId, 'usage', { profile, query: { days: String(days) } }),
       this.call<unknown>(instanceId, 'sessionStats', { profile }),
@@ -126,13 +127,13 @@ export class MonitorService {
   }
 
   async logs(instanceId: string, profile: string, q: LogQuery): Promise<PublicLogs> {
-    const file = oneOf(LOG_FILES, q.file as 'agent', 'journal');
-    const lines = oneOf(LOG_LINES, q.lines as 100, 'nombre de lignes');
+    const file = oneOf(LOG_FILES, q.file as 'agent', msg('journal'));
+    const lines = oneOf(LOG_LINES, q.lines as 100, msg('nombre de lignes'));
     const query: Record<string, string> = { file, lines: String(lines) };
-    if (q.level) query.level = oneOf(LOG_LEVELS, q.level as 'ALL', 'niveau');
-    if (q.component) query.component = oneOf(LOG_COMPONENTS, q.component as 'agent', 'composant');
+    if (q.level) query.level = oneOf(LOG_LEVELS, q.level as 'ALL', msg('niveau'));
+    if (q.component) query.component = oneOf(LOG_COMPONENTS, q.component as 'agent', msg('composant'));
     if (q.search) {
-      if (q.search.length > SEARCH_MAX) throw new ValidationError('recherche trop longue');
+      if (q.search.length > SEARCH_MAX) throw new ValidationError(msg('recherche trop longue'));
       query.search = q.search;
     }
     const [raw, known] = await Promise.all([

@@ -1,6 +1,7 @@
 // Slash commands of the composer: typed at the start of an empty message, run by the session page instead of being
 // sent to the agent. Only the commands the page can run now are offered (`disabled` gives the reason otherwise); any
 // other text starting with « / » is an ordinary message.
+import { t } from '../i18n';
 
 export type CommandName = 'new' | 'clear' | 'undo' | 'retry' | 'branch' | 'title' | 'usage' | 'stop' | 'prompt' | 'use' | 'goal';
 
@@ -14,17 +15,17 @@ export interface Command {
 }
 
 export const COMMANDS: { name: CommandName; args?: string; label: string }[] = [
-  { name: 'new', label: 'Nouvelle session dans ce workspace' },
-  { name: 'clear', label: 'Vider la conversation' },
-  { name: 'undo', label: 'Annuler le dernier échange' },
-  { name: 'retry', label: 'Réessayer la dernière réponse' },
-  { name: 'branch', label: 'Créer une branche à partir d’ici' },
-  { name: 'title', args: '[nom]', label: 'Renommer (sans nom : titre par l’IA)' },
-  { name: 'usage', label: 'Contexte et forfait utilisés' },
-  { name: 'stop', label: 'Arrêter l’agent' },
-  { name: 'prompt', args: '[titre]', label: 'Insérer un prompt enregistré' },
-  { name: 'use', args: '<skill>', label: 'Utiliser un skill pour ce message' },
-  { name: 'goal', args: '[objectif]', label: 'Fixer un objectif (relances automatiques)' },
+  { name: 'new', label: t('Nouvelle session dans ce workspace') },
+  { name: 'clear', label: t('Vider la conversation') },
+  { name: 'undo', label: t('Annuler le dernier échange') },
+  { name: 'retry', label: t('Réessayer la dernière réponse') },
+  { name: 'branch', label: t('Créer une branche à partir d’ici') },
+  { name: 'title', args: t('[nom]'), label: t('Renommer (sans nom : titre par l’IA)') },
+  { name: 'usage', label: t('Contexte et forfait utilisés') },
+  { name: 'stop', label: t('Arrêter l’agent') },
+  { name: 'prompt', args: t('[titre]'), label: t('Insérer un prompt enregistré') },
+  { name: 'use', args: '<skill>', label: t('Utiliser un skill pour ce message') },
+  { name: 'goal', args: t('[objectif]'), label: t('Fixer un objectif (relances automatiques)') },
 ];
 
 /** Commands offered while the name is typed: text = « / » then letters only (no space yet). Null = no menu. */

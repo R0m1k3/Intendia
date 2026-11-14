@@ -1,3 +1,5 @@
+import { t } from '../../i18n';
+
 /** Reads the start of a file: at most `max` bytes, `cut` when there was more. */
 export async function readHead(url: string, max: number): Promise<{ text: string; cut: boolean }> {
   const bytes = await readBytes(url, max, 'cut');
@@ -12,11 +14,11 @@ export class TooBigError extends Error {}
  */
 export async function readBytes(url: string, max: number, over: 'cut' | 'fail'): Promise<{ data: Uint8Array; cut: boolean }> {
   const res = await fetch(url, { credentials: 'same-origin' });
-  if (!res.ok || !res.body) throw new Error(res.status === 404 ? 'Fichier introuvable' : `HTTP ${res.status}`);
+  if (!res.ok || !res.body) throw new Error(res.status === 404 ? t('Fichier introuvable') : `HTTP ${res.status}`);
   const announced = Number(res.headers.get('content-length') ?? NaN);
   if (over === 'fail' && announced > max) {
     void res.body.cancel();
-    throw new TooBigError('Trop gros pour un aperçu : téléchargez-le');
+    throw new TooBigError(t('Trop gros pour un aperçu : téléchargez-le'));
   }
   const reader = res.body.getReader();
   const parts: Uint8Array[] = [];
@@ -28,7 +30,7 @@ export async function readBytes(url: string, max: number, over: 'cut' | 'fail'):
     if (size + value.length > max) {
       if (over === 'fail') {
         void reader.cancel();
-        throw new TooBigError('Trop gros pour un aperçu : téléchargez-le');
+        throw new TooBigError(t('Trop gros pour un aperçu : téléchargez-le'));
       }
       parts.push(value.subarray(0, max - size));
       size = max;

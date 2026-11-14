@@ -2,11 +2,12 @@ import { Hono, type Context } from 'hono';
 import type { MonitorService } from '../monitor/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
+import { msg } from '../i18n/index.js';
 
 function int(c: Context, name: string, fallback: number): number {
   const v = c.req.query(name);
   if (v === undefined || v === '') return fallback;
-  if (!/^\d{1,4}$/.test(v)) throw new ValidationError(`${name} invalide`);
+  if (!/^\d{1,4}$/.test(v)) throw new ValidationError(msg('{name} invalide', { name }));
   return Number(v);
 }
 

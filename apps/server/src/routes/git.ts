@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { MESSAGE_MAX, type DiffWhich, type GitService } from '../git/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { slugOf } from './files.js';
+import { msg } from '../i18n/index.js';
 
 const Repo = z.object({ repo: z.string().max(1024) });
 const File = Repo.extend({ file: z.string().max(1024).optional() });
@@ -23,7 +24,7 @@ export function gitRoutes(git: GitService): Hono {
   r.get(base, async (c) => c.json(await git.status(slugOf(c), repo(c))));
   r.get(`${base}/diff`, async (c) => {
     const which = (c.req.query('which') ?? 'unstaged') as DiffWhich;
-    if (!WHICH.has(which)) throw new ValidationError('which invalide');
+    if (!WHICH.has(which)) throw new ValidationError(msg('which invalide'));
     const text = await git.diff(slugOf(c), repo(c), c.req.query('file') ?? '', which);
     return c.body(text, 200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
   });

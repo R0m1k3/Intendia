@@ -2,6 +2,7 @@ import { AdminError } from '../admin-error.js';
 import type { CompatService } from '../compat/service.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import type { ConfigService, McpFlow } from './service.js';
+import { msg } from '../i18n/index.js';
 
 /** Hermes keeps a dashboard OAuth flow 15 min: a callback after that has nothing to land on. */
 export const FLOW_TTL_MS = 15 * 60_000;
@@ -78,18 +79,18 @@ export class McpCatalogService {
   async install(instanceId: string, profile: string, name: string, env: Record<string, string>): Promise<{ version: string | null; background: boolean }> {
     const raw = await this.config.mcpCatalogRaw(instanceId, profile);
     const entry = raw.entries.find((e) => e.name === name);
-    if (!entry) throw new NotFoundError(`Absent du catalogue : ${name}`);
-    if (entry.installed) throw new AdminError('already_installed', `Déjà installé : ${name}`);
+    if (!entry) throw new NotFoundError(msg('Absent du catalogue : {name}', { name }));
+    if (entry.installed) throw new AdminError('already_installed', msg('Déjà installé : {name}', { name }));
     const declared = entry.required_env ?? [];
     const unknown = Object.keys(env).filter((k) => !declared.some((d) => d.name === k));
-    if (unknown.length) throw new ValidationError(`Variables non déclarées par cette entrée : ${unknown.join(', ')}`);
+    if (unknown.length) throw new ValidationError(msg('Variables non déclarées par cette entrée : {names}', { names: unknown.join(', ') }));
     const values: Record<string, string> = {};
     for (const [k, v] of Object.entries(env)) {
-      if (v.length > ENV_VALUE_MAX) throw new ValidationError(`${k} : valeur trop longue`);
+      if (v.length > ENV_VALUE_MAX) throw new ValidationError(msg('{name} : valeur trop longue', { name: k }));
       if (v.trim()) values[k] = v.trim();
     }
     const missing = declared.filter((d) => d.required !== false && !values[d.name]).map((d) => d.name);
-    if (missing.length) throw new ValidationError(`À remplir : ${missing.join(', ')}`);
+    if (missing.length) throw new ValidationError(msg('À remplir : {names}', { names: missing.join(', ') }));
     const res = await this.config.installMcpCatalog(instanceId, profile, name, values);
     return { version: res.version, background: res.background };
   }
@@ -111,16 +112,16 @@ export class McpCatalogService {
   /** Starts the OAuth connection of an MCP server; the browser opens `authorizationUrl`, then follows the flow. */
   async connect(instanceId: string, profile: string, name: string): Promise<{ flow: PublicMcpFlow; mode: OauthMode }> {
     const s = await this.config.mcpOauthSettings(instanceId, profile, name);
-    if (!s) throw new ValidationError('Hermes ne donne pas le fichier de configuration : connexion impossible d’ici');
-    if (!s.present) throw new NotFoundError(`Serveur MCP introuvable : ${name}`);
+    if (!s) throw new ValidationError(msg('Hermes ne donne pas le fichier de configuration : connexion impossible d’ici'));
+    if (!s.present) throw new NotFoundError(msg('Serveur MCP introuvable : {name}', { name }));
     const ours = this.callbackUrl(instanceId, name);
     let mode: OauthMode;
     if (s.redirectUri && s.redirectUri !== ours) mode = 'custom';
     else if (!s.redirectUri && s.dashboardPublicUrl) mode = 'hermes';
     else if (ours) mode = 'relay';
-    else throw new AdminError('no_public_url', 'Définissez INTENDIA_PUBLIC_URL (adresse publique d’Intendia) pour connecter un serveur MCP par OAuth');
+    else throw new AdminError('no_public_url', msg('Définissez INTENDIA_PUBLIC_URL (adresse publique d’Intendia) pour connecter un serveur MCP par OAuth'));
     if (mode === 'relay') {
-      if (!this.config.canAll(instanceId, ['mcpCallback', 'put'])) throw new AdminError('refused', 'Cette version d’Hermes n’a pas la route de retour OAuth attendue');
+      if (!this.config.canAll(instanceId, ['mcpCallback', 'put'])) throw new AdminError('refused', msg('Cette version d’Hermes n’a pas la route de retour OAuth attendue'));
       if (s.redirectUri !== ours) await this.config.setMcpRedirect(instanceId, profile, name, ours!);
     }
     const f = await this.config.mcpAuth(instanceId, profile, name);
@@ -145,7 +146,7 @@ export class McpCatalogService {
     try { state = new URL(f.authorization_url).searchParams.get('state'); } catch { state = null; }
     if (!state) {
       await this.config.mcpFlowCancel(instanceId, profile, f.flow_id).catch(() => undefined);
-      throw new AdminError('refused', 'Le fournisseur n’a pas donné de paramètre state : Intendia ne peut pas relayer ce retour');
+      throw new AdminError('refused', msg('Le fournisseur n’a pas donné de paramètre state : Intendia ne peut pas relayer ce retour'));
     }
     this.expected.set(state, pending);
   }

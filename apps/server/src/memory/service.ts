@@ -5,6 +5,7 @@ import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import { hostPaths, Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 /** `memory:<memory|profile>:<index>:<fingerprint>` (Hermes 0.23: sha256 of the entry, 12 hex). */
 export const MEMORY_ID_RE = /^memory:(memory|profile):\d{1,6}:[0-9a-f]{12}$/;
@@ -63,7 +64,7 @@ export class MemoryService {
   }
 
   private ctx(instanceId: string) {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
   }
 
@@ -75,11 +76,11 @@ export class MemoryService {
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http') {
         const detail = hostPaths(this.mask.text(hermesDetail(err)));
-        if (STALE_RE.test(detail)) throw new AdminError('stale', 'L’entrée a changé depuis la lecture de la liste : rechargez');
-        if (OVER_RE.test(detail)) throw new AdminError('over_budget', `Mémoire pleine : ${detail}`);
-        if (err.detail.status === 404) throw new NotFoundError(`Entrée introuvable : ${detail}`);
-        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Requête refusée par Hermes : ${detail}`);
-        throw new HermesError('http', `Hermes : ${detail}`, err.detail);
+        if (STALE_RE.test(detail)) throw new AdminError('stale', msg('L’entrée a changé depuis la lecture de la liste : rechargez'));
+        if (OVER_RE.test(detail)) throw new AdminError('over_budget', msg('Mémoire pleine : {detail}', { detail }));
+        if (err.detail.status === 404) throw new NotFoundError(msg('Entrée introuvable : {detail}', { detail }));
+        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Requête refusée par Hermes : {detail}', { detail }));
+        throw new HermesError('http', msg('Hermes : {detail}', { detail }), err.detail);
       }
       throw err;
     }
@@ -142,7 +143,7 @@ export class MemoryService {
   }
 
   private checkId(id: string): void {
-    if (!MEMORY_ID_RE.test(id)) throw new ValidationError('Identifiant d’entrée invalide');
+    if (!MEMORY_ID_RE.test(id)) throw new ValidationError(msg('Identifiant d’entrée invalide'));
   }
 
   private async raw(instanceId: string, profile: string, id: string): Promise<string> {
@@ -159,8 +160,8 @@ export class MemoryService {
   /** Rewrites an entry from a draft of its masked text; the secrets come back from the entry read again. */
   async update(instanceId: string, profile: string, id: string, draft: string): Promise<{ ok: true }> {
     this.checkId(id);
-    if (!draft.trim()) throw new ValidationError('Entrée vide : utilisez Supprimer');
-    if (draft.length > ENTRY_MAX) throw new ValidationError(`Entrée trop longue (${ENTRY_MAX} caractères au plus)`);
+    if (!draft.trim()) throw new ValidationError(msg('Entrée vide : utilisez Supprimer'));
+    if (draft.length > ENTRY_MAX) throw new ValidationError(msg('Entrée trop longue ({max} caractères au plus)', { max: ENTRY_MAX }));
     const current = await this.raw(instanceId, profile, id);
     const content = this.mask.restoreText(draft, current);
     await this.call(instanceId, 'putNode', { profile, body: { id, content, profile } });

@@ -1,4 +1,5 @@
 import type { ConfigField } from '../api';
+import { t } from '../i18n';
 
 /** How the generated form shows a field, and the conversions between the input text and the value. */
 
@@ -42,14 +43,14 @@ export function fromText(kind: EditorKind, text: string, original: unknown): Par
   switch (kind) {
     case 'number': {
       const n = Number(text.trim());
-      return text.trim() !== '' && Number.isFinite(n) ? { ok: true, value: n } : { ok: false, error: 'nombre attendu' };
+      return text.trim() !== '' && Number.isFinite(n) ? { ok: true, value: n } : { ok: false, error: t('nombre attendu') };
     }
     case 'lines': {
       const numeric = Array.isArray(original) && original.length > 0 && original.every((v) => typeof v === 'number');
       const items = text.split('\n').map((l) => l.trim()).filter(Boolean);
       if (numeric) {
         const nums = items.map(Number);
-        return nums.every(Number.isFinite) ? { ok: true, value: nums } : { ok: false, error: 'nombres attendus, un par ligne' };
+        return nums.every(Number.isFinite) ? { ok: true, value: nums } : { ok: false, error: t('nombres attendus, un par ligne') };
       }
       return { ok: true, value: items };
     }

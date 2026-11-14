@@ -1,5 +1,6 @@
 // What a run adds to the session's instructions for this message only: skills asked by `/use` (option 8) and the
 // session's personality (option 9).
+import { msg } from '../i18n/index.js';
 import type { ConfigService } from '../hermes-config/service.js';
 import type { PromptService } from '../prompts/service.js';
 import type { SkillService } from '../skills/service.js';
@@ -23,7 +24,7 @@ export async function skillBlocks(skills: SkillService, ctx: SessionContext, nam
     try {
       s = await skills.content(ctx.instance.id, ctx.profile, name);
     } catch (err) {
-      if (err instanceof NotFoundError) throw new RunExtrasError('skill_not_found', `Skill introuvable chez l’agent : ${name}`);
+      if (err instanceof NotFoundError) throw new RunExtrasError('skill_not_found', msg('Skill introuvable chez l’agent : {name}', { name }));
       throw err;
     }
     const cut = s.truncated || s.content.length > SKILL_CHARS;

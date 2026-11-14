@@ -1,3 +1,4 @@
+import { msg } from '../i18n/index.js';
 import { ValidationError } from '../workspaces/service.js';
 
 /** Hermes profile name, as accepted in `?profile=` by every console route. */
@@ -10,6 +11,6 @@ export const TASK_RE = /^t_[a-z0-9]{4,32}$/;
 
 /** Positive integer path parameter (kanban run ids), or a ValidationError. */
 export function intParam(value: string | undefined, what: string): number {
-  if (!value || !/^\d{1,12}$/.test(value)) throw new ValidationError(`${what} invalide`);
+  if (!value || !/^\d{1,12}$/.test(value)) throw new ValidationError(msg('{what} invalide', { what }));
   return Number(value);
 }

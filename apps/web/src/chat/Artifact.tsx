@@ -2,6 +2,7 @@ import { FolderOpen, Maximize2 } from 'lucide-react';
 import { useRef } from 'react';
 import { rawUrl } from '../api';
 import { useFilePaths } from '../files/FilePaths';
+import { t } from '../i18n';
 
 const LINK = 'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink';
 
@@ -17,7 +18,7 @@ export function Artifact({ path }: { path: string }) {
   if (!paths || !rel) {
     return (
       <p className="font-mono text-xs text-ink-faint" data-artifact-missing>
-        {paths?.pending ? 'Chargement de l’artefact…' : `Artefact introuvable : ${path}`}
+        {paths?.pending ? t('Chargement de l’artefact…') : t('Artefact introuvable : {path}', { path })}
       </p>
     );
   }
@@ -28,10 +29,10 @@ export function Artifact({ path }: { path: string }) {
       <figcaption className="flex items-center gap-1 border-b border-line py-1 pl-3 pr-1.5">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-soft">{name}</span>
         <button type="button" className={LINK} onClick={() => void frame.current?.requestFullscreen().catch(() => {})}>
-          <Maximize2 className="size-3.5" strokeWidth={1.5} />Plein écran
+          <Maximize2 className="size-3.5" strokeWidth={1.5} />{t('Plein écran')}
         </button>
         <button type="button" className={LINK} onClick={() => paths.open(rel)}>
-          <FolderOpen className="size-3.5" strokeWidth={1.5} />Voir dans les fichiers
+          <FolderOpen className="size-3.5" strokeWidth={1.5} />{t('Voir dans les fichiers')}
         </button>
       </figcaption>
       <iframe

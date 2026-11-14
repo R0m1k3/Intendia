@@ -4,6 +4,7 @@
  * the instance, the managed files root of its Hermes). Hermes itself confines every path to that root.
  */
 import { WorkspaceFsError } from '../workspaces/fs.js';
+import { msg } from '../i18n/index.js';
 
 export const PATH_MAX = 1024;
 export const NAME_MAX_BYTES = 255;
@@ -14,13 +15,13 @@ export const NAME_MAX_BYTES = 255;
  */
 export function normalizeRel(rel: string, opts: { allowRoot?: boolean } = {}): string {
   if (typeof rel !== 'string' || rel.length > PATH_MAX || rel.includes('\0') || rel.includes('\\')) {
-    throw new WorkspaceFsError('invalid', 'Chemin invalide');
+    throw new WorkspaceFsError('invalid', msg('Chemin invalide'));
   }
-  if (rel.startsWith('/')) throw new WorkspaceFsError('invalid', `Chemin invalide : ${rel}`);
+  if (rel.startsWith('/')) throw new WorkspaceFsError('invalid', msg('Chemin invalide : {path}', { path: rel }));
   const parts = rel.split('/').filter((p) => p !== '' && p !== '.');
-  if (parts.some((p) => p === '..')) throw new WorkspaceFsError('invalid', `Chemin invalide : ${rel}`);
+  if (parts.some((p) => p === '..')) throw new WorkspaceFsError('invalid', msg('Chemin invalide : {path}', { path: rel }));
   const out = parts.join('/');
-  if (!out && !opts.allowRoot) throw new WorkspaceFsError('invalid', 'Chemin vide');
+  if (!out && !opts.allowRoot) throw new WorkspaceFsError('invalid', msg('Chemin vide'));
   return out;
 }
 
@@ -41,7 +42,7 @@ export function hiddenByHermes(vol: string): boolean {
 
 export function checkName(name: string): string {
   if (!name || name === '.' || name === '..' || /[/\\\0]/.test(name) || Buffer.byteLength(name, 'utf8') > NAME_MAX_BYTES) {
-    throw new WorkspaceFsError('invalid', `Nom invalide : ${name.slice(0, 80)}`);
+    throw new WorkspaceFsError('invalid', msg('Nom invalide : {name}', { name: name.slice(0, 80) }));
   }
   return name;
 }

@@ -3,18 +3,19 @@ import { z } from 'zod';
 import type { SkillService } from '../skills/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { PROFILE_RE } from './params.js';
+import { msg } from '../i18n/index.js';
 
-const NAME = z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/, 'nom de skill invalide');
+const NAME = z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/, msg('nom de skill invalide'));
 const IDENTIFIER = z.string().max(300).refine(
   (v) => /^[A-Za-z0-9_.:/@-]{1,300}$/.test(v) || /^https:\/\/[^\s]+$/.test(v),
-  'identifiant de hub invalide',
+  msg('identifiant de hub invalide'),
 );
 const ACTION_RE = /^skills-[a-z0-9-]{1,120}$/;
 
 const EnabledBody = z.object({ name: NAME, enabled: z.boolean() });
 const InstallBody = z.object({ identifier: IDENTIFIER, acknowledged: z.boolean().default(false) });
 const UninstallBody = z.object({ name: NAME });
-const SKILL_NAME = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, 'nom de skill invalide (minuscules, chiffres, . _ -)');
+const SKILL_NAME = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, msg('nom de skill invalide (minuscules, chiffres, . _ -)'));
 const CreateBody = z.object({
   name: SKILL_NAME,
   category: SKILL_NAME.optional(),
@@ -27,7 +28,7 @@ const LockBody = z.object({ name: NAME, locked: z.boolean() });
 /** `?profile=`, `default` when absent. */
 export function profileOf(c: Context): string {
   const profile = c.req.query('profile') ?? 'default';
-  if (!PROFILE_RE.test(profile)) throw new ValidationError('profil invalide');
+  if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide'));
   return profile;
 }
 
@@ -82,7 +83,7 @@ export function skillRoutes(skills: SkillService): Hono {
   r.post('/i/:inst/skills/hub/update', async (c) => c.json(await skills.update(inst(c), profileOf(c)), 202));
   r.get('/i/:inst/skills/hub/actions/:action', async (c) => {
     const action = c.req.param('action');
-    if (!ACTION_RE.test(action)) throw new ValidationError("nom d'action invalide");
+    if (!ACTION_RE.test(action)) throw new ValidationError(msg('nom d\'action invalide'));
     return c.json(await skills.actionStatus(inst(c), action));
   });
   return r;

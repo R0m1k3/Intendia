@@ -4,6 +4,7 @@
  * by the browser or the agent goes through files/paths.ts.
  */
 import type { HermesFs } from '../files/hermes-fs.js';
+import { msg } from '../i18n/index.js';
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const AGENTS_MD_MAX_BYTES = 65_536;
@@ -40,7 +41,7 @@ export const WORKSPACE_SUBDIRS = ['files', 'inbox', 'sessions'] as const;
 /** Creates <root>/<slug>/ with files/, inbox/, sessions/ and AGENTS.md; leaves nothing behind on failure. */
 export async function createWorkspaceDir(fs: HermesFs, slug: string): Promise<void> {
   if (!SLUG_RE.test(slug)) throw new Error(`invalid slug ${slug}`);
-  if (await fs.entry(slug)) throw new WorkspaceFsError('exists', `Le dossier ${slug} existe déjà chez Hermes`);
+  if (await fs.entry(slug)) throw new WorkspaceFsError('exists', msg('Le dossier {slug} existe déjà chez Hermes', { slug }));
   await fs.mkdir(slug);
   try {
     for (const sub of WORKSPACE_SUBDIRS) await fs.mkdir(`${slug}/${sub}`);
@@ -66,7 +67,7 @@ export async function readAgentsMd(fs: HermesFs, slug: string): Promise<string> 
 
 export async function writeAgentsMd(fs: HermesFs, slug: string, text: string): Promise<void> {
   if (Buffer.byteLength(text, 'utf8') > AGENTS_MD_MAX_BYTES) {
-    throw new WorkspaceFsError('too_large', `AGENTS.md dépasse ${AGENTS_MD_MAX_BYTES / 1024} Kio`);
+    throw new WorkspaceFsError('too_large', msg('AGENTS.md dépasse {n} Kio', { n: AGENTS_MD_MAX_BYTES / 1024 }));
   }
   await fs.create(`${slug}/AGENTS.md`, text, { overwrite: true });
 }

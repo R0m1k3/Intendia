@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { api, type ModuleId } from '../api';
 import { availability, compatPoll, type OpRef, type OptionalOp } from './availability';
 import { Mark } from './ui';
+import { t } from '../i18n';
 
 export type { OpRef, OptionalOp } from './availability';
 
@@ -23,8 +24,8 @@ export function ModuleNotice({ instanceId, module, title, required, optional, ex
   const a = useModuleAvailability(instanceId, module, required, optional, explainMissing);
   const pendingLine = a.pending && (
     <div className="mt-2 flex flex-wrap items-center gap-x-2 text-ink-soft first:mt-0" data-compat-pending>
-      {a.checkError ? `Vérification échouée : ${a.checkError}` : 'Vérification de cette instance en cours'}
-      <Link to="/etat" className="font-medium text-accent-ink hover:text-ink">Page État</Link>
+      {a.checkError ? t('Vérification échouée : {error}', { error: a.checkError }) : t('Vérification de cette instance en cours')}
+      <Link to="/etat" className="font-medium text-accent-ink hover:text-ink">{t('Page État')}</Link>
     </div>
   );
   const soft = a.available || a.onlyPending;
@@ -35,13 +36,13 @@ export function ModuleNotice({ instanceId, module, title, required, optional, ex
     <div className={soft ? 'rounded-[10px] bg-warn-soft px-3.5 py-3 text-[13.5px] text-warn' : 'rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13.5px] text-bad'}>
       <div className="flex items-center gap-2 font-medium">
         <Mark state={soft ? 'readonly' : 'unavailable'} />
-        {soft ? `Indisponible sur cette instance : ${a.missing.join(', ').toLowerCase()}` : `${title} est indisponible sur cette instance`}
+        {soft ? t('Indisponible sur cette instance : {list}', { list: a.missing.join(', ').toLowerCase() }) : t('{title} est indisponible sur cette instance', { title })}
       </div>
       {a.reasons.length > 0 && <ul className="mt-2 space-y-1 text-ink-soft">{a.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
       {pendingLine}
       {a.link && (
         <a href={a.link} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-medium text-accent-ink hover:text-ink">
-          Ouvrir le dashboard officiel
+          {t('Ouvrir le dashboard officiel')}
           <ArrowUpRight className="size-4" strokeWidth={1.5} />
         </a>
       )}

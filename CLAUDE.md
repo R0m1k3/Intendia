@@ -6,4 +6,6 @@ Web UI for Hermes Agent, through its HTTP APIs only. Read docs/architecture.md b
 - A new Hermes route = a candidate route in the module's connector + a tolerant zod schema; record fixtures with
   `pnpm probe record` and keep tests passing against `apps/fake-hermes`.
 - DB migrations: SQL files in `apps/server/src/db/migrations/`, additive only (new tables / columns).
-- UI text in French; code, comments and docs in English.
+- UI text written in French inside `t()` / `plural()` / `<T k>` (`apps/web/src/i18n`), English in
+  `apps/web/src/i18n/en/<zone>.ts`; server texts shown to users through `msg()`, English in
+  `apps/server/src/i18n/en.ts`. Never translate what is sent to Hermes. Code, comments and docs in English.

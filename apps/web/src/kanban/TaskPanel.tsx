@@ -8,6 +8,7 @@ import { Button, cx, ErrorText, Field, Input, Mark, timeAgo } from '../component
 import { moveTargets, statusLabel } from './moves';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
 import { POLL_MS } from './useLive';
+import { t } from '../i18n';
 
 const ICON = 'size-4';
 const when = (s: number | null) => (s ? timeAgo(s * 1000) : '');
@@ -32,9 +33,9 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1 space-y-2">
           <p className="text-base font-medium">{task.title}</p>
-          <p className={cx('whitespace-pre-wrap text-sm', task.body ? 'text-ink-soft' : 'text-ink-faint')}>{task.body || 'Pas de description'}</p>
+          <p className={cx('whitespace-pre-wrap text-sm', task.body ? 'text-ink-soft' : 'text-ink-faint')}>{task.body || t('Pas de description')}</p>
         </div>
-        <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft({ title: task.title, body: task.body })} aria-label="Modifier la tâche">
+        <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft({ title: task.title, body: task.body })} aria-label={t('Modifier la tâche')}>
           <Pencil className={ICON} strokeWidth={1.5} />
         </Button>
       </div>
@@ -42,10 +43,10 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
   }
   return (
     <div className="space-y-3">
-      <Input value={draft.title} maxLength={200} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-label="Titre" autoFocus />
-      <textarea value={draft.body} maxLength={20_000} rows={6} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className={TEXTAREA} aria-label="Description" />
+      <Input value={draft.title} maxLength={200} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-label={t('Titre')} autoFocus />
+      <textarea value={draft.body} maxLength={20_000} rows={6} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className={TEXTAREA} aria-label={t('Description')} />
       <div className="flex justify-end gap-2">
-        <Button onClick={() => setDraft(null)}>Annuler</Button>
+        <Button onClick={() => setDraft(null)}>{t('Annuler')}</Button>
         <Button variant="primary" disabled={busy || !draft.title.trim()}
           onClick={() => {
             const sent = draft;
@@ -53,7 +54,7 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
               // Close only if nothing was typed while the save was pending; the error is shown by the panel.
               .then(() => setDraft((cur) => (cur && cur.title === sent.title && cur.body === sent.body ? null : cur)), () => {});
           }}>
-          Enregistrer
+          {t('Enregistrer')}
         </Button>
       </div>
     </div>
@@ -90,87 +91,92 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
   const unlink = useMutation({ mutationFn: (r: { parent: string; child: string }) => api.unlinkKanbanTasks(inst, board, r.parent, r.child), onSettled: refresh });
   const aux = useMutation({
     mutationFn: (op: 'specify' | 'decompose') => api.kanbanAux(inst, board, taskId, op),
-    onSuccess: (_r, op) => setNotice(op === 'specify' ? 'Tâche précisée par Hermes' : 'Tâche découpée par Hermes'),
+    onSuccess: (_r, op) => setNotice(op === 'specify' ? t('Tâche précisée par Hermes') : t('Tâche découpée par Hermes')),
     onSettled: refresh,
   });
   const error = update.error ?? addComment.error ?? link.error ?? unlink.error ?? aux.error;
 
   const d: KanbanTaskDetail | undefined = detail.data;
-  const t = d?.task;
-  const targets = t && workflow ? moveTargets(workflow.manual, t.status) : [];
+  const tk = d?.task;
+  const targets = tk && workflow ? moveTargets(workflow.manual, tk.status) : [];
   const linked = new Set([taskId, ...(d?.parents.map((p) => p.id) ?? []), ...(d?.children.map((c) => c.id) ?? [])]);
   const candidates = allTasks.filter((x) => !linked.has(x.id));
 
   return (
-    <Sheet title={t ? <span className="flex items-center gap-2"><span className="font-mono text-[12px] text-ink-faint">{t.id}</span>{statusLabel(t.status)}</span> : 'Tâche'}
+    <Sheet title={tk ? <span className="flex items-center gap-2"><span className="font-mono text-[12px] text-ink-faint">{tk.id}</span>{statusLabel(tk.status)}</span> : t('Tâche')}
       onClose={onClose} width="md:w-[560px]">
       <ErrorText error={detail.error ?? error} />
       {notice && <p role="status" className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ink">{notice}</p>}
-      {!t ? <p className="text-sm text-ink-faint">Chargement…</p> : (
+      {!tk ? <p className="text-sm text-ink-faint">{t('Chargement…')}</p> : (
         <>
-          <TextEditor task={t} save={(p) => update.mutateAsync(p)} busy={update.isPending} />
+          <TextEditor task={tk} save={(p) => update.mutateAsync(p)} busy={update.isPending} />
 
           {mission && (
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm" data-root-of={mission.id}>
               <span className="min-w-0 flex-1">
-                Tâche racine de la mission « {mission.goal} » ({MISSION_STATE[mission.state]}) : elle attend toutes ses tâches{d.parents.length ? `, ${d.parents.filter((p) => p.status === 'done' || p.status === 'archived').length}/${d.parents.length} finies` : ''}.
+                {d.parents.length
+                  ? t('Tâche racine de la mission « {goal} » ({state}) : elle attend toutes ses tâches, {done}/{total} finies.', {
+                    goal: mission.goal, state: MISSION_STATE[mission.state],
+                    done: d.parents.filter((p) => p.status === 'done' || p.status === 'archived').length, total: d.parents.length,
+                  })
+                  : t('Tâche racine de la mission « {goal} » ({state}) : elle attend toutes ses tâches.', { goal: mission.goal, state: MISSION_STATE[mission.state] })}
               </span>
               {onOpenMission && (
                 <Button variant={mission.state === 'held' ? 'primary' : 'secondary'} onClick={() => onOpenMission(mission.id)}>
-                  {mission.state === 'held' ? 'Relire et lancer' : 'Voir la mission'}
+                  {mission.state === 'held' ? t('Relire et lancer') : t('Voir la mission')}
                 </Button>
               )}
             </div>
           )}
-          {t.status === 'blocked' && (
+          {tk.status === 'blocked' && (
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 px-4 py-3 text-sm">
-              <span className="min-w-0 flex-1">Bloquée{d.blockReason ? ` : ${d.blockReason}` : ''}</span>
-              <Button variant="primary" disabled={update.isPending} onClick={() => update.mutate({ status: 'ready' })}>Débloquer</Button>
+              <span className="min-w-0 flex-1">{d.blockReason ? t('Bloquée : {reason}', { reason: d.blockReason }) : t('Bloquée')}</span>
+              <Button variant="primary" disabled={update.isPending} onClick={() => update.mutate({ status: 'ready' })}>{t('Débloquer')}</Button>
             </div>
           )}
-          {t.error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">Dernier échec : {t.error}</p>}
+          {tk.error && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{t('Dernier échec : {error}', { error: tk.error })}</p>}
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Statut">
-              <select className={SELECT} value="" aria-label="Déplacer vers…" disabled={!targets.length || update.isPending}
+            <Field label={t('Statut')}>
+              <select className={SELECT} value="" aria-label={t('Déplacer vers…')} disabled={!targets.length || update.isPending}
                 onChange={(e) => e.target.value && update.mutate({ status: e.target.value })}>
-                <option value="">{statusLabel(t.status)}</option>
+                <option value="">{statusLabel(tk.status)}</option>
                 {targets.map((s) => <option key={s} value={s}>→ {statusLabel(s)}</option>)}
               </select>
             </Field>
-            <Field label="Agent">
-              <select className={SELECT} value={t.assignee ?? ''} onChange={(e) => update.mutate({ assignee: e.target.value || null })}>
-                <option value="">Aucun</option>
-                {[...new Set([...(t.assignee ? [t.assignee] : []), ...assignees])].map((a) => <option key={a} value={a}>{a}</option>)}
+            <Field label={t('Agent')}>
+              <select className={SELECT} value={tk.assignee ?? ''} onChange={(e) => update.mutate({ assignee: e.target.value || null })}>
+                <option value="">{t('Aucun')}</option>
+                {[...new Set([...(tk.assignee ? [tk.assignee] : []), ...assignees])].map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </Field>
-            <Field label="Priorité">
-              <Input type="number" defaultValue={t.priority ?? 0} min={-1000} max={1000} key={`${t.id}:${t.priority}`}
-                onBlur={(e) => { const v = e.target.valueAsNumber; if (Number.isFinite(v) && v !== (t.priority ?? 0)) update.mutate({ priority: v }); }} />
+            <Field label={t('Priorité')}>
+              <Input type="number" defaultValue={tk.priority ?? 0} min={-1000} max={1000} key={`${tk.id}:${tk.priority}`}
+                onBlur={(e) => { const v = e.target.valueAsNumber; if (Number.isFinite(v) && v !== (tk.priority ?? 0)) update.mutate({ priority: v }); }} />
             </Field>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button disabled={aux.isPending} onClick={() => { setNotice(null); aux.mutate('specify'); }}><Wand2 className={ICON} strokeWidth={1.5} />Préciser</Button>
-            <Button disabled={aux.isPending} onClick={() => { setNotice(null); aux.mutate('decompose'); }}><Split className={ICON} strokeWidth={1.5} />Découper</Button>
-            {t.workspace && (
-              <Link to="/w/$slug/fichiers" params={{ slug: t.workspace.slug }} search={{ path: t.workspace.folder }}
+            <Button disabled={aux.isPending} onClick={() => { setNotice(null); aux.mutate('specify'); }}><Wand2 className={ICON} strokeWidth={1.5} />{t('Préciser')}</Button>
+            <Button disabled={aux.isPending} onClick={() => { setNotice(null); aux.mutate('decompose'); }}><Split className={ICON} strokeWidth={1.5} />{t('Découper')}</Button>
+            {tk.workspace && (
+              <Link to="/w/$slug/fichiers" params={{ slug: tk.workspace.slug }} search={{ path: tk.workspace.folder }}
                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft hover:text-ink">
-                <FolderOpen className={ICON} strokeWidth={1.5} />{t.workspace.name}
+                <FolderOpen className={ICON} strokeWidth={1.5} />{tk.workspace.name}
               </Link>
             )}
           </div>
-          {aux.isPending && <p className="text-xs text-ink-faint">Hermes réfléchit (jusqu’à 2 min)…</p>}
+          {aux.isPending && <p className="text-xs text-ink-faint">{t('Hermes réfléchit (jusqu’à 2 min)…')}</p>}
 
-          <Section title="Dépendances">
-            {d.parents.length + d.children.length === 0 && <p className="text-sm text-ink-faint">Aucune</p>}
+          <Section title={t('Dépendances')}>
+            {d.parents.length + d.children.length === 0 && <p className="text-sm text-ink-faint">{t('Aucune')}</p>}
             <ul className="space-y-1">
               {[...d.parents.map((p) => ({ ...p, role: 'parent' as const })), ...d.children.map((c) => ({ ...c, role: 'child' as const }))].map((x) => (
                 <li key={`${x.role}:${x.id}`} className="flex items-center gap-2 text-sm">
-                  <span className="w-20 shrink-0 text-xs text-ink-faint">{x.role === 'parent' ? 'dépend de' : 'bloque'}</span>
+                  <span className="w-20 shrink-0 text-xs text-ink-faint">{x.role === 'parent' ? t('dépend de') : t('bloque')}</span>
                   <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-accent-ink" onClick={() => onOpen(x.id)}>{x.title ?? x.id}</button>
                   <span className="text-xs text-ink-faint">{x.status ? statusLabel(x.status) : ''}</span>
-                  <Button variant="ghost" className="h-7 px-1.5" aria-label="Délier" disabled={unlink.isPending}
+                  <Button variant="ghost" className="h-7 px-1.5" aria-label={t('Délier')} disabled={unlink.isPending}
                     onClick={() => unlink.mutate(x.role === 'parent' ? { parent: x.id, child: taskId } : { parent: taskId, child: x.id })}>
                     <Unlink className="size-3.5" strokeWidth={1.5} />
                   </Button>
@@ -179,16 +185,16 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
             </ul>
             {candidates.length > 0 && (
               <div className="flex gap-2">
-                <select className={SELECT} value={linkTo} onChange={(e) => setLinkTo(e.target.value)} aria-label="Lier à…">
-                  <option value="">Dépend de…</option>
+                <select className={SELECT} value={linkTo} onChange={(e) => setLinkTo(e.target.value)} aria-label={t('Lier à…')}>
+                  <option value="">{t('Dépend de…')}</option>
                   {candidates.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
-                <Button disabled={!linkTo || link.isPending} onClick={() => link.mutate(linkTo)}><Link2 className={ICON} strokeWidth={1.5} />Lier</Button>
+                <Button disabled={!linkTo || link.isPending} onClick={() => link.mutate(linkTo)}><Link2 className={ICON} strokeWidth={1.5} />{t('Lier')}</Button>
               </div>
             )}
           </Section>
 
-          <Section title={`Commentaires (${d.comments.length})`}>
+          <Section title={t('Commentaires ({n})', { n: d.comments.length })}>
             <ul className="space-y-2">
               {d.comments.map((c) => (
                 <li key={c.id} className="rounded-lg border border-line bg-sheet px-3 py-2 text-sm">
@@ -199,19 +205,19 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
             </ul>
             <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (comment.trim()) addComment.mutate(); }}>
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={10_000} className={TEXTAREA}
-                placeholder="Un commentaire pour l’agent ou pour vous" aria-label="Commentaire" />
-              <div className="flex justify-end"><Button type="submit" disabled={!comment.trim() || addComment.isPending}>Commenter</Button></div>
+                placeholder={t('Un commentaire pour l’agent ou pour vous')} aria-label={t('Commentaire')} />
+              <div className="flex justify-end"><Button type="submit" disabled={!comment.trim() || addComment.isPending}>{t('Commenter')}</Button></div>
             </form>
           </Section>
 
           {d.attachments.length > 0 && (
-            <Section title="Pièces jointes">
+            <Section title={t('Pièces jointes')}>
               <ul className="space-y-1">
                 {d.attachments.map((a) => (
                   <li key={a.id}>
                     <a href={`/x${kanbanPath(inst, `attachments/${a.id}`, board)}`} className="inline-flex items-center gap-2 text-sm hover:text-accent-ink" download>
                       <Download className="size-3.5" strokeWidth={1.5} />{a.filename}
-                      {a.size !== null && <span className="text-xs text-ink-faint">{Math.ceil(a.size / 1024)} Kio</span>}
+                      {a.size !== null && <span className="text-xs text-ink-faint">{t('{n} Kio', { n: Math.ceil(a.size / 1024) })}</span>}
                     </a>
                   </li>
                 ))}
@@ -220,7 +226,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
           )}
 
           {d.runs.length > 0 && (
-            <Section title="Exécutions">
+            <Section title={t('Exécutions')}>
               <ul className="space-y-1.5">
                 {d.runs.slice(-5).reverse().map((r) => (
                   <li key={r.id} className="text-sm">
@@ -237,24 +243,24 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
             </Section>
           )}
 
-          <Section title="Derniers événements">
+          <Section title={t('Derniers événements')}>
             <ul className="space-y-0.5 font-mono text-[12px] text-ink-soft">
               {d.events.slice(-8).reverse().map((e) => <li key={e.id}>{when(e.createdAt)} · {e.kind}</li>)}
             </ul>
           </Section>
 
-          <Section title="Journal du worker" action={
+          <Section title={t('Journal du worker')} action={
             <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => setShowLog((s) => !s)}>
-              <ScrollText className="size-3.5" strokeWidth={1.5} />{showLog ? 'Masquer' : 'Afficher'}
+              <ScrollText className="size-3.5" strokeWidth={1.5} />{showLog ? t('Masquer') : t('Afficher')}
             </Button>
           }>
             {showLog && (log.data ? (
               log.data.exists ? (
                 <pre className="max-h-80 overflow-auto rounded-lg border border-line bg-sheet p-3 font-mono text-[11px] whitespace-pre-wrap">
-                  {log.data.truncated ? '… (200 dernières lignes)\n' : ''}{log.data.content}
+                  {log.data.truncated ? `${t('… (200 dernières lignes)')}\n` : ''}{log.data.content}
                 </pre>
-              ) : <p className="text-sm text-ink-faint">Pas encore de journal</p>
-            ) : <p className="text-sm text-ink-faint">Chargement…</p>)}
+              ) : <p className="text-sm text-ink-faint">{t('Pas encore de journal')}</p>
+            ) : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>)}
           </Section>
         </>
       )}

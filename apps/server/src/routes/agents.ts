@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { SOUL_MAX, type AgentService } from '../agents/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { PROFILE_RE } from './params.js';
+import { msg } from '../i18n/index.js';
 
 const CreateBody = z.object({
   name: z.string().min(1).max(64),
@@ -20,7 +21,7 @@ const DescriptionBody = z.object({ description: z.string().max(1000) });
 
 function nameOf(c: Context): string {
   const name = c.req.param('name') ?? '';
-  if (!PROFILE_RE.test(name)) throw new ValidationError('nom d’agent invalide');
+  if (!PROFILE_RE.test(name)) throw new ValidationError(msg('nom d’agent invalide'));
   return name;
 }
 

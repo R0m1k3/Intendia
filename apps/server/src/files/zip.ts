@@ -6,6 +6,7 @@
 import { strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import { FILE_READ_MAX, idleGuard, type WalkOpts, type WalkResult } from './walk.js';
+import { msg } from '../i18n/index.js';
 
 export const ZIP_PARALLEL = 2;
 export const ZIP_WALK: WalkOpts = {
@@ -13,7 +14,7 @@ export const ZIP_WALK: WalkOpts = {
   maxBytes: 1024 * 1024 * 1024,
   maxFileBytes: Infinity, // a file past FILE_READ_MAX is left out and listed, not a failure
   links: 'skip',
-  tooLarge: 'Dossier trop gros pour un zip (5 000 fichiers ou 1 Gio au plus)',
+  tooLarge: msg('Dossier trop gros pour un zip (5 000 fichiers ou 1 Gio au plus)'),
 };
 /** Already compressed: stored as they are. */
 const COMPRESSED = /\.(png|jpe?g|gif|webp|avif|heic|mp4|webm|mov|mkv|mp3|m4a|ogg|opus|flac|aac|zip|gz|tgz|bz2|xz|7z|rar|zst|docx|xlsx|pptx|odt|ods|odp|epub|pdf|woff2?)$/i;
@@ -25,7 +26,7 @@ let running = 0;
 
 /** A place among the zips running; throws 409 `busy` when all are taken. The release runs once. */
 export function zipSlot(): () => void {
-  if (running >= ZIP_PARALLEL) throw new WorkspaceFsError('busy', 'Deux zips sont déjà en cours, réessayez dans un instant');
+  if (running >= ZIP_PARALLEL) throw new WorkspaceFsError('busy', msg('Deux zips sont déjà en cours, réessayez dans un instant'));
   running++;
   let done = false;
   return () => {

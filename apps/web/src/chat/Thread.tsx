@@ -8,6 +8,7 @@ import { rawUrl, type ApprovalChoice, type RunStat, type SubagentsSummary } from
 import { Button, copyText, cx, Mark } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
 import { baseName, fileKind } from '../files/paths';
+import { locale, t } from '../i18n';
 import { rehypePaths } from '../files/rehypePaths';
 import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
@@ -21,11 +22,11 @@ import { duration, Subagents } from './Subagents';
 import type { Stamp } from './timeline';
 
 /** How the user is named in the thread. */
-const USER = 'Vous';
+const USER = t('Vous');
 
 export function clock(ts: number | null, seconds = false): string {
   if (!ts) return '';
-  return new Date(ts * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}) });
+  return new Date(ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}) });
 }
 
 /** « Afficher les heures »: stamps of the entries by key (chat/timeline.ts); null = normal display. */
@@ -41,8 +42,8 @@ function VaultLinks({ tools }: { tools: ToolEntry[] }) {
   const vault = useContext(VaultLink);
   if (!vault) return null;
   const seen = new Set<string>();
-  const hints = tools.flatMap((t) => {
-    const h = vaultHint(t.tool, t.result);
+  const hints = tools.flatMap((tool) => {
+    const h = vaultHint(tool.tool, tool.result);
     if (!h) return [];
     const k = h.origin ?? '';
     if (seen.has(k)) return [];
@@ -60,7 +61,7 @@ function VaultLinks({ tools }: { tools: ToolEntry[] }) {
           className="inline-flex w-fit items-center gap-2 rounded-md px-1.5 py-1 text-[13px] font-medium text-accent-ink hover:bg-raised hover:text-ink"
         >
           <KeyRound className="size-3.5" strokeWidth={1.75} />
-          {h.origin ? `Ajouter un accès pour ${new URL(h.origin).host}` : 'Ajouter un accès'}
+          {h.origin ? t('Ajouter un accès pour {host}', { host: new URL(h.origin).host }) : t('Ajouter un accès')}
         </Link>
       ))}
     </div>
@@ -143,7 +144,7 @@ function Step({ e }: { e: ToolEntry }) {
         <span className="shrink-0 font-mono text-ink">{e.tool}</span>
         <span className="min-w-0 truncate text-ink-faint">{e.preview}</span>
         <span className="ml-auto shrink-0 font-mono text-ink-faint">
-          {e.state === 'running' ? 'en cours' : e.duration !== null ? `${e.duration.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s` : ''}
+          {e.state === 'running' ? t('en cours') : e.duration !== null ? `${e.duration.toLocaleString(locale(), { maximumFractionDigits: 1 })} s` : ''}
         </span>
         {hasResult && <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform duration-150', open && 'rotate-90')} strokeWidth={1.5} />}
       </button>
@@ -162,7 +163,7 @@ function Step({ e }: { e: ToolEntry }) {
  */
 function Steps({ tools }: { tools: ToolEntry[] }) {
   const times = useContext(Times) !== null;
-  const [open, setOpen] = useState(() => times || tools.length <= 3 || tools.some((t) => t.state === 'running'));
+  const [open, setOpen] = useState(() => times || tools.length <= 3 || tools.some((tool) => tool.state === 'running'));
   return (
     <div className="rounded-lg bg-paper px-1.5 py-1.5 text-ink-soft" data-steps>
       <button
@@ -173,7 +174,7 @@ function Steps({ tools }: { tools: ToolEntry[] }) {
         {stepsLabel(tools)}
       </button>
       <VaultLinks tools={tools} />
-      {open && <ul className="flex flex-col gap-0.5">{tools.map((t) => <Step key={t.key} e={t} />)}</ul>}
+      {open && <ul className="flex flex-col gap-0.5">{tools.map((tool) => <Step key={tool.key} e={tool} />)}</ul>}
     </div>
   );
 }
@@ -193,7 +194,7 @@ function PartBody({ p }: { p: Exclude<Part, { kind: 'steps' }> }) {
     case 'reasoning':
       return (
         <details className="text-[13px] text-ink-faint">
-          <summary className="cursor-pointer select-none">Raisonnement</summary>
+          <summary className="cursor-pointer select-none">{t('Raisonnement')}</summary>
           <p className="mt-2 whitespace-pre-wrap">{p.text}</p>
         </details>
       );
@@ -213,8 +214,8 @@ function CopyReply({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
-      type="button" title="Copier la réponse" aria-label="Copier la réponse"
-      onClick={() => void copyText(text, 'Réponse').then(() => { setDone(true); setTimeout(() => setDone(false), 1500); })}
+      type="button" title={t('Copier la réponse')} aria-label={t('Copier la réponse')}
+      onClick={() => void copyText(text, t('Réponse')).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); })}
       className="flex size-7 items-center justify-center rounded-md text-ink-faint transition-[color,background-color,opacity] hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
     >
       {done ? <Check className="size-3.5" strokeWidth={2} /> : <Copy className="size-3.5" strokeWidth={1.5} />}
@@ -318,92 +319,92 @@ function TurnButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 /** The text of a user message edited in place; "Envoyer" restarts the conversation from there. */
-function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel: () => void; onSend: (t: string) => void; busy: boolean }) {
+function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel: () => void; onSend: (value: string) => void; busy: boolean }) {
   const [value, setValue] = useState(text);
   const ok = value.trim().length > 0 && value !== text;
   return (
     <div className="min-w-0 flex-1" data-edit-message>
       <textarea
-        aria-label="Modifier le message" autoFocus value={value} onChange={(e) => setValue(e.target.value)} rows={Math.min(8, Math.max(2, value.split('\n').length))}
+        aria-label={t('Modifier le message')} autoFocus value={value} onChange={(e) => setValue(e.target.value)} rows={Math.min(8, Math.max(2, value.split('\n').length))}
         onKeyDown={(e) => {
           if (e.key === 'Escape') onCancel();
           if (e.key === 'Enter' && !e.shiftKey && ok && !busy) { e.preventDefault(); onSend(value); }
         }}
         className="w-full resize-y rounded-2xl border border-line bg-sheet px-4 py-2.5 text-sm outline-none focus:border-ink"
       />
-      <p className="mt-1 text-[11px] text-ink-faint">La suite de la conversation sera retirée (Annuler pendant 10 s ; « Créer une branche » d’abord pour la garder).</p>
+      <p className="mt-1 text-[11px] text-ink-faint">{t('La suite de la conversation sera retirée (Annuler pendant 10 s ; « Créer une branche » d’abord pour la garder).')}</p>
       <div className="mt-2 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel} disabled={busy}>Annuler</Button>
-        <Button onClick={() => onSend(value)} disabled={!ok || busy}>Envoyer</Button>
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>{t('Annuler')}</Button>
+        <Button onClick={() => onSend(value)} disabled={!ok || busy}>{t('Envoyer')}</Button>
       </div>
     </div>
   );
 }
 
-function DeliveryTurn({ t, clock: at }: { t: Extract<Turn, { kind: 'delegation' }>; clock: string }) {
+function DeliveryTurn({ turn, clock: at }: { turn: Extract<Turn, { kind: 'delegation' }>; clock: string }) {
   const wake = useContext(WakeInfo);
-  const summary = wake.summary === undefined ? undefined : t.entry.key === wake.lastKey ? wake.summary : null;
-  return <Delivery entry={t.entry} clock={at} footers={t.footers} summary={summary} />;
+  const summary = wake.summary === undefined ? undefined : turn.entry.key === wake.lastKey ? wake.summary : null;
+  return <Delivery entry={turn.entry} clock={at} footers={turn.footers} summary={summary} />;
 }
 
-function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: ThreadActions }) {
+function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; actions?: ThreadActions }) {
   const [editing, setEditing] = useState(false);
   const times = useContext(Times);
-  if (t.kind === 'delegation') return <DeliveryTurn t={t} clock={clock(t.entry.ts, Boolean(times))} />;
-  if (t.kind === 'user' && (t.entry.relaunch || t.entry.wake)) {
+  if (turn.kind === 'delegation') return <DeliveryTurn turn={turn} clock={clock(turn.entry.ts, Boolean(times))} />;
+  if (turn.kind === 'user' && (turn.entry.relaunch || turn.entry.wake)) {
     // sent by Intendia's server (goal loop, wake after sub-agents), not by the user: a quiet line, no bubble
-    const r = t.entry.relaunch;
+    const r = turn.entry.relaunch;
     return (
-      <div className="flex flex-col items-center gap-1" data-turn="user" {...(r ? { 'data-relaunch': `${r.n}/${r.max}` } : { 'data-wake': '' })} data-key={t.key}>
-        <div className="flex items-center gap-2 text-[12px] text-ink-faint" title={t.entry.text}>
+      <div className="flex flex-col items-center gap-1" data-turn="user" {...(r ? { 'data-relaunch': `${r.n}/${r.max}` } : { 'data-wake': '' })} data-key={turn.key}>
+        <div className="flex items-center gap-2 text-[12px] text-ink-faint" title={turn.entry.text}>
           <span className="h-px w-8 bg-line" />
-          <span>{r ? `Relance automatique ${r.n}/${r.max}` : 'Reprise automatique · sous-agents terminés'}</span>
+          <span>{r ? t('Relance automatique {n}/{max}', { n: r.n, max: r.max }) : t('Reprise automatique · sous-agents terminés')}</span>
           <span className="h-px w-8 bg-line" />
         </div>
-        {t.footers.length > 0 && <div className="flex flex-col items-center">{t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
+        {turn.footers.length > 0 && <div className="flex flex-col items-center">{turn.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
       </div>
     );
   }
-  if (t.kind === 'user') {
-    const editable = Boolean(actions?.canEdit(t.key));
+  if (turn.kind === 'user') {
+    const editable = Boolean(actions?.canEdit(turn.key));
     if (editing && actions) {
       return (
-        <div className="flex gap-3" data-turn="user" data-key={t.key}>
+        <div className="flex gap-3" data-turn="user" data-key={turn.key}>
           <Avatar name={USER} agent={false} />
-          <EditMessage text={t.entry.text} busy={actions.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); actions.edit(t.key, v); }} />
+          <EditMessage text={turn.entry.text} busy={actions.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); actions.edit(turn.key, v); }} />
         </div>
       );
     }
     // the user's turn on the right, in a bubble; the agent's on the left (reading a conversation at a glance)
     return (
-      <div className="group flex justify-end" data-turn="user" data-key={t.key}>
+      <div className="group flex justify-end" data-turn="user" data-key={turn.key}>
         <div className="flex min-w-0 max-w-[85%] flex-col items-end">
           <div className="flex min-w-0 items-center gap-1.5">
-            {editable && <TurnButton label="Modifier le message" onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
-            {t.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title="Donné à l’agent pendant son travail, après ses outils en cours">Réorientation</span>}
-            <Who name={USER} ts={t.entry.ts} seconds={Boolean(times)} />
+            {editable && <TurnButton label={t('Modifier le message')} onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
+            {turn.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title={t('Donné à l’agent pendant son travail, après ses outils en cours')}>{t('Réorientation')}</span>}
+            <Who name={USER} ts={turn.entry.ts} seconds={Boolean(times)} />
           </div>
-          <div className="mt-1 min-w-0 max-w-full rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5"><UserMessage text={t.entry.text} /></div>
-          {t.footers.length > 0 && <div className="mt-1 flex flex-col items-end">{t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
+          <div className="mt-1 min-w-0 max-w-full rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5"><UserMessage text={turn.entry.text} /></div>
+          {turn.footers.length > 0 && <div className="mt-1 flex flex-col items-end">{turn.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
         </div>
       </div>
     );
   }
   return (
-    <div data-turn="agent" data-key={t.key} className="group rounded-lg">
-      <AgentHeader ts={t.ts} name={agent} />
+    <div data-turn="agent" data-key={turn.key} className="group rounded-lg">
+      <AgentHeader ts={turn.ts} name={agent} />
       <div className={cx('mt-1.5 space-y-2.5 text-[15px]', AGENT_INDENT)}>
-        {t.parts.map((p) => <PartView key={p.key} p={p} />)}
-        {(t.footers.length > 0 || (t.text && !t.streaming) || actions) && (
+        {turn.parts.map((p) => <PartView key={p.key} p={p} />)}
+        {(turn.footers.length > 0 || (turn.text && !turn.streaming) || actions) && (
           <div className="space-y-0.5">
-            {t.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
+            {turn.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
             <div className="flex items-center gap-0.5">
-              {t.text && !t.streaming && <CopyReply text={t.text} />}
-              {actions && actions.retryTurn === t.key && (
-                <TurnButton label="Réessayer" onClick={actions.retry} disabled={actions.busy}><RotateCcw className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              {turn.text && !turn.streaming && <CopyReply text={turn.text} />}
+              {actions && actions.retryTurn === turn.key && (
+                <TurnButton label={t('Réessayer')} onClick={actions.retry} disabled={actions.busy}><RotateCcw className="size-3.5" strokeWidth={1.5} /></TurnButton>
               )}
-              {actions?.canBranch(t.key) && (
-                <TurnButton label="Créer une branche" onClick={() => actions.branch(t.key)} disabled={actions.busy}><GitBranch className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              {actions?.canBranch(turn.key) && (
+                <TurnButton label={t('Créer une branche')} onClick={() => actions.branch(turn.key)} disabled={actions.busy}><GitBranch className="size-3.5" strokeWidth={1.5} /></TurnButton>
               )}
             </div>
           </div>
@@ -415,14 +416,14 @@ function TurnView({ t, agent, actions }: { t: Turn; agent?: string; actions?: Th
 
 /** Shown at the end of the thread while a run is going on: what the agent is doing, with three moving dots. */
 export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?: string }) {
-  const t = thinkingState(entries);
+  const th = thinkingState(entries);
   const line = (
-    <div role="status" aria-live="polite" data-thinking className={cx('flex items-center gap-2.5 text-sm text-ink-soft', t.inTurn ? AGENT_INDENT : cx('mt-2', AGENT_INDENT))}>
+    <div role="status" aria-live="polite" data-thinking className={cx('flex items-center gap-2.5 text-sm text-ink-soft', th.inTurn ? AGENT_INDENT : cx('mt-2', AGENT_INDENT))}>
       <span aria-hidden className="thinking-dots"><span /><span /><span /></span>
-      <span className="thinking-label">{t.label}</span>
+      <span className="thinking-label">{th.label}</span>
     </div>
   );
-  if (t.inTurn) return <div className="mt-3">{line}</div>;
+  if (th.inTurn) return <div className="mt-3">{line}</div>;
   return <div className="mt-6"><AgentHeader ts={null} name={agent} />{line}</div>;
 }
 
@@ -447,7 +448,7 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
       <LiveDeliveries.Provider value={liveDeliveries}>
       <WakeInfo.Provider value={wake}>
         <div className="space-y-7">
-          {turns.map((t) => <TurnView key={t.key} t={t} agent={agent} actions={actions} />)}
+          {turns.map((turn) => <TurnView key={turn.key} turn={turn} agent={agent} actions={actions} />)}
         </div>
       </WakeInfo.Provider>
       </LiveDeliveries.Provider>
@@ -457,10 +458,10 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
 }
 
 const CHOICES: Record<string, { label: string; variant: 'primary' | 'secondary' | 'danger' }> = {
-  once: { label: 'Autoriser une fois', variant: 'primary' },
-  session: { label: 'Pour cette session', variant: 'secondary' },
-  always: { label: 'Toujours', variant: 'secondary' },
-  deny: { label: 'Refuser', variant: 'danger' },
+  once: { label: t('Autoriser une fois'), variant: 'primary' },
+  session: { label: t('Pour cette session'), variant: 'secondary' },
+  always: { label: t('Toujours'), variant: 'secondary' },
+  deny: { label: t('Refuser'), variant: 'danger' },
 };
 
 /** `inline`: without the thread's indent (notifications); `footer`: shown under the choices. */
@@ -472,7 +473,7 @@ export function ApprovalCard({ approval, onChoose, busy, inline, footer }: {
       <div className="rounded-xl border border-warn/40 bg-warn-soft/40 p-4">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Mark state="readonly" />
-          Approbation demandée
+          {t('Approbation demandée')}
         </div>
         {approval.description && <p className="mt-2 text-sm text-ink-soft">{approval.description}</p>}
         {approval.command && (

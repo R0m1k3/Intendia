@@ -20,23 +20,25 @@ import { ConfigPlugins } from '../config/Plugins';
 import { ConfigYaml } from '../config/Yaml';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask } from '../components/Dialog';
+import { t } from '../i18n';
+import { T } from '../i18n/T';
 
 const REQUIRED: OpRef[] = [['config', 'get']];
 const OPTIONAL: OptionalOp[] = [
-  ['config', 'schema', 'Formulaire'], ['config', 'put', 'Enregistrer le formulaire'], ['config', 'raw', 'Éditeur YAML et historique'],
-  ['config', 'putRaw', 'Enregistrer le YAML, restaurer'], ['config', 'modelInfo', 'Modèles'], ['config', 'setModel', 'Changer de modèle'],
-  ['config', 'env', 'Variables'], ['config', 'putEnv', 'Définir une variable'], ['config', 'mcpServers', 'Serveurs MCP'],
-  ['config', 'platforms', 'Plateformes'], ['config', 'restartGateway', 'Redémarrer la passerelle'],
-  ['config', 'oauthList', 'Abonnements'], ['config', 'oauthStart', 'Connecter un abonnement'], ['config', 'oauthPoll', 'Suivre une connexion'],
-  ['config', 'oauthCancel', 'Annuler une connexion'], ['config', 'oauthDisconnect', 'Déconnecter un abonnement'],
-  ['config', 'mcpCatalog', 'Catalogue MCP'], ['config', 'mcpAuth', 'Connexion OAuth MCP'],
-  ['config', 'poolList', 'Clés d’API'], ['config', 'poolAdd', 'Ajouter une clé'], ['config', 'poolRemove', 'Retirer une clé'],
+  ['config', 'schema', t('Formulaire')], ['config', 'put', t('Enregistrer le formulaire')], ['config', 'raw', t('Éditeur YAML et historique')],
+  ['config', 'putRaw', t('Enregistrer le YAML, restaurer')], ['config', 'modelInfo', t('Modèles')], ['config', 'setModel', t('Changer de modèle')],
+  ['config', 'env', t('Variables')], ['config', 'putEnv', t('Définir une variable')], ['config', 'mcpServers', t('Serveurs MCP')],
+  ['config', 'platforms', t('Plateformes')], ['config', 'restartGateway', t('Redémarrer la passerelle')],
+  ['config', 'oauthList', t('Abonnements')], ['config', 'oauthStart', t('Connecter un abonnement')], ['config', 'oauthPoll', t('Suivre une connexion')],
+  ['config', 'oauthCancel', t('Annuler une connexion')], ['config', 'oauthDisconnect', t('Déconnecter un abonnement')],
+  ['config', 'mcpCatalog', t('Catalogue MCP')], ['config', 'mcpAuth', t('Connexion OAuth MCP')],
+  ['config', 'poolList', t('Clés d’API')], ['config', 'poolAdd', t('Ajouter une clé')], ['config', 'poolRemove', t('Retirer une clé')],
 ];
 
 const PLUGINS_REQUIRED: OpRef[] = [['plugins', 'installed']];
 const PLUGINS_OPTIONAL: OptionalOp[] = [
-  ['plugins', 'catalog', 'Catalogue'], ['plugins', 'install', 'Installer'], ['plugins', 'enable', 'Activer'], ['plugins', 'disable', 'Désactiver'],
-  ['plugins', 'remove', 'Désinstaller'],
+  ['plugins', 'catalog', t('Catalogue')], ['plugins', 'install', t('Installer')], ['plugins', 'enable', t('Activer')], ['plugins', 'disable', t('Désactiver')],
+  ['plugins', 'remove', t('Désinstaller')],
 ];
 
 export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'garde-fous', 'yaml', 'variables', 'mcp', 'plugins', 'plateformes', 'historique'] as const;
@@ -45,15 +47,15 @@ export interface ConfigSearch { profile?: string; tab?: ConfigTab; key?: string 
 
 /** A tab shows when the config module has its operation (one of them, for a list); Plugins is its own module. */
 const TAB: Record<Exclude<ConfigTab, 'plugins'>, { label: string; op: string | string[] }> = {
-  modeles: { label: 'Modèles', op: 'modelInfo' },
-  fournisseurs: { label: 'Fournisseurs', op: ['oauthList', 'poolList'] },
-  reglages: { label: 'Réglages', op: 'schema' },
-  'garde-fous': { label: 'Garde-fous', op: 'schema' },
-  yaml: { label: 'YAML', op: 'raw' },
-  variables: { label: 'Variables', op: 'env' },
-  mcp: { label: 'MCP', op: 'mcpServers' },
-  plateformes: { label: 'Plateformes', op: 'platforms' },
-  historique: { label: 'Historique', op: 'raw' },
+  modeles: { label: t('Modèles'), op: 'modelInfo' },
+  fournisseurs: { label: t('Fournisseurs'), op: ['oauthList', 'poolList'] },
+  reglages: { label: t('Réglages'), op: 'schema' },
+  'garde-fous': { label: t('Garde-fous'), op: 'schema' },
+  yaml: { label: t('YAML'), op: 'raw' },
+  variables: { label: t('Variables'), op: 'env' },
+  mcp: { label: t('MCP'), op: 'mcpServers' },
+  plateformes: { label: t('Plateformes'), op: 'platforms' },
+  historique: { label: t('Historique'), op: 'raw' },
 };
 
 
@@ -70,7 +72,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   const a = useModuleAvailability(inst, 'config', REQUIRED, OPTIONAL);
   const can = (op: string) => a.has('config', op);
   const pa = useModuleAvailability(inst, 'plugins', PLUGINS_REQUIRED, PLUGINS_OPTIONAL);
-  const tabs = CONFIG_TABS.filter((t) => (t === 'plugins' ? pa.available : [TAB[t].op].flat().some(can)));
+  const tabs = CONFIG_TABS.filter((k) => (k === 'plugins' ? pa.available : [TAB[k].op].flat().some(can)));
   const tab: ConfigTab | undefined = search.tab && tabs.includes(search.tab) ? search.tab : tabs[0];
   const [needRestart, setNeedRestart] = useState(false);
   const restart = useRestart(inst, profile, () => setNeedRestart(false));
@@ -91,15 +93,15 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   return (
     <Narrow>
       <PageHeader
-        title="Configuration"
-        subtitle={<>Agent <span className="font-mono text-ink-soft">{profile}</span> sur {current ? current.label : 'l’instance'}</>}
+        title={t('Configuration')}
+        subtitle={<T k="Agent {profile} sur {instance}" vars={{ profile: <span className="font-mono text-ink-soft">{profile}</span>, instance: current ? current.label : t('l’instance') }} />}
         action={(
           <div className="flex flex-wrap items-center gap-2">
             <ProfileSelect inst={inst} value={profile}
               onChange={(p) => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: p === 'default' ? undefined : p, tab } })} />
             {a.available && can('restartGateway') && (
               <Button disabled={restart.running} onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}>
-                <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? 'Redémarrage…' : 'Redémarrer la passerelle'}
+                <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? t('Redémarrage…') : t('Redémarrer la passerelle')}
               </Button>
             )}
           </div>
@@ -107,18 +109,18 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
       />
       <div className="space-y-5 px-4 pb-14 md:px-8">
         <div className="empty:hidden">
-          <ModuleNotice instanceId={inst} module="config" title="La configuration" required={REQUIRED} optional={OPTIONAL} explainMissing />
+          <ModuleNotice instanceId={inst} module="config" title={t('La configuration')} required={REQUIRED} optional={OPTIONAL} explainMissing />
         </div>
         {(needRestart || pendingPlatform) && !restart.running && !restart.done && can('restartGateway') && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
-            <span>{pendingPlatform && !needRestart ? 'Une plateforme attend un redémarrage de la passerelle.' : 'Certains changements ne comptent qu’après un redémarrage de la passerelle.'}</span>
-            <Button onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}><RefreshCw className={ICON} strokeWidth={1.5} />Redémarrer</Button>
+            <span>{pendingPlatform && !needRestart ? t('Une plateforme attend un redémarrage de la passerelle.') : t('Certains changements ne comptent qu’après un redémarrage de la passerelle.')}</span>
+            <Button onClick={async () => { if (await ask(RESTART_CONFIRM)) restart.start(); }}><RefreshCw className={ICON} strokeWidth={1.5} />{t('Redémarrer')}</Button>
           </div>
         )}
         <RestartStrip state={restart} />
         {a.available && tab && (
           <>
-            <Chips role="tab" label="Sections" value={tab} items={tabs.map((t) => ({ key: t, label: t === 'plugins' ? 'Plugins' : TAB[t].label }))} onChange={(t) => go({ tab: t, key: undefined })} />
+            <Chips role="tab" label={t('Sections')} value={tab} items={tabs.map((k) => ({ key: k, label: k === 'plugins' ? t('Plugins') : TAB[k].label }))} onChange={(k) => go({ tab: k, key: undefined })} />
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}

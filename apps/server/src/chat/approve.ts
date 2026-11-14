@@ -1,4 +1,5 @@
 // Answer to an approval of a run, shared by the route (a click on the page) and the AutoApprover (« Sans confirmation »).
+import { msg } from '../i18n/index.js';
 import { RunStatusSchema } from '../connectors/chat/index.js';
 import { callOp } from '../connectors/runtime.js';
 import type { CompatService } from '../compat/service.js';
@@ -6,8 +7,8 @@ import type { SessionContext } from '../workspaces/service.js';
 import { readRunStatus } from './history.js';
 
 export const CONTROL_ERRORS = {
-  no_pending: 'Plus rien n’attend votre réponse',
-  ambiguous: 'Plusieurs demandes en attente : rechargez la page',
+  no_pending: msg('Plus rien n’attend votre réponse'),
+  ambiguous: msg('Plusieurs demandes en attente : rechargez la page'),
 } as const;
 
 export class ApproveError extends Error {
@@ -41,7 +42,7 @@ export async function answerApproval(
   compat: CompatService, ctx: SessionContext, runId: string, choice: 'once' | 'session' | 'always' | 'deny', requestId: string | null,
 ): Promise<unknown> {
   const s = await readRunStatus(compat, ctx.instance.id, ctx.profile, runId);
-  if (s.status === 'unknown') throw new ApproveError('run_gone', 'Ce run est terminé');
+  if (s.status === 'unknown') throw new ApproveError('run_gone', msg('Ce run est terminé'));
   const built = controlBody('approval', s.raw, requestId, choice);
   if ('code' in built) throw new ApproveError(built.code, CONTROL_ERRORS[built.code]);
   return callOp(compat.http(ctx.instance.id), compat.get(ctx.instance.id), 'chat', 'approval', { params: { run_id: runId }, profile: ctx.profile, body: built.body });

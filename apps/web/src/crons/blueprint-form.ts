@@ -1,4 +1,5 @@
 import type { Blueprint, BlueprintField } from '../api';
+import { t } from '../i18n';
 
 /**
  * Input of a template field: a time picker, a select for a closed list (Hermes `enum`, `weekdays`), a text input
@@ -13,7 +14,7 @@ export function controlOf(f: BlueprintField): FieldControl {
 }
 
 /** Hermes' named weekday recurrences, in French; other option labels are shown as Hermes sends them. */
-const WEEKDAY_LABELS: Record<string, string> = { everyday: 'tous les jours', weekdays: 'du lundi au vendredi', weekends: 'le week-end' };
+const WEEKDAY_LABELS: Record<string, string> = { everyday: t('tous les jours'), weekdays: t('du lundi au vendredi'), weekends: t('le week-end') };
 
 export function optionLabel(f: BlueprintField, o: { value: string; label: string }): string {
   return f.type === 'weekdays' ? WEEKDAY_LABELS[o.value] ?? o.label : o.label;

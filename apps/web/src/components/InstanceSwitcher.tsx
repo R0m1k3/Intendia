@@ -6,6 +6,7 @@ import { failedCount } from '../home/summary';
 import { useCurrentInstance } from '../instance/current';
 import { Popover } from './Menu';
 import { cx, Mark, worst } from './ui';
+import { plural, t } from '../i18n';
 
 /** What needs a look on each instance: crons whose last run failed, runs waiting for approval. */
 export function useAlerts(): (id: string) => { failed: number; approvals: number } {
@@ -19,8 +20,8 @@ export function useAlerts(): (id: string) => { failed: number; approvals: number
 
 function alertLabel({ failed, approvals }: { failed: number; approvals: number }): string | null {
   const parts = [
-    approvals ? `${approvals} approbation${approvals > 1 ? 's' : ''} en attente` : '',
-    failed ? `${failed} cron${failed > 1 ? 's' : ''} en échec` : '',
+    approvals ? plural(approvals, '{n} approbation en attente', '{n} approbations en attente') : '',
+    failed ? plural(failed, '{n} cron en échec', '{n} crons en échec') : '',
   ].filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }
@@ -61,7 +62,7 @@ export function InstanceSwitcher({ className, onPicked }: { className?: string; 
 
   if (instances.length < 2) {
     return (
-      <Link to="/etat" hash={instance.id} data-instance-switcher="" className={cx(BLOCK, 'hover:bg-raised', className)} title="État de l’instance">
+      <Link to="/etat" hash={instance.id} data-instance-switcher="" className={cx(BLOCK, 'hover:bg-raised', className)} title={t('État de l’instance')}>
         <Line instance={instance} report={report(instance.id)} />
       </Link>
     );
@@ -73,19 +74,19 @@ export function InstanceSwitcher({ className, onPicked }: { className?: string; 
   return (
     <div className={className} data-instance-switcher="">
       <Popover
-        title="Changer d’instance" placement="below" width={300}
+        title={t('Changer d’instance')} placement="below" width={300}
         triggerClass={cx(BLOCK, 'hover:bg-raised aria-expanded:bg-raised')}
         trigger={(
           <>
             <Line instance={instance} report={report(instance.id)} />
-            <Alert n={elsewhere.failed + elsewhere.approvals} label={elsewhereLabel && `Sur les autres instances : ${elsewhereLabel}`} />
+            <Alert n={elsewhere.failed + elsewhere.approvals} label={elsewhereLabel && t('Sur les autres instances : {alerts}', { alerts: elsewhereLabel })} />
             <ChevronsUpDown className="size-3.5 shrink-0 text-ink-faint" strokeWidth={1.5} />
           </>
         )}
       >
         {(close) => (
           <>
-            <p role="presentation" className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-ink-faint">Instances</p>
+            <p role="presentation" className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-ink-faint">{t('Instances')}</p>
             {instances.map((i) => {
               const a = alerts(i.id);
               return (
@@ -106,7 +107,7 @@ export function InstanceSwitcher({ className, onPicked }: { className?: string; 
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-ink-soft hover:bg-raised hover:text-ink focus:bg-raised focus:outline-none"
               >
                 <Settings2 className="size-4 shrink-0" strokeWidth={1.5} />
-                Gérer les instances
+                {t('Gérer les instances')}
               </Link>
             </div>
           </>

@@ -2,6 +2,7 @@ import { ArrowUp, CornerDownRight, FileText, FolderArchive, ShieldOff, Sparkles,
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
+import { locale, plural, t } from '../i18n';
 import { clearDraft, loadDraft, onFlush, saveDraft } from './draft';
 import { insertAt } from './insert';
 import { PromptPicker } from './PromptPicker';
@@ -141,7 +142,7 @@ export function Composer({
       if (preview) blobs.current.add(preview);
       return { file: f, tile: { id: nextId++, name: f.name, image, preview, agentPath: null, state: 'pending' as const } };
     });
-    setFiles((list) => [...list, ...tiles.map((t) => t.tile)]);
+    setFiles((list) => [...list, ...tiles.map((str) => str.tile)]);
     ref.current?.focus();
     void (async () => {
       for (const { file, tile } of tiles) {
@@ -150,7 +151,7 @@ export function Composer({
           free(tile.preview);
           const preview = tile.image ? done.url : null;
           if (extract && isArchive(file.name)) {
-            patch(tile.id, { preview, note: 'Décompression…' });
+            patch(tile.id, { preview, note: t('Décompression…') });
             patch(tile.id, await unpack(done, extract));
           } else {
             patch(tile.id, { state: 'done', agentPath: done.agentPath, preview });
@@ -160,7 +161,7 @@ export function Composer({
         }
       }
     })();
-    return tiles.map((t) => t.tile.id);
+    return tiles.map((str) => str.tile.id);
   };
   const remove = (a: Attachment) => {
     free(a.preview);
@@ -170,13 +171,13 @@ export function Composer({
 
   const hadFocus = useRef(false);
   /** Inserted at the cursor; an empty composer takes the text as is. */
-  const insertText = (t: string) => {
+  const insertText = (str: string) => {
     const el = ref.current;
-    if (!text.trim() || !el) { edit(t); el?.focus(); return; }
+    if (!text.trim() || !el) { edit(str); el?.focus(); return; }
     const at = el.selectionStart ?? text.length;
     const end = el.selectionEnd ?? at;
-    edit(text.slice(0, at) + t + text.slice(end));
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(at + t.length, at + t.length); });
+    edit(text.slice(0, at) + str + text.slice(end));
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(at + str.length, at + str.length); });
   };
   const unpaste = () => {
     if (!pastedText) return;
@@ -189,12 +190,12 @@ export function Composer({
   useImperativeHandle(handle, () => ({
     addFiles: (f: File[]) => { addFiles(f); },
     focus: () => ref.current?.focus(),
-    setText: (t: string) => { setText(t); ref.current?.focus(); },
+    setText: (str: string) => { setText(str); ref.current?.focus(); },
     openPrompts: (filter = '') => { setPromptFilter(filter); setPromptsOpen(true); },
-    insert: (t: string) => {
+    insert: (str: string) => {
       const el = ref.current;
       const [start, end] = el && hadFocus.current ? [el.selectionStart ?? text.length, el.selectionEnd ?? text.length] : [text.length, text.length];
-      const next = insertAt(text, start, end, t);
+      const next = insertAt(text, start, end, str);
       edit(next.value);
       requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(next.caret, next.caret); });
     },
@@ -211,11 +212,11 @@ export function Composer({
     if (!upload || disabled) return;
     const pasted = Array.from(e.clipboardData.files);
     if (!pasted.length) {
-      const t = e.clipboardData.getData('text/plain');
-      if (t.length <= LONG_PASTE) return;
+      const str = e.clipboardData.getData('text/plain');
+      if (str.length <= LONG_PASTE) return;
       e.preventDefault();
-      const [id] = addFiles([new File([t], pastedTextName(), { type: 'text/plain' })]);
-      if (id !== undefined) setPastedText({ id, text: t });
+      const [id] = addFiles([new File([str], pastedTextName(), { type: 'text/plain' })]);
+      if (id !== undefined) setPastedText({ id, text: str });
       return;
     }
     e.preventDefault();
@@ -235,7 +236,7 @@ export function Composer({
     const ok = await how(message, sentSkills.length ? sentSkills : undefined);
     setSending(false);
     if (ok) {
-      setText((t) => (t === sentText ? '' : t));
+      setText((str) => (str === sentText ? '' : str));
       if (draftKey && latest.current.text === sentText) clearDraft(draftKey);
       for (const a of files) free(a.preview);
       setFiles((all) => all.filter((a) => !sent.has(a.id)));
@@ -252,13 +253,13 @@ export function Composer({
   const pickedSkill = skillMenu ? skillMenu[Math.min(pick, skillMenu.length - 1)]! : null;
   const addSkill = (name: string) => {
     if (skills.includes(name)) { edit(''); return; }
-    if (skills.length >= 3) { setCommandNote('3 skills au plus par message'); return; }
+    if (skills.length >= 3) { setCommandNote(t('3 skills au plus par message')); return; }
     setSkills([...skills, name]);
     edit('');
     ref.current?.focus();
   };
   const picked = menu ? menu[Math.min(pick, menu.length - 1)]! : null;
-  const edit = (t: string) => { setText(t); setPick(0); setCommandNote(null); };
+  const edit = (str: string) => { setText(str); setPick(0); setCommandNote(null); };
   /** Runs the command written in the text; false = the text is an ordinary message. */
   const runCommand = async (): Promise<boolean> => {
     if (!commands || !onCommand || sending) return false;
@@ -267,15 +268,15 @@ export function Composer({
     // /use <skill> stays in the composer: a pill for the next message
     if (found.command.name === 'use' && !found.command.disabled) {
       if (skillNames?.includes(found.arg)) addSkill(found.arg);
-      else setCommandNote(found.arg ? `Skill inconnu ou désactivé : ${found.arg}` : 'Écrivez le nom du skill après /use');
+      else setCommandNote(found.arg ? t('Skill inconnu ou désactivé : {name}', { name: found.arg }) : t('Écrivez le nom du skill après /use'));
       return true;
     }
-    if (found.command.disabled) { setCommandNote(`/${found.command.name} : ${found.command.disabled}`); return true; }
+    if (found.command.disabled) { setCommandNote(t('/{name} : {reason}', { name: found.command.name, reason: found.command.disabled })); return true; }
     const sentText = text;
     setSending(true);
     const ok = await onCommand(found.command.name, found.arg).catch(() => false);
     setSending(false);
-    if (ok) setText((t) => (t === sentText ? '' : t));
+    if (ok) setText((str) => (str === sentText ? '' : str));
     return true;
   };
   const choose = async (c: Command) => {
@@ -283,11 +284,11 @@ export function Composer({
     // a command with an argument: its name goes in the text, the user goes on typing
     if (c.args) { edit(`/${c.name} `); ref.current?.focus(); return; }
     setText(`/${c.name}`);
-    if (c.disabled) { setCommandNote(`/${c.name} : ${c.disabled}`); setClosedFor(`/${c.name}`); return; }
+    if (c.disabled) { setCommandNote(t('/{name} : {reason}', { name: c.name, reason: c.disabled })); setClosedFor(`/${c.name}`); return; }
     setSending(true);
     const ok = await onCommand!(c.name, '').catch(() => false);
     setSending(false);
-    setText((t) => (ok && t === `/${c.name}` ? '' : t));
+    setText((str) => (ok && str === `/${c.name}` ? '' : str));
   };
   const enter = async () => {
     if (await runCommand()) return;
@@ -300,8 +301,8 @@ export function Composer({
     await submit(async (m, sk) => { onQueue(m, sk); return true; });
   };
   // a reorientation is text only: files would be cited before they are seen
-  const steerBlock = files.length > 0 ? 'Réorienter n’accepte pas de pièces jointes'
-    : skills.length > 0 ? 'Réorienter n’accepte pas de skill' : steerDisabled;
+  const steerBlock = files.length > 0 ? t('Réorienter n’accepte pas de pièces jointes')
+    : skills.length > 0 ? t('Réorienter n’accepte pas de skill') : steerDisabled;
   const canSteer = Boolean(onSteer) && text.trim() !== '' && !sending && !disabled && !steerBlock;
   const steer = async () => {
     if (!canSteer || !running || !onSteer) return;
@@ -314,12 +315,12 @@ export function Composer({
     <div className={cx('card p-2 pl-2.5 transition-colors focus-within:border-ink-faint', disabled && 'opacity-60')}>
       {queue && queue.items.length > 0 && (
         <div className="px-1 pb-1.5 pt-1" data-queue>
-          <ul className="flex flex-wrap gap-1.5" aria-label="Messages en attente">
+          <ul className="flex flex-wrap gap-1.5" aria-label={t('Messages en attente')}>
             {queue.items.map((q, i) => (
               <li key={q.id} data-queued className="flex max-w-full items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
                 <span className="text-ink-faint">{i + 1}.</span>
                 <span className="max-w-[16rem] truncate" title={q.text}>{q.text}</span>
-                <button type="button" onClick={() => queue.onRemove(q.id)} aria-label={`Retirer « ${q.text.slice(0, 40)} » de la file`}
+                <button type="button" onClick={() => queue.onRemove(q.id)} aria-label={t('Retirer « {text} » de la file', { text: q.text.slice(0, 40) })}
                   className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
                   <X className="size-3" strokeWidth={2} />
                 </button>
@@ -329,38 +330,38 @@ export function Composer({
           <p className="mt-1 text-[11px] text-ink-faint">
             {queue.paused ? (
               <>
-                En pause : {queue.paused} ·{' '}
-                <button type="button" onClick={queue.onResume} className="font-medium text-accent-ink hover:underline">Reprendre</button>
+                {t('En pause : {why}', { why: queue.paused })} ·{' '}
+                <button type="button" onClick={queue.onResume} className="font-medium text-accent-ink hover:underline">{t('Reprendre')}</button>
               </>
-            ) : running ? 'Envoyé à la fin du travail en cours, un message à la fois' : (
-              <button type="button" onClick={queue.onResume} className="font-medium text-accent-ink hover:underline">Envoyer le suivant</button>
+            ) : running ? t('Envoyé à la fin du travail en cours, un message à la fois') : (
+              <button type="button" onClick={queue.onResume} className="font-medium text-accent-ink hover:underline">{t('Envoyer le suivant')}</button>
             )}
           </p>
         </div>
       )}
       {files.length > 0 && (
-        <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label="Pièces jointes">
+        <ul className="flex flex-wrap gap-2 px-1 pb-1 pt-1" aria-label={t('Pièces jointes')}>
           {files.map((a) => <Tile key={a.id} a={a} onRemove={() => remove(a)} />)}
         </ul>
       )}
       {pastedText && files.some((a) => a.id === pastedText.id) && (
         <p data-long-paste className="px-1.5 pb-1 text-[12px] text-ink-soft">
-          Texte collé joint en fichier ({pastedText.text.length.toLocaleString('fr-FR')} caractères) ·{' '}
-          <button type="button" onClick={unpaste} className="font-medium text-accent-ink hover:underline">Remettre en texte</button>
+          {t('Texte collé joint en fichier ({n} caractères)', { n: pastedText.text.length.toLocaleString(locale()) })} ·{' '}
+          <button type="button" onClick={unpaste} className="font-medium text-accent-ink hover:underline">{t('Remettre en texte')}</button>
         </p>
       )}
       {(skills.length > 0 || autoApprove) && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1">
           {autoApprove && (
-            <button type="button" data-auto-approve onClick={autoApprove.onOff} title="L’agent agit sans demander votre accord. Cliquer pour redemander l’accord."
+            <button type="button" data-auto-approve onClick={autoApprove.onOff} title={t('L’agent agit sans demander votre accord. Cliquer pour redemander l’accord.')}
               className="flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-xs text-warn hover:border-warn">
-              <ShieldOff className="size-3" strokeWidth={2} /> Sans confirmation <X className="size-3" strokeWidth={2} />
+              <ShieldOff className="size-3" strokeWidth={2} /> {t('Sans confirmation')} <X className="size-3" strokeWidth={2} />
             </button>
           )}
           {skills.map((name) => (
             <span key={name} data-skill-pill={name} className="flex items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
-              <Sparkles className="size-3 text-ink-faint" strokeWidth={1.75} /> Skill : <span className="font-mono">{name}</span>
-              <button type="button" onClick={() => setSkills(skills.filter((x) => x !== name))} aria-label={`Retirer le skill ${name}`}
+              <Sparkles className="size-3 text-ink-faint" strokeWidth={1.75} /> {t('Skill : ')}<span className="font-mono">{name}</span>
+              <button type="button" onClick={() => setSkills(skills.filter((x) => x !== name))} aria-label={t('Retirer le skill {name}', { name })}
                 className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
                 <X className="size-3" strokeWidth={2} />
               </button>
@@ -381,7 +382,7 @@ export function Composer({
         </ul>
       )}
       {menu && (
-        <ul role="listbox" aria-label="Commandes" data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
+        <ul role="listbox" aria-label={t('Commandes')} data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
           {menu.map((c) => (
             <li key={c.name} role="option" aria-selected={c === picked} aria-disabled={Boolean(c.disabled)}
               onMouseDown={(e) => { e.preventDefault(); void choose(c); }}
@@ -397,8 +398,7 @@ export function Composer({
       )}
       {failed.length > 0 && (
         <p role="alert" className="px-1.5 pb-1 text-[12px] text-bad">
-          {failed.length === 1 ? 'Pièce jointe non envoyée' : `${failed.length} pièces jointes non envoyées`}
-          {' '}({failed.map((a) => a.error ?? a.name).join(' ; ')}). {failed.length === 1 ? 'Retirez-la' : 'Retirez-les'} pour envoyer le message.
+          {plural(failed.length, 'Pièce jointe non envoyée ({why}). Retirez-la pour envoyer le message.', '{n} pièces jointes non envoyées ({why}). Retirez-les pour envoyer le message.', { why: failed.map((a) => a.error ?? a.name).join(' ; ') })}
         </p>
       )}
       <textarea
@@ -436,7 +436,7 @@ export function Composer({
             void enter();
           }
         }}
-        placeholder={placeholder ?? 'Écrire à l’agent'}
+        placeholder={placeholder ?? t('Écrire à l’agent')}
         aria-label="Message"
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
@@ -453,8 +453,8 @@ export function Composer({
               type="button"
               onClick={() => picker.current?.click()}
               disabled={disabled}
-              aria-label="Joindre des fichiers"
-              title="Joindre des fichiers (déposés dans inbox/)"
+              aria-label={t('Joindre des fichiers')}
+              title={t('Joindre des fichiers (déposés dans inbox/)')}
               className="flex size-[34px] shrink-0 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-40"
             >
               <Paperclip className="size-4" strokeWidth={1.5} />
@@ -471,15 +471,15 @@ export function Composer({
         {/* narrow: the options get their own line above the buttons, the hint stays on the buttons' line */}
         <div data-composer-options className="order-first flex min-w-0 basis-full overflow-x-auto [scrollbar-width:none] @2xl:order-none @2xl:basis-auto @2xl:flex-none">{options}</div>
         {running && onSteer && (
-          <button type="button" onClick={() => void steer()} disabled={!canSteer} aria-label="Réorienter"
-            title={steerBlock ?? 'Réorienter : donner ce texte à l’agent tout de suite, après ses outils en cours'}
+          <button type="button" onClick={() => void steer()} disabled={!canSteer} aria-label={t('Réorienter')}
+            title={steerBlock ?? t('Réorienter : donner ce texte à l’agent tout de suite, après ses outils en cours')}
             className={cx(iconButton, 'text-ink-soft hover:bg-raised hover:text-ink')}>
             <CornerDownRight className="size-4" strokeWidth={1.5} />
           </button>
         )}
         {running && onQueue && (
-          <button type="button" onClick={() => void queueOrCommand()} disabled={!canSend} aria-label="Mettre en file"
-            title="Mettre en file (Entrée) : envoyé à la fin du travail en cours"
+          <button type="button" onClick={() => void queueOrCommand()} disabled={!canSend} aria-label={t('Mettre en file')}
+            title={t('Mettre en file (Entrée) : envoyé à la fin du travail en cours')}
             className={cx(iconButton, 'text-ink-soft hover:bg-raised hover:text-ink')}>
             <ListPlus className="size-4" strokeWidth={1.5} />
           </button>
@@ -488,8 +488,8 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            aria-label="Arrêter"
-            title="Arrêter"
+            aria-label={t('Arrêter')}
+            title={t('Arrêter')}
             className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border border-line text-ink transition-colors hover:bg-raised"
           >
             <Square className="size-3.5 fill-current" strokeWidth={1.5} />
@@ -499,8 +499,8 @@ export function Composer({
             type="button"
             onClick={() => void enter()}
             disabled={!canSend}
-            aria-label="Envoyer"
-            title={waiting ? (files.some((a) => a.state === 'failed') ? 'Retirez les pièces jointes en échec' : 'Envoi des pièces jointes…') : 'Envoyer (Entrée)'}
+            aria-label={t('Envoyer')}
+            title={waiting ? (files.some((a) => a.state === 'failed') ? t('Retirez les pièces jointes en échec') : t('Envoi des pièces jointes…')) : t('Envoyer (Entrée)')}
             className="flex size-[34px] shrink-0 items-center justify-center rounded-lg border border-accent-strong bg-accent text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-40"
           >
             <ArrowUp className="size-4" strokeWidth={1.75} />
@@ -516,7 +516,7 @@ function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
   const failed = a.state === 'failed';
   return (
     <li
-      data-attachment={a.state} title={failed ? `Échec : ${a.error ?? ''}` : a.name}
+      data-attachment={a.state} title={failed ? t('Échec : {error}', { error: a.error ?? '' }) : a.name}
       className={cx('group relative', a.image ? 'size-16' : 'flex h-16 max-w-[14rem] items-center')}
     >
       {a.image && a.preview ? (
@@ -531,12 +531,12 @@ function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
         </span>
       )}
       {a.state === 'pending' && (
-        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" aria-label="Envoi…">
+        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" aria-label={t('Envoi…|fichier')}>
           <Loader2 className="size-4 animate-spin text-ink-soft" strokeWidth={1.75} />
         </span>
       )}
       <button
-        type="button" onClick={onRemove} aria-label={`Retirer ${a.name}`} title={`Retirer ${a.name}`}
+        type="button" onClick={onRemove} aria-label={t('Retirer {name}', { name: a.name })} title={t('Retirer {name}', { name: a.name })}
         className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
       >
         <X className="size-3" strokeWidth={2} />
@@ -550,11 +550,11 @@ async function unpack(done: { agentPath: string; path: string }, extract: Extrac
   try {
     const r = await extract(done.path);
     const agentPath = done.agentPath.slice(0, done.agentPath.length - done.path.length) + r.folder;
-    const n = r.count === 1 ? '1 fichier' : `${r.count} fichiers`;
-    const extra = [r.skipped.length ? `${r.skipped.length} ignorés` : '', r.partial ? 'incomplet' : ''].filter(Boolean).join(', ');
-    return { state: 'done', agentPath, note: `${n} dans ${r.folder}/${extra ? ` (${extra})` : ''}` };
+    const n = plural(r.count, '{n} fichier', '{n} fichiers');
+    const extra = [r.skipped.length ? t('{n} ignorés', { n: r.skipped.length }) : '', r.partial ? t('incomplet') : ''].filter(Boolean).join(', ');
+    return { state: 'done', agentPath, note: extra ? t('{files} dans {folder}/ ({extra})', { files: n, folder: r.folder, extra }) : t('{files} dans {folder}/', { files: n, folder: r.folder }) };
   } catch (err) {
-    return { state: 'done', agentPath: done.agentPath, note: `Non décompressée : ${err instanceof Error ? err.message : String(err)}` };
+    return { state: 'done', agentPath: done.agentPath, note: t('Non décompressée : {error}', { error: err instanceof Error ? err.message : String(err) }) };
   }
 }
 

@@ -1,4 +1,5 @@
 import { ApiError } from '../api';
+import { t } from '../i18n';
 
 /** Uploads files one by one (raw body, streamed by the server) into a workspace folder. */
 export async function uploadFiles(slug: string, dir: string, files: File[]): Promise<{ path: string; agentPath: string }[]> {
@@ -11,7 +12,7 @@ export async function uploadFiles(slug: string, dir: string, files: File[]): Pro
       body: f,
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok) throw new ApiError(res.status, `${f.name} : ${(data as { error?: string } | null)?.error ?? `HTTP ${res.status}`}`, data);
+    if (!res.ok) throw new ApiError(res.status, t('{name} : {error}', { name: f.name, error: (data as { error?: string } | null)?.error ?? `HTTP ${res.status}` }), data);
     done.push(data as { path: string; agentPath: string });
   }
   return done;

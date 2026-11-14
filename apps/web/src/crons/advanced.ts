@@ -1,4 +1,5 @@
 import type { Cron, CronInput } from '../api';
+import { t } from '../i18n';
 
 /** The "Options avancées" of a cron as the form holds them (strings for the inputs). */
 export interface AdvancedForm {
@@ -32,10 +33,10 @@ const TZ_RE = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$|^UTC$/;
 
 /** The first problem of the form, or null. */
 export function advancedError(f: AdvancedForm): string | null {
-  if (f.repeat.trim() && !intIn(f.repeat, 1, 100_000)) return 'Répétition : un nombre entier de 1 à 100 000 (vide = toujours)';
-  if (f.timezone.trim() && !TZ_RE.test(f.timezone.trim())) return 'Fuseau horaire inconnu (exemple : Europe/Paris)';
-  if (f.grace.trim() && !intIn(f.grace, 0, 10_080)) return 'Délai de grâce : des minutes, de 0 à 10 080';
-  if (f.contextFrom.length > 10) return 'Contexte : 10 crons au plus';
+  if (f.repeat.trim() && !intIn(f.repeat, 1, 100_000)) return t('Répétition : un nombre entier de 1 à 100 000 (vide = toujours)');
+  if (f.timezone.trim() && !TZ_RE.test(f.timezone.trim())) return t('Fuseau horaire inconnu (exemple : Europe/Paris)');
+  if (f.grace.trim() && !intIn(f.grace, 0, 10_080)) return t('Délai de grâce : des minutes, de 0 à 10 080');
+  if (f.contextFrom.length > 10) return t('Contexte : 10 crons au plus');
   return null;
 }
 

@@ -18,6 +18,7 @@ import { checkEndpoint, HERMES_ALIASES, keyEnvFor, readCustomProviders, slugFor,
 import { declaredModels, editableShape, type Declared } from './declared.js';
 import { KNOWN_MIN, Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * Settings of a Hermes instance (phase 6): config form and YAML editor, history, models, env, MCP servers,
@@ -59,9 +60,9 @@ export const ANTHROPIC_TOKEN_VARS = ['ANTHROPIC_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN
 /** A `claude setup-token` token (`sk-ant-oat…`), trimmed; refuses a console API key with its own message. */
 export function checkSetupToken(raw: string): string {
   const t = raw.trim();
-  if (t.startsWith('sk-ant-api')) throw new ConfigInputError('api_key_given', 'C’est une clé d’API : ajoutez-la dans Clés d’API');
+  if (t.startsWith('sk-ant-api')) throw new ConfigInputError('api_key_given', msg('C’est une clé d’API : ajoutez-la dans Clés d’API'));
   if (t.length < 20 || t.length > 4096 || /\s/.test(t) || !t.startsWith('sk-ant-oat')) {
-    throw new ConfigInputError('invalid_token', 'Ce n’est pas un jeton de claude setup-token (sk-ant-oat…)');
+    throw new ConfigInputError('invalid_token', msg('Ce n’est pas un jeton de claude setup-token (sk-ant-oat…)'));
   }
   return t;
 }
@@ -69,7 +70,7 @@ export function checkSetupToken(raw: string): string {
 export class ConfirmRequiredError extends Error {
   readonly code = 'confirm_required';
   constructor(readonly prompt: string, readonly task?: string) {
-    super('Confirmation demandée par Hermes');
+    super(msg('Confirmation demandée par Hermes'));
     this.name = 'ConfirmRequiredError';
   }
 }
@@ -77,7 +78,7 @@ export class ConfirmRequiredError extends Error {
 /** Some tasks of a group write may be written and could not be put back: the history copy stays. */
 export class PartialWriteError extends Error {
   readonly code = 'partial_write';
-  constructor(message = "Écriture peut-être partielle : vérifiez les valeurs ou restaurez la version d'avant dans l'onglet Historique") {
+  constructor(message = msg('Écriture peut-être partielle : vérifiez les valeurs ou restaurez la version d\'avant dans l\'onglet Historique')) {
     super(message);
     this.name = 'PartialWriteError';
   }
@@ -166,14 +167,14 @@ function getPath(obj: unknown, path: string): unknown {
  * 422), a conflict (409), a not found (404) or a Hermes error, its detail masked. `scrub` cleans the detail first
  * (e.g. removes a key the request carried, which Hermes may repeat). Other errors are returned as they are.
  */
-export function toConfigError(mask: Masker, err: unknown, what = 'Introuvable', scrub: (s: string) => string = (s) => s): unknown {
+export function toConfigError(mask: Masker, err: unknown, what = msg('Introuvable'), scrub: (s: string) => string = (s) => s): unknown {
   if (!(err instanceof HermesError && err.kind === 'http')) return err;
   const detail = mask.text(scrub(hermesDetail(err)));
   const status = err.detail.status;
-  if (status === 404) return new NotFoundError(`${what} : ${detail}`);
-  if (status === 400 || status === 422) return new ConfigInputError('hermes_refused', `Requête refusée par Hermes : ${detail}`);
-  if (status === 409) return new ConfigConflictError('hermes_conflict', `Conflit signalé par Hermes : ${detail}`);
-  return new HermesError('http', `Hermes a répondu ${status} : ${detail}`, err.detail);
+  if (status === 404) return new NotFoundError(msg('{what} : {detail}', { what, detail }));
+  if (status === 400 || status === 422) return new ConfigInputError('hermes_refused', msg('Requête refusée par Hermes : {detail}', { detail }));
+  if (status === 409) return new ConfigConflictError('hermes_conflict', msg('Conflit signalé par Hermes : {detail}', { detail }));
+  return new HermesError('http', msg('Hermes a répondu {status} : {detail}', { status, detail }), err.detail);
 }
 
 const KNOWN_TTL_MS = 60_000;
@@ -197,7 +198,7 @@ export class ConfigService {
   readonly gateway: GatewayService;
 
   private ctx(instanceId: string, profile: string): Ctx {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId), instanceId, profile };
   }
 
@@ -212,7 +213,7 @@ export class ConfigService {
   }
 
   /** Hermes call with error translation (texts masked). */
-  private async call<T = unknown>(ctx: Ctx, op: string, opts: CallOptions = {}, what = 'Introuvable', scrub?: (s: string) => string): Promise<T> {
+  private async call<T = unknown>(ctx: Ctx, op: string, opts: CallOptions = {}, what = msg('Introuvable'), scrub?: (s: string) => string): Promise<T> {
     try {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
@@ -271,13 +272,13 @@ export class ConfigService {
       const current = await this.readRaw(ctx);
       if (current === null) {
         if (CHECKED.has(source)) {
-          throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+          throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
         }
         await fn(null);
         return { version: null };
       }
       if (CHECKED.has(source) && expected !== null && versionOf(current) !== expected) {
-        throw new ConfigConflictError('config_changed', "La configuration a changé dans Hermes depuis l'affichage");
+        throw new ConfigConflictError('config_changed', msg('La configuration a changé dans Hermes depuis l\'affichage'));
       }
       const copied = this.copy(ctx, source, current);
       try {
@@ -372,7 +373,7 @@ export class ConfigService {
   private versionText(ctx: Ctx, id: number): string {
     const row = this.rows(ctx).find((r) => r.id === id);
     const text = row ? this.openRow(row).text : null;
-    if (text === null) throw new NotFoundError(`Copie introuvable : ${id}`);
+    if (text === null) throw new NotFoundError(msg('Copie introuvable : {id}', { id }));
     return text;
   }
 
@@ -427,17 +428,17 @@ export class ConfigService {
     const ctx = this.ctx(instanceId, profile);
     const { fields } = ConfigSchemaSchema.parse(await this.call<unknown>(ctx, 'schema'));
     for (const [path, value] of Object.entries(changes)) {
-      if (MODEL_PATHS.has(path)) throw new ConfigInputError('model_field', `${path} se change dans l'onglet Modèles`, { path });
+      if (MODEL_PATHS.has(path)) throw new ConfigInputError('model_field', msg("{path} se change dans l'onglet Modèles", { path }), { path });
       const field = fields[path];
-      if (!field) throw new ConfigInputError('unknown_field', `Réglage inconnu : ${path}`, { path });
+      if (!field) throw new ConfigInputError('unknown_field', msg('Réglage inconnu : {path}', { path }), { path });
       const strings = typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((v) => typeof v === 'string') : [];
       if (strings.some((s) => s.includes(PLACEHOLDER_START))) {
-        throw new ConfigInputError('secret_placeholder', `${path} : valeur masquée`, { path });
+        throw new ConfigInputError('secret_placeholder', msg('{path} : valeur masquée', { path }), { path });
       }
       // `null` = back to Hermes' default, only for the fields Hermes types `string` because their default is None
       // (agent.run_budget_seconds, agent.max_turns, kanban.max_in_progress…): « no limit »
       const bad = checkValue(field, value, { allowNull: field.type === 'string' });
-      if (bad) throw new ConfigInputError('invalid_field', `${path} : ${bad}`, { paths: [path] });
+      if (bad) throw new ConfigInputError('invalid_field', msg('{what} : {detail}', { what: path, detail: bad }), { paths: [path] });
     }
     return this.write(ctx, 'form', version, async () => {
       await this.call(ctx, 'put', { body: { config: unflatten(changes) } });
@@ -449,7 +450,7 @@ export class ConfigService {
   async raw(instanceId: string, profile: string): Promise<{ yaml: string; version: string }> {
     const ctx = this.ctx(instanceId, profile);
     const text = await this.readRaw(ctx);
-    if (text === null) throw new ConfigConflictError('config_unavailable', 'Hermes ne donne pas le fichier de configuration');
+    if (text === null) throw new ConfigConflictError('config_unavailable', msg('Hermes ne donne pas le fichier de configuration'));
     return { yaml: this.mask.yaml(text), version: versionOf(text) };
   }
 
@@ -465,7 +466,7 @@ export class ConfigService {
         throw err;
       }
       const bad = validateDoc(parse(text).toJS(), fields);
-      if (bad.length) throw new ConfigInputError('invalid_field', `Valeurs invalides : ${bad.join(', ')}`, { paths: bad });
+      if (bad.length) throw new ConfigInputError('invalid_field', msg('Valeurs invalides : {paths}', { paths: bad.join(', ') }), { paths: bad });
       await this.call(ctx, 'putRaw', { body: { yaml_text: text } });
     });
   }
@@ -527,10 +528,10 @@ export class ConfigService {
     let next: string[] = [];
     try {
       await this.write(ctx, 'provider-models', null, async (current) => {
-        if (current === null) throw new ConfigConflictError('config_unreadable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+        if (current === null) throw new ConfigConflictError('config_unreadable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
         const d = declaredModels(current).get(provider);
         if (d && (d.custom || !editableShape(d.shape))) {
-          throw new ConfigInputError('not_editable', 'Les modèles de ce fournisseur se modifient dans l\'onglet YAML', { provider });
+          throw new ConfigInputError('not_editable', msg('Les modèles de ce fournisseur se modifient dans l\'onglet YAML'), { provider });
         }
         const ids = d?.ids ?? [];
         if ('add' in change) {
@@ -557,7 +558,7 @@ export class ConfigService {
       if (change.scope === 'auxiliary') body.task = change.task;
       if (change.confirm) body.confirm_expensive_model = true;
       const out = ModelSetSchema.parse(await this.call<unknown>(ctx, 'setModel', { body }));
-      if (out.ok === false && out.confirm_required) throw new ConfirmRequiredError(this.mask.text(out.confirm_message ?? 'Confirmer ce modèle ?'));
+      if (out.ok === false && out.confirm_required) throw new ConfirmRequiredError(this.mask.text(out.confirm_message ?? msg('Confirmer ce modèle ?')));
       if (out.notice) notice = this.mask.text(out.notice);
     });
     return notice ? { ...res, notice } : res;
@@ -579,7 +580,7 @@ export class ConfigService {
           if (input.confirm) body.confirm_expensive_model = true;
           const out = ModelSetSchema.parse(await this.call<unknown>(ctx, 'setModel', { body }));
           if (out.ok === false && out.confirm_required) {
-            throw new ConfirmRequiredError(this.mask.text(out.confirm_message ?? 'Confirmer ce modèle ?'), change.task);
+            throw new ConfirmRequiredError(this.mask.text(out.confirm_message ?? msg('Confirmer ce modèle ?')), change.task);
           }
           if (out.notice) {
             const n = this.mask.text(out.notice);
@@ -622,7 +623,7 @@ export class ConfigService {
   async deleteEnv(instanceId: string, profile: string, key: string): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
     return this.write(ctx, 'env', null, async () => {
-      await this.call(ctx, 'deleteEnv', { body: { key } }, 'Variable introuvable');
+      await this.call(ctx, 'deleteEnv', { body: { key } }, msg('Variable introuvable'));
     });
   }
 
@@ -633,14 +634,14 @@ export class ConfigService {
    * (`active_profile`): it goes through `write` for that profile, so the file is copied first.
    */
   async setOrchestration(instanceId: string, body: Record<string, unknown>): Promise<{ version: string | null; profile: string }> {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     const http = this.compat.http(instanceId);
     const report = this.compat.get(instanceId);
     const kanban = async <T>(op: string, opts: CallOptions = {}): Promise<T> => {
       try {
         return await callOp<T>(http, report, 'kanban', op, opts);
       } catch (err) {
-        throw toConfigError(this.mask, err, 'Orchestration');
+        throw toConfigError(this.mask, err, msg('Orchestration'));
       }
     };
     const current = await kanban<{ active_profile?: unknown }>('orchestration');
@@ -721,8 +722,8 @@ export class ConfigService {
   async replaceMcp(instanceId: string, profile: string, input: { name: string; url: string; token: string; exists: boolean }): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
     return this.write(ctx, 'mcp', null, async (original) => {
-      if (original === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
-      if (input.exists) await this.call(ctx, 'removeMcp', { params: { name: input.name } }, 'Serveur MCP introuvable');
+      if (original === null) throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
+      if (input.exists) await this.call(ctx, 'removeMcp', { params: { name: input.name } }, msg('Serveur MCP introuvable'));
       try {
         await this.call(ctx, 'addMcp', { body: { name: input.name, url: input.url, auth: 'header', bearer_token: input.token } });
       } catch (err) {
@@ -740,14 +741,14 @@ export class ConfigService {
 
   async testMcp(instanceId: string, profile: string, name: string): Promise<{ ok: boolean; tools: string[]; error?: string }> {
     const ctx = this.ctx(instanceId, profile);
-    const out = McpTestSchema.parse(await this.call<unknown>(ctx, 'testMcp', { params: { name }, timeoutMs: TEST_MS }, 'Serveur MCP introuvable'));
+    const out = McpTestSchema.parse(await this.call<unknown>(ctx, 'testMcp', { params: { name }, timeoutMs: TEST_MS }, msg('Serveur MCP introuvable')));
     return { ok: out.ok, tools: (out.tools ?? []).map((t) => t.name), ...(out.error ? { error: this.mask.text(out.error) } : {}) };
   }
 
   async enableMcp(instanceId: string, profile: string, name: string, enabled: boolean): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
     return this.write(ctx, 'mcp', null, async () => {
-      await this.call(ctx, 'enableMcp', { params: { name }, body: { enabled } }, 'Serveur MCP introuvable');
+      await this.call(ctx, 'enableMcp', { params: { name }, body: { enabled } }, msg('Serveur MCP introuvable'));
     });
   }
 
@@ -755,7 +756,7 @@ export class ConfigService {
     const ctx = this.ctx(instanceId, profile);
     let tokenLeft: string | undefined;
     const res = await this.write(ctx, 'mcp', null, async () => {
-      await this.call(ctx, 'removeMcp', { params: { name } }, 'Serveur MCP introuvable');
+      await this.call(ctx, 'removeMcp', { params: { name } }, msg('Serveur MCP introuvable'));
       // Hermes leaves the bearer token in its env file
       const key = mcpTokenEnv(name);
       try {
@@ -785,7 +786,7 @@ export class ConfigService {
     const scrub = (t: string) => values.reduce((acc, v) => acc.split(v).join('…'), t);
     let out: { background?: unknown; action?: unknown } = {};
     const res = await this.write(ctx, 'mcp', null, async () => {
-      out = (await this.call<{ background?: unknown; action?: unknown }>(ctx, 'mcpInstall', { body: { name, env, enable: true } }, 'Absent du catalogue', scrub)) ?? {};
+      out = (await this.call<{ background?: unknown; action?: unknown }>(ctx, 'mcpInstall', { body: { name, env, enable: true } }, msg('Absent du catalogue'), scrub)) ?? {};
     });
     return { ...res, background: out.background === true, action: typeof out.action === 'string' ? out.action : null };
   }
@@ -817,17 +818,17 @@ export class ConfigService {
   async mcpAuth(instanceId: string, profile: string, name: string): Promise<McpFlow> {
     const ctx = this.ctx(instanceId, profile);
     // Hermes waits up to 30 s for the authorization URL
-    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpAuth', { params: { name }, timeoutMs: 45_000 }, 'Serveur MCP introuvable'));
+    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpAuth', { params: { name }, timeoutMs: 45_000 }, msg('Serveur MCP introuvable')));
   }
 
   async mcpFlow(instanceId: string, profile: string, id: string): Promise<McpFlow> {
     const ctx = this.ctx(instanceId, profile);
-    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpFlow', { params: { flow_id: id } }, 'Connexion expirée'));
+    return McpFlowSchema.parse(await this.call<unknown>(ctx, 'mcpFlow', { params: { flow_id: id } }, msg('Connexion expirée')));
   }
 
   async mcpFlowCancel(instanceId: string, profile: string, id: string): Promise<void> {
     const ctx = this.ctx(instanceId, profile);
-    await this.call(ctx, 'mcpFlowCancel', { params: { flow_id: id } }, 'Connexion expirée');
+    await this.call(ctx, 'mcpFlowCancel', { params: { flow_id: id } }, msg('Connexion expirée'));
   }
 
   /** The masked text of a Hermes message (MCP catalog texts). */
@@ -850,18 +851,18 @@ export class ConfigService {
     const scrub = (s: string) => s.split(token).join('•••');
     let restartNeeded = false;
     const res = await this.write(ctx, 'env', null, async () => {
-      const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env', {}, 'Introuvable', scrub));
+      const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env', {}, msg('Introuvable'), scrub));
       const keySet = env[ANTHROPIC_KEY_VAR]?.is_set === true;
       if (keySet && !replaceApiKey) {
-        throw new ConfigConflictError('api_key_present', `Une clé d'API Anthropic (${ANTHROPIC_KEY_VAR}) est définie et Hermes la préfère au jeton`);
+        throw new ConfigConflictError('api_key_present', msg("Une clé d'API Anthropic ({name}) est définie et Hermes la préfère au jeton", { name: ANTHROPIC_KEY_VAR }));
       }
-      await this.call(ctx, 'putEnv', { body: { key: ANTHROPIC_TOKEN_VARS[0], value: token } }, 'Introuvable', scrub);
+      await this.call(ctx, 'putEnv', { body: { key: ANTHROPIC_TOKEN_VARS[0], value: token } }, msg('Introuvable'), scrub);
       if (!keySet) return;
       try {
-        await this.call(ctx, 'deleteEnv', { body: { key: ANTHROPIC_KEY_VAR } }, 'Variable introuvable', scrub);
+        await this.call(ctx, 'deleteEnv', { body: { key: ANTHROPIC_KEY_VAR } }, msg('Variable introuvable'), scrub);
       } catch (err) {
         if (!(err instanceof NotFoundError)) {
-          throw new PartialWriteError(`Jeton enregistré, mais la clé ${ANTHROPIC_KEY_VAR} n'a pas pu être supprimée et passe encore avant lui : retirez-la dans Clés d'API`);
+          throw new PartialWriteError(msg("Jeton enregistré, mais la clé {name} n'a pas pu être supprimée et passe encore avant lui : retirez-la dans Clés d'API", { name: ANTHROPIC_KEY_VAR }));
         }
       }
       // the running gateway keeps a deleted variable until it restarts
@@ -877,10 +878,10 @@ export class ConfigService {
     const res = await this.write(ctx, 'env', null, async () => {
       const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env'));
       const set = ANTHROPIC_TOKEN_VARS.filter((k) => env[k]?.is_set === true);
-      if (set.length === 0) throw new NotFoundError('Aucun jeton d’abonnement Anthropic enregistré');
+      if (set.length === 0) throw new NotFoundError(msg('Aucun jeton d’abonnement Anthropic enregistré'));
       for (const key of set) {
         try {
-          await this.call(ctx, 'deleteEnv', { body: { key } }, 'Variable introuvable');
+          await this.call(ctx, 'deleteEnv', { body: { key } }, msg('Variable introuvable'));
         } catch {
           left.push(key);
         }
@@ -922,17 +923,17 @@ export class ConfigService {
     const e = checkEndpoint(input);
     const apiKey = input.apiKey?.trim() || null;
     const res = await this.write(ctx, 'custom-providers', null, async (current) => {
-      if (current === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+      if (current === null) throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
       const taken = new Set([...reserved, ...HERMES_ALIASES].map((x) => x.toLowerCase()));
       const doc = parse(current).toJS() as Record<string, unknown> | null;
       const providers = doc && typeof doc.providers === 'object' && doc.providers ? Object.keys(doc.providers) : [];
       for (const k of providers) taken.add(k.toLowerCase());
       for (const old of readCustomProviders(current).filter((x) => x.legacy)) taken.add(slugFor(old.name));
-      if (taken.has(e.slug)) throw new ConfigConflictError('exists', `Nom déjà pris (${e.slug}) : choisissez-en un autre`);
+      if (taken.has(e.slug)) throw new ConfigConflictError('exists', msg('Nom déjà pris ({slug}) : choisissez-en un autre', { slug: e.slug }));
       const keyEnv = apiKey ? keyEnvFor(e.slug) : null;
       if (keyEnv) {
         const env = EnvListSchema.parse(await this.call<unknown>(ctx, 'env'));
-        if (env[keyEnv]?.is_set) throw new ConfigConflictError('exists', `La variable ${keyEnv} existe déjà : choisissez un autre nom`);
+        if (env[keyEnv]?.is_set) throw new ConfigConflictError('exists', msg('La variable {name} existe déjà : choisissez un autre nom', { name: keyEnv }));
         await this.call(ctx, 'putEnv', { body: { key: keyEnv, value: apiKey } });
       }
       const entry: Record<string, unknown> = { name: e.name, api: e.baseUrl };
@@ -950,7 +951,7 @@ export class ConfigService {
         try {
           await this.call(ctx, 'deleteEnv', { body: { key: keyEnv } });
         } catch {
-          throw new PartialWriteError(`Endpoint refusé par Hermes, mais la variable ${keyEnv} n'a pas pu être retirée : retirez-la dans l'onglet Variables`);
+          throw new PartialWriteError(msg("Endpoint refusé par Hermes, mais la variable {name} n'a pas pu être retirée : retirez-la dans l'onglet Variables", { name: keyEnv }));
         }
         throw err;
       }
@@ -966,16 +967,16 @@ export class ConfigService {
     const ctx = this.ctx(instanceId, profile);
     let keyLeft: string | undefined;
     const res = await this.write(ctx, 'custom-providers', null, async (current) => {
-      if (current === null) throw new ConfigConflictError('config_unavailable', 'Écriture impossible : Hermes ne donne pas le fichier de configuration');
+      if (current === null) throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
       const all = readCustomProviders(current);
       const target = all.find((x) => x.slug === slug);
-      if (!target) throw new NotFoundError(`Endpoint introuvable : ${slug}`);
+      if (!target) throw new NotFoundError(msg('Endpoint introuvable : {slug}', { slug }));
       const doc = parse(current).toJS() as Record<string, unknown> | null;
       const model = doc && typeof doc.model === 'object' && doc.model ? (doc.model as Record<string, unknown>) : {};
       if (model.provider === slug || model.provider === `custom:${slug}`) {
-        throw new ConfigConflictError('in_use', 'Cet endpoint sert le modèle principal : changez de modèle (onglet Modèles) avant de le supprimer');
+        throw new ConfigConflictError('in_use', msg('Cet endpoint sert le modèle principal : changez de modèle (onglet Modèles) avant de le supprimer'));
       }
-      if (!this.can(ctx, 'putRaw')) throw new ConfigConflictError('raw_unavailable', 'Suppression impossible sur cette instance : retirez-le dans l’onglet YAML');
+      if (!this.can(ctx, 'putRaw')) throw new ConfigConflictError('raw_unavailable', msg('Suppression impossible sur cette instance : retirez-le dans l’onglet YAML'));
       await this.call(ctx, 'putRaw', { body: { yaml_text: withoutProvider(current, slug) } });
       const keyEnv = target.key?.kind === 'env' ? target.key.name : null;
       const shared = keyEnv && all.some((x) => x !== target && x.key?.kind === 'env' && x.key.name === keyEnv);

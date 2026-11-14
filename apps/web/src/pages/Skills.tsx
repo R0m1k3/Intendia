@@ -13,14 +13,16 @@ import {
 import { categories, filterSkills, groupByCategory, provenanceLabel, type SkillFilter, type StateFilter } from '../skills/filter';
 import { ask } from '../components/Dialog';
 import { NewSkill, SkillContent } from '../skills/SkillEditor';
+import { plural, t } from '../i18n';
+import { T } from '../i18n/T';
 
 const REQUIRED: OpRef[] = [['skills', 'list']];
 const OPTIONAL: OptionalOp[] = [
-  ['skills', 'toggle', 'Activer ou désactiver'], ['skills', 'content', 'Lire le SKILL.md'], ['skills', 'hubOfficial', 'Catalogue officiel'],
-  ['skills', 'hubSearch', 'Rechercher dans le hub'], ['skills', 'hubScan', 'Installer'], ['skills', 'install', 'Installer'],
-  ['skills', 'uninstall', 'Désinstaller'], ['skills', 'update', 'Mettre à jour'], ['skills', 'actionStatus', 'Installer, désinstaller, mettre à jour'],
-  ['skills', 'toolsets', "Outils de l'agent"], ['skills', 'create', 'Nouveau skill'], ['skills', 'putContent', 'Modifier un skill'],
-  ['skills', 'lock', 'Verrouiller'], ['skills', 'archive', 'Archiver'],
+  ['skills', 'toggle', t('Activer ou désactiver')], ['skills', 'content', t('Lire le SKILL.md')], ['skills', 'hubOfficial', t('Catalogue officiel')],
+  ['skills', 'hubSearch', t('Rechercher dans le hub')], ['skills', 'hubScan', t('Installer')], ['skills', 'install', t('Installer')],
+  ['skills', 'uninstall', t('Désinstaller')], ['skills', 'update', t('Mettre à jour')], ['skills', 'actionStatus', t('Installer, désinstaller, mettre à jour')],
+  ['skills', 'toolsets', t("Outils de l'agent")], ['skills', 'create', t('Nouveau skill')], ['skills', 'putContent', t('Modifier un skill')],
+  ['skills', 'lock', t('Verrouiller')], ['skills', 'archive', t('Archiver')],
 ];
 /** Hermes' provenance of the skills written by the user or by the agent: the only ones edited and archived here. */
 const OWN = 'agent';
@@ -62,7 +64,8 @@ function useSkillActions(inst: string, profile: string) {
         finished[p.target] = {
           state,
           text: state === 'failed' && status && status !== 'gone'
-            ? `${p.label} : échec, ${failureLine(status.lines)}` : `${p.label} : ${STATE_TEXT[state as Exclude<ActionState, 'failed'>]}`,
+            ? t('{label} : échec, {line}', { label: p.label, line: failureLine(status.lines) })
+            : t('{label} : {state}', { label: p.label, state: STATE_TEXT[state as Exclude<ActionState, 'failed'>] }),
         };
       }
       const targets = Object.keys(finished);
@@ -92,17 +95,17 @@ function ActionsStrip({ actions }: { actions: Actions }) {
   const done = Object.entries(actions.outcomes);
   if (!actions.pending.length && !done.length) return null;
   return (
-    <ul className="space-y-1.5 rounded-[10px] bg-paper px-4 py-3" aria-label="Actions" role="status">
+    <ul className="space-y-1.5 rounded-[10px] bg-paper px-4 py-3" aria-label={t('Actions')} role="status">
       {actions.pending.map((p) => (
         <li key={p.action} className="flex items-center gap-2 font-mono text-[12px] text-ink-soft">
-          <Mark state="readonly" className="animate-pulse" />{p.label} : en cours…
+          <Mark state="readonly" className="animate-pulse" />{t('{label} : en cours…', { label: p.label })}
         </li>
       ))}
       {done.map(([target, o]) => (
         <li key={target} className={cx('flex items-center gap-2 font-mono text-[12px]', o.state === 'failed' ? 'text-bad' : 'text-ink-soft')}>
           <Mark state={o.state === 'done' ? 'full' : o.state === 'failed' ? 'unavailable' : 'readonly'} />
           <span className="min-w-0 flex-1">{o.text}</span>
-          <button type="button" className="text-ink-faint hover:text-ink" aria-label="Masquer" onClick={() => actions.dismiss(target)}>
+          <button type="button" className="text-ink-faint hover:text-ink" aria-label={t('Masquer')} onClick={() => actions.dismiss(target)}>
             <X className="size-3.5" strokeWidth={1.5} />
           </button>
         </li>
@@ -112,9 +115,9 @@ function ActionsStrip({ actions }: { actions: Actions }) {
 }
 
 const VERDICT: Record<string, { text: string; icon: typeof ShieldCheck; cls: string }> = {
-  allow: { text: 'Scan sans alerte', icon: ShieldCheck, cls: 'text-ok' },
-  ask: { text: 'Le scan demande de la prudence', icon: ShieldAlert, cls: 'text-warn' },
-  block: { text: 'Installation refusée par le scan', icon: ShieldX, cls: 'text-bad' },
+  allow: { text: t('Scan sans alerte'), icon: ShieldCheck, cls: 'text-ok' },
+  ask: { text: t('Le scan demande de la prudence'), icon: ShieldAlert, cls: 'text-warn' },
+  block: { text: t('Installation refusée par le scan'), icon: ShieldX, cls: 'text-bad' },
 };
 
 function scanOf(err: unknown): Scan | null {
@@ -129,22 +132,22 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
   const [ack, setAck] = useState(false);
   const install = useMutation({
     mutationFn: () => api.installSkill(inst, profile, result.identifier, ack),
-    onSuccess: ({ action }) => { actions.track(action, `Installation de ${result.name}`, result.identifier); onClose(); },
+    onSuccess: ({ action }) => { actions.track(action, t('Installation de {name}', { name: result.name }), result.identifier); onClose(); },
   });
   const s = scanOf(install.error) ?? scan.data;
-  const v = s ? VERDICT[s.policy] ?? { text: `Résultat inconnu : ${s.policy}`, icon: ShieldX, cls: 'text-bad' } : null;
+  const v = s ? VERDICT[s.policy] ?? { text: t('Résultat inconnu : {policy}', { policy: s.policy }), icon: ShieldX, cls: 'text-bad' } : null;
   const counts = s ? Object.entries(s.counts).filter(([, n]) => n > 0) : [];
 
   return (
     <div className="card p-4 text-sm">
-      {scan.isPending && !s ? <p className="text-ink-faint">Scan de sécurité en cours…</p> : scan.error && !s ? <ErrorText error={scan.error} /> : s && v && (
+      {scan.isPending && !s ? <p className="text-ink-faint">{t('Scan de sécurité en cours…')}</p> : scan.error && !s ? <ErrorText error={scan.error} /> : s && v && (
         <div className="space-y-3">
           <p className={cx('flex items-center gap-2 font-medium', v.cls)}><v.icon className={ICON} strokeWidth={1.5} />{v.text}</p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
-            <dt className="text-ink-faint">Source</dt><dd>{result.source ?? '-'}{result.repo ? ` · ${result.repo}` : ''}</dd>
-            <dt className="text-ink-faint">Confiance</dt><dd>{s.trust ?? result.trust ?? '-'}</dd>
-            <dt className="text-ink-faint">Verdict</dt><dd>{s.verdict}{counts.length ? ` (${counts.map(([k, n]) => `${n} ${k}`).join(', ')})` : ''}</dd>
-            {s.reason && <><dt className="text-ink-faint">Raison</dt><dd>{s.reason}</dd></>}
+            <dt className="text-ink-faint">{t('Source')}</dt><dd>{result.source ?? '-'}{result.repo ? ` · ${result.repo}` : ''}</dd>
+            <dt className="text-ink-faint">{t('Confiance')}</dt><dd>{s.trust ?? result.trust ?? '-'}</dd>
+            <dt className="text-ink-faint">{t('Verdict')}</dt><dd>{s.verdict}{counts.length ? ` (${counts.map(([k, n]) => `${n} ${k}`).join(', ')})` : ''}</dd>
+            {s.reason && <><dt className="text-ink-faint">{t('Raison')}</dt><dd>{s.reason}</dd></>}
           </dl>
           {s.findings.length > 0 && (
             <ul className="max-h-40 space-y-1 overflow-auto font-mono text-[12px] text-ink-soft">
@@ -154,7 +157,7 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
           {s.policy === 'ask' && (
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
-              J’ai lu les constats
+              {t('J’ai lu les constats')}
             </label>
           )}
           <ErrorText error={scanOf(install.error) ? null : install.error} />
@@ -162,10 +165,10 @@ function InstallPanel({ result, inst, profile, actions, onClose }: {
             {(s.policy === 'allow' || s.policy === 'ask') && (
               <Button variant="primary" disabled={install.isPending || (s.policy === 'ask' && !ack)} onClick={() => install.mutate()}>
                 <Download className={ICON} strokeWidth={1.5} />
-                {install.isPending ? 'Analyse et lancement…' : s.policy === 'ask' ? 'Installer quand même' : 'Installer'}
+                {install.isPending ? t('Analyse et lancement…') : s.policy === 'ask' ? t('Installer quand même') : t('Installer')}
               </Button>
             )}
-            <Button onClick={onClose}>Fermer</Button>
+            <Button onClick={onClose}>{t('Fermer')}</Button>
           </div>
         </div>
       )}
@@ -190,7 +193,7 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
   });
   const uninstall = useMutation({
     mutationFn: () => api.uninstallSkill(inst, profile, skill.name),
-    onSuccess: ({ action }) => actions.track(action, `Désinstallation de ${skill.name}`, skill.name),
+    onSuccess: ({ action }) => actions.track(action, t('Désinstallation de {name}', { name: skill.name }), skill.name),
   });
   const lock = useMutation({
     mutationFn: () => api.lockSkill(inst, profile, skill.name, !skill.locked),
@@ -206,7 +209,7 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
   const own = skill.provenance === OWN;
   const busy = actions.busy(skill.name);
   const canToggle = can('toggle') && skill.enabled !== null;
-  const facts = [provenanceLabel(skill.provenance), skill.category, skill.usage ? `${skill.usage} usage${skill.usage > 1 ? 's' : ''}` : null, skill.enabled === false ? 'inactif' : null, skill.locked ? 'verrouillé' : null]
+  const facts = [provenanceLabel(skill.provenance), skill.category, skill.usage ? plural(skill.usage, '{n} usage', '{n} usages', { n: skill.usage }) : null, skill.enabled === false ? t('inactif') : null, skill.locked ? t('verrouillé') : null]
     .filter(Boolean).join(' · ');
 
   return (
@@ -218,30 +221,30 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
           <>
             {canToggle && (
               skill.enabled
-                ? <Button variant="ghost" className="!text-bad hover:!bg-bad-soft" disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Désactiver</Button>
-                : <Button disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>Activer</Button>
+                ? <Button variant="ghost" className="!text-bad hover:!bg-bad-soft" disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>{t('Désactiver')}</Button>
+                : <Button disabled={toggle.isPending || busy} onClick={() => toggle.mutate()}>{t('Activer')}</Button>
             )}
             {can('lock') && (
               <Button disabled={lock.isPending || busy} onClick={() => lock.mutate()}
-                title={skill.locked ? 'L’agent pourra de nouveau le modifier' : 'L’agent et le curateur ne pourront plus le modifier ; vous, si'}>
-                {skill.locked ? <><LockOpen className={ICON} strokeWidth={1.5} />Déverrouiller</> : <><Lock className={ICON} strokeWidth={1.5} />Verrouiller</>}
+                title={skill.locked ? t('L’agent pourra de nouveau le modifier') : t('L’agent et le curateur ne pourront plus le modifier ; vous, si')}>
+                {skill.locked ? <><LockOpen className={ICON} strokeWidth={1.5} />{t('Déverrouiller')}</> : <><Lock className={ICON} strokeWidth={1.5} />{t('Verrouiller')}</>}
               </Button>
             )}
             {own && can('archive') && (
-              <Button variant="danger" disabled={busy || archive.isPending} aria-label={`Archiver ${skill.name}`}
+              <Button variant="danger" disabled={busy || archive.isPending} aria-label={t('Archiver {name}', { name: skill.name })}
                 onClick={async () => {
                   if (await ask({
-                    title: `Archiver ${skill.name} ?`, confirmLabel: 'Archiver', danger: true,
-                    message: 'Il sera retiré de l’agent. Hermes le garde dans skills/.archive (restauration par hermes curator restore).',
+                    title: t('Archiver {name} ?', { name: skill.name }), confirmLabel: t('Archiver'), danger: true,
+                    message: t('Il sera retiré de l’agent. Hermes le garde dans skills/.archive (restauration par hermes curator restore).'),
                   })) archive.mutate();
                 }}>
-                <Archive className={ICON} strokeWidth={1.5} />Archiver
+                <Archive className={ICON} strokeWidth={1.5} />{t('Archiver')}
               </Button>
             )}
             {skill.provenance === 'hub' && can('uninstall') && can('actionStatus') && (
-              <Button variant="danger" disabled={busy || uninstall.isPending} aria-label={`Désinstaller ${skill.name}`}
-                onClick={async () => { if (await ask({ title: `Désinstaller ${skill.name} de cet agent ?`, confirmLabel: 'Désinstaller', danger: true })) uninstall.mutate(); }}>
-                <Trash2 className={ICON} strokeWidth={1.5} />Désinstaller
+              <Button variant="danger" disabled={busy || uninstall.isPending} aria-label={t('Désinstaller {name}', { name: skill.name })}
+                onClick={async () => { if (await ask({ title: t('Désinstaller {name} de cet agent ?', { name: skill.name }), confirmLabel: t('Désinstaller'), danger: true })) uninstall.mutate(); }}>
+                <Trash2 className={ICON} strokeWidth={1.5} />{t('Désinstaller')}
               </Button>
             )}
           </>
@@ -252,7 +255,7 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
         {skill.description && <p className="text-[15px]">{skill.description}</p>}
         {can('content') ? (
           <SkillContent inst={inst} profile={profile} name={skill.name} editable={own && can('putContent')} />
-        ) : <p className="text-sm text-ink-faint">Lecture du SKILL.md indisponible sur cette instance</p>}
+        ) : <p className="text-sm text-ink-faint">{t('Lecture du SKILL.md indisponible sur cette instance')}</p>}
       </DetailBody>
     </article>
   );
@@ -260,29 +263,29 @@ function SkillDetail({ skill, inst, profile, can, actions }: {
 
 function Toolsets({ inst, profile, onClose }: { inst: string; profile: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ['toolsets', inst, profile], queryFn: () => api.toolsets(inst, profile).then((r) => r.toolsets) });
-  const on = q.data?.filter((t) => t.enabled).length;
+  const on = q.data?.filter((ts) => ts.enabled).length;
   return (
-    <section aria-label="Outils de l’agent">
+    <section aria-label={t('Outils de l’agent')}>
       <DetailHeader
-        title="Outils de l’agent"
-        meta={q.data ? `${on}/${q.data.length} actifs · agent ${profile}` : `agent ${profile}`}
-        actions={<Button variant="ghost" className="w-[34px] px-0" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>}
+        title={t('Outils de l’agent')}
+        meta={q.data ? t('{on}/{total} actifs · agent {profile}', { on: on ?? 0, total: q.data.length, profile }) : t('agent {profile}', { profile })}
+        actions={<Button variant="ghost" className="w-[34px] px-0" onClick={onClose} aria-label={t('Fermer')}><X className={ICON} strokeWidth={1.5} /></Button>}
       />
       <DetailBody>
         {q.data ? (
           <ul className="card overflow-hidden">
-            {q.data.map((t, i) => (
-              <li key={t.name} className={cx('flex items-start gap-3.5 px-4 py-3', i > 0 && 'border-t border-line/70')}>
-                <Mark state={t.enabled ? 'full' : null} className="mt-1.5" />
+            {q.data.map((ts, i) => (
+              <li key={ts.name} className={cx('flex items-start gap-3.5 px-4 py-3', i > 0 && 'border-t border-line/70')}>
+                <Mark state={ts.enabled ? 'full' : null} className="mt-1.5" />
                 <div className="min-w-0">
-                  <p className="text-sm"><span className={t.enabled ? 'font-medium text-ink' : 'text-ink-soft'}>{t.label}</span>
-                    <span className="ml-2 font-mono text-[11px] text-ink-faint">{t.name}{t.configured === false ? ' · non configuré' : ''}</span></p>
-                  {t.tools.length > 0 && <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{t.tools.join(' · ')}</p>}
+                  <p className="text-sm"><span className={ts.enabled ? 'font-medium text-ink' : 'text-ink-soft'}>{ts.label}</span>
+                    <span className="ml-2 font-mono text-[11px] text-ink-faint">{ts.name}{ts.configured === false ? ` · ${t('non configuré')}` : ''}</span></p>
+                  {ts.tools.length > 0 && <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{ts.tools.join(' · ')}</p>}
                 </div>
               </li>
             ))}
           </ul>
-        ) : q.error ? <ErrorText error={q.error} /> : <p className="text-sm text-ink-faint">Chargement…</p>}
+        ) : q.error ? <ErrorText error={q.error} /> : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
       </DetailBody>
     </section>
   );
@@ -301,21 +304,21 @@ function HubDetail({ result, inst, profile, canInstall, actions, onClose }: {
           <>
             {canInstall && !result.installed && !installing && (
               <Button variant="primary" disabled={busy} onClick={() => setInstalling(true)}>
-                <Download className={ICON} strokeWidth={1.5} />Installer
+                <Download className={ICON} strokeWidth={1.5} />{t('Installer')}
               </Button>
             )}
-            {result.installed && <Tag className="text-ok">installé</Tag>}
-            <Button variant="ghost" className="w-[34px] px-0 md:hidden" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>
+            {result.installed && <Tag className="text-ok">{t('installé')}</Tag>}
+            <Button variant="ghost" className="w-[34px] px-0 md:hidden" onClick={onClose} aria-label={t('Fermer')}><X className={ICON} strokeWidth={1.5} /></Button>
           </>
         )}
       />
       <DetailBody>
         {result.description && <p className="text-[15px]">{result.description}</p>}
         <Facts items={[
-          { label: 'Source', value: result.source ?? '-' },
-          { label: 'Confiance', value: result.trust ?? '-' },
-          ...(result.repo ? [{ label: 'Dépôt', value: result.repo, mono: true }] : []),
-          ...(result.tags.length ? [{ label: 'Étiquettes', value: result.tags.join(', ') }] : []),
+          { label: t('Source'), value: result.source ?? '-' },
+          { label: t('Confiance'), value: result.trust ?? '-' },
+          ...(result.repo ? [{ label: t('Dépôt'), value: result.repo, mono: true }] : []),
+          ...(result.tags.length ? [{ label: t('Étiquettes'), value: result.tags.join(', ') }] : []),
         ]} />
         {installing && <InstallPanel result={result} inst={inst} profile={profile} actions={actions} onClose={() => setInstalling(false)} />}
       </DetailBody>
@@ -350,7 +353,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
   const [f, setF] = useState<SkillFilter>({ text: '', category: '', state: 'all' });
   const update = useMutation({
     mutationFn: () => api.updateSkills(inst, profile),
-    onSuccess: ({ action }) => actions.track(action, 'Mise à jour des skills du hub', '*'),
+    onSuccess: ({ action }) => actions.track(action, t('Mise à jour des skills du hub'), '*'),
   });
   const all = skills.data ?? [];
   const shown = useMemo(() => groupByCategory(filterSkills(all, f)), [all, f]);
@@ -371,37 +374,37 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
 
   const note = 'px-3.5 py-6 text-sm text-ink-faint';
   const tabs = [
-    { key: 'installed' as const, label: 'Installés', count: skills.data ? all.length : undefined },
-    ...(can('hubOfficial') || can('hubSearch') ? [{ key: 'hub' as const, label: 'Hub' }] : []),
+    { key: 'installed' as const, label: t('Installés'), count: skills.data ? all.length : undefined },
+    ...(can('hubOfficial') || can('hubSearch') ? [{ key: 'hub' as const, label: t('Hub') }] : []),
   ];
 
   const list = (
     <ListPane
-      title="Skills"
+      title={t('Skills')}
       action={options.length > 1 ? (
-        <select className={cx(SELECT, 'h-[34px] flex-none font-mono')} value={profile} aria-label="Agent"
+        <select className={cx(SELECT, 'h-[34px] flex-none font-mono')} value={profile} aria-label={t('Agent')}
           onChange={(e) => void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: e.target.value === 'default' ? undefined : e.target.value } })}>
           {options.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
       ) : undefined}
       head={a.available ? (
         <>
-          {tabs.length > 1 && <Chips role="tab" label="Skills" items={tabs} value={tab} onChange={(k) => { setTab(k); setTools(false); }} />}
+          {tabs.length > 1 && <Chips role="tab" label={t('Skills')} items={tabs} value={tab} onChange={(k) => { setTab(k); setTools(false); }} />}
           {tab === 'installed' ? (
             <>
               <label className={SEARCH_BOX}>
                 <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-                <input type="search" placeholder="Filtrer" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} aria-label="Filtrer les skills" className={SEARCH_INPUT} />
+                <input type="search" placeholder={t('Filtrer')} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} aria-label={t('Filtrer les skills')} className={SEARCH_INPUT} />
               </label>
               <div className="flex gap-1.5">
-                <select className={SELECT} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} aria-label="Catégorie">
-                  <option value="">Toutes les catégories</option>
+                <select className={SELECT} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} aria-label={t('Catégorie')}>
+                  <option value="">{t('Toutes les catégories')}</option>
                   {categories(all).map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <select className={SELECT} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as StateFilter })} aria-label="État">
-                  <option value="all">Actifs et inactifs</option>
-                  <option value="on">Actifs</option>
-                  <option value="off">Inactifs</option>
+                <select className={SELECT} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value as StateFilter })} aria-label={t('État')}>
+                  <option value="all">{t('Actifs et inactifs')}</option>
+                  <option value="on">{t('Actifs')}</option>
+                  <option value="off">{t('Inactifs')}</option>
                 </select>
               </div>
             </>
@@ -409,9 +412,9 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
             <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); setQ(hubText.trim()); setHubSel(null); }}>
               <label className={cx(SEARCH_BOX, 'min-w-0 flex-1')}>
                 <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-                <input type="search" placeholder="pdf, notion, git…" value={hubText} onChange={(e) => setHubText(e.target.value)} aria-label="Recherche dans le hub" maxLength={200} className={SEARCH_INPUT} />
+                <input type="search" placeholder={t('pdf, notion, git…')} value={hubText} onChange={(e) => setHubText(e.target.value)} aria-label={t('Recherche dans le hub')} maxLength={200} className={SEARCH_INPUT} />
               </label>
-              <Button type="submit" disabled={!hubText.trim() || hubSearch.isFetching}>Chercher</Button>
+              <Button type="submit" disabled={!hubText.trim() || hubSearch.isFetching}>{t('Chercher')}</Button>
             </form>
           ) : null}
         </>
@@ -421,19 +424,19 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
           {can('create') && (
             <button type="button" onClick={() => setCreating(true)}
               className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
-              <Plus className={ICON} strokeWidth={1.5} />Nouveau skill
+              <Plus className={ICON} strokeWidth={1.5} />{t('Nouveau skill')}
             </button>
           )}
           {can('toolsets') && (
             <button type="button" onClick={() => setTools(true)} aria-pressed={tools}
               className={cx('flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink', tools && 'bg-raised text-ink')}>
-              <Wrench className={ICON} strokeWidth={1.5} />Outils de l’agent
+              <Wrench className={ICON} strokeWidth={1.5} />{t('Outils de l’agent')}
             </button>
           )}
           {canUpdate && (
             <button type="button" disabled={actions.busy('*') || update.isPending} onClick={() => update.mutate()}
               className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50">
-              <RefreshCw className={ICON} strokeWidth={1.5} />Mettre à jour les skills du hub
+              <RefreshCw className={ICON} strokeWidth={1.5} />{t('Mettre à jour les skills du hub')}
             </button>
           )}
         </div>
@@ -442,12 +445,12 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
       {tab === 'installed' ? (
         <>
           <div className="empty:hidden"><ErrorText error={update.error ?? skills.error} /></div>
-          {skills.isPending && a.available && <p className={note}>Chargement…</p>}
-          {skills.isSuccess && all.length === 0 && <p className={note}>Aucun skill pour cet agent</p>}
-          {skills.isSuccess && all.length > 0 && count === 0 && <p className={note}>Aucun skill ne correspond au filtre</p>}
+          {skills.isPending && a.available && <p className={note}>{t('Chargement…')}</p>}
+          {skills.isSuccess && all.length === 0 && <p className={note}>{t('Aucun skill pour cet agent')}</p>}
+          {skills.isSuccess && all.length > 0 && count === 0 && <p className={note}>{t('Aucun skill ne correspond au filtre')}</p>}
           {shown.map((g) => (
-            <section key={g.category || '-'} aria-label={g.category || 'sans catégorie'}>
-              <ListLabel>{g.category || 'sans catégorie'}</ListLabel>
+            <section key={g.category || '-'} aria-label={g.category || t('sans catégorie')}>
+              <ListLabel>{g.category || t('sans catégorie')}</ListLabel>
               <ul className="flex flex-col gap-0.5">
                 {g.skills.map((s) => {
                   const on = !tools && selected?.name === s.name;
@@ -457,7 +460,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
                         <ListItemBody
                           mono
                           title={<span className={cx(s.enabled === false && 'text-ink-faint')}>{s.name}</span>}
-                          meta={<Tag className={cx(on && 'bg-sheet', s.enabled === false && 'text-ink-faint')}>{s.enabled === false ? 'inactif' : provenanceLabel(s.provenance)}</Tag>}
+                          meta={<Tag className={cx(on && 'bg-sheet', s.enabled === false && 'text-ink-faint')}>{s.enabled === false ? t('inactif') : provenanceLabel(s.provenance)}</Tag>}
                           sub={s.description}
                         />
                       </ListLink>
@@ -470,13 +473,13 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
         </>
       ) : (
         <>
-          {q && <ListLabel>Résultats pour <span className="font-mono">{q}</span> · <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => { setQ(''); setHubText(''); setHubSel(null); }}>catalogue officiel</button></ListLabel>}
-          {!q && can('hubOfficial') && <ListLabel>Catalogue officiel</ListLabel>}
+          {q && <ListLabel><T k="Résultats pour {q} · {official}" vars={{ q: <span className="font-mono">{q}</span>, official: <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => { setQ(''); setHubText(''); setHubSel(null); }}>{t('catalogue officiel')}</button> }} /></ListLabel>}
+          {!q && can('hubOfficial') && <ListLabel>{t('Catalogue officiel')}</ListLabel>}
           <ErrorText error={hub.error} />
-          {hub.data?.timedOut.length ? <p className="px-3.5 py-2 text-[13px] text-warn">Sources sans réponse : {hub.data.timedOut.join(', ')}</p> : null}
-          {hub.isFetching && !hub.data && <p className={note}>{q ? 'Recherche dans le hub… (environ 10 secondes)' : 'Chargement…'}</p>}
-          {hub.isSuccess && results.length === 0 && <p className={note}>Aucun résultat</p>}
-          <ul className="flex flex-col gap-0.5" aria-label="Hub">
+          {hub.data?.timedOut.length ? <p className="px-3.5 py-2 text-[13px] text-warn">{t('Sources sans réponse : {list}', { list: hub.data.timedOut.join(', ') })}</p> : null}
+          {hub.isFetching && !hub.data && <p className={note}>{q ? t('Recherche dans le hub… (environ 10 secondes)') : t('Chargement…')}</p>}
+          {hub.isSuccess && results.length === 0 && <p className={note}>{t('Aucun résultat')}</p>}
+          <ul className="flex flex-col gap-0.5" aria-label={t('Hub')}>
             {results.map((r) => {
               const on = hubPicked?.identifier === r.identifier;
               return (
@@ -484,7 +487,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
                   <button type="button" className={listItemClass(on)} aria-current={on ? 'true' : undefined} onClick={() => setHubSel(r.identifier)}>
                     <ListItemBody
                       mono title={r.name}
-                      meta={<Tag className={cx(on && 'bg-sheet', r.installed && 'text-ok')}>{r.installed ? 'installé' : r.trust ?? r.source ?? 'hub'}</Tag>}
+                      meta={<Tag className={cx(on && 'bg-sheet', r.installed && 'text-ok')}>{r.installed ? t('installé') : r.trust ?? r.source ?? 'hub'}</Tag>}
                       sub={r.description}
                     />
                   </button>
@@ -502,20 +505,20 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
   ) : tab === 'hub' ? (
     hubPicked
       ? <HubDetail key={hubPicked.identifier} result={hubPicked} inst={inst} profile={profile} canInstall={canInstall} actions={actions} onClose={() => setHubSel(null)} />
-      : <Empty icon={<Download strokeWidth={1.5} />} title="Le hub des skills">Choisissez un skill dans la liste pour lire sa fiche et l’installer ; un scan de sécurité passe avant chaque installation.</Empty>
+      : <Empty icon={<Download strokeWidth={1.5} />} title={t('Le hub des skills')}>{t('Choisissez un skill dans la liste pour lire sa fiche et l’installer ; un scan de sécurité passe avant chaque installation.')}</Empty>
   ) : selected ? (
     <SkillDetail key={selected.name} skill={selected} inst={inst} profile={profile} can={can} actions={actions} />
   ) : skills.isSuccess && all.length === 0 ? (
-    <Empty icon={<Layers strokeWidth={1.5} />} title="Aucun skill pour cet agent"
-      actions={can('hubOfficial') ? <Button variant="primary" onClick={() => setTab('hub')}><Search className={ICON} strokeWidth={1.5} />Chercher dans le hub</Button> : undefined}>
-      Un skill apprend une méthode à l’agent : installez-en depuis le hub{can('create') ? ', ou écrivez le vôtre' : ''}.
+    <Empty icon={<Layers strokeWidth={1.5} />} title={t('Aucun skill pour cet agent')}
+      actions={can('hubOfficial') ? <Button variant="primary" onClick={() => setTab('hub')}><Search className={ICON} strokeWidth={1.5} />{t('Chercher dans le hub')}</Button> : undefined}>
+      {can('create') ? t('Un skill apprend une méthode à l’agent : installez-en depuis le hub, ou écrivez le vôtre.') : t('Un skill apprend une méthode à l’agent : installez-en depuis le hub.')}
     </Empty>
   ) : null;
 
   return (
-    <SplitView label="Skills" list={list} selected={Boolean(picked) || tools || (tab === 'hub' && hubPicked !== null)}>
+    <SplitView label={t('Skills')} list={list} selected={Boolean(picked) || tools || (tab === 'hub' && hubPicked !== null)}>
       <div className="px-4 pt-5 empty:hidden md:px-6">
-        <ModuleNotice instanceId={inst} module="skills" title="La console des skills" required={REQUIRED} optional={OPTIONAL} explainMissing />
+        <ModuleNotice instanceId={inst} module="skills" title={t('La console des skills')} required={REQUIRED} optional={OPTIONAL} explainMissing />
       </div>
       <div className="px-4 pt-4 empty:hidden md:px-6"><ActionsStrip actions={actions} /></div>
       {a.available && detail}

@@ -1,6 +1,7 @@
 // Follow-up of a skills hub action (install, uninstall, update). Hermes runs them in the background and
 // reports `running` / `exit_code`; the pending actions live in sessionStorage so a reload resumes them.
 import type { ActionStatus } from '../api';
+import { t } from '../i18n';
 
 export const ACTION_POLL_MS = 1_500;
 export const ACTION_MAX_MS = 5 * 60_000;
@@ -27,14 +28,14 @@ export function actionState(status: ActionStatus | 'gone' | undefined, startedAt
 /** Hermes' error line in the log, else the last line. */
 export function failureLine(lines: string[]): string {
   const err = [...lines].reverse().find((l) => /^(Error|Installation blocked)/.test(l.trim()));
-  return (err ?? lines.filter((l) => l.trim()).at(-1) ?? 'échec sans message').trim();
+  return (err ?? lines.filter((l) => l.trim()).at(-1) ?? t('échec sans message')).trim();
 }
 
 export const STATE_TEXT: Record<Exclude<ActionState, 'failed'>, string> = {
-  running: 'en cours…',
-  done: 'terminé',
-  lost: 'suivi perdu, la liste a été rechargée',
-  stale: 'toujours en cours, vérifier plus tard',
+  running: t('en cours…'),
+  done: t('terminé'),
+  lost: t('suivi perdu, la liste a été rechargée'),
+  stale: t('toujours en cours, vérifier plus tard'),
 };
 
 const key = (inst: string, profile: string) => `intendia:skill-actions:${inst}:${profile}`;

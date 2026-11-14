@@ -1,7 +1,8 @@
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from './ModuleNotice';
+import { t } from '../i18n';
 
 const REQUIRED: OpRef[] = [['chat', 'createRun'], ['chat', 'runStatus'], ['chat', 'runEvents'], ['sessions', 'messages']];
-const OPTIONAL: OptionalOp[] = [['chat', 'stopRun', 'Arrêter un run'], ['chat', 'approval', 'Répondre aux approbations']];
+const OPTIONAL: OptionalOp[] = [['chat', 'stopRun', t('Arrêter un run')], ['chat', 'approval', t('Répondre aux approbations')]];
 
 /** Chat availability from the operations phase 2 uses: a missing `steer` must not warn, a missing `createRun` must block. */
 export function useChatAvailability(instanceId: string | undefined) {
@@ -10,5 +11,5 @@ export function useChatAvailability(instanceId: string | undefined) {
 }
 
 export function ChatNotice({ instanceId }: { instanceId: string | undefined }) {
-  return <ModuleNotice instanceId={instanceId} module="chat" title="Le chat" required={REQUIRED} optional={OPTIONAL} />;
+  return <ModuleNotice instanceId={instanceId} module="chat" title={t('Le chat')} required={REQUIRED} optional={OPTIONAL} />;
 }

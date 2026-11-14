@@ -1,12 +1,13 @@
 import { Check, ChevronDown, ChevronRight, Circle, CircleDot } from 'lucide-react';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { cx } from '../components/ui';
+import { t } from '../i18n';
 import { todoSummary, todoTree, type Todo } from './todos';
 
 function Mark({ status }: { status: string }) {
-  if (status === 'completed') return <Check className="size-3.5 text-ok" strokeWidth={2} aria-label="faite" />;
-  if (status === 'in_progress') return <CircleDot className="size-3.5 text-accent-ink" strokeWidth={2} aria-label="en cours" />;
-  return <Circle className="size-3.5 text-ink-faint" strokeWidth={1.5} aria-label={status === 'cancelled' ? 'annulée' : 'à faire'} />;
+  if (status === 'completed') return <Check className="size-3.5 text-ok" strokeWidth={2} aria-label={t('faite')} />;
+  if (status === 'in_progress') return <CircleDot className="size-3.5 text-accent-ink" strokeWidth={2} aria-label={t('en cours')} />;
+  return <Circle className="size-3.5 text-ink-faint" strokeWidth={1.5} aria-label={status === 'cancelled' ? t('annulée') : t('à faire')} />;
 }
 
 /** The agent's task list (todo_list), above the composer: one line folded, the list unfolded. */
@@ -15,13 +16,13 @@ export function Todos({ todos }: { todos: Todo[] }) {
   const { done, total, current } = todoSummary(todos);
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <section aria-label="Tâches de l'agent" className="mb-2 rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]" data-todos>
+    <section aria-label={t('Tâches de l’agent')} className="mb-2 rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]" data-todos>
       <button
         type="button" aria-expanded={open} onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
       >
         <Chevron className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
-        <span className="shrink-0 font-medium">Tâches de l’agent</span>
+        <span className="shrink-0 font-medium">{t('Tâches de l’agent')}</span>
         <span className="shrink-0 font-mono text-xs text-ink-soft" data-todos-count>{done}/{total}</span>
         {current && <span className="min-w-0 flex-1 truncate text-ink-soft">· {current.content}</span>}
       </button>

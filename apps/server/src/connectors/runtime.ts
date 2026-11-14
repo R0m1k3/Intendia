@@ -1,5 +1,6 @@
 import type { CompatReport, ModuleId, ResolvedOp } from './types.js';
 import { MODULES } from './index.js';
+import { msg } from '../i18n/index.js';
 import { HermesError, type HermesHttp, type RequestOptions, type Via } from '../hermes/http.js';
 
 // Routes and services outside src/{hermes,connectors,compat,cli} import these from here (boundaries.test.ts).
@@ -8,7 +9,7 @@ export type { HermesHttp } from '../hermes/http.js';
 
 export class ModuleUnavailableError extends Error {
   constructor(readonly module: ModuleId, readonly op: string, readonly reasons: string[], pending = false) {
-    super(`${module}.${op} ${pending ? 'pas encore vérifié' : 'indisponible'} sur cette instance`);
+    super(pending ? msg('{module}.{op} pas encore vérifié sur cette instance', { module, op }) : msg('{module}.{op} indisponible sur cette instance', { module, op }));
     this.name = 'ModuleUnavailableError';
   }
 }
@@ -45,7 +46,7 @@ function fill(path: string, params: Record<string, string> = {}): string {
 function unavailable(report: CompatReport | undefined, module: ModuleId, op: string, resolved: ResolvedOp | undefined): ModuleUnavailableError {
   if (resolved) return new ModuleUnavailableError(module, op, resolved.notes);
   const pending = !report || Boolean(report.unchecked?.includes(`${module}.${op}`));
-  return new ModuleUnavailableError(module, op, [report?.checkError ? `Vérification échouée : ${report.checkError}` : 'pas encore vérifié'], pending);
+  return new ModuleUnavailableError(module, op, [report?.checkError ? msg('Vérification échouée : {error}', { error: report.checkError }) : msg('pas encore vérifié')], pending);
 }
 
 /**

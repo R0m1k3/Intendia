@@ -8,6 +8,7 @@ import { mcpTokenEnv } from '../connectors/config/index.js';
 import type { Db } from '../db/index.js';
 import { ConfigConflictError, type ConfigService } from '../hermes-config/service.js';
 import { isMcpSynced, markMcpSynced, mcpToken, mcpUrl, rotateMcpToken } from './server.js';
+import { msg } from '../i18n/index.js';
 
 export const MCP_NAME = 'intendia';
 const PROFILE = 'default';
@@ -63,10 +64,10 @@ export class McpLink {
   async connect(id: string, opts: { replaceOther?: boolean; test: boolean }): Promise<{ state: McpState; test?: McpTest }> {
     await this.queued(id, async () => {
       const state = await this.state(id);
-      if (state === 'plugin') throw new ConfigConflictError('mcp_plugin', 'Le serveur MCP « intendia » vient d’un plugin d’Hermes : il ne peut pas être remplacé');
-      if (state === 'unknown') throw new ConfigConflictError('mcp_unavailable', 'Hermes ne répond pas, ou ne permet pas d’ajouter un serveur MCP');
+      if (state === 'plugin') throw new ConfigConflictError('mcp_plugin', msg('Le serveur MCP « intendia » vient d’un plugin d’Hermes : il ne peut pas être remplacé'));
+      if (state === 'unknown') throw new ConfigConflictError('mcp_unavailable', msg('Hermes ne répond pas, ou ne permet pas d’ajouter un serveur MCP'));
       if (state === 'other_url' && !opts.replaceOther) {
-        throw new ConfigConflictError('mcp_other', 'Un autre serveur MCP nommé « intendia » existe dans Hermes');
+        throw new ConfigConflictError('mcp_other', msg('Un autre serveur MCP nommé « intendia » existe dans Hermes'));
       }
       await this.write(id, state);
     });
@@ -107,7 +108,7 @@ export class McpLink {
     try {
       const out = await this.configService.testMcp(id, PROFILE, MCP_NAME);
       const ok = out.ok && out.tools.includes('share_file');
-      const error = out.error ?? (out.ok && !ok ? 'Hermes joint le serveur mais ne voit pas l’outil share_file' : undefined);
+      const error = out.error ?? (out.ok && !ok ? msg('Hermes joint le serveur mais ne voit pas l’outil share_file') : undefined);
       return { ok, tools: out.tools, ...(error ? { error } : {}) };
     } catch (err) {
       return { ok: false, tools: [], error: err instanceof Error ? err.message : String(err) };

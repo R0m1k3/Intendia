@@ -1,9 +1,10 @@
 import { GitBranch } from 'lucide-react';
 import type { SubagentsSummary } from '../api';
+import { plural, t } from '../i18n';
 
 /** « 2 sous-agents travaillent · l’agent reprendra à leur fin » */
 export function subagentsLine(n: number): string {
-  return n === 1 ? '1 sous-agent travaille · l’agent reprendra à sa fin' : `${n} sous-agents travaillent · l’agent reprendra à leur fin`;
+  return plural(n, '{n} sous-agent travaille · l’agent reprendra à sa fin', '{n} sous-agents travaillent · l’agent reprendra à leur fin');
 }
 
 /**
@@ -20,7 +21,7 @@ export function SubagentsBar({ summary, onStop }: { summary: SubagentsSummary; o
         {onStop && (
           <button type="button" onClick={onStop} data-subagents-stop
             className="ml-auto shrink-0 rounded-md px-2 py-0.5 text-[12px] text-ink-soft hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-ink">
-            Ne plus attendre
+            {t('Ne plus attendre')}
           </button>
         )}
       </div>

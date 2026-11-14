@@ -5,8 +5,9 @@ import type { ProvidersService } from '../hermes-config/providers.js';
 import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
 import { GATEWAY_ACTIONS, type GatewayAction } from '../hermes-config/gateway.js';
+import { msg } from '../i18n/index.js';
 
-const VERSION = z.string().regex(/^[0-9a-f]{16}$/, 'version invalide');
+const VERSION = z.string().regex(/^[0-9a-f]{16}$/, msg('version invalide'));
 const PATH = z.string().regex(/^[A-Za-z0-9_.-]{1,200}$/);
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -43,20 +44,20 @@ const McpBody = z.object({
 const EnabledBody = z.object({ enabled: z.boolean() });
 
 function checkKey(key: string): string {
-  if (!KEY_RE.test(key)) throw new ConfigInputError('invalid_key', 'Nom de variable invalide', { key });
+  if (!KEY_RE.test(key)) throw new ConfigInputError('invalid_key', msg('Nom de variable invalide'), { key });
   return key;
 }
 
 function checkName(name: string): string {
-  if (!NAME_RE.test(name)) throw new ConfigInputError('invalid_name', 'Nom de serveur MCP invalide (lettres, chiffres, - et _)');
+  if (!NAME_RE.test(name)) throw new ConfigInputError('invalid_name', msg('Nom de serveur MCP invalide (lettres, chiffres, - et _)'));
   return name;
 }
 
 /** Same rule as a session's model (PatchSession.model in routes/workspaces.ts). */
-const ModelName = z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne');
+const ModelName = z.string().trim().min(1).max(200).regex(/^[^\s]+$/, msg('nom de modèle sans espace ni saut de ligne'));
 /** Built-in provider keys only (`custom:<name>` providers keep their own list, edited in the YAML tab). */
 const ProviderModelsBody = z.object({
-  provider: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, 'fournisseur non modifiable ici'),
+  provider: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, msg('fournisseur non modifiable ici')),
   add: ModelName.optional(),
   remove: ModelName.optional(),
 });
@@ -89,7 +90,7 @@ const CustomProviderBody = z.object({
 const StopBody = z.object({ interrupt: z.boolean().optional() });
 
 function gatewayAction(raw: string | undefined): GatewayAction {
-  if (!GATEWAY_ACTIONS.includes(raw as GatewayAction)) throw new ValidationError('action de passerelle inconnue');
+  if (!GATEWAY_ACTIONS.includes(raw as GatewayAction)) throw new ValidationError(msg('action de passerelle inconnue'));
   return raw as GatewayAction;
 }
 
@@ -98,7 +99,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   const inst = (c: Context) => c.req.param('inst') ?? '';
   const id = (c: Context) => {
     const n = Number(c.req.param('id'));
-    if (!Number.isInteger(n) || n <= 0) throw new ConfigInputError('invalid_id', 'Copie invalide');
+    if (!Number.isInteger(n) || n <= 0) throw new ConfigInputError('invalid_id', msg('Copie invalide'));
     return n;
   };
 
@@ -123,7 +124,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   // ---- provider accounts and API keys (auth.json of the profile)
   const param = (c: Context, name: string, re: RegExp) => {
     const v = c.req.param(name) ?? '';
-    if (!re.test(v)) throw new ValidationError(`${name} invalide`);
+    if (!re.test(v)) throw new ValidationError(msg('{name} invalide', { name }));
     return v;
   };
   r.get('/i/:inst/config/providers', async (c) => c.json(await providers.list(inst(c), profileOf(c))));
@@ -160,14 +161,14 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.get('/i/:inst/config/model-info', async (c) => c.json(await config.modelInfo(inst(c), profileOf(c))));
   r.get('/i/:inst/config/recommended-model', async (c) => {
     const provider = c.req.query('provider') ?? '';
-    if (!PROVIDER_RE.test(provider)) throw new ValidationError('provider invalide');
+    if (!PROVIDER_RE.test(provider)) throw new ValidationError(msg('provider invalide'));
     return c.json(await config.recommendedModel(inst(c), profileOf(c), provider));
   });
   r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
   r.post('/i/:inst/config/models', async (c) => {
     const body = ModelBody.parse(await c.req.json());
     if ((body.scope === 'auxiliary') !== (body.task !== undefined)) {
-      throw new ConfigInputError('invalid_task', 'Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui');
+      throw new ConfigInputError('invalid_task', msg('Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui'));
     }
     return c.json(await config.setModel(inst(c), profileOf(c), body));
   });
@@ -181,7 +182,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.post('/i/:inst/config/provider-models', async (c) => {
     const body = ProviderModelsBody.parse(await c.req.json());
     if ((body.add === undefined) === (body.remove === undefined)) {
-      throw new ConfigInputError('invalid_change', 'Donner un modèle à ajouter ou à retirer (un seul)');
+      throw new ConfigInputError('invalid_change', msg('Donner un modèle à ajouter ou à retirer (un seul)'));
     }
     const change = body.add !== undefined ? { add: body.add } : { remove: body.remove! };
     return c.json(await config.changeProviderModels(inst(c), profileOf(c), body.provider, change));
@@ -192,7 +193,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
     const body = EnvBody.parse(await c.req.json());
     checkKey(body.key);
     if (!body.value || body.value.includes('«') || body.value.length > 16_384) {
-      throw new ConfigInputError('invalid_value', 'Valeur vide, masquée ou trop longue');
+      throw new ConfigInputError('invalid_value', msg('Valeur vide, masquée ou trop longue'));
     }
     return c.json(await config.setEnv(inst(c), profileOf(c), body.key, body.value));
   });
@@ -208,7 +209,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
       && (!byUrl || (/^https?:\/\/\S+$/i.test(body.url!) && body.args === undefined && body.env === undefined))
       && (!byCommand || body.token === undefined)
       && Object.keys(body.env ?? {}).every((k) => KEY_RE.test(k));
-    if (!valid) throw new ConfigInputError('invalid_mcp', 'Donner une URL (avec jeton facultatif) ou une commande (avec arguments et variables)');
+    if (!valid) throw new ConfigInputError('invalid_mcp', msg('Donner une URL (avec jeton facultatif) ou une commande (avec arguments et variables)'));
     return c.json(await config.addMcp(inst(c), profileOf(c), body), 201);
   });
   r.post('/i/:inst/config/mcp/:name/test', async (c) => c.json(await config.testMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));

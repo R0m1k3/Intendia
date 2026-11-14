@@ -4,11 +4,12 @@ import type { LearnedSkill, MemoryOverview } from '../api';
 import { DetailBody, DetailHeader, Facts, ListItemBody, ListLink } from '../components/Panes';
 import { Button, Tag } from '../components/ui';
 import type { EntryLink } from './Entries';
+import { plural, t } from '../i18n';
 
 const ICON = 'size-4';
 type SkillLink = (name: string) => { to: '/i/$inst/memoire'; params: { inst: string }; search: Record<string, string | undefined> };
 
-const BY: Record<string, string> = { agent: 'l’agent', learn: 'apprentissage', bundled: 'fourni', hub: 'hub', user: 'vous' };
+const BY: Record<string, string> = { agent: t('l’agent'), learn: t('apprentissage'), bundled: t('fourni'), hub: t('hub'), user: t('vous') };
 
 /** The learned skills of the graph (written by the agent, or used), most used first. */
 export function LearnedList({ overview, selected, link }: { overview: MemoryOverview; selected: string | undefined; link: SkillLink }) {
@@ -17,18 +18,18 @@ export function LearnedList({ overview, selected, link }: { overview: MemoryOver
   return (
     <>
       <p className="px-3.5 pb-1.5 pt-4 text-xs text-ink-faint" data-learned-stats>
-        {s.skills} skill{s.skills > 1 ? 's' : ''} appris · {s.links} lien{s.links > 1 ? 's' : ''} entre eux
-        {s.isolatedPct !== null && s.skills > 0 ? ` · ${s.isolatedPct} % isolés` : ''}
+        {plural(s.skills, '{n} skill appris', '{n} skills appris')} · {plural(s.links, '{n} lien entre eux', '{n} liens entre eux')}
+        {s.isolatedPct !== null && s.skills > 0 ? ` · ${t('{n} % isolés', { n: s.isolatedPct })}` : ''}
       </p>
-      {list.length === 0 && <p className="px-3.5 py-3 text-sm text-ink-faint">Rien d’appris pour l’instant : un skill apparaît ici quand l’agent l’écrit ou s’en sert.</p>}
-      <ul className="flex flex-col gap-0.5" aria-label="Skills appris">
+      {list.length === 0 && <p className="px-3.5 py-3 text-sm text-ink-faint">{t('Rien d’appris pour l’instant : un skill apparaît ici quand l’agent l’écrit ou s’en sert.')}</p>}
+      <ul className="flex flex-col gap-0.5" aria-label={t('Skills appris')}>
         {list.map((k) => (
           <li key={k.name} data-learned={k.name}>
             <ListLink link={link(k.name)} selected={selected === k.name}>
               <ListItemBody
                 mono title={k.name}
-                meta={<Tag>{k.useCount} usage{k.useCount > 1 ? 's' : ''}</Tag>}
-                sub={[k.category, k.pinned ? 'épinglé' : null, k.related.length || k.memories.length ? `${k.related.length + k.memories.length} lien${k.related.length + k.memories.length > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ') || undefined}
+                meta={<Tag>{plural(k.useCount, '{n} usage', '{n} usages')}</Tag>}
+                sub={[k.category, k.pinned ? t('épinglé') : null, k.related.length || k.memories.length ? plural(k.related.length + k.memories.length, '{n} lien', '{n} liens') : null].filter(Boolean).join(' · ') || undefined}
               />
             </ListLink>
           </li>
@@ -52,36 +53,36 @@ export function LearnedDetail({ inst, profile, skill, overview, skillLink, entry
         mono title={skill.name} sub={skill.category ?? undefined} back={back}
         actions={(
           <Button onClick={() => void navigate({ to: '/i/$inst/skills', params: { inst }, search: { profile: profile === 'default' ? undefined : profile, skill: skill.name } })}>
-            <Layers className={ICON} strokeWidth={1.5} />Ouvrir dans Skills
+            <Layers className={ICON} strokeWidth={1.5} />{t('Ouvrir dans Skills')}
           </Button>
         )}
       />
       <DetailBody className="gap-4">
         <Facts items={[
-          { label: 'Utilisations', value: String(skill.useCount) },
-          ...(skill.state ? [{ label: 'État', value: skill.state === 'active' ? 'actif' : skill.state }] : []),
-          ...(skill.createdBy ? [{ label: 'Origine', value: BY[skill.createdBy] ?? skill.createdBy }] : []),
-          ...(skill.pinned ? [{ label: 'Épinglé', value: 'oui : le curateur ne l’archive pas' }] : []),
+          { label: t('Utilisations'), value: String(skill.useCount) },
+          ...(skill.state ? [{ label: t('État'), value: skill.state === 'active' ? t('actif') : skill.state }] : []),
+          ...(skill.createdBy ? [{ label: t('Origine'), value: BY[skill.createdBy] ?? skill.createdBy }] : []),
+          ...(skill.pinned ? [{ label: t('Épinglé'), value: t('oui : le curateur ne l’archive pas') }] : []),
         ]} />
-        <section aria-label="Lié à">
-          <h3 className="text-[15px] font-semibold">Lié à</h3>
+        <section aria-label={t('Lié à')}>
+          <h3 className="text-[15px] font-semibold">{t('Lié à')}</h3>
           {skill.related.length ? (
             <p className="mt-2 flex flex-wrap gap-1.5">
               {skill.related.map((r) => <Link key={r} {...skillLink(r)} className={linkClass}><Tag className="font-mono">{r}</Tag></Link>)}
             </p>
-          ) : <p className="mt-1 text-sm text-ink-faint">Aucun autre skill appris</p>}
+          ) : <p className="mt-1 text-sm text-ink-faint">{t('Aucun autre skill appris')}</p>}
         </section>
-        <section aria-label="Souvenirs proches">
-          <h3 className="text-[15px] font-semibold">Souvenirs proches</h3>
+        <section aria-label={t('Souvenirs proches')}>
+          <h3 className="text-[15px] font-semibold">{t('Souvenirs proches')}</h3>
           {near.length ? (
             <ul className="mt-2 space-y-1.5">
               {near.map((e) => (
                 <li key={e.id}>
-                  <Link {...entryLink(e.id)} className="block rounded-[10px] bg-paper px-3.5 py-2.5 text-sm transition-colors hover:bg-raised">{e.title || '(sans titre)'}</Link>
+                  <Link {...entryLink(e.id)} className="block rounded-[10px] bg-paper px-3.5 py-2.5 text-sm transition-colors hover:bg-raised">{e.title || t('(sans titre)')}</Link>
                 </li>
               ))}
             </ul>
-          ) : <p className="mt-1 text-sm text-ink-faint">Aucune entrée de mémoire proche</p>}
+          ) : <p className="mt-1 text-sm text-ink-faint">{t('Aucune entrée de mémoire proche')}</p>}
         </section>
       </DetailBody>
     </article>

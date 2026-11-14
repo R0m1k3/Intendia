@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
 import { showCopy } from './Dialog';
+import { locale, t } from '../i18n';
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
@@ -68,9 +69,9 @@ export function Panel({ title, action, children, className, bodyClassName }: {
 
 /* State dot: full, half, empty, so the state reads without colour. */
 const MARK: Record<ModuleState, { label: string; text: string; box: string }> = {
-  full: { label: 'Complet', text: 'text-ok', box: 'border-dot-ok bg-dot-ok shadow-[0_0_0_3px_var(--color-ok-soft)]' },
-  readonly: { label: 'Lecture seule', text: 'text-warn', box: 'border-warn bg-[linear-gradient(to_right,var(--color-warn)_50%,transparent_50%)]' },
-  unavailable: { label: 'Indisponible', text: 'text-bad', box: 'border-bad' },
+  full: { label: t('Complet'), text: 'text-ok', box: 'border-dot-ok bg-dot-ok shadow-[0_0_0_3px_var(--color-ok-soft)]' },
+  readonly: { label: t('Lecture seule'), text: 'text-warn', box: 'border-warn bg-[linear-gradient(to_right,var(--color-warn)_50%,transparent_50%)]' },
+  unavailable: { label: t('Indisponible'), text: 'text-bad', box: 'border-bad' },
 };
 
 export function Mark({ state, className }: { state: ModuleState | null; className?: string }) {
@@ -103,20 +104,29 @@ export function worst(states: ModuleState[]): ModuleState {
   return 'full';
 }
 
-export const MODULE_META: Record<ModuleId, { icon: LucideIcon; does: string }> = {
-  health: { icon: HeartPulse, does: 'Version, santé et capacités' },
-  chat: { icon: MessagesSquare, does: 'Conversations avec l’agent' },
-  sessions: { icon: ScrollText, does: 'Historique et reprise' },
-  crons: { icon: CalendarClock, does: 'Tâches planifiées' },
-  skills: { icon: Puzzle, does: 'Skills et toolsets' },
-  config: { icon: SlidersHorizontal, does: 'Configuration et modèles' },
-  agents: { icon: Bot, does: 'Profils d’agents' },
-  kanban: { icon: KanbanSquare, does: 'Tableau de tâches' },
-  git: { icon: GitBranch, does: 'Statut, diff et commits des dépôts des workspaces' },
-  monitor: { icon: LineChart, does: 'Utilisation, journaux et métriques du serveur' },
-  memory: { icon: Brain, does: 'Mémoire de l’agent et ce qu’il a appris' },
-  plugins: { icon: Puzzle, does: 'Plugins d’Hermes : installés et catalogue' },
+export const MODULE_META: Record<ModuleId, { icon: LucideIcon; label: string; does: string }> = {
+  health: { icon: HeartPulse, label: t('Santé'), does: t('Version, santé et capacités') },
+  chat: { icon: MessagesSquare, label: t('Chat'), does: t('Conversations avec l’agent') },
+  sessions: { icon: ScrollText, label: t('Sessions'), does: t('Historique et reprise') },
+  crons: { icon: CalendarClock, label: t('Crons'), does: t('Tâches planifiées') },
+  skills: { icon: Puzzle, label: t('Skills'), does: t('Skills et toolsets') },
+  config: { icon: SlidersHorizontal, label: t('Configuration'), does: t('Configuration et modèles') },
+  agents: { icon: Bot, label: t('Agents'), does: t('Profils d’agents') },
+  kanban: { icon: KanbanSquare, label: t('Kanban'), does: t('Tableau de tâches') },
+  git: { icon: GitBranch, label: t('Git'), does: t('Statut, diff et commits des dépôts des workspaces') },
+  monitor: { icon: LineChart, label: t('Suivi'), does: t('Utilisation, journaux et métriques du serveur') },
+  memory: { icon: Brain, label: t('Mémoire'), does: t('Mémoire de l’agent et ce qu’il a appris') },
+  plugins: { icon: Puzzle, label: t('Plugins'), does: t('Plugins d’Hermes : installés et catalogue') },
 };
+
+/**
+ * Label of a module of the compat report in the interface language: `ModuleReport.label` stays French on the
+ * server, so the web picks its own by id (`files` is a server module outside `ModuleId`); unknown id: the server's.
+ */
+export function moduleLabel(m: { id: string; label: string }): string {
+  if (m.id === 'files') return t('Fichiers');
+  return (MODULE_META as Record<string, { label: string } | undefined>)[m.id]?.label ?? m.label;
+}
 
 export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null;
@@ -173,10 +183,10 @@ export function chipClass(on: boolean): string {
 
 export function timeAgo(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
-  if (s < 60) return 'à l’instant';
-  if (s < 3600) return `il y a ${Math.round(s / 60)} min`;
-  if (s < 86400) return `il y a ${Math.round(s / 3600)} h`;
-  return new Date(ts).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+  if (s < 60) return t('à l’instant');
+  if (s < 3600) return t('il y a {n} min', { n: Math.round(s / 60) });
+  if (s < 86400) return t('il y a {n} h', { n: Math.round(s / 3600) });
+  return new Date(ts).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export function host(url: string): string {

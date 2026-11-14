@@ -7,8 +7,9 @@ import { ConfigBox } from './Box';
 import { auxLabel } from './aux-labels';
 import { AUTO, changesOf, extraLabel, optionGroups, optionValue, OTHER, parseOption, valueOf } from './aux-draft';
 import { ChatModels } from './ChatModels';
-import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
+import { configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 import { ask } from '../components/Dialog';
+import { locale, plural, t } from '../i18n';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
 export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProviders }: TabProps & { onKey: (key: string) => void; onProviders?: () => void }) {
@@ -25,7 +26,7 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
       onSaved(false);
     },
     onError: async (err, input) => {
-      if (errorCode(err) === 'confirm_required') setConfirmFor({ input, message: String(errorData(err).message ?? 'Confirmer ?') });
+      if (errorCode(err) === 'confirm_required') setConfirmFor({ input, message: String(errorData(err).message ?? t('Confirmer ?')) });
       // the file changed elsewhere: reread it so the next attempt carries the new version
       if (errorCode(err) === 'config_changed') { setConfirmFor(null); await models.refetch(); }
     },
@@ -35,7 +36,7 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
   const invalidateOthers = useInvalidateOthers(inst, profile);
   useEffect(() => { if (models.dataUpdatedAt) void invalidateOthers(); }, [models.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (models.isPending) return <p className="text-sm text-ink-soft">Lecture des modèles…</p>;
+  if (models.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des modèles…')}</p>;
   if (models.isError || !models.data) return <ErrorText error={models.error} />;
   const m = models.data;
   const writable = can('setModel') && m.version !== null;
@@ -44,17 +45,17 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
 
   return (
     <div className="space-y-5">
-      {!writable && <p className="text-sm text-ink-soft">{m.version === null ? 'Écriture impossible : Hermes ne donne pas le fichier de configuration.' : 'Changement de modèle indisponible sur cette instance.'}</p>}
+      {!writable && <p className="text-sm text-ink-soft">{m.version === null ? t('Écriture impossible : Hermes ne donne pas le fichier de configuration.') : t('Changement de modèle indisponible sur cette instance.')}</p>}
       {confirmFor && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
           <span>{confirmFor.message}</span>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setConfirmFor(null)}>Annuler</Button>
-            <Button variant="primary" onClick={() => submit(confirmFor.input, true)}>Confirmer</Button>
+            <Button variant="ghost" onClick={() => setConfirmFor(null)}>{t('Annuler')}</Button>
+            <Button variant="primary" onClick={() => submit(confirmFor.input, true)}>{t('Confirmer')}</Button>
           </div>
         </div>
       )}
-      {otherError && <p className="text-sm text-bad">{errorCode(otherError) === 'config_changed' ? `${CHANGED_TEXT} Les valeurs ont été relues : recommencez.` : <ErrorText error={otherError} />}</p>}
+      {otherError && <p className="text-sm text-bad">{errorCode(otherError) === 'config_changed' ? t("La configuration a changé dans Hermes depuis l'affichage. Les valeurs ont été relues : recommencez.") : <ErrorText error={otherError} />}</p>}
       {notice && <p className="text-sm text-warn">{notice}</p>}
       <MainModel data={m} disabled={!writable || set.isPending} onSave={(provider, model) => submit({ scope: 'main', provider, model })} onKey={onKey} />
       <ChatModels inst={inst} profile={profile} providers={m.providers} writable={m.version !== null} onProviders={onProviders} />
@@ -76,10 +77,10 @@ function ProviderSelect({ value, providers, onChange, disabled, auto = false }: 
 }) {
   const known = providers.some((p) => p.slug === value) || (auto && value === 'auto');
   return (
-    <select className={SELECT} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label="Fournisseur">
+    <select className={SELECT} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={t('Fournisseur')}>
       {auto && <option value="auto">auto</option>}
       {!known && <option value={value}>{value}</option>}
-      {providers.map((p) => <option key={p.slug} value={p.slug}>{p.name}{p.authenticated ? '' : ' (sans clé)'}</option>)}
+      {providers.map((p) => <option key={p.slug} value={p.slug}>{p.name}{p.authenticated ? '' : ` ${t('(sans clé)')}`}</option>)}
     </select>
   );
 }
@@ -93,29 +94,31 @@ export function MainModel({ data, disabled, onSave, onKey }: {
   const p = data.providers.find((x) => x.slug === provider);
   const changed = provider !== data.main.provider || model !== data.main.model;
   return (
-    <ConfigBox id="cf-m" title="Modèle principal" description="Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.">
+    <ConfigBox id="cf-m" title={t('Modèle principal')} description={t('Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.')}>
       <div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="mb-1.5 block text-[13px] font-medium">Fournisseur</span>
+          <span className="mb-1.5 block text-[13px] font-medium">{t('Fournisseur')}</span>
           <ProviderSelect value={provider} providers={data.providers} onChange={setProvider} disabled={disabled} auto />
         </label>
         <label className="block min-w-64 flex-1">
-          <span className="mb-1.5 block text-[13px] font-medium">Modèle</span>
+          <span className="mb-1.5 block text-[13px] font-medium">{t('Modèle')}</span>
           <Input className="font-mono text-[12.5px]" list="main-models" value={model} disabled={disabled} onChange={(e) => setModel(e.target.value)} />
           <datalist id="main-models">{(p?.models ?? []).map((x) => <option key={x} value={x} />)}</datalist>
         </label>
         <Button variant="primary" disabled={disabled || !changed || !model.trim() || !provider} onClick={() => onSave(provider, model.trim())}>
-          <Save className={ICON} strokeWidth={1.5} />Enregistrer
+          <Save className={ICON} strokeWidth={1.5} />{t('Enregistrer')}
         </Button>
       </div>
       <p className="mt-3 text-xs text-ink-faint">
-        Contexte : {data.main.contextLength ? `${data.main.contextLength.toLocaleString('fr-FR')} jetons` : 'inconnu'}. Le changement vaut pour les nouvelles sessions.
+        {data.main.contextLength
+          ? t('Contexte : {n} jetons. Le changement vaut pour les nouvelles sessions.', { n: data.main.contextLength.toLocaleString(locale()) })
+          : t('Contexte : inconnu. Le changement vaut pour les nouvelles sessions.')}
       </p>
       {p && !p.authenticated && (
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-warn">
-          {p.name} n’a pas de clé.
-          {p.keyEnv && onKey && <Button variant="ghost" className="h-7 px-2" onClick={() => onKey(p.keyEnv!)}><KeyRound className={ICON} strokeWidth={1.5} />Définir {p.keyEnv}</Button>}
+          {t('{name} n’a pas de clé.', { name: p.name })}
+          {p.keyEnv && onKey && <Button variant="ghost" className="h-7 px-2" onClick={() => onKey(p.keyEnv!)}><KeyRound className={ICON} strokeWidth={1.5} />{t('Définir {name}', { name: p.keyEnv })}</Button>}
         </p>
       )}
       {p?.warning && <p className="mt-1 text-xs text-ink-faint">{p.warning}</p>}
@@ -146,7 +149,7 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
       const code = errorCode(err);
       if (code === 'confirm_required') {
         const d = errorData(err);
-        setConfirmMsg({ task: typeof d.task === 'string' ? d.task : null, message: String(d.message ?? 'Confirmer ?') });
+        setConfirmMsg({ task: typeof d.task === 'string' ? d.task : null, message: String(d.message ?? t('Confirmer ?')) });
         return;
       }
       setConfirmMsg(null);
@@ -158,20 +161,20 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
   const disabled = !writable || busy || save.isPending;
   const error = save.error && errorCode(save.error) !== 'confirm_required' ? save.error : null;
   const n = changes.length;
-  const confirmLabel = confirmMsg?.task ? auxLabel(confirmMsg.task, data.auxiliary.find((t) => t.task === confirmMsg.task)?.label ?? null) : null;
+  const confirmLabel = confirmMsg?.task ? auxLabel(confirmMsg.task, data.auxiliary.find((a) => a.task === confirmMsg.task)?.label ?? null) : null;
 
   return (
-    <Panel title="Modèles auxiliaires"
-      action={<Button variant="ghost" disabled={disabled || n > 0} title={n > 0 ? 'Enregistrez ou annulez d’abord les modifications' : undefined}
-        onClick={async () => { if (await ask({ title: 'Remettre toutes les tâches sur auto ?', confirmLabel: 'Remettre sur auto' })) onReset(); }}>
-        <RotateCcw className={ICON} strokeWidth={1.5} />Tout remettre sur auto</Button>}
+    <Panel title={t('Modèles auxiliaires')}
+      action={<Button variant="ghost" disabled={disabled || n > 0} title={n > 0 ? t('Enregistrez ou annulez d’abord les modifications') : undefined}
+        onClick={async () => { if (await ask({ title: t('Remettre toutes les tâches sur auto ?'), confirmLabel: t('Remettre sur auto') })) onReset(); }}>
+        <RotateCcw className={ICON} strokeWidth={1.5} />{t('Tout remettre sur auto')}</Button>}
       bodyClassName="divide-y divide-line/70 border-t border-line/70">
-      {data.auxiliary.map((t) => (
-        <AuxRow key={t.task} task={t} providers={data.providers} disabled={disabled}
-          value={draft[t.task] ?? valueOf(t)} other={other.has(t.task)}
+      {data.auxiliary.map((a) => (
+        <AuxRow key={a.task} task={a} providers={data.providers} disabled={disabled}
+          value={draft[a.task] ?? valueOf(a)} other={other.has(a.task)}
           onChange={(v, isOther) => {
-            setOther((cur) => { const next = new Set(cur); if (isOther) next.add(t.task); else next.delete(t.task); return next; });
-            setDraft((cur) => ({ ...cur, [t.task]: v }));
+            setOther((cur) => { const next = new Set(cur); if (isOther) next.add(a.task); else next.delete(a.task); return next; });
+            setDraft((cur) => ({ ...cur, [a.task]: v }));
             setConfirmMsg(null);
           }} />
       ))}
@@ -179,23 +182,23 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
         <div data-aux-bar className="sticky bottom-4 z-10 max-md:bottom-[calc(4.75rem+env(safe-area-inset-bottom))] mx-3 my-3 rounded-xl bg-ink px-4 py-3 text-sm text-sheet shadow-[0_8px_24px_rgb(22_24_27/0.25)]">
           {confirmMsg && (
             <div data-aux-confirm className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-sheet/20 pb-3">
-              <span>{confirmLabel ? `${confirmLabel} : ` : ''}{confirmMsg.message}</span>
+              <span>{confirmLabel ? t('{task} : {message}', { task: confirmLabel, message: confirmMsg.message }) : confirmMsg.message}</span>
               <button type="button" onClick={() => save.mutate(true)} disabled={save.isPending}
-                className="h-8 rounded-lg bg-sheet px-3 text-[13px] font-medium text-ink transition-opacity hover:opacity-90">Confirmer</button>
+                className="h-8 rounded-lg bg-sheet px-3 text-[13px] font-medium text-ink transition-opacity hover:opacity-90">{t('Confirmer')}</button>
             </div>
           )}
           {error && (
             <p role="alert" className="mb-3 border-b border-sheet/20 pb-3 text-[13px]">
-              {errorCode(error) === 'config_changed' ? `${CHANGED_TEXT} Les valeurs ont été relues : vérifiez puis enregistrez de nouveau.` : (error as Error).message}
+              {errorCode(error) === 'config_changed' ? t("La configuration a changé dans Hermes depuis l'affichage. Les valeurs ont été relues : vérifiez puis enregistrez de nouveau.") : (error as Error).message}
             </p>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>{n === 0 ? 'Aucune modification' : `${n} modification${n > 1 ? 's' : ''} non enregistrée${n > 1 ? 's' : ''}`}</span>
+            <span>{n === 0 ? t('Aucune modification') : plural(n, '{n} modification non enregistrée', '{n} modifications non enregistrées')}</span>
             <div className="flex gap-2">
-              <button type="button" onClick={cancel} className="h-8 rounded-lg px-3 text-[13px] font-medium text-sheet/80 transition-colors hover:text-sheet">Annuler</button>
+              <button type="button" onClick={cancel} className="h-8 rounded-lg px-3 text-[13px] font-medium text-sheet/80 transition-colors hover:text-sheet">{t('Annuler')}</button>
               <button type="button" onClick={() => save.mutate(false)} disabled={disabled || n === 0}
                 className="h-8 rounded-lg bg-sheet px-3 text-[13px] font-medium text-ink transition-opacity hover:opacity-90 disabled:opacity-50">
-                {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
+                {save.isPending ? t('Enregistrement…') : t('Enregistrer')}
               </button>
             </div>
           </div>
@@ -220,33 +223,33 @@ function AuxRow({ task, providers, disabled, value, other, onChange }: {
         <div className="min-w-0 md:w-52 md:shrink-0">
           <p className="text-sm font-medium">
             {label}
-            {changed && <span className="font-normal text-accent-ink"> · modifié</span>}
+            {changed && <span className="font-normal text-accent-ink"> · {t('modifié')}</span>}
           </p>
           <p className="font-mono text-[11.5px] text-ink-faint">{task.task}</p>
         </div>
-        <select className={`${SELECT} w-full min-w-0 md:flex-1`} disabled={disabled} aria-label={`Modèle : ${label}`}
+        <select className={`${SELECT} w-full min-w-0 md:flex-1`} disabled={disabled} aria-label={t('Modèle : {task}', { task: label })}
           value={other ? OTHER : value}
           onChange={(e) => {
             const v = e.target.value;
             if (v === OTHER) onChange(value === AUTO ? optionValue(firstKeyed, '') : value, true);
             else onChange(v, false);
           }}>
-          <option value={AUTO}>Auto · modèle principal</option>
+          <option value={AUTO}>{t('Auto · modèle principal')}</option>
           {extra && !other && <option value={extra}>{extraLabel(extra)}</option>}
           {groups.map((g) => (
             <optgroup key={g.label} label={g.label}>
               {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </optgroup>
           ))}
-          <option value={OTHER}>Autre…</option>
+          <option value={OTHER}>{t('Autre…')}</option>
         </select>
       </div>
       {other && (
         <div className="mt-2 flex flex-wrap items-center gap-2 md:pl-56">
           <ProviderSelect value={custom.provider} providers={providers} disabled={disabled} auto
             onChange={(p) => onChange(optionValue(p, custom.model), true)} />
-          <Input className="h-9 min-w-48 flex-1 font-mono text-[12.5px]" placeholder="modèle" value={custom.model} disabled={disabled}
-            aria-label={`Autre modèle : ${label}`} onChange={(e) => onChange(optionValue(custom.provider, e.target.value), true)} />
+          <Input className="h-9 min-w-48 flex-1 font-mono text-[12.5px]" placeholder={t('modèle')} value={custom.model} disabled={disabled}
+            aria-label={t('Autre modèle : {task}', { task: label })} onChange={(e) => onChange(optionValue(custom.provider, e.target.value), true)} />
         </div>
       )}
     </div>

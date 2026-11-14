@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Entry } from './events';
 
 // Edit, retry, undo, branch, clear: each is a truncated copy made by the server (POST …/rewrite), cut before a user
@@ -9,10 +10,10 @@ type UserEntry = Extract<Entry, { kind: 'user' }>;
 
 /** Label of the "Annuler" banner after a replacement. */
 export const ACTION_LABEL: Record<Exclude<HistoryAction, 'branch'>, string> = {
-  edit: 'Message modifié',
-  retry: 'Réponse relancée',
-  undo: 'Dernier échange retiré',
-  clear: 'Conversation vidée',
+  edit: t('Message modifié'),
+  retry: t('Réponse relancée'),
+  undo: t('Dernier échange retiré'),
+  clear: t('Conversation vidée'),
 };
 
 /** Hermes row id of a history entry, or null (live entry, message not stored). */

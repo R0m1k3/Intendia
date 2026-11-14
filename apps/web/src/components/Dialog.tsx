@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Input } from './ui';
+import { t } from '../i18n';
 
 /**
  * In-app dialogs replacing the browser's confirm() / prompt(): `ask()` and `askText()` return a promise, the
@@ -84,7 +85,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
 
   const { title, message } = req.opts;
   const danger = req.kind === 'ask' && req.opts.danger;
-  const confirmLabel = req.opts.confirmLabel ?? (req.kind === 'copy' ? 'Fermer' : 'Confirmer');
+  const confirmLabel = req.opts.confirmLabel ?? (req.kind === 'copy' ? t('Fermer') : t('Confirmer'));
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[18vh]" onMouseDown={() => finish(false)}>
       <form
@@ -121,7 +122,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
           </label>
         )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          {req.kind !== 'copy' && <Button type="button" variant="ghost" onClick={() => finish(false)}>{req.opts.cancelLabel ?? 'Annuler'}</Button>}
+          {req.kind !== 'copy' && <Button type="button" variant="ghost" onClick={() => finish(false)}>{req.opts.cancelLabel ?? t('Annuler')}</Button>}
           <Button
             ref={ok} type="submit" variant={danger ? 'danger' : 'primary'}
             disabled={(req.kind === 'text' && !text.trim()) || (req.kind === 'choice' && !text)}

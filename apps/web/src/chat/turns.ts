@@ -1,3 +1,4 @@
+import { plural } from '../i18n';
 import type { RunStat } from '../api';
 import type { Entry } from './events';
 
@@ -57,9 +58,9 @@ export function toTurns(entries: Entry[], footers?: Map<string, RunStat[]>): Tur
 
 /** "N étapes" with the summed duration when every step has one (live runs only: Hermes' history has none). */
 export function stepsLabel(tools: ToolEntry[]): string {
-  const n = `${tools.length} étape${tools.length > 1 ? 's' : ''}`;
-  if (tools.some((t) => t.duration === null)) return n;
-  const s = tools.reduce((sum, t) => sum + (t.duration ?? 0), 0);
+  const n = plural(tools.length, '{n} étape', '{n} étapes');
+  if (tools.some((tool) => tool.duration === null)) return n;
+  const s = tools.reduce((sum, tool) => sum + (tool.duration ?? 0), 0);
   return `${n} · ${s.toLocaleString('fr-FR', { maximumFractionDigits: s < 10 ? 1 : 0 })} s`;
 }
 

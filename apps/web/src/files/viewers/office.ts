@@ -4,6 +4,7 @@
  * announces; XML read by DOMParser. Nothing from the file is ever injected as HTML: the result is plain data.
  */
 import { AsyncUnzipInflate, Unzip, UnzipInflate } from 'fflate';
+import { t } from '../../i18n';
 
 export const OFFICE_READ_MAX = 20 * 1024 * 1024;
 export const ENTRY_MAX = 20 * 1024 * 1024;
@@ -12,7 +13,7 @@ export const SHEET_ROWS = 1000;
 export const SHEET_COLS = 50;
 
 export class PreviewError extends Error {}
-const tooBig = () => new PreviewError('Aperçu impossible : contenu trop gros');
+const tooBig = () => new PreviewError(t('Aperçu impossible : contenu trop gros'));
 
 /** Tests run without workers: `sync` inflates on the main thread. */
 export interface ZipOpts { entryMax?: number; totalMax?: number; sync?: boolean }
@@ -54,7 +55,7 @@ export function unzipText(bytes: Uint8Array, want: (name: string) => boolean, op
       let size = 0;
       file.ondata = (err, data, final) => {
         if (failed) return;
-        if (err) { fail(new PreviewError(`Aperçu impossible : ${err.message}`)); return; }
+        if (err) { fail(new PreviewError(t('Aperçu impossible : {error}', { error: err.message }))); return; }
         size += data.length;
         total += data.length;
         if (size > entryMax || total > totalMax) { fail(tooBig()); return; }
@@ -68,14 +69,14 @@ export function unzipText(bytes: Uint8Array, want: (name: string) => boolean, op
       try {
         file.start();
       } catch (e) {
-        fail(new PreviewError(`Aperçu impossible : ${(e as Error).message}`));
+        fail(new PreviewError(t('Aperçu impossible : {error}', { error: (e as Error).message })));
       }
     });
     unzip.register(opts.sync ? UnzipInflate : AsyncUnzipInflate);
     try {
       unzip.push(bytes, true);
     } catch (e) {
-      fail(new PreviewError(`Aperçu impossible : ${(e as Error).message}`));
+      fail(new PreviewError(t('Aperçu impossible : {error}', { error: (e as Error).message })));
     }
     pushed = true;
     finish();
@@ -83,9 +84,9 @@ export function unzipText(bytes: Uint8Array, want: (name: string) => boolean, op
 }
 
 function xml(text: string | undefined, what: string): Document {
-  if (text === undefined) throw new PreviewError(`Aperçu impossible : ${what} absent`);
+  if (text === undefined) throw new PreviewError(t('Aperçu impossible : {part} absent', { part: what }));
   const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) throw new PreviewError(`Aperçu impossible : ${what} illisible`);
+  if (doc.getElementsByTagName('parsererror').length) throw new PreviewError(t('Aperçu impossible : {part} illisible', { part: what }));
   return doc;
 }
 
@@ -121,7 +122,7 @@ function paragraph(p: Element): { level: number; runs: Run[] } {
 
 export async function readDocx(bytes: Uint8Array, opts?: ZipOpts): Promise<DocBlock[]> {
   const files = await unzipText(bytes, (n) => n === 'word/document.xml', opts);
-  const doc = xml(files.get('word/document.xml'), 'document Word');
+  const doc = xml(files.get('word/document.xml'), t('document Word'));
   const body = doc.getElementsByTagName('w:body')[0];
   if (!body) return [];
   const out: DocBlock[] = [];
@@ -143,8 +144,8 @@ export interface Workbook { sheets: { name: string; path: string }[]; shared: st
 export async function readXlsxSheets(bytes: Uint8Array, opts?: ZipOpts): Promise<Workbook> {
   const files = await unzipText(bytes, (n) => n === 'xl/workbook.xml' || n === 'xl/_rels/workbook.xml.rels'
     || n === 'xl/sharedStrings.xml' || /^xl\/worksheets\/[^/]+\.xml$/.test(n), opts);
-  const wb = xml(files.get('xl/workbook.xml'), 'classeur Excel');
-  const rels = new Map(all(xml(files.get('xl/_rels/workbook.xml.rels'), 'liens du classeur'), 'Relationship')
+  const wb = xml(files.get('xl/workbook.xml'), t('classeur Excel'));
+  const rels = new Map(all(xml(files.get('xl/_rels/workbook.xml.rels'), t('liens du classeur')), 'Relationship')
     .map((r) => [attr(r, 'Id') ?? '', attr(r, 'Target') ?? '']));
   const sheets = all(wb, 'sheet').map((s) => {
     const target = rels.get(attr(s, 'r:id') ?? '') ?? '';
@@ -152,7 +153,7 @@ export async function readXlsxSheets(bytes: Uint8Array, opts?: ZipOpts): Promise
     return { name: attr(s, 'name') ?? '', path };
   });
   const sst = files.get('xl/sharedStrings.xml');
-  const shared = sst === undefined ? [] : all(xml(sst, 'textes partagés'), 'si').map((si) => all(si, 't').map((t) => t.textContent ?? '').join(''));
+  const shared = sst === undefined ? [] : all(xml(sst, t('textes partagés')), 'si').map((si) => all(si, 't').map((node) => node.textContent ?? '').join(''));
   return { sheets, shared, files };
 }
 
@@ -167,8 +168,8 @@ const colIndex = (ref: string) => {
 /** One sheet, parsed when shown: at most SHEET_ROWS × SHEET_COLS, `cut` when there was more. */
 export function readXlsxSheet(wb: Workbook, index: number): { rows: string[][]; cut: boolean } {
   const sheet = wb.sheets[index];
-  if (!sheet) throw new PreviewError('Aperçu impossible : feuille absente');
-  const doc = xml(wb.files.get(sheet.path), `feuille ${sheet.name}`);
+  if (!sheet) throw new PreviewError(t('Aperçu impossible : feuille absente'));
+  const doc = xml(wb.files.get(sheet.path), t('feuille {name}', { name: sheet.name }));
   const rows: string[][] = [];
   let cut = false;
   for (const row of all(doc, 'row')) {
@@ -184,7 +185,7 @@ export function readXlsxSheet(wb: Workbook, index: number): { rows: string[][]; 
       const type = attr(c, 't');
       const v = kids(c, 'v')[0]?.textContent ?? '';
       cells[col] = type === 's' ? wb.shared[Number(v)] ?? ''
-        : type === 'inlineStr' ? all(c, 't').map((t) => t.textContent ?? '').join('')
+        : type === 'inlineStr' ? all(c, 't').map((node) => node.textContent ?? '').join('')
         : type === 'b' ? (v === '1' ? 'VRAI' : 'FAUX')
         : v;
     }
@@ -198,14 +199,14 @@ export function readXlsxSheet(wb: Workbook, index: number): { rows: string[][]; 
 export async function readPptx(bytes: Uint8Array, opts?: ZipOpts): Promise<string[][]> {
   const files = await unzipText(bytes, (n) => n === 'ppt/presentation.xml' || n === 'ppt/_rels/presentation.xml.rels'
     || /^ppt\/slides\/[^/]+\.xml$/.test(n), opts);
-  const pres = xml(files.get('ppt/presentation.xml'), 'présentation');
-  const rels = new Map(all(xml(files.get('ppt/_rels/presentation.xml.rels'), 'liens de la présentation'), 'Relationship')
+  const pres = xml(files.get('ppt/presentation.xml'), t('présentation'));
+  const rels = new Map(all(xml(files.get('ppt/_rels/presentation.xml.rels'), t('liens de la présentation')), 'Relationship')
     .map((r) => [attr(r, 'Id') ?? '', attr(r, 'Target') ?? '']));
   return all(pres, 'p:sldId').map((s) => {
     const target = rels.get(attr(s, 'r:id') ?? '') ?? '';
     const path = target.startsWith('/') ? target.slice(1) : `ppt/${target}`;
     const text = files.get(path);
     if (text === undefined) return [];
-    return all(xml(text, 'diapositive'), 'a:p').map((p) => all(p, 'a:t').map((t) => t.textContent ?? '').join('')).filter(Boolean);
+    return all(xml(text, t('diapositive')), 'a:p').map((p) => all(p, 'a:t').map((node) => node.textContent ?? '').join('')).filter(Boolean);
   });
 }

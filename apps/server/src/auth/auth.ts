@@ -4,6 +4,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { AppConfig } from '../config.js';
 import { randomToken, safeEqual } from '../crypto.js';
+import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
 import { authSessions, settings } from '../db/schema.js';
 
@@ -31,9 +32,9 @@ export class Auth {
   }
 
   async setInitialPassword(code: string, password: string): Promise<void> {
-    if (!this.needsPassword() || !this.setupCode) throw new AuthError(409, 'Un mot de passe est déjà défini');
-    if (!safeEqual(code.trim(), this.setupCode)) throw new AuthError(403, "Code d'installation incorrect");
-    if (password.length < 12) throw new AuthError(400, 'Le mot de passe doit faire au moins 12 caractères');
+    if (!this.needsPassword() || !this.setupCode) throw new AuthError(409, msg('Un mot de passe est déjà défini'));
+    if (!safeEqual(code.trim(), this.setupCode)) throw new AuthError(403, msg("Code d'installation incorrect"));
+    if (password.length < 12) throw new AuthError(400, msg('Le mot de passe doit faire au moins 12 caractères'));
     const value = await hash(password, { algorithm: 2 /* Argon2id */ });
     this.db.insert(settings).values({ key: 'password_hash', value }).onConflictDoNothing().run();
   }
@@ -42,7 +43,7 @@ export class Auth {
   rateLimit(ip: string): void {
     const now = Date.now();
     const recent = (this.attempts.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-    if (recent.length >= MAX_ATTEMPTS) throw new AuthError(429, 'Trop d’essais, réessayez dans une minute');
+    if (recent.length >= MAX_ATTEMPTS) throw new AuthError(429, msg('Trop d’essais, réessayez dans une minute'));
     recent.push(now);
     this.attempts.set(ip, recent);
   }

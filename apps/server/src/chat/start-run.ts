@@ -1,5 +1,6 @@
 // Starting a run of an Intendia session, shared by the send route, the goal routes and the goal loop (chat/goal.ts):
 // one lock, one cost handover, one way to build the instructions. Also the run_stats settling read by the chat routes.
+import { msg } from '../i18n/index.js';
 import type { CompatService } from '../compat/service.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp } from '../connectors/runtime.js';
@@ -22,7 +23,7 @@ export interface StartRunDeps {
   goals: GoalStore;
 }
 
-export const RUN_BUSY = 'Un run est déjà en cours dans cette session';
+export const RUN_BUSY = msg('Un run est déjà en cours dans cette session');
 
 /** A run of the session goes on (or is being started): the send is refused (409). */
 export class RunBusyError extends Error {
@@ -35,7 +36,7 @@ export class RunBusyError extends Error {
 /** An automatic start (relaunch) whose goal is no longer active: nothing was started. */
 export class GoalInactiveError extends Error {
   constructor() {
-    super('Objectif plus actif');
+    super(msg('Objectif plus actif'));
     this.name = 'GoalInactiveError';
   }
 }

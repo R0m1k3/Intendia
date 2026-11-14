@@ -15,6 +15,7 @@ import type { InstanceConfig } from '../config.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import { ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { GatewaySocketError, oneshot } from '../hermes/gateway-ws.js';
+import { msg } from '../i18n/index.js';
 
 export type GitErrorCode = 'sensitive' | 'staged_sensitive' | 'nothing_staged' | 'git_failed' | 'busy' | 'unsupported' | 'no_model' | 'empty';
 const GIT_STATUS: Record<GitErrorCode, 403 | 409 | 502 | 503> = {
@@ -72,11 +73,11 @@ export type DiffWhich = 'staged' | 'unstaged' | 'all';
  * and `clean` as a pathspec: wildcards and magic (`:(…)`) are refused. A final `/` (folder not tracked) is kept.
  */
 export function checkFile(file: string): { path: string; dir: boolean } {
-  if (typeof file !== 'string') throw new WorkspaceFsError('invalid', 'Fichier invalide');
+  if (typeof file !== 'string') throw new WorkspaceFsError('invalid', msg('Fichier invalide'));
   const dir = file.endsWith('/');
   const rel = normalizeRel(file);
   if (rel.startsWith(':') || /[*?[\]]/.test(rel)) {
-    throw new WorkspaceFsError('invalid', `${rel.slice(0, 200)} : Intendia ne gère pas ce nom (caractère * ? [ ] ou : au début), demandez-le à l'agent`);
+    throw new WorkspaceFsError('invalid', msg("{name} : Intendia ne gère pas ce nom (caractère * ? [ ] ou : au début), demandez-le à l'agent", { name: rel.slice(0, 200) }));
   }
   return { path: dir ? `${rel}/` : rel, dir };
 }
@@ -120,8 +121,8 @@ export class GitService {
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http') {
         const detail = hermesDetail(err).slice(0, DETAIL_MAX);
-        if (err.detail.status === 400) throw new GitError('git_failed', detail || 'git a échoué');
-        if (err.detail.status === 403) throw new GitError('sensitive', `Refusé par Hermes : ${detail}`);
+        if (err.detail.status === 400) throw new GitError('git_failed', detail || msg('git a échoué'));
+        if (err.detail.status === 403) throw new GitError('sensitive', msg('Refusé par Hermes : {detail}', { detail }));
       }
       throw err;
     }
@@ -151,11 +152,11 @@ export class GitService {
     const rel = normalizeRel(repo, { allowRoot: true });
     const abs = under(p.wsAbs, rel);
     if (await this.gitRoot(p, abs) !== abs) {
-      throw new WorkspaceFsError('outside', `${rel || slug} : ce dossier n'est pas la racine d'un dépôt git du workspace`);
+      throw new WorkspaceFsError('outside', msg("{path} : ce dossier n'est pas la racine d'un dépôt git du workspace", { path: rel || slug }));
     }
     const dotGit = await this.roots.fs(this.workspaces.getWorkspace(slug).instanceId).entry(under(slug, rel ? `${rel}/.git` : '.git'));
     if (!dotGit || !dotGit.isDir || dotGit.isLink) {
-      throw new WorkspaceFsError('outside', `${rel || slug} : dépôt refusé, son .git est un lien ou un fichier (sous-module, worktree lié)`);
+      throw new WorkspaceFsError('outside', msg('{path} : dépôt refusé, son .git est un lien ou un fichier (sous-module, worktree lié)', { path: rel || slug }));
     }
     return { ...p, repo: rel, abs };
   }
@@ -187,7 +188,7 @@ export class GitService {
   async status(slug: string, repo: string): Promise<GitStatus> {
     const r = await this.open(slug, repo);
     const st = await this.call<HermesGitStatus | null>(r, 'status');
-    if (!st) throw new WorkspaceFsError('not_found', 'Ce dossier n\'est plus un dépôt git');
+    if (!st) throw new WorkspaceFsError('not_found', msg("Ce dossier n'est plus un dépôt git"));
     const files = await this.files(r, st);
     return {
       repo: r.repo,
@@ -204,9 +205,9 @@ export class GitService {
 
   async diff(slug: string, repo: string, file: string, which: DiffWhich): Promise<string> {
     const f = checkFile(file);
-    if (f.dir) throw new WorkspaceFsError('invalid', 'Pas de diff pour un dossier non suivi');
+    if (f.dir) throw new WorkspaceFsError('invalid', msg('Pas de diff pour un dossier non suivi'));
     if (sensitiveIn(normalizeRel(repo, { allowRoot: true }), f.path)) {
-      throw new GitError('sensitive', `${f.path} : fichier sensible, diff non affiché`);
+      throw new GitError('sensitive', msg('{path} : fichier sensible, diff non affiché', { path: f.path }));
     }
     const r = await this.open(slug, repo);
     const res = which === 'all'
@@ -231,7 +232,7 @@ export class GitService {
   private async locked<T>(slug: string, repo: string, fn: (r: Repo) => Promise<T>): Promise<T> {
     const r = await this.open(slug, repo);
     const key = `${r.inst.id}:${r.abs}`;
-    if (this.busy.has(key)) throw new GitError('busy', 'Une action git est déjà en cours sur ce dépôt');
+    if (this.busy.has(key)) throw new GitError('busy', msg('Une action git est déjà en cours sur ce dépôt'));
     this.busy.add(key);
     try {
       return await fn(r);
@@ -256,7 +257,7 @@ export class GitService {
   async stage(slug: string, repo: string, file: string | null): Promise<{ unstaged: string[] }> {
     const f = file === null ? null : checkFile(file);
     return this.locked(slug, repo, async (r) => {
-      if (f && !f.dir && this.sensitive(r, f.path)) throw new GitError('sensitive', `${f.path} : fichier sensible, Intendia ne l'indexe pas`);
+      if (f && !f.dir && this.sensitive(r, f.path)) throw new GitError('sensitive', msg("{path} : fichier sensible, Intendia ne l'indexe pas", { path: f.path }));
       const before = new Set((await this.list(r)).filter((x) => x.staged && this.sensitive(r, x.path)).map((x) => x.path));
       await this.call(r, 'stage', { body: f ? { file: f.path } : {} });
       const added = (await this.list(r)).filter((x) => x.staged && this.sensitive(r, x.path) && !before.has(x.path)).map((x) => x.path);
@@ -280,14 +281,14 @@ export class GitService {
   async revert(slug: string, repo: string, file: string): Promise<{ ok: true }> {
     const f = checkFile(file);
     return this.locked(slug, repo, async (r) => {
-      if (this.sensitive(r, f.path)) throw new GitError('sensitive', `${f.path} : fichier sensible, Intendia ne l'annule pas`);
+      if (this.sensitive(r, f.path)) throw new GitError('sensitive', msg("{path} : fichier sensible, Intendia ne l'annule pas", { path: f.path }));
       const row = (await this.list(r)).find((x) => x.path === f.path);
       if (!row || row.path.endsWith('/') || row.status === 'R' || row.status === 'C') {
-        throw new ValidationError('Seul un fichier listé (ni dossier, ni renommage) peut être annulé ; supprimez un dossier depuis la page Fichiers');
+        throw new ValidationError(msg('Seul un fichier listé (ni dossier, ni renommage) peut être annulé ; supprimez un dossier depuis la page Fichiers'));
       }
       if (row.status === 'A') await this.call(r, 'unstage', { body: { file: f.path } });
       await this.call(r, 'revert', { body: { file: f.path } });
-      if ((await this.list(r)).some((x) => x.path === f.path)) throw new GitError('git_failed', `Annulation non faite : ${f.path} est toujours modifié`);
+      if ((await this.list(r)).some((x) => x.path === f.path)) throw new GitError('git_failed', msg('Annulation non faite : {path} est toujours modifié', { path: f.path }));
       return { ok: true as const };
     });
   }
@@ -298,12 +299,12 @@ export class GitService {
    */
   async commit(slug: string, repo: string, message: string, push: boolean): Promise<{ committed: true; pushError?: string }> {
     const text = message.trim();
-    if (!text || text.length > MESSAGE_MAX) throw new ValidationError(`Message de commit vide ou trop long (${MESSAGE_MAX} caractères au plus)`);
+    if (!text || text.length > MESSAGE_MAX) throw new ValidationError(msg('Message de commit vide ou trop long ({max} caractères au plus)', { max: MESSAGE_MAX }));
     return this.locked(slug, repo, async (r) => {
       const staged = (await this.list(r)).filter((x) => x.staged);
-      if (!staged.length) throw new GitError('nothing_staged', 'Rien n\'est indexé : indexez d\'abord les fichiers à valider');
+      if (!staged.length) throw new GitError('nothing_staged', msg("Rien n'est indexé : indexez d'abord les fichiers à valider"));
       const bad = staged.filter((x) => this.sensitive(r, x.path)).map((x) => x.path);
-      if (bad.length) throw new GitError('staged_sensitive', `Fichiers sensibles indexés : ${bad.join(', ')} ; désindexez-les avant de valider`);
+      if (bad.length) throw new GitError('staged_sensitive', msg('Fichiers sensibles indexés : {files} ; désindexez-les avant de valider', { files: bad.join(', ') }));
       await this.call(r, 'commit', { body: { message: text, push: false } });
       if (!push) return { committed: true as const };
       try {
@@ -317,7 +318,7 @@ export class GitService {
 
   private async pushRepo(r: Repo): Promise<void> {
     const st = await this.call<HermesGitStatus | null>(r, 'status');
-    if (st?.detached) throw new ValidationError('HEAD détaché : rien à pousser');
+    if (st?.detached) throw new ValidationError(msg('HEAD détaché : rien à pousser'));
     await this.call(r, 'push', { body: {}, timeoutMs: LONG_MS });
   }
 
@@ -331,7 +332,7 @@ export class GitService {
   async switchBranch(slug: string, repo: string, branch: string): Promise<{ branch: string }> {
     return this.locked(slug, repo, async (r) => {
       const res = GitBranchesSchema.parse(await this.call(r, 'branches'));
-      if (!res.branches.some((b) => !b.isRemote && b.name === branch)) throw new ValidationError(`Branche inconnue : ${branch.slice(0, 200)}`);
+      if (!res.branches.some((b) => !b.isRemote && b.name === branch)) throw new ValidationError(msg('Branche inconnue : {branch}', { branch: branch.slice(0, 200) }));
       await this.call(r, 'switch', { body: { branch } });
       return { branch };
     });
@@ -340,8 +341,8 @@ export class GitService {
   /** A commit message for what is staged, by the auxiliary model of Hermes (`llm.oneshot`, template `commit_message`). */
   async message(slug: string, repo: string, avoid?: string): Promise<{ message: string }> {
     return this.locked(slug, repo, async (r) => {
-      if (!r.report?.socket?.oneshot) throw new GitError('unsupported', 'Message par l\'IA indisponible sur cette instance');
-      if (!(await this.list(r)).some((x) => x.staged)) throw new GitError('nothing_staged', 'Rien n\'est indexé : indexez d\'abord les fichiers à valider');
+      if (!r.report?.socket?.oneshot) throw new GitError('unsupported', msg("Message par l'IA indisponible sur cette instance"));
+      if (!(await this.list(r)).some((x) => x.staged)) throw new GitError('nothing_staged', msg("Rien n'est indexé : indexez d'abord les fichiers à valider"));
       const ctx = GitContextSchema.parse(await this.call(r, 'context'));
       let text: string;
       try {
@@ -351,13 +352,13 @@ export class GitService {
           task: 'title_generation', max_tokens: 400,
         }, { factory: this.compat.wsFactory, timeoutMs: TIMEOUT_MS });
       } catch (err) {
-        if (err instanceof GatewaySocketError && err.code === 5030) throw new GitError('no_model', 'Aucun modèle n\'est configuré pour les messages sur cette instance');
-        if (err instanceof GatewaySocketError && err.code === 4031) throw new GitError('unsupported', 'Modèle de message absent de cette version d\'Hermes');
-        if (err instanceof GatewaySocketError) throw new GitError('empty', `Message non obtenu : ${err.message}`);
+        if (err instanceof GatewaySocketError && err.code === 5030) throw new GitError('no_model', msg("Aucun modèle n'est configuré pour les messages sur cette instance"));
+        if (err instanceof GatewaySocketError && err.code === 4031) throw new GitError('unsupported', msg("Modèle de message absent de cette version d'Hermes"));
+        if (err instanceof GatewaySocketError) throw new GitError('empty', msg('Message non obtenu : {reason}', { reason: err.message }));
         throw err;
       }
       const message = cleanMessage(text);
-      if (!message) throw new GitError('empty', 'Le modèle n\'a pas proposé de message');
+      if (!message) throw new GitError('empty', msg("Le modèle n'a pas proposé de message"));
       return { message };
     });
   }

@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type BulkAction, type BulkResult, type Session, type Workspace } from '../api';
 import { askChoice } from '../components/Dialog';
 import { Button, ErrorText, cx, timeAgo } from '../components/ui';
-import { ACTION_LABELS, groupSessions, selectionActions, sessionsCount } from './actions';
+import { ACTION_LABELS, groupSessions, selectionActions } from './actions';
+import { plural, t } from '../i18n';
+import { T } from '../i18n/T';
 import { SESSION_LIST_KEYS, showUndo } from './UndoBar';
 
 /**
@@ -46,10 +48,10 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
         .map((w) => ({ value: w.slug, label: w.name }));
       if (!options.length) {
         setFailures([]);
-        setError(new Error('Aucun autre workspace pour cet agent : créez-en un d’abord'));
+        setError(new Error(t('Aucun autre workspace pour cet agent : créez-en un d’abord')));
         return;
       }
-      const picked = await askChoice({ title: `Déplacer ${sessionsCount(ids.length)}`, label: 'Vers le workspace', options, confirmLabel: 'Déplacer' });
+      const picked = await askChoice({ title: plural(ids.length, 'Déplacer {n} session', 'Déplacer {n} sessions'), label: t('Vers le workspace'), options, confirmLabel: t('Déplacer') });
       if (!picked) return;
       target = picked;
     }
@@ -58,11 +60,11 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
     try {
       const res = await api.bulkSessions(workspace.instanceId, ids, action, target);
       const failed = res.results.filter((r): r is BulkResult & { error: string } => !r.ok && Boolean(r.error));
-      const titles = new Map(sessions.map((s) => [s.id, s.title || 'Nouvelle session']));
+      const titles = new Map(sessions.map((s) => [s.id, s.title || t('Nouvelle session')]));
       setFailures(failed.map((f) => ({ title: titles.get(f.id) ?? f.id, error: f.error })));
       const done = res.results.filter((r) => r.ok).map((r) => r.id);
       if (res.undoUntil && done.length) {
-        showUndo({ inst: workspace.instanceId, ids: done, undoUntil: res.undoUntil, label: `${sessionsCount(done.length)} supprimée${done.length > 1 ? 's' : ''}` });
+        showUndo({ inst: workspace.instanceId, ids: done, undoUntil: res.undoUntil, label: plural(done.length, '{n} session supprimée', '{n} sessions supprimées') });
       }
       setSelected(new Set(failed.map((f) => f.id)));
     } catch (err) {
@@ -77,20 +79,20 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
     <div>
       {selected.size > 0 && (
         <div data-selection-bar className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-sheet px-5 py-2">
-          <span className="mr-auto text-sm font-medium">{sessionsCount(selected.size)} sélectionnée{selected.size > 1 ? 's' : ''}</span>
+          <span className="mr-auto text-sm font-medium">{plural(selected.size, '{n} session sélectionnée', '{n} sessions sélectionnées')}</span>
           {actions.map((a) => (
             <Button key={a} variant={a === 'delete' ? 'danger' : 'ghost'} className="h-8 text-xs" disabled={busy} onClick={() => void run(a)}>
               {ACTION_LABELS[a]}
             </Button>
           ))}
-          <Button variant="ghost" className="h-8 text-xs" onClick={() => setSelected(new Set())}>Désélectionner</Button>
+          <Button variant="ghost" className="h-8 text-xs" onClick={() => setSelected(new Set())}>{t('Désélectionner')}</Button>
         </div>
       )}
       {(failures.length > 0 || error !== null) && (
         <div data-selection-failures className="space-y-1 border-b border-line px-5 py-2 text-sm">
           <ErrorText error={error} />
           {failures.map((f, i) => (
-            <p key={i} className="text-bad"><span className="font-medium">{f.title}</span> : {f.error}</p>
+            <p key={i} className="text-bad"><T k="{title} : {error}" vars={{ title: <span className="font-medium">{f.title}</span>, error: f.error }} /></p>
           ))}
         </div>
       )}
@@ -100,19 +102,19 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
         return (
           <section key={g.label} aria-label={g.label}>
             <div className="flex h-9 items-center gap-3 bg-paper px-4 text-xs font-medium text-ink-soft">
-              <input type="checkbox" aria-label={`Tout sélectionner : ${g.label}`} checked={allOn} onChange={(e) => toggle(ids, e.target.checked)} className="accent-accent" />
+              <input type="checkbox" aria-label={t('Tout sélectionner : {label}', { label: g.label })} checked={allOn} onChange={(e) => toggle(ids, e.target.checked)} className="accent-accent" />
               <span>{g.label}</span>
             </div>
             <ul className="divide-y divide-line">
               {g.items.map((s) => (
                 <li key={s.id} className={cx('flex h-12 items-center gap-3 pl-4 text-sm transition-colors hover:bg-paper', selected.has(s.id) && 'bg-raised/60')}>
                   <input
-                    type="checkbox" aria-label={`Sélectionner ${s.title || 'Nouvelle session'}`} checked={selected.has(s.id)}
+                    type="checkbox" aria-label={t('Sélectionner {title}', { title: s.title || t('Nouvelle session') })} checked={selected.has(s.id)}
                     onChange={(e) => toggle([s.id], e.target.checked)} className="accent-accent"
                   />
                   <Link to="/w/$slug/s/$sessionId" params={{ slug: workspace.slug, sessionId: s.id }} className="flex h-full min-w-0 flex-1 items-center gap-2 pr-5">
-                    {s.pinned && <Pin className="size-3.5 shrink-0 text-ink-faint" strokeWidth={1.75} aria-label="Épinglée" />}
-                    <span className="min-w-0 flex-1 truncate">{s.title || <span className="text-ink-faint">Nouvelle session</span>}</span>
+                    {s.pinned && <Pin className="size-3.5 shrink-0 text-ink-faint" strokeWidth={1.75} aria-label={t('Épinglée')} />}
+                    <span className="min-w-0 flex-1 truncate">{s.title || <span className="text-ink-faint">{t('Nouvelle session')}</span>}</span>
                     <span className="shrink-0 text-xs text-ink-faint">{timeAgo(s.lastActiveAt ?? s.createdAt)}</span>
                   </Link>
                 </li>

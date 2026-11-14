@@ -7,6 +7,8 @@ import { Button, copyText, cx, ErrorText, Input, Mark, Panel } from '../componen
 import { configKey, ICON, SELECT, type TabProps } from './common';
 import { loadConnect, nextPollDelay, resumable, saveConnect, type PendingConnect } from './connect-state';
 import { displayName, visibleAccounts } from './provider-names';
+import { locale, t } from '../i18n';
+import { T } from '../i18n/T';
 
 /**
  * "Fournisseurs": the subscriptions (accounts connected by a device code) and API keys of an agent, kept by Hermes in
@@ -18,12 +20,12 @@ export function ConfigProviders({ inst, profile, can, onVariable, onSaved }: Tab
   const info = useQuery({ queryKey: configKey(inst, profile, 'providers'), queryFn: () => api.configProviders(inst, profile) });
   const refresh = useRefreshProviders(inst, profile);
   const custom = useQuery({ queryKey: configKey(inst, profile, 'custom-providers'), queryFn: () => api.customProviders(inst, profile) });
-  if (info.isPending) return <p className="text-sm text-ink-soft">Lecture des fournisseurs…</p>;
+  if (info.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des fournisseurs…')}</p>;
   if (info.isError) return <ErrorText error={info.error} />;
   return (
     <div className="space-y-6">
       <p className="text-sm text-ink-soft">
-        Un fournisseur connecté ici est proposé dans le chat de cet agent. Les clés et les jetons restent dans Hermes : Intendia ne les affiche jamais.
+        {t('Un fournisseur connecté ici est proposé dans le chat de cet agent. Les clés et les jetons restent dans Hermes : Intendia ne les affiche jamais.')}
       </p>
       <Accounts inst={inst} profile={profile} accounts={info.data.accounts} can={can} refresh={refresh} onRestart={() => onSaved(true)} />
       <Keys inst={inst} profile={profile} info={info.data} can={can} refresh={refresh} onVariable={onVariable} endpoints={custom.data?.endpoints ?? []} />
@@ -51,10 +53,10 @@ type Refresh = () => Promise<unknown>;
 type Ended = { provider: string; status: string; error: string | null; model: string | null };
 
 const ENDED_TEXT: Record<string, string> = {
-  denied: 'La connexion a été refusée.',
-  expired: 'Le code a expiré ou la session n’existe plus. Recommencez.',
-  cancelled: 'Connexion annulée.',
-  error: 'La connexion a échoué.',
+  denied: t('La connexion a été refusée.'),
+  expired: t('Le code a expiré ou la session n’existe plus. Recommencez.'),
+  cancelled: t('Connexion annulée.'),
+  error: t('La connexion a échoué.'),
 };
 
 function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
@@ -85,10 +87,10 @@ function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
     if (r.status === 'approved') void refresh();
   };
 
-  if (accounts === null) return <Panel title="Abonnements"><p className="px-4 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
+  if (accounts === null) return <Panel title={t('Abonnements')}><p className="px-4 py-4 text-sm text-ink-soft">{t('Hermes ne donne pas cette information.')}</p></Panel>;
   return (
-    <Panel title="Abonnements" bodyClassName="divide-y divide-line/70 border-t border-line/70">
-      {accounts.length === 0 && <p className="px-4 py-4 text-sm text-ink-soft">Aucun fournisseur à abonnement.</p>}
+    <Panel title={t('Abonnements')} bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      {accounts.length === 0 && <p className="px-4 py-4 text-sm text-ink-soft">{t('Aucun fournisseur à abonnement.')}</p>}
       {visibleAccounts(accounts).map((a) => {
         const { name, hermes } = displayName(a.id, a.name);
         const isAnthropic = a.id === 'anthropic';
@@ -98,29 +100,29 @@ function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
             <Mark state={a.connected ? 'full' : 'unavailable'} />
             <div className="min-w-0 flex-1">
               <span className="block text-sm font-medium">{name}</span>
-              {hermes && <span className="block text-[11.5px] text-ink-faint">Dans Hermes : {hermes}</span>}
+              {hermes && <span className="block text-[11.5px] text-ink-faint">{t('Dans Hermes : {name}', { name: hermes })}</span>}
               <span className="block text-xs text-ink-faint">
                 {isAnthropic ? anthropicState(a)
-                  : a.connected ? 'Connecté' : a.flow === 'external' ? 'Non connecté — à faire sur la machine d’Hermes' : 'Non connecté'}
-                {a.connected && a.expiresAt && <> · jeton valable jusqu’au {formatDate(a.expiresAt)}</>}
+                  : a.connected ? t('Connecté') : a.flow === 'external' ? t('Non connecté — à faire sur la machine d’Hermes') : t('Non connecté')}
+                {a.connected && a.expiresAt && <> · {t('jeton valable jusqu’au {date}', { date: formatDate(a.expiresAt) })}</>}
               </span>
             </div>
             {a.docsUrl && (
               <a href={a.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-ink-soft hover:text-ink">
-                Documentation<ExternalLink className="size-3" strokeWidth={1.5} />
+                {t('Documentation')}<ExternalLink className="size-3" strokeWidth={1.5} />
               </a>
             )}
             {a.flow === 'device_code' && !a.connected && can('oauthStart') && pending?.provider !== a.id && (
               <Button className="h-8" disabled={pending !== null || start.isPending} onClick={() => start.mutate(a.id)}>
-                {start.isPending && start.variables === a.id ? 'Connexion…' : 'Connecter'}
+                {start.isPending && start.variables === a.id ? t('Connexion…|fournisseur') : t('Connecter')}
               </Button>
             )}
             {a.connected && a.disconnectable && can('oauthDisconnect') && (
               <Button variant="ghost" className="h-8" disabled={disconnect.isPending}
                 onClick={async () => {
-                  if (await ask({ title: `Déconnecter ${name} ?`, message: 'Le chat ne pourra plus utiliser ses modèles.', confirmLabel: 'Déconnecter', danger: true })) disconnect.mutate(a.id);
+                  if (await ask({ title: t('Déconnecter {name} ?', { name }), message: t('Le chat ne pourra plus utiliser ses modèles.'), confirmLabel: t('Déconnecter'), danger: true })) disconnect.mutate(a.id);
                 }}>
-                Déconnecter
+                {t('Déconnecter')}
               </Button>
             )}
           </div>
@@ -131,7 +133,7 @@ function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
           {!isAnthropic && a.flow === 'external' && !a.connected && a.cliCommand && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <code className="rounded-md bg-raised px-2 py-1 font-mono text-[12.5px]">{a.cliCommand}</code>
-              <Button variant="ghost" className="h-7 px-2" aria-label="Copier la commande" onClick={() => void copyText(a.cliCommand!, 'Commande')}>
+              <Button variant="ghost" className="h-7 px-2" aria-label={t('Copier la commande')} onClick={() => void copyText(a.cliCommand!, t('Commande'))}>
                 <Copy className={ICON} strokeWidth={1.5} />
               </Button>
             </div>
@@ -152,10 +154,10 @@ function Accounts({ inst, profile, accounts, can, refresh, onRestart }: {
 }
 
 function anthropicState(a: ProviderAccount): string {
-  if (a.via === 'token') return 'Jeton d’abonnement enregistré';
-  if (a.via === 'hermes') return 'Connecté (connexion faite sur la machine d’Hermes)';
-  if (a.via === 'api_key') return 'Pas d’abonnement : une clé d’API Anthropic est utilisée, payée à l’usage (voir Clés d’API)';
-  return a.connected ? 'Connecté' : 'Non connecté';
+  if (a.via === 'token') return t('Jeton d’abonnement enregistré');
+  if (a.via === 'hermes') return t('Connecté (connexion faite sur la machine d’Hermes)');
+  if (a.via === 'api_key') return t('Pas d’abonnement : une clé d’API Anthropic est utilisée, payée à l’usage (voir Clés d’API)');
+  return a.connected ? t('Connecté') : t('Non connecté');
 }
 
 const SETUP_COMMAND = 'claude setup-token';
@@ -178,9 +180,9 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
       } catch (err) {
         if (!(err instanceof ApiError) || err.status !== 409 || (err.data as { code?: string } | undefined)?.code !== 'api_key_present') throw err;
         const ok = await ask({
-          title: 'Supprimer la clé d’API Anthropic ?',
-          message: 'Une clé d’API Anthropic (ANTHROPIC_API_KEY) est définie et Hermes la préfère au jeton. Elle sera supprimée : ce n’est pas annulable.',
-          confirmLabel: 'Supprimer la clé et enregistrer', danger: true,
+          title: t('Supprimer la clé d’API Anthropic ?'),
+          message: t('Une clé d’API Anthropic (ANTHROPIC_API_KEY) est définie et Hermes la préfère au jeton. Elle sera supprimée : ce n’est pas annulable.'),
+          confirmLabel: t('Supprimer la clé et enregistrer'), danger: true,
         });
         if (!ok) return null;
         return api.setAnthropicToken(inst, profile, token, true);
@@ -200,8 +202,7 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
 
   const leftLine = left.length > 0 && (
     <p className="text-xs text-bad" data-token-left>
-      Pas supprimé : {left.join(', ')}. Cette variable est sans doute définie hors du fichier .env d’Hermes (environnement du
-      conteneur, gestionnaire de secrets) : retirez-la là-bas, puis redémarrez la passerelle.
+      {t('Pas supprimé : {list}. Cette variable est sans doute définie hors du fichier .env d’Hermes (environnement du conteneur, gestionnaire de secrets) : retirez-la là-bas, puis redémarrez la passerelle.', { list: left.join(', ') })}
     </p>
   );
   if (account.via === 'token') {
@@ -211,9 +212,9 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
         {canRemove && (
           <Button variant="ghost" className="h-8" disabled={remove.isPending}
             onClick={async () => {
-              if (await ask({ title: 'Retirer le jeton d’abonnement ?', message: 'Le chat ne pourra plus utiliser votre abonnement Claude. Redémarrez ensuite la passerelle : elle garde le jeton jusque-là.', confirmLabel: 'Retirer', danger: true })) remove.mutate();
+              if (await ask({ title: t('Retirer le jeton d’abonnement ?'), message: t('Le chat ne pourra plus utiliser votre abonnement Claude. Redémarrez ensuite la passerelle : elle garde le jeton jusque-là.'), confirmLabel: t('Retirer'), danger: true })) remove.mutate();
             }}>
-            Retirer le jeton
+            {t('Retirer le jeton')}
           </Button>
         )}
         {remove.isError && <ErrorText error={remove.error} />}
@@ -227,41 +228,40 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
     <div className="mt-2 space-y-2">
       {leftLine}
       {!open && canWrite && (
-        <Button className="h-8" onClick={() => setOpen(true)}>Connecter avec un jeton d’abonnement</Button>
+        <Button className="h-8" onClick={() => setOpen(true)}>{t('Connecter avec un jeton d’abonnement')}</Button>
       )}
       {open && (
         <form className="space-y-3 rounded-xl border border-line bg-raised/50 p-4" data-anthropic-token
           onSubmit={(e) => { e.preventDefault(); if (token.trim()) save.mutate(); }}>
           <ol className="list-decimal space-y-2 pl-5 text-sm">
             <li>
-              Sur votre ordinateur, avec Claude Code installé, lancez :
+              {t('Sur votre ordinateur, avec Claude Code installé, lancez :')}
               <span className="ml-2 inline-flex items-center gap-1">
                 <code className="rounded-md bg-sheet px-2 py-0.5 font-mono text-[12.5px]">{SETUP_COMMAND}</code>
-                <Button type="button" variant="ghost" className="h-7 px-2" aria-label="Copier la commande" onClick={() => void copyText(SETUP_COMMAND, 'Commande')}>
+                <Button type="button" variant="ghost" className="h-7 px-2" aria-label={t('Copier la commande')} onClick={() => void copyText(SETUP_COMMAND, t('Commande'))}>
                   <Copy className={ICON} strokeWidth={1.5} />
                 </Button>
               </span>
-              <span className="block text-xs text-ink-faint">Une page de connexion à votre compte Claude s’ouvre dans le navigateur ; à la fin, la commande affiche un jeton qui commence par sk-ant-oat.</span>
+              <span className="block text-xs text-ink-faint">{t('Une page de connexion à votre compte Claude s’ouvre dans le navigateur ; à la fin, la commande affiche un jeton qui commence par sk-ant-oat.')}</span>
             </li>
             <li>
-              Collez ce jeton ici :
-              <Input type="password" autoComplete="off" spellCheck={false} aria-label="Jeton d’abonnement Anthropic" placeholder="sk-ant-oat…"
+              {t('Collez ce jeton ici :')}
+              <Input type="password" autoComplete="off" spellCheck={false} aria-label={t('Jeton d’abonnement Anthropic')} placeholder="sk-ant-oat…"
                 className="mt-1 w-full font-mono" value={token} onChange={(e) => setToken(e.target.value)} />
             </li>
           </ol>
           <p className="text-xs text-ink-soft">
-            Hermes indique qu’Anthropic décompte cet usage de l’abonnement en crédits d’usage supplémentaire (Extra Usage).
-            Le jeton de claude setup-token est un jeton longue durée ; Intendia le donne à Hermes et ne l’affiche plus jamais.
+            {t('Hermes indique qu’Anthropic décompte cet usage de l’abonnement en crédits d’usage supplémentaire (Extra Usage). Le jeton de claude setup-token est un jeton longue durée ; Intendia le donne à Hermes et ne l’affiche plus jamais.')}
           </p>
           {save.isError && <ErrorText error={save.error} />}
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" disabled={!token.trim() || save.isPending}>{save.isPending ? 'Enregistrement…' : 'Enregistrer le jeton'}</Button>
-            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setToken(''); save.reset(); }}>Annuler</Button>
+            <Button type="submit" disabled={!token.trim() || save.isPending}>{save.isPending ? t('Enregistrement…') : t('Enregistrer le jeton')}</Button>
+            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setToken(''); save.reset(); }}>{t('Annuler')}</Button>
           </div>
         </form>
       )}
       {account.cliCommand && (
-        <p className="text-xs text-ink-faint">Ou, sur la machine d’Hermes : <code className="font-mono">{account.cliCommand}</code></p>
+        <p className="text-xs text-ink-faint"><T k="Ou, sur la machine d’Hermes : {command}" vars={{ command: <code className="font-mono">{account.cliCommand}</code> }} /></p>
       )}
     </div>
   );
@@ -311,20 +311,20 @@ function Connecting({ inst, profile, pending, name, onEnd, canCancel }: {
 
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-line bg-raised/50 p-4" data-connecting={pending.provider}>
-      <p className="text-sm">Ouvrez la page de validation de {name}, connectez-vous et saisissez ce code :</p>
+      <p className="text-sm">{t('Ouvrez la page de validation de {name}, connectez-vous et saisissez ce code :', { name })}</p>
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-lg border border-line bg-sheet px-3 py-1.5 font-mono text-xl tracking-widest" data-user-code>{pending.userCode}</span>
-        <Button variant="ghost" className="h-8 px-2" aria-label="Copier le code" onClick={() => void copyText(pending.userCode, 'Code')}>
+        <Button variant="ghost" className="h-8 px-2" aria-label={t('Copier le code')} onClick={() => void copyText(pending.userCode, t('Code'))}>
           <Copy className={ICON} strokeWidth={1.5} />
         </Button>
         <a href={pending.verificationUrl} target="_blank" rel="noreferrer"
           className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-medium text-on-accent hover:bg-accent-strong">
-          Ouvrir la page de validation<ExternalLink className={ICON} strokeWidth={1.5} />
+          {t('Ouvrir la page de validation')}<ExternalLink className={ICON} strokeWidth={1.5} />
         </a>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-ink-faint">En attente de la validation… Vous pouvez quitter cet onglet, la connexion continue.</span>
-        {canCancel && <Button variant="ghost" className="h-8" disabled={cancelling} onClick={() => void cancel()}>Annuler</Button>}
+        <span className="text-xs text-ink-faint">{t('En attente de la validation… Vous pouvez quitter cet onglet, la connexion continue.')}</span>
+        {canCancel && <Button variant="ghost" className="h-8" disabled={cancelling} onClick={() => void cancel()}>{t('Annuler')}</Button>}
       </div>
       {problem !== null && <ErrorText error={problem} />}
     </div>
@@ -335,22 +335,22 @@ function EndedLine({ ended, name, onRetry }: { ended: Ended; name: string; onRet
   if (ended.status === 'approved') {
     return (
       <p className="mt-2 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok" role="status">
-        {name} est connecté : ses modèles sont proposés dans le chat.
-        {ended.model && <> Hermes a aussi choisi le modèle principal : <span className="font-mono">{ended.model}</span>.</>}
+        {t('{name} est connecté : ses modèles sont proposés dans le chat.', { name })}
+        {ended.model && <> <T k="Hermes a aussi choisi le modèle principal : {model}." vars={{ model: <span className="font-mono">{ended.model}</span> }} /></>}
       </p>
     );
   }
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad" role="status">
-      <span className="flex-1">{ENDED_TEXT[ended.status] ?? `La connexion s’est arrêtée (${ended.status}).`}{ended.error && <> {ended.error}</>}</span>
-      {onRetry && <Button className="h-7" onClick={onRetry}>Recommencer</Button>}
+      <span className="flex-1">{ENDED_TEXT[ended.status] ?? t('La connexion s’est arrêtée ({status}).', { status: ended.status })}{ended.error && <> {ended.error}</>}</span>
+      {onRetry && <Button className="h-7" onClick={onRetry}>{t('Recommencer')}</Button>}
     </div>
   );
 }
 
 function formatDate(v: string): string {
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 // ---------------------------------------------------------------- API keys
@@ -359,13 +359,13 @@ function Keys({ inst, profile, info, can, refresh, onVariable, endpoints }: {
   inst: string; profile: string; info: ProvidersInfo; can: (op: string) => boolean; refresh: Refresh; onVariable?: (key: string) => void;
   endpoints: CustomProvider[];
 }) {
-  if (info.keys === null) return <Panel title="Clés d’API"><p className="px-4 py-4 text-sm text-ink-soft">Hermes ne donne pas cette information.</p></Panel>;
+  if (info.keys === null) return <Panel title={t('Clés d’API')}><p className="px-4 py-4 text-sm text-ink-soft">{t('Hermes ne donne pas cette information.')}</p></Panel>;
   const names = new Map(info.keyProviders.map((p) => [p.slug, p.name]));
   const byProvider = new Map<string, ProviderKey[]>();
   for (const k of info.keys) byProvider.set(k.provider, [...(byProvider.get(k.provider) ?? []), k]);
   return (
-    <Panel title="Clés d’API" bodyClassName="divide-y divide-line/70 border-t border-line/70">
-      {byProvider.size === 0 && <p className="px-4 py-4 text-sm text-ink-soft">Aucune clé d’API enregistrée dans Hermes.</p>}
+    <Panel title={t('Clés d’API')} bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      {byProvider.size === 0 && <p className="px-4 py-4 text-sm text-ink-soft">{t('Aucune clé d’API enregistrée dans Hermes.')}</p>}
       {[...byProvider.entries()].map(([provider, keys]) => (
         <div key={provider} className="px-4 py-3" data-provider-keys={provider}>
           <h3 className="text-sm font-medium">{names.get(provider) ?? provider} <span className="font-mono text-xs font-normal text-ink-faint">{provider}</span></h3>
@@ -399,12 +399,12 @@ function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, re
     if (!variable) return;
     const users = endpoints.filter((e) => e.key?.kind === 'env' && e.key.name === variable).map((e) => e.name);
     const main = qc.getQueryData<{ main: { provider: string } }>(configKey(inst, profile, 'models'))?.main.provider;
-    const still = [...users.map((u) => `l’endpoint ${u}`), ...(main === k.provider ? ['le modèle principal'] : [])];
+    const still = [...users.map((u) => t('l’endpoint {name}', { name: u })), ...(main === k.provider ? [t('le modèle principal')] : [])];
     const ok = await ask({
-      title: `Retirer la clé ${k.label} ?`,
-      message: `La variable ${variable} sera supprimée du fichier .env d’Hermes. Ce n’est pas annulable : il faudra ressaisir la clé.`
-        + (still.length ? ` Elle sert encore à : ${still.join(', ')}.` : ''),
-      confirmLabel: 'Retirer', danger: true,
+      title: t('Retirer la clé {label} ?', { label: k.label }),
+      message: t('La variable {name} sera supprimée du fichier .env d’Hermes. Ce n’est pas annulable : il faudra ressaisir la clé.', { name: variable })
+        + (still.length ? ` ${t('Elle sert encore à : {list}.', { list: still.join(', ') })}` : ''),
+      confirmLabel: t('Retirer'), danger: true,
     });
     if (ok) dropEnv.mutate();
   };
@@ -415,27 +415,27 @@ function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, re
         <div className="min-w-0 flex-1">
           <span className="block truncate text-sm">{k.label}</span>
           <span className="block text-xs text-ink-faint">
-            {variable ? <>Clé de la variable <span className="font-mono">{variable}</span></> : k.source === 'manual' ? 'Ajoutée à la main' : k.source}
-            {k.lastStatus && <> · dernier état : {k.lastStatus}</>}
+            {variable ? <T k="Clé de la variable {name}" vars={{ name: <span className="font-mono">{variable}</span> }} /> : k.source === 'manual' ? t('Ajoutée à la main') : k.source}
+            {k.lastStatus && <> · {t('dernier état : {status}', { status: k.lastStatus })}</>}
           </span>
         </div>
-        {variable && onVariable && <Button variant="ghost" className="h-8" onClick={() => onVariable(variable)}>Voir la variable</Button>}
+        {variable && onVariable && <Button variant="ghost" className="h-8" onClick={() => onVariable(variable)}>{t('Voir la variable')}</Button>}
         {variable && canDeleteEnv && (
-          <Button variant="ghost" className="h-8 px-2" aria-label={`Retirer la clé ${k.label}`} disabled={dropEnv.isPending} onClick={() => void askDropEnv()}>
+          <Button variant="ghost" className="h-8 px-2" aria-label={t('Retirer la clé {label}', { label: k.label })} disabled={dropEnv.isPending} onClick={() => void askDropEnv()}>
             <Trash2 className={ICON} strokeWidth={1.5} />
           </Button>
         )}
         {k.source === 'manual' && canRemove && (
-          <Button variant="ghost" className="h-8 px-2" aria-label={`Retirer la clé ${k.label}`} disabled={remove.isPending}
+          <Button variant="ghost" className="h-8 px-2" aria-label={t('Retirer la clé {label}', { label: k.label })} disabled={remove.isPending}
             onClick={async () => {
-              if (await ask({ title: `Retirer la clé ${k.label} ?`, message: `Hermes ne pourra plus l’utiliser pour ${name}.`, confirmLabel: 'Retirer', danger: true })) remove.mutate();
+              if (await ask({ title: t('Retirer la clé {label} ?', { label: k.label }), message: t('Hermes ne pourra plus l’utiliser pour {name}.', { name }), confirmLabel: t('Retirer'), danger: true })) remove.mutate();
             }}>
             <Trash2 className={ICON} strokeWidth={1.5} />
           </Button>
         )}
       </div>
       {tried && !dropEnv.isError && (
-        <p className="mt-1 text-xs text-ink-soft">Cette variable est définie hors d’Hermes (environnement du conteneur) : retirez-la là où elle est posée.</p>
+        <p className="mt-1 text-xs text-ink-soft">{t('Cette variable est définie hors d’Hermes (environnement du conteneur) : retirez-la là où elle est posée.')}</p>
       )}
       <ErrorText error={remove.error ?? dropEnv.error} />
     </li>
@@ -453,21 +453,21 @@ function AddKey({ inst, profile, providers, refresh }: { inst: string; profile: 
     onSettled: () => setKey(''),
     onSuccess: async () => { setLabel(''); setOpen(false); await refresh(); },
   });
-  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />Ajouter une clé d’API</Button>;
+  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />{t('Ajouter une clé d’API')}</Button>;
   return (
     <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (provider && key.trim()) add.mutate(); }}>
       <div className="flex flex-wrap gap-2">
-        <select className={cx(SELECT, 'w-56')} value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Fournisseur">
-          <option value="">Fournisseur…</option>
+        <select className={cx(SELECT, 'w-56')} value={provider} onChange={(e) => setProvider(e.target.value)} aria-label={t('Fournisseur')}>
+          <option value="">{t('Fournisseur…')}</option>
           {providers.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
         </select>
-        <Input className="w-48" placeholder="Libellé (facultatif)" maxLength={80} value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Libellé" />
-        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="Clé d’API" value={key}
-          onChange={(e) => setKey(e.target.value)} aria-label="Clé d’API" />
+        <Input className="w-48" placeholder={t('Libellé (facultatif)')} maxLength={80} value={label} onChange={(e) => setLabel(e.target.value)} aria-label={t('Libellé')} />
+        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder={t('Clé d’API')} value={key}
+          onChange={(e) => setKey(e.target.value)} aria-label={t('Clé d’API')} />
       </div>
       <div className="flex gap-2">
-        <Button variant="primary" type="submit" disabled={!provider || !key.trim() || add.isPending}>{add.isPending ? 'Ajout…' : 'Ajouter'}</Button>
-        <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>Annuler</Button>
+        <Button variant="primary" type="submit" disabled={!provider || !key.trim() || add.isPending}>{add.isPending ? t('Ajout…') : t('Ajouter')}</Button>
+        <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>{t('Annuler')}</Button>
       </div>
       <ErrorText error={add.error} />
     </form>
@@ -488,12 +488,12 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
     mutationFn: (slug: string) => api.removeCustomProvider(inst, profile, slug),
     onSuccess: async (r) => { setLeft(r.keyLeft ?? null); await refresh(); },
   });
-  if (error) return <Panel title="Endpoints personnalisés"><div className="px-4 py-4"><ErrorText error={error} /></div></Panel>;
+  if (error) return <Panel title={t('Endpoints personnalisés')}><div className="px-4 py-4"><ErrorText error={error} /></div></Panel>;
   if (!data) return null;
   return (
-    <Panel title="Endpoints personnalisés" bodyClassName="divide-y divide-line/70 border-t border-line/70">
-      <p className="px-4 py-3 text-sm text-ink-soft">Un serveur compatible OpenAI (Ollama, vLLM, LM Studio, un proxy…). Ses modèles sont proposés dans le chat.</p>
-      {data.endpoints.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">Aucun endpoint personnalisé.</p>}
+    <Panel title={t('Endpoints personnalisés')} bodyClassName="divide-y divide-line/70 border-t border-line/70">
+      <p className="px-4 py-3 text-sm text-ink-soft">{t('Un serveur compatible OpenAI (Ollama, vLLM, LM Studio, un proxy…). Ses modèles sont proposés dans le chat.')}</p>
+      {data.endpoints.length === 0 && <p className="px-4 py-3 text-sm text-ink-soft">{t('Aucun endpoint personnalisé.')}</p>}
       {data.endpoints.map((e) => (
         <div key={e.slug ?? `old:${e.name}:${e.baseUrl}`} className="flex flex-wrap items-center gap-3 px-4 py-3" data-endpoint={e.slug ?? e.name}>
           <Server className="size-4 text-ink-faint" strokeWidth={1.5} />
@@ -501,19 +501,21 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
             <span className="block text-sm font-medium">{e.name} {e.slug && <span className="font-mono text-xs font-normal text-ink-faint">{e.slug}</span>}</span>
             <span className="block truncate font-mono text-xs text-ink-faint" title={e.baseUrl}>{e.baseUrl}</span>
             <span className="block text-xs text-ink-faint">
-              {e.model ? <>Modèle : <span className="font-mono">{e.model}</span> · </> : null}
-              {e.key === null ? 'Sans clé' : e.key.kind === 'inline' ? 'Clé écrite dans le fichier' : e.key.set ? <>Clé dans <span className="font-mono">{e.key.name}</span></> : <>Variable <span className="font-mono">{e.key.name}</span> absente</>}
-              {e.legacy && ' · ancienne forme, à modifier dans l’onglet YAML'}
+              {e.model ? <><T k="Modèle : {model}" vars={{ model: <span className="font-mono">{e.model}</span> }} /> · </> : null}
+              {e.key === null ? t('Sans clé') : e.key.kind === 'inline' ? t('Clé écrite dans le fichier')
+                : e.key.set ? <T k="Clé dans {name}" vars={{ name: <span className="font-mono">{e.key.name}</span> }} />
+                : <T k="Variable {name} absente" vars={{ name: <span className="font-mono">{e.key.name}</span> }} />}
+              {e.legacy && ` · ${t('ancienne forme, à modifier dans l’onglet YAML')}`}
             </span>
           </div>
           {e.slug && data.writable && (
-            <Button variant="ghost" className="h-8 px-2" aria-label={`Supprimer l’endpoint ${e.name}`} disabled={remove.isPending}
+            <Button variant="ghost" className="h-8 px-2" aria-label={t('Supprimer l’endpoint {name}', { name: e.name })} disabled={remove.isPending}
               onClick={async () => {
                 const ok = await ask({
-                  title: `Supprimer l’endpoint ${e.name} ?`,
-                  message: 'Ses modèles ne seront plus proposés dans le chat.'
-                    + (e.key?.kind === 'env' && e.key.name.startsWith('INTENDIA_') ? ` Sa clé (${e.key.name}) est supprimée aussi : restaurer la configuration depuis Historique ne la remettra pas.` : ''),
-                  confirmLabel: 'Supprimer', danger: true,
+                  title: t('Supprimer l’endpoint {name} ?', { name: e.name }),
+                  message: t('Ses modèles ne seront plus proposés dans le chat.')
+                    + (e.key?.kind === 'env' && e.key.name.startsWith('INTENDIA_') ? ` ${t('Sa clé ({name}) est supprimée aussi : restaurer la configuration depuis Historique ne la remettra pas.', { name: e.key.name })}` : ''),
+                  confirmLabel: t('Supprimer'), danger: true,
                 });
                 if (ok) remove.mutate(e.slug!);
               }}>
@@ -522,11 +524,11 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
           )}
         </div>
       ))}
-      {!data.writable && data.endpoints.some((e) => e.slug) && <p className="px-4 py-3 text-xs text-ink-faint">Modification impossible sur cette instance : utilisez l’onglet YAML.</p>}
+      {!data.writable && data.endpoints.some((e) => e.slug) && <p className="px-4 py-3 text-xs text-ink-faint">{t('Modification impossible sur cette instance : utilisez l’onglet YAML.')}</p>}
       {(remove.error || left) && (
         <div className="px-4 py-3">
           <ErrorText error={remove.error} />
-          {left && <p className="text-xs text-ink-soft">Endpoint supprimé, mais la variable {left} n’a pas pu l’être : retirez-la dans l’onglet Variables.</p>}
+          {left && <p className="text-xs text-ink-soft">{t('Endpoint supprimé, mais la variable {name} n’a pas pu l’être : retirez-la dans l’onglet Variables.', { name: left })}</p>}
         </div>
       )}
       {data.writable && <div className="px-4 py-4"><AddEndpoint inst={inst} profile={profile} refresh={refresh} /></div>}
@@ -548,24 +550,24 @@ function AddEndpoint({ inst, profile, refresh }: { inst: string; profile: string
     onSettled: () => setKey(''),
     onSuccess: async () => { setName(''); setBaseUrl(''); setModel(''); setOpen(false); await refresh(); },
   });
-  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />Ajouter un endpoint</Button>;
+  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />{t('Ajouter un endpoint')}</Button>;
   const ready = name.trim() && /^https?:\/\/./.test(baseUrl.trim());
   return (
     <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (ready) add.mutate(); }}>
       <div className="flex flex-wrap gap-2">
-        <Input className="w-48" placeholder="Nom (ex. Ollama maison)" maxLength={64} value={name} onChange={(e) => setName(e.target.value)} aria-label="Nom de l’endpoint" />
+        <Input className="w-48" placeholder={t('Nom (ex. Ollama maison)')} maxLength={64} value={name} onChange={(e) => setName(e.target.value)} aria-label={t('Nom de l’endpoint')} />
         <Input className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="http://127.0.0.1:11434/v1" maxLength={2048} value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)} aria-label="Adresse de l’endpoint" />
+          onChange={(e) => setBaseUrl(e.target.value)} aria-label={t('Adresse de l’endpoint')} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="Clé d’API (facultative)" value={key}
-          onChange={(e) => setKey(e.target.value)} aria-label="Clé d’API de l’endpoint" />
-        <Input className="w-56 font-mono text-[12.5px]" placeholder="Modèle (facultatif)" maxLength={200} value={model} onChange={(e) => setModel(e.target.value)} aria-label="Modèle" />
+        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder={t('Clé d’API (facultative)')} value={key}
+          onChange={(e) => setKey(e.target.value)} aria-label={t('Clé d’API de l’endpoint')} />
+        <Input className="w-56 font-mono text-[12.5px]" placeholder={t('Modèle (facultatif)')} maxLength={200} value={model} onChange={(e) => setModel(e.target.value)} aria-label={t('Modèle')} />
       </div>
-      <p className="text-xs text-ink-faint">La clé est gardée dans une variable d’Hermes, jamais dans le fichier de configuration.</p>
+      <p className="text-xs text-ink-faint">{t('La clé est gardée dans une variable d’Hermes, jamais dans le fichier de configuration.')}</p>
       <div className="flex gap-2">
-        <Button variant="primary" type="submit" disabled={!ready || add.isPending}>{add.isPending ? 'Ajout…' : 'Ajouter'}</Button>
-        <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>Annuler</Button>
+        <Button variant="primary" type="submit" disabled={!ready || add.isPending}>{add.isPending ? t('Ajout…') : t('Ajouter')}</Button>
+        <Button variant="ghost" type="button" onClick={() => { setOpen(false); setKey(''); add.reset(); }}>{t('Annuler')}</Button>
       </div>
       <ErrorText error={add.error} />
     </form>

@@ -1,5 +1,6 @@
 // Run events → thread entries. No React here: unit-tested in events.test.ts.
 import type { ChatMessage, DelegationInfo, TicketInfo } from '../api';
+import { t } from '../i18n';
 import { deliverySummary, EMPTY_DELIVERY } from './deliveries';
 import { isWake, parseRelaunch } from './goal';
 
@@ -99,7 +100,7 @@ function closeStreaming(entries: Entry[]): Entry[] {
   return last?.kind === 'assistant' && last.streaming ? [...entries.slice(0, -1), { ...last, streaming: false }] : entries;
 }
 
-function updateTool(entries: Entry[], ev: RunEvent, patch: (t: Extract<Entry, { kind: 'tool' }>) => Entry): Entry[] {
+function updateTool(entries: Entry[], ev: RunEvent, patch: (tool: Extract<Entry, { kind: 'tool' }>) => Entry): Entry[] {
   const callId = typeof ev.call_id === 'string' ? ev.call_id : null;
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!;
@@ -146,14 +147,14 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
         }],
       };
     case 'tool.progress':
-      return { ...s, entries: updateTool(s.entries, ev, (t) => ({ ...t, preview: str(ev.preview) || t.preview })) };
+      return { ...s, entries: updateTool(s.entries, ev, (tool) => ({ ...tool, preview: str(ev.preview) || tool.preview })) };
     case 'tool.completed':
     case 'tool.failed': {
       const failed = ev.event === 'tool.failed' || ev.error === true;
       return {
         ...s,
-        entries: updateTool(s.entries, ev, (t) => ({
-          ...t, state: failed ? 'failed' : 'ok', result: str(ev.preview) || null,
+        entries: updateTool(s.entries, ev, (tool) => ({
+          ...tool, state: failed ? 'failed' : 'ok', result: str(ev.preview) || null,
           duration: typeof ev.duration === 'number' ? ev.duration : null,
         })),
       };
@@ -182,7 +183,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
         entries: closeStreaming(s.entries),
         clarify: {
           requestId: typeof ev.prompt_id === 'string' ? ev.prompt_id : null,
-          question: str(ev.question) || 'Hermes vous pose une question',
+          question: str(ev.question) || t('Hermes vous pose une question'),
           choices: Array.isArray(ev.choices) ? ev.choices.map(String) : [],
           multiSelect: ev.multi_select === true,
         },
@@ -193,7 +194,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     case 'approval.settled':
       return {
         ...s, status: 'running', approval: null,
-        entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.choice == null ? 'Approbation répondue' : `Approbation : ${CHOICE_LABEL[str(ev.choice)] ?? str(ev.choice)}`, tone: 'muted', ts }],
+        entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.choice == null ? t('Approbation répondue') : t('Approbation : {choice}', { choice: CHOICE_LABEL[str(ev.choice)] ?? str(ev.choice) }), tone: 'muted', ts }],
       };
     case 'subagent.start':
     case 'subagent.complete':
@@ -216,7 +217,7 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     case 'replay.truncated':
       return { ...s, truncated: true };
     case 'intendia.error':
-      return { ...s, status: 'error', approval: null, clarify: null, error: str(ev.message) || 'Flux interrompu', entries: closeStreaming(s.entries) };
+      return { ...s, status: 'error', approval: null, clarify: null, error: str(ev.message) || t('Flux interrompu'), entries: closeStreaming(s.entries) };
     default:
       return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.event, tone: 'muted', ts }] };
   }
@@ -311,26 +312,26 @@ export function withTrees(entries: Entry[], trees: Extract<Entry, { kind: 'subag
     const at = ts === null ? -1 : out.findIndex((e) => e.kind !== 'subagents' && e.ts !== null && e.ts > ts);
     return at < 0 ? out.length : at;
   };
-  for (const t of trees) {
-    if (out.some((e) => e.key === t.key)) continue;
+  for (const tree of trees) {
+    if (out.some((e) => e.key === tree.key)) continue;
     // the live tree is richer (cost, nested sub-agents): the cards read from the history for that turn go
-    const at = place(t.ts);
+    const at = place(tree.ts);
     const question = (e: Entry) => e.kind === 'user' && !e.steer;
     let from = at - 1;
     while (from >= 0 && !question(out[from]!)) from--;
     let to = at;
     while (to < out.length && !question(out[to]!)) to++;
     out = out.filter((e, i) => !(i > from && i < to && e.kind === 'subagents' && e.key.startsWith('h')));
-    out.splice(place(t.ts), 0, t);
+    out.splice(place(tree.ts), 0, tree);
   }
   return out;
 }
 
 export const CHOICE_LABEL: Record<string, string> = {
-  once: 'autorisé une fois',
-  session: 'autorisé pour la session',
-  always: 'toujours autorisé',
-  deny: 'refusé',
+  once: t('autorisé une fois'),
+  session: t('autorisé pour la session'),
+  always: t('toujours autorisé'),
+  deny: t('refusé'),
 };
 
 /** Session history (oldest first) → entries; tool results attach to their call. */
@@ -350,9 +351,9 @@ export function historyEntries(messages: ChatMessage[]): Entry[] {
     else if (m.role === 'assistant') {
       if (m.content.trim()) out.push({ kind: 'assistant', key: k, text: m.content, ts: m.timestamp });
       if (m.toolCalls.length) calls = [];
-      m.toolCalls.forEach((t, i) => {
+      m.toolCalls.forEach((call, i) => {
         const line: Extract<Entry, { kind: 'tool' }> = {
-          kind: 'tool', key: `${k}-${i}`, callId: null, tool: t.name, preview: t.arguments === '{}' ? '' : t.arguments,
+          kind: 'tool', key: `${k}-${i}`, callId: null, tool: call.name, preview: call.arguments === '{}' ? '' : call.arguments,
           result: null, duration: null, state: 'ok', ts: m.timestamp,
         };
         calls.push(line);
@@ -404,18 +405,18 @@ export function delegationNodes(argsJson: string, resultJson: string, key: strin
 }
 
 /** Cards of a delegate_task in the background: one `background` node per task not refused by Hermes. */
-export function dispatchedNodes(argsJson: string, t: TicketInfo | undefined, key: string, ts: number | null): SubagentNode[] | null {
-  if (!t) return null;
+export function dispatchedNodes(argsJson: string, ticket: TicketInfo | undefined, key: string, ts: number | null): SubagentNode[] | null {
+  if (!ticket) return null;
   const args = obj(parse(argsJson || '{}')) ?? {};
   const tasks = Array.isArray(args.tasks) ? args.tasks : [];
-  const goals = t.goals.length ? t.goals : tasks.length ? tasks.map((x) => str(obj(x)?.goal)) : [str(args.goal)];
+  const goals = ticket.goals.length ? ticket.goals : tasks.length ? tasks.map((x) => str(obj(x)?.goal)) : [str(args.goal)];
   const nodes: SubagentNode[] = [];
   goals.forEach((goal, index) => {
-    if (t.refused.includes(index)) return;
+    if (ticket.refused.includes(index)) return;
     nodes.push({
       id: `${key}-${index}`, parentId: null, depth: 1, goal: goal || str(obj(tasks[index])?.goal), model: null, status: 'background',
       startedAt: ts, duration: null, cost: null, inputTokens: null, outputTokens: null, toolCount: null, summary: null,
-      delegationId: t.units.find((u) => u.tasks.includes(index))?.id ?? t.delegationId, taskIndex: index, childSessionId: null,
+      delegationId: ticket.units.find((u) => u.tasks.includes(index))?.id ?? ticket.delegationId, taskIndex: index, childSessionId: null,
     });
   });
   return nodes.length ? nodes : null;

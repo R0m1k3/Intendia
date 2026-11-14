@@ -1,3 +1,4 @@
+import { msg } from '../i18n/index.js';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
@@ -16,7 +17,7 @@ import { PROFILE_RE } from './params.js';
 import { personalityExists } from '../sessions/personalities.js';
 
 /** Created by the browser once per action: the same key again gives the same copy. */
-const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, 'clé invalide');
+const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, msg('clé invalide'));
 const DuplicateBody = z.object({ key: Key });
 const ToProfileBody = z.object({ key: Key, profile: z.string().min(1).max(64).regex(PROFILE_RE) });
 const ContinueBody = z.object({ key: Key, profile: z.string().max(64).default('default'), workspace: z.string().regex(SLUG_RE) });
@@ -31,9 +32,9 @@ function exportedFromFile(file: unknown): Exported {
   const one = file && typeof file === 'object' && Array.isArray((file as { sessions?: unknown }).sessions)
     ? (file as { sessions: unknown[] }).sessions
     : null;
-  if (one && one.length !== 1) throw new CopyError('invalid', 'Le fichier contient plusieurs sessions : importez-les une par une', 400);
+  if (one && one.length !== 1) throw new CopyError('invalid', msg('Le fichier contient plusieurs sessions : importez-les une par une'), 400);
   const parsed = ExportSchema.safeParse(one ? one[0] : file);
-  if (!parsed.success) throw new CopyError('invalid', 'Fichier non reconnu : un export JSON de session est attendu', 400);
+  if (!parsed.success) throw new CopyError('invalid', msg('Fichier non reconnu : un export JSON de session est attendu'), 400);
   return parsed.data;
 }
 
@@ -78,9 +79,9 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const { key, profile } = ToProfileBody.parse(await c.req.json());
     const ctx = workspaces.getSession(inst, id);
     const { session: s, workspace } = ctx;
-    if (profile === ctx.profile) return c.json({ error: 'La session est déjà sur cet agent', code: 'same_profile' }, 400);
+    if (profile === ctx.profile) return c.json({ error: msg('La session est déjà sur cet agent'), code: 'same_profile' }, 400);
     if (profile !== 'default' && !ctx.instance.profileKeys[profile]) {
-      return c.json({ error: `Profil sans clé sur cette instance : ${profile}`, code: 'no_key' }, 400);
+      return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile }), code: 'no_key' }, 400);
     }
     const newId = copyId(inst, workspace.slug, `${key}:${profile}`);
     const done = workspaces.existingCopy(workspace.slug, newId);
@@ -134,15 +135,15 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
   r.post('/i/:inst/external/:id/continue', async (c) => {
     const inst = c.req.param('inst');
     const id = c.req.param('id');
-    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError('identifiant invalide');
+    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError(msg('identifiant invalide'));
     const body = ContinueBody.parse(await c.req.json());
     const instance = deps.store.get(inst);
-    if (!instance) throw new NotFoundError(`Instance inconnue : ${inst}`);
-    if (body.profile !== 'default' && !instance.profileKeys[body.profile]) throw new ValidationError(`Profil inconnu : ${body.profile}`);
+    if (!instance) throw new NotFoundError(msg('Instance inconnue : {id}', { id: inst }));
+    if (body.profile !== 'default' && !instance.profileKeys[body.profile]) throw new ValidationError(msg('Profil inconnu : {profile}', { profile: body.profile }));
     const ws = workspaces.getWorkspace(body.workspace);
-    if (ws.instanceId !== inst) throw new ValidationError('Workspace d’une autre instance');
+    if (ws.instanceId !== inst) throw new ValidationError(msg('Workspace d’une autre instance'));
     // the history stays with its profile: a copy is only made in a workspace of that profile
-    if ((ws.profile ?? 'default') !== body.profile) return c.json({ error: 'Workspace d’un autre agent', code: 'other_profile' }, 400);
+    if ((ws.profile ?? 'default') !== body.profile) return c.json({ error: msg('Workspace d’un autre agent'), code: 'other_profile' }, 400);
     const newId = copyId(inst, ws.slug, body.key);
     const done = workspaces.existingCopy(ws.slug, newId);
     if (done) return c.json({ session: done });
@@ -155,7 +156,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
 
   r.post('/workspaces/:slug/sessions/import', bodyLimit({
     maxSize: IMPORT_MAX_BYTES,
-    onError: (c) => c.json({ error: 'Fichier trop gros (10 Mo au plus)', code: 'too_large' }, 413),
+    onError: (c) => c.json({ error: msg('Fichier trop gros (10 Mo au plus)'), code: 'too_large' }, 413),
   }), async (c) => {
     const ws = workspaces.getWorkspace(c.req.param('slug'));
     const { key, file } = ImportBody.parse(await c.req.json());
@@ -173,7 +174,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
   r.get('/sessions/:inst/:id/export', async (c) => {
     const { inst, id } = sessionParams(c);
     const format = c.req.query('format') ?? 'md';
-    if (format !== 'md' && format !== 'html' && format !== 'json') throw new ValidationError('format : md, html ou json');
+    if (format !== 'md' && format !== 'html' && format !== 'json') throw new ValidationError(msg('format : md, html ou json'));
     const ctx = workspaces.getSession(inst, id);
     const title = ctx.session.title || 'Nouvelle session';
     if (format === 'json') {
@@ -183,7 +184,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
       });
     }
     const h = await readHistory(compat, inst, id, ctx.profile);
-    if (!h.exists) throw new CopyError('empty', 'Session vide : rien à exporter', 404);
+    if (!h.exists) throw new CopyError('empty', msg('Session vide : rien à exporter'), 404);
     let startedAt: number | null = null;
     try {
       const s = await callOp<{ started_at?: number | null; session?: { started_at?: number | null } }>(compat.http(inst), compat.get(inst), 'sessions', 'get', {

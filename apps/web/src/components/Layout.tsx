@@ -15,6 +15,7 @@ import { flushDrafts } from '../chat/draft';
 import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
 import { cx, Wordmark } from './ui';
+import { plural, t } from '../i18n';
 
 type NavGroup = 'top' | 'auto' | 'agent' | 'foot';
 
@@ -22,21 +23,21 @@ interface NavEntry { key: string; to: string; label: string; icon: typeof House;
 
 /** In display order; `group` places each entry in the sidebar; `page`: per instance. */
 const NAV: readonly NavEntry[] = [
-  { key: 'home', to: '/', label: 'Sessions', icon: Inbox, group: 'top' },
-  { key: 'chat', to: '/chat', label: 'Chat', icon: MessagesSquare, group: 'top' },
-  { key: 'workspaces', to: '/w', label: 'Workspaces', icon: Folder, group: 'top' },
-  { key: 'files', to: '/files', label: 'Fichiers', icon: Files, group: 'top', page: 'files' },
-  { key: 'crons', to: '/crons', label: 'Crons', icon: CalendarClock, group: 'auto', page: 'crons' },
-  { key: 'kanban', to: '/kanban', label: 'Kanban', icon: KanbanSquare, group: 'auto', page: 'kanban' },
-  { key: 'skills', to: '/skills', label: 'Skills', icon: Layers, group: 'agent', page: 'skills' },
-  { key: 'memory', to: '/memoire', label: 'Mémoire', icon: Brain, group: 'agent', page: 'memoire' },
-  { key: 'access', to: '/acces', label: 'Accès', icon: KeyRound, group: 'agent', page: 'acces' },
-  { key: 'agents', to: '/agents', label: 'Agents', icon: Bot, group: 'agent', page: 'agents' },
-  { key: 'config', to: '/config', label: 'Configuration', icon: SlidersHorizontal, group: 'agent', page: 'config' },
-  { key: 'monitor', to: '/suivi', label: 'Suivi', icon: LineChart, group: 'foot', page: 'suivi' },
-  { key: 'activity', to: '/activite', label: 'Centre', icon: Activity, group: 'foot' },
-  { key: 'status', to: '/etat', label: 'État', icon: Server, group: 'foot' },
-  { key: 'settings', to: '/reglages', label: 'Réglages', icon: Settings2, group: 'foot' },
+  { key: 'home', to: '/', label: t('Sessions'), icon: Inbox, group: 'top' },
+  { key: 'chat', to: '/chat', label: t('Chat'), icon: MessagesSquare, group: 'top' },
+  { key: 'workspaces', to: '/w', label: t('Workspaces'), icon: Folder, group: 'top' },
+  { key: 'files', to: '/files', label: t('Fichiers'), icon: Files, group: 'top', page: 'files' },
+  { key: 'crons', to: '/crons', label: t('Crons'), icon: CalendarClock, group: 'auto', page: 'crons' },
+  { key: 'kanban', to: '/kanban', label: t('Kanban'), icon: KanbanSquare, group: 'auto', page: 'kanban' },
+  { key: 'skills', to: '/skills', label: t('Skills'), icon: Layers, group: 'agent', page: 'skills' },
+  { key: 'memory', to: '/memoire', label: t('Mémoire'), icon: Brain, group: 'agent', page: 'memoire' },
+  { key: 'access', to: '/acces', label: t('Accès'), icon: KeyRound, group: 'agent', page: 'acces' },
+  { key: 'agents', to: '/agents', label: t('Agents'), icon: Bot, group: 'agent', page: 'agents' },
+  { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'agent', page: 'config' },
+  { key: 'monitor', to: '/suivi', label: t('Suivi'), icon: LineChart, group: 'foot', page: 'suivi' },
+  { key: 'activity', to: '/activite', label: t('Centre'), icon: Activity, group: 'foot' },
+  { key: 'status', to: '/etat', label: t('État'), icon: Server, group: 'foot' },
+  { key: 'settings', to: '/reglages', label: t('Réglages'), icon: Settings2, group: 'foot' },
 ];
 
 /** Which entry the address belongs to: sessions open in the inbox light "Sessions", a workspace "Workspaces". */
@@ -98,10 +99,10 @@ function FullLayout() {
   // every open chat of this tab, whatever its instance
   const openChats = useChat().open.length;
   const counts: Record<string, { n?: number; bad?: boolean; label?: string }> = {
-    chat: { n: openChats || undefined, label: `${openChats} chat${openChats > 1 ? 's' : ''} ouvert${openChats > 1 ? 's' : ''}` },
+    chat: { n: openChats || undefined, label: plural(openChats, '{n} chat ouvert', '{n} chats ouverts') },
     workspaces: { n: inst ? mine.length : undefined },
     crons: failed > 0
-      ? { n: failed, bad: true, label: `${failed} en échec` }
+      ? { n: failed, bad: true, label: t('{n} en échec', { n: failed }) }
       : { n: inst && overview.data ? myCrons.length : undefined },
   };
   // the address names an instance (/i/<inst>/…, a workspace, /etat#<inst>): it becomes this tab's
@@ -200,7 +201,7 @@ function FullLayout() {
           <Wordmark />
           {!onSession && inst && (
             <button type="button" onClick={side ? closeSide : openSide} aria-expanded={side}
-              aria-label="Chat latéral" title={`Chat latéral (${shortcutLabel().replace('K', 'J')})`}
+              aria-label={t('Chat latéral')} title={t('Chat latéral ({key})', { key: shortcutLabel().replace('K', 'J') })}
               className={cx('flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink', side && 'bg-raised text-ink')}>
               <MessageSquareText className="size-4" strokeWidth={1.5} />
             </button>
@@ -208,18 +209,18 @@ function FullLayout() {
         </div>
         <NewSessionButton />
         <InstanceSwitcher className="mt-2.5" />
-        <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" title={`Rechercher (${shortcutLabel()}) ; un fichier : ${shortcutLabel().replace('K', 'P')}`}
+        <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" title={t('Rechercher ({key}) ; un fichier : {fileKey}', { key: shortcutLabel(), fileKey: shortcutLabel().replace('K', 'P') })}
           className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} />
-          <span className="flex-1 text-left">Rechercher</span>
+          <span className="flex-1 text-left">{t('Rechercher')}</span>
           <kbd className="font-mono text-[11px] text-ink-faint">{shortcutLabel()}</kbd>
         </button>
 
-        <nav className="-mx-1 mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label="Navigation principale">
+        <nav className="-mx-1 mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label={t('Navigation principale')}>
           {entries('top')}
-          <p className={GROUP}>Automatisation</p>
+          <p className={GROUP}>{t('Automatisation')}</p>
           {entries('auto')}
-          <p className={GROUP}>Agent</p>
+          <p className={GROUP}>{t('Agent')}</p>
           {entries('agent')}
         </nav>
 
@@ -228,9 +229,9 @@ function FullLayout() {
           <div className="mt-2 flex items-center gap-2.5 border-t border-line px-2.5 pt-2.5">
             <button onClick={logout} className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg text-sm text-ink-soft transition-colors hover:text-ink">
               <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">Se déconnecter</span>
+              <span className="truncate">{t('Se déconnecter')}</span>
             </button>
-            {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title="Version d’Intendia">v{version}</span>}
+            {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title={t('Version d’Intendia')}>v{version}</span>}
           </div>
         </div>
       </aside>
@@ -269,19 +270,19 @@ function MobileNav({ current, onSearch, onChat, version, inst }: { current: stri
     <>
       {more && createPortal(
         <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
-          <nav aria-label="Plus" onClick={(e) => e.stopPropagation()}
+          <nav aria-label={t('Plus')} onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
             <InstanceSwitcher className="col-span-3" onPicked={() => setMore(false)} />
             <button type="button" onClick={() => { setMore(false); onSearch(); }}
               className="col-span-3 flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft">
               <Search className="size-4" strokeWidth={1.5} />
-              Rechercher
+              {t('Rechercher')}
             </button>
             {onChat && (
               <button type="button" onClick={() => { setMore(false); onChat(); }}
                 className="col-span-3 flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-sm text-ink-soft">
                 <MessageSquareText className="size-4" strokeWidth={1.5} />
-                Chat latéral
+                {t('Chat latéral')}
               </button>
             )}
             <NewSessionButton className="col-span-3 mb-2" onClick={() => setMore(false)} />
@@ -306,7 +307,7 @@ function MobileNav({ current, onSearch, onChat, version, inst }: { current: stri
         <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more}
           className={`${item} ${more || rest.some((n) => current === n.key) ? 'font-medium text-ink' : 'text-ink-faint'}`}>
           <Ellipsis className="size-5" strokeWidth={1.5} />
-          Plus
+          {t('Plus')}
         </button>
       </nav>
     </>
@@ -322,7 +323,7 @@ function NewSessionButton({ className, onClick }: { className?: string; onClick?
       className={cx('flex h-[34px] items-center justify-center gap-2 rounded-lg border border-accent-strong bg-accent px-3 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong', className)}
     >
       <PenLine className="size-4" strokeWidth={1.5} />
-      Nouvelle session
+      {t('Nouvelle session')}
     </Link>
   );
 }

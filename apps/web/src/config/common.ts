@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api';
+import { t } from '../i18n';
 
 /** Shared by the tabs of the Configuration page. */
 
@@ -31,4 +32,4 @@ export function errorData(err: unknown): Record<string, unknown> {
   return err instanceof ApiError && err.data && typeof err.data === 'object' ? (err.data as Record<string, unknown>) : {};
 }
 
-export const CHANGED_TEXT = "La configuration a changé dans Hermes depuis l'affichage.";
+export const CHANGED_TEXT = t("La configuration a changé dans Hermes depuis l'affichage.");

@@ -4,6 +4,7 @@
  */
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import { mapLimit, type FsEntry } from './hermes-fs.js';
+import { msg } from '../i18n/index.js';
 
 export const MOVE_MAX_FILES = 500;
 export const MOVE_MAX_BYTES = 200 * 1024 * 1024;
@@ -37,7 +38,7 @@ export async function walk(list: (rel: string) => Promise<FsEntry[]>, root: stri
   const files: WalkFile[] = [];
   let bytes = 0;
   let failed: unknown = null;
-  const tooLarge = () => new WorkspaceFsError('too_large', opts.tooLarge ?? 'Dossier trop gros');
+  const tooLarge = () => new WorkspaceFsError('too_large', opts.tooLarge ?? msg('Dossier trop gros'));
   let level = [''];
   while (level.length && !failed) {
     const next: string[] = [];
@@ -54,7 +55,7 @@ export async function walk(list: (rel: string) => Promise<FsEntry[]>, root: stri
         if (failed) return;
         const rel = join2(sub, e.name);
         if (e.isLink) {
-          if (opts.links === 'fail') failed = new WorkspaceFsError('outside', `${join2(root, rel)} : c'est un lien symbolique ; Intendia ne le déplace pas`);
+          if (opts.links === 'fail') failed = new WorkspaceFsError('outside', msg("{path} : c'est un lien symbolique ; Intendia ne le déplace pas", { path: join2(root, rel) }));
           continue;
         }
         if (e.isDir) {
@@ -83,7 +84,7 @@ export function idleGuard(source: ReadableStream<Uint8Array>, ms = IDLE_MS): Rea
     async pull(c) {
       let timer: NodeJS.Timeout | undefined;
       const idle = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new WorkspaceFsError('unreachable', 'Hermes ne répond plus pendant la lecture du fichier')), ms);
+        timer = setTimeout(() => reject(new WorkspaceFsError('unreachable', msg('Hermes ne répond plus pendant la lecture du fichier'))), ms);
       });
       try {
         const { done, value } = await Promise.race([reader.read(), idle]);

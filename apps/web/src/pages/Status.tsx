@@ -6,12 +6,13 @@ import { api, type CompatReport, type ModuleReport, type PublicInstance } from '
 import { useCurrentInstance } from '../instance/current';
 import { Gateway } from '../agents/Gateway';
 import { PageHeader } from '../components/Layout';
-import { Button, cx, ErrorText, host, MODULE_META, Panel, Tag, timeAgo } from '../components/ui';
+import { Button, cx, ErrorText, host, MODULE_META, moduleLabel, Panel, Tag, timeAgo } from '../components/ui';
+import { plural, t } from '../i18n';
 
 const STATE_TAG: Record<ModuleReport['state'], { label: string; tag: string; icon: string }> = {
-  full: { label: 'complet', tag: '', icon: 'text-dot-ok' },
-  readonly: { label: 'lecture seule', tag: 'bg-warn-soft text-warn', icon: 'text-warn' },
-  unavailable: { label: 'indisponible', tag: 'bg-bad-soft text-bad', icon: 'text-bad' },
+  full: { label: t('complet'), tag: '', icon: 'text-dot-ok' },
+  readonly: { label: t('lecture seule'), tag: 'bg-warn-soft text-warn', icon: 'text-warn' },
+  unavailable: { label: t('indisponible'), tag: 'bg-bad-soft text-bad', icon: 'text-bad' },
 };
 
 function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
@@ -26,10 +27,10 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
         aria-expanded={open}
       >
         <StateIcon className={cx('size-4 shrink-0', st.icon)} strokeWidth={1.75} aria-hidden />
-        <span className="w-36 shrink-0 font-medium">{m.label}</span>
-        <span className="hidden min-w-0 flex-1 truncate text-ink-faint sm:inline">{MODULE_META[m.id]?.does ?? ((m.id as string) === 'files' ? 'Fichiers des workspaces' : '')}</span>
+        <span className="w-36 shrink-0 font-medium">{moduleLabel(m)}</span>
+        <span className="hidden min-w-0 flex-1 truncate text-ink-faint sm:inline">{MODULE_META[m.id]?.does ?? ((m.id as string) === 'files' ? t('Fichiers des workspaces') : '')}</span>
         <span className="ml-auto flex items-center gap-2">
-          <Tag className={st.tag}><span className="sr-only">État : </span>{st.label}</Tag>
+          <Tag className={st.tag}><span className="sr-only">{t('État : ')}</span>{st.label}</Tag>
           <ChevronRight className={cx('size-4 shrink-0 text-ink-faint transition-transform duration-150', open && 'rotate-90')} strokeWidth={1.5} />
         </span>
       </button>
@@ -42,7 +43,7 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
           )}
           {m.state !== 'full' && m.dashboardLink && (
             <a href={m.dashboardLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-accent-ink hover:text-ink">
-              Ouvrir dans le dashboard officiel
+              {t('Ouvrir dans le dashboard officiel')}
               <ArrowUpRight className="size-4" strokeWidth={1.5} />
             </a>
           )}
@@ -58,7 +59,7 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
                         <span className="text-ink-soft">{op.route.method.padEnd(6, ' ')}</span>
                         <span>{op.route.path}</span>
                       </>
-                    ) : <span className="text-bad">aucune route</span>}
+                    ) : <span className="text-bad">{t('aucune route')}</span>}
                     {op.notes.length > 0 && <div className="mt-0.5 font-sans text-ink-faint">{op.notes.join(' · ')}</div>}
                   </td>
                 </tr>
@@ -83,11 +84,11 @@ function InstanceCard({ instance, report, current, onPick }: { instance: PublicI
         <span aria-hidden className={cx('size-2.5 shrink-0 rounded-full', online ? 'bg-dot-ok' : 'border-2 border-ink-faint')} />
         <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{instance.label}</span>
         <Tag className={online ? 'bg-ok-soft text-ok' : online === false ? 'bg-bad-soft text-bad' : undefined}>
-          {online === null ? 'non vérifiée' : online ? 'en ligne' : 'hors ligne'}
+          {online === null ? t('non vérifiée') : online ? t('en ligne') : t('hors ligne')}
         </Tag>
       </span>
       <span className="mt-1.5 block truncate font-mono text-xs text-ink-faint">
-        {[report?.hermesVersion, host(instance.api), instance.dashboard ? host(instance.dashboard) : 'sans dashboard'].filter(Boolean).join(' · ')}
+        {[report?.hermesVersion, host(instance.api), instance.dashboard ? host(instance.dashboard) : t('sans dashboard')].filter(Boolean).join(' · ')}
       </span>
     </button>
   );
@@ -95,38 +96,38 @@ function InstanceCard({ instance, report, current, onPick }: { instance: PublicI
 
 function InstanceStatus({ report, label }: { report: CompatReport; label: string }) {
   const dash = !report.dash.configured
-    ? 'non configuré'
+    ? t('non configuré')
     : report.dash.reachable
-      ? `joignable${report.dash.openapi ? ', OpenAPI lue' : ', sans OpenAPI'}`
-      : `injoignable (${report.dash.error ?? '?'})`;
+      ? (report.dash.openapi ? t('joignable, OpenAPI lue') : t('joignable, sans OpenAPI'))
+      : t('injoignable ({error})', { error: report.dash.error ?? '?' });
   const full = report.modules.filter((m) => m.state === 'full').length;
   return (
     <section className="card overflow-hidden" aria-labelledby={`mods-${report.instanceId}`}>
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-4 py-3">
         <h2 id={`mods-${report.instanceId}`} className="text-[15px] font-semibold">
-          <span id={report.instanceId} className="scroll-mt-6">Modules de {label}</span>
+          <span id={report.instanceId} className="scroll-mt-6">{t('Modules de {label}', { label })}</span>
         </h2>
-        <span className="text-[13px] text-ink-faint">{full} sur {report.modules.length} complets · vérifié {timeAgo(report.checkedAt)}</span>
+        <span className="text-[13px] text-ink-faint">{t('{full} sur {total} complets · vérifié {ago}', { full, total: report.modules.length, ago: timeAgo(report.checkedAt) })}</span>
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-line/70 px-4 py-2.5 text-[13px]">
-        <span><span className="text-ink-faint">API server</span> {report.api.reachable ? 'joignable' : <span className="text-bad">injoignable ({report.api.error ?? '?'})</span>}</span>
+        <span><span className="text-ink-faint">API server</span> {report.api.reachable ? t('joignable') : <span className="text-bad">{t('injoignable ({error})', { error: report.api.error ?? '?' })}</span>}</span>
         <span><span className="text-ink-faint">Dashboard</span> {dash}</span>
         {report.socket && (
           <span data-socket={report.socket.sessionStats ? 'on' : 'off'}>
-            <span className="text-ink-faint">Statistiques de session (WebSocket)</span> {report.socket.sessionStats ? 'disponibles' : 'indisponibles'}
+            <span className="text-ink-faint">{t('Statistiques de session (WebSocket)')}</span> {report.socket.sessionStats ? t('disponibles') : t('indisponibles')}
             <span className="text-ink-faint"> · {report.socket.note}</span>
           </span>
         )}
         {report.socket?.vault !== undefined && (
           <span data-socket-vault={report.socket.vault ? 'on' : 'off'}>
-            <span className="text-ink-faint">Coffre (WebSocket)</span> {report.socket.vault ? 'disponible' : 'indisponible'}
+            <span className="text-ink-faint">{t('Coffre (WebSocket)')}</span> {report.socket.vault ? t('disponible') : t('indisponible')}
           </span>
         )}
         <span className="font-mono text-xs text-ink-faint">Hermes {report.hermesVersion ?? '?'}</span>
         {report.checkError
-          ? <span className="text-bad" data-check-error>Vérification échouée : {report.checkError}</span>
+          ? <span className="text-bad" data-check-error>{t('Vérification échouée : {error}', { error: report.checkError })}</span>
           : report.unchecked?.length
-            ? <span className="text-ink-soft" data-unchecked>{report.unchecked.length} opération{report.unchecked.length > 1 ? 's' : ''} pas encore vérifiée{report.unchecked.length > 1 ? 's' : ''}{report.checking ? ' (vérification en cours)' : ''}</span>
+            ? <span className="text-ink-soft" data-unchecked>{plural(report.unchecked.length, '{n} opération pas encore vérifiée', '{n} opérations pas encore vérifiées')}{report.checking ? t(' (vérification en cours)') : ''}</span>
             : null}
       </div>
       <ul>
@@ -150,12 +151,12 @@ function StoppedGateways({ report }: { report: CompatReport }) {
   if (!ok || stopped.length === 0) return null;
   return (
     <section className="card overflow-hidden" aria-labelledby={`gw-${inst}`}>
-      <h2 id={`gw-${inst}`} className="px-4 py-3 text-[15px] font-semibold">Passerelles arrêtées</h2>
+      <h2 id={`gw-${inst}`} className="px-4 py-3 text-[15px] font-semibold">{t('Passerelles arrêtées')}</h2>
       <ul>
         {stopped.map((a) => (
           <li key={a.name} className="flex flex-wrap items-start gap-3 border-t border-line/70 px-4 py-3">
             <Link to="/i/$inst/agents/$name" params={{ inst, name: a.name }} className="pt-2 font-mono text-[13.5px] hover:underline">{a.name}</Link>
-            <span className="pt-2 text-[13px] text-ink-faint">chat, runs et crons de cet agent arrêtés</span>
+            <span className="pt-2 text-[13px] text-ink-faint">{t('chat, runs et crons de cet agent arrêtés')}</span>
             <div className="ml-auto min-w-[12rem] flex-1">
               <Gateway inst={inst} profile={a.name} running={false} compact can={{ start: true, stop: false, restart: false }} />
             </div>
@@ -178,16 +179,16 @@ export function StatusPage() {
   return (
     <>
       <PageHeader
-        title="État des instances"
-        subtitle="Chaque module est testé contre Hermes au démarrage, à chaque nouvelle version et chaque jour. Ouvrez un module pour voir les routes qu’il utilise."
+        title={t('État des instances')}
+        subtitle={t('Chaque module est testé contre Hermes au démarrage, à chaque nouvelle version et chaque jour. Ouvrez un module pour voir les routes qu’il utilise.')}
         action={(
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => recheck.mutate()} disabled={recheck.isPending || !instance}>
               <RotateCw className={cx('size-4', recheck.isPending && 'animate-spin')} strokeWidth={1.5} />
-              {recheck.isPending ? 'Vérification…' : 'Revérifier'}
+              {recheck.isPending ? t('Vérification…') : t('Revérifier')}
             </Button>
             <Link to="/reglages" className="inline-flex h-[34px] items-center rounded-lg border border-ink bg-ink px-3.5 text-[13.5px] font-medium text-sheet hover:opacity-90">
-              Ajouter une instance
+              {t('Ajouter une instance')}
             </Link>
           </div>
         )}
@@ -204,7 +205,7 @@ export function StatusPage() {
           const r = report(i.id);
           return r
             ? <div key={i.id} className="space-y-5"><StoppedGateways report={r} /><InstanceStatus report={r} label={i.label} /></div>
-            : <Panel key={i.id} title={i.label}><p className="text-sm text-ink-soft">Vérification en cours…</p></Panel>;
+            : <Panel key={i.id} title={i.label}><p className="text-sm text-ink-soft">{t('Vérification en cours…')}</p></Panel>;
         })}
       </div>
     </>

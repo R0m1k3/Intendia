@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { UsageDay } from '../api';
 import { formatTokens, formatUsd, niceScale } from './format';
+import { t } from '../i18n';
+import { T } from '../i18n/T';
 
 const H = 160;
 const PAD_L = 52;
@@ -45,11 +47,11 @@ export function DailyBars({ daily, days }: { daily: UsageDay[]; days: number }) 
   const h = hover === null ? null : data[hover]!;
   return (
     <div className="relative">
-      <svg viewBox={`0 ${-PAD_T} ${W} ${H + PAD_B + PAD_T}`} className="w-full" role="img" aria-label="Coût estimé par jour" onMouseLeave={() => setHover(null)}>
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={PAD_L} x2={W} y1={y(t)} y2={y(t)} stroke="var(--color-line)" strokeWidth={1} />
-            <text x={PAD_L - 6} y={y(t) + 4} textAnchor="end" className="fill-ink-faint text-[11px]">{formatUsd(t)}</text>
+      <svg viewBox={`0 ${-PAD_T} ${W} ${H + PAD_B + PAD_T}`} className="w-full" role="img" aria-label={t('Coût estimé par jour')} onMouseLeave={() => setHover(null)}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line x1={PAD_L} x2={W} y1={y(tick)} y2={y(tick)} stroke="var(--color-line)" strokeWidth={1} />
+            <text x={PAD_L - 6} y={y(tick) + 4} textAnchor="end" className="fill-ink-faint text-[11px]">{formatUsd(tick)}</text>
           </g>
         ))}
         {data.map((d, i) => {
@@ -76,9 +78,9 @@ export function DailyBars({ daily, days }: { daily: UsageDay[]; days: number }) 
         <div role="tooltip" className="pointer-events-none absolute top-0 rounded-lg border border-line bg-sheet px-3 py-2 text-xs shadow-sm"
           style={{ left: `min(calc(${((PAD_L + (hover! + 0.5) * slot) / W) * 100}% + 8px), calc(100% - 11rem))` }}>
           <p className="font-medium">{h.day}</p>
-          <p className="text-ink-soft">Coût estimé : <span className="font-mono text-ink">{formatUsd(h.estimatedCost)}</span></p>
-          <p className="text-ink-soft">Sessions : <span className="font-mono text-ink">{h.sessions ?? '—'}</span> · appels : <span className="font-mono text-ink">{h.apiCalls ?? '—'}</span></p>
-          <p className="text-ink-soft">Jetons : <span className="font-mono text-ink">{formatTokens(h.input)}</span> / <span className="font-mono text-ink">{formatTokens(h.output)}</span></p>
+          <p className="text-ink-soft"><T k="Coût estimé : {v}" vars={{ v: <span className="font-mono text-ink">{formatUsd(h.estimatedCost)}</span> }} /></p>
+          <p className="text-ink-soft"><T k="Sessions : {s} · appels : {c}" vars={{ s: <span className="font-mono text-ink">{h.sessions ?? '—'}</span>, c: <span className="font-mono text-ink">{h.apiCalls ?? '—'}</span> }} /></p>
+          <p className="text-ink-soft"><T k="Jetons : {i} / {o}" vars={{ i: <span className="font-mono text-ink">{formatTokens(h.input)}</span>, o: <span className="font-mono text-ink">{formatTokens(h.output)}</span> }} /></p>
         </div>
       )}
     </div>

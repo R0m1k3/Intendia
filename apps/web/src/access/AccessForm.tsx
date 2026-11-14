@@ -4,11 +4,12 @@ import { useState, type FormEvent } from 'react';
 import { api, ApiError, type VaultInput, type VaultItem, type VaultKind } from '../api';
 import { Button, Chips, cx, Field, host, Input } from '../components/ui';
 import { FIELDS, KIND_LABEL, missing, toInput, type VaultField } from './fields';
+import { t } from '../i18n';
 
 const ID_TYPES = [
-  { value: 'email', label: 'E-mail' },
-  { value: 'username', label: 'Nom d’utilisateur' },
-  { value: 'phone', label: 'Téléphone' },
+  { value: 'email', label: t('E-mail') },
+  { value: 'username', label: t('Nom d’utilisateur') },
+  { value: 'phone', label: t('Téléphone') },
 ] as const;
 
 /** Props that keep password managers of the browser away from the fields (never fill them with the user's own data). */
@@ -24,7 +25,7 @@ function SecretInput({ field, value, onChange, invalid }: { field: VaultField; v
         required={field.required} aria-invalid={invalid || undefined} className="pr-10 font-mono" {...NO_MANAGER}
       />
       <button
-        type="button" onClick={() => setShown(!shown)} aria-label={shown ? 'Masquer' : 'Afficher'}
+        type="button" onClick={() => setShown(!shown)} aria-label={shown ? t('Masquer') : t('Afficher')}
         className="absolute inset-y-0 right-0 grid w-9 place-items-center text-ink-faint hover:text-ink"
       >
         {shown ? <EyeOff className="size-4" strokeWidth={1.5} /> : <Eye className="size-4" strokeWidth={1.5} />}
@@ -79,7 +80,7 @@ export function AccessForm({ inst, profile, replacing, initial, proposed = false
       onDone(res);
     } catch (err) {
       const data = err instanceof ApiError ? (err.data as { field?: unknown } | undefined) : undefined;
-      setErrors({ field: typeof data?.field === 'string' ? data.field : undefined, message: err instanceof Error ? err.message : 'Erreur' });
+      setErrors({ field: typeof data?.field === 'string' ? data.field : undefined, message: err instanceof Error ? err.message : t('Erreur') });
     } finally {
       setSending(false);
     }
@@ -93,24 +94,24 @@ export function AccessForm({ inst, profile, replacing, initial, proposed = false
           <p className="font-mono text-base font-semibold text-ink">{proposedHost}</p>
           <p className="mt-1 flex items-start gap-2">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
-            Site proposé par l’agent : vérifiez que c’est bien l’adresse officielle avant de saisir votre mot de passe.
+            {t('Site proposé par l’agent : vérifiez que c’est bien l’adresse officielle avant de saisir votre mot de passe.')}
           </p>
         </div>
       )}
       {!replacing && (
-        <Chips label="Type" value={kind} onChange={(k) => { setKind(k); setErrors(null); }}
+        <Chips label={t('Type')} value={kind} onChange={(k) => { setKind(k); setErrors(null); }}
           items={(['login', 'payment', 'address'] as const).map((k) => ({ key: k, label: KIND_LABEL[k] }))} />
       )}
       {replacing && (
         <p className="rounded-[10px] bg-raised px-3.5 py-2.5 text-[13px] text-ink-soft">
           {kind === 'login'
-            ? 'Le mot de passe actuel ne peut pas être affiché : saisissez-le à nouveau.'
-            : 'Les valeurs actuelles ne peuvent pas être affichées : saisissez-les à nouveau.'}
+            ? t('Le mot de passe actuel ne peut pas être affiché : saisissez-le à nouveau.')
+            : t('Les valeurs actuelles ne peuvent pas être affichées : saisissez-les à nouveau.')}
         </p>
       )}
       {FIELDS[kind].map((f) => (
         <div key={f.name} className="flex flex-col gap-4">
-          <Field label={f.required ? f.label : `${f.label} (facultatif)`} hint={fieldError(f.name) ? <span className="text-bad">{fieldError(f.name)}</span> : f.hint}>
+          <Field label={f.required ? f.label : t('{label} (facultatif)', { label: f.label })} hint={fieldError(f.name) ? <span className="text-bad">{fieldError(f.name)}</span> : f.hint}>
             {f.secret ? (
               <SecretInput field={f} value={values[f.name] ?? ''} onChange={(v) => set(f.name, v)} invalid={Boolean(fieldError(f.name))} />
             ) : (
@@ -123,9 +124,9 @@ export function AccessForm({ inst, profile, replacing, initial, proposed = false
             )}
           </Field>
           {kind === 'login' && f.name === 'origin' && (
-            <Field label="Type d’identifiant" hint={fieldError('identifierType') ? <span className="text-bad">{fieldError('identifierType')}</span> : undefined}>
-              <Chips label="Type d’identifiant" value={values.identifierType ?? 'email'} onChange={(v) => set('identifierType', v)}
-                items={ID_TYPES.map((t) => ({ key: t.value, label: t.label }))} />
+            <Field label={t('Type d’identifiant')} hint={fieldError('identifierType') ? <span className="text-bad">{fieldError('identifierType')}</span> : undefined}>
+              <Chips label={t('Type d’identifiant')} value={values.identifierType ?? 'email'} onChange={(v) => set('identifierType', v)}
+                items={ID_TYPES.map((it) => ({ key: it.value, label: it.label }))} />
             </Field>
           )}
         </div>
@@ -135,12 +136,12 @@ export function AccessForm({ inst, profile, replacing, initial, proposed = false
       )}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" variant="primary" disabled={empty.length > 0 || sending}>
-          {sending ? 'Enregistrement…' : replacing ? 'Remplacer' : 'Enregistrer'}
+          {sending ? t('Enregistrement…') : replacing ? t('Remplacer') : t('Enregistrer')}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>{t('Annuler')}</Button>
       </div>
       <p className="text-xs text-ink-faint">
-        Les valeurs sont envoyées au coffre chiffré d’Hermes et ne sont gardées ni par Intendia ni par votre navigateur. L’agent remplit les champs sans jamais les voir.
+        {t('Les valeurs sont envoyées au coffre chiffré d’Hermes et ne sont gardées ni par Intendia ni par votre navigateur. L’agent remplit les champs sans jamais les voir.')}
       </p>
     </form>
   );

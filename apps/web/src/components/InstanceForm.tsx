@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api, type CompatReport, type InstanceInput } from '../api';
-import { Button, ErrorText, Field, Input, StateMark } from './ui';
+import { Button, ErrorText, Field, Input, moduleLabel, StateMark } from './ui';
+import { t } from '../i18n';
+import { T } from '../i18n/T';
 
 const EMPTY: InstanceInput = { id: '', label: '', api: 'http://hermes:8642', apiKey: '', dashboard: '', dashboardToken: '', dashboardLink: '' };
 
@@ -41,25 +43,25 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
   return (
     <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); void run(report ? 'save' : 'test'); }}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Identifiant" hint="a-z, 0-9 et tiret, par exemple hermes-dev">
+        <Field label={t('Identifiant')} hint={t('a-z, 0-9 et tiret, par exemple hermes-dev')}>
           <Input value={v.id} onChange={set('id')} required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="hermes" />
         </Field>
-        <Field label="Nom affiché">
-          <Input value={v.label} onChange={set('label')} required placeholder="Hermes principal" />
+        <Field label={t('Nom affiché')}>
+          <Input value={v.label} onChange={set('label')} required placeholder={t('Hermes principal')} />
         </Field>
-        <Field label="URL de l’API server" hint="Port 8642, dans le réseau Docker">
+        <Field label={t('URL de l’API server')} hint={t('Port 8642, dans le réseau Docker')}>
           <Input value={v.api} onChange={set('api')} required type="url" />
         </Field>
-        <Field label="Clé de l’API server" hint="API_SERVER_KEY, 16 caractères minimum">
+        <Field label={t('Clé de l’API server')} hint={t('API_SERVER_KEY, 16 caractères minimum')}>
           <Input value={v.apiKey} onChange={set('apiKey')} required minLength={16} type="password" autoComplete="off" />
         </Field>
-        <Field label="URL du dashboard" hint="Port 9119 ; requis pour les fichiers des workspaces">
+        <Field label={t('URL du dashboard')} hint={t('Port 9119 ; requis pour les fichiers des workspaces')}>
           <Input value={v.dashboard} onChange={set('dashboard')} type="url" placeholder="http://hermes:9119" />
         </Field>
-        <Field label="Jeton du dashboard" hint="HERMES_DASHBOARD_SESSION_TOKEN">
+        <Field label={t('Jeton du dashboard')} hint="HERMES_DASHBOARD_SESSION_TOKEN">
           <Input value={v.dashboardToken} onChange={set('dashboardToken')} type="password" autoComplete="off" />
         </Field>
-        <Field label="Lien public du dashboard" hint="Facultatif : pour les liens « ouvrir dans le dashboard »">
+        <Field label={t('Lien public du dashboard')} hint={t('Facultatif : pour les liens « ouvrir dans le dashboard »')}>
           <Input value={v.dashboardLink} onChange={set('dashboardLink')} type="url" />
         </Field>
       </div>
@@ -69,15 +71,18 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
       {report && (
         <div className="overflow-hidden rounded-lg border border-line">
           <div className="flex items-center justify-between border-b border-line px-4 py-3 text-sm">
-            <span className="font-medium">Hermes {report.hermesVersion ?? 'version inconnue'}</span>
+            <span className="font-medium">Hermes {report.hermesVersion ?? t('version inconnue')}</span>
             <span className="text-ink-faint">
-              API {report.api.reachable ? 'joignable' : 'injoignable'} · dashboard {!report.dash.configured ? 'non configuré' : report.dash.reachable ? 'joignable' : 'injoignable'}
+              {t('API {api} · dashboard {dash}', {
+                api: report.api.reachable ? t('joignable') : t('injoignable'),
+                dash: !report.dash.configured ? t('non configuré') : report.dash.reachable ? t('joignable') : t('injoignable'),
+              })}
             </span>
           </div>
           {report.files && (
             <div className="border-b border-line px-4 py-3 text-sm">
               {report.files.workspaceRoot
-                ? <>Racine des workspaces : <span className="font-mono text-xs">{report.files.workspaceRoot}</span></>
+                ? <T k="Racine des workspaces : {root}" vars={{ root: <span className="font-mono text-xs">{report.files.workspaceRoot}</span> }} />
                 : <span className="text-bad">{report.files.reason}</span>}
             </div>
           )}
@@ -85,7 +90,7 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
             {report.modules.map((m) => (
               <li key={m.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
                 <div className="min-w-0">
-                  <div>{m.label}</div>
+                  <div>{moduleLabel(m)}</div>
                   {m.reasons[0] && <div className="truncate text-xs text-ink-faint">{m.reasons[0]}</div>}
                 </div>
                 <StateMark state={m.state} quiet />
@@ -97,10 +102,10 @@ export function InstanceForm({ onSaved }: { onSaved: (r: CompatReport) => void }
 
       <div className="flex gap-2">
         <Button type="button" onClick={() => void run('test')} disabled={busy !== null}>
-          {busy === 'test' ? 'Test en cours…' : 'Tester la connexion'}
+          {busy === 'test' ? t('Test en cours…') : t('Tester la connexion')}
         </Button>
         <Button type="button" variant="primary" onClick={() => void run('save')} disabled={busy !== null || !report?.api.reachable}>
-          {busy === 'save' ? 'Enregistrement…' : 'Enregistrer'}
+          {busy === 'save' ? t('Enregistrement…') : t('Enregistrer')}
         </Button>
       </div>
     </form>

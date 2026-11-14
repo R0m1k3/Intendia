@@ -6,6 +6,8 @@ import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type Ka
 import { PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, chipClass, cx, ErrorText, Field, Input, Mark, Tag } from '../components/ui';
+import { plural, t } from '../i18n';
+import { T } from '../i18n/T';
 import { MissionSheet } from '../kanban/Mission';
 import { MISSION_STATE } from '../kanban/mission';
 import { canMove, moveLocally, moveTargets, statusLabel } from '../kanban/moves';
@@ -15,8 +17,8 @@ import { POLL_MS, useKanbanLive } from '../kanban/useLive';
 
 const REQUIRED: OpRef[] = [['kanban', 'board'], ['kanban', 'boards'], ['kanban', 'workflow']];
 const OPTIONAL: OptionalOp[] = [
-  ['kanban', 'createTask', 'Créer une tâche'], ['kanban', 'updateTask', 'Déplacer et modifier'], ['kanban', 'dispatch', 'Répartir'],
-  ['kanban', 'createBoard', 'Nouveau tableau'], ['kanban', 'setOrchestration', 'Orchestration'], ['kanban', 'decompose', 'Missions'],
+  ['kanban', 'createTask', t('Créer une tâche')], ['kanban', 'updateTask', t('Déplacer et modifier')], ['kanban', 'dispatch', t('Répartir')],
+  ['kanban', 'createBoard', t('Nouveau tableau')], ['kanban', 'setOrchestration', t('Orchestration')], ['kanban', 'decompose', t('Missions')],
 ];
 /** what a mission calls at Hermes: the button is hidden when one is missing */
 const MISSION_OPS = ['createTask', 'decompose', 'task', 'updateTask', 'dispatch', 'workers'];
@@ -54,7 +56,7 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
           <span className="min-w-0 flex-1 font-medium leading-snug">{task.title}</span>
         </span>
         <span className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-faint">
-          <Tag className={task.assignee ? undefined : 'text-ink-faint'}>{task.assignee ?? 'sans agent'}</Tag>
+          <Tag className={task.assignee ? undefined : 'text-ink-faint'}>{task.assignee ?? t('sans agent')}</Tag>
           {task.priority ? <Tag>p{task.priority}</Tag> : null}
           {task.commentCount > 0 && <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" strokeWidth={1.5} />{task.commentCount}</span>}
           {task.parents + task.children > 0 && <span className="inline-flex items-center gap-1"><GitBranch className="size-3" strokeWidth={1.5} />{task.parents + task.children}</span>}
@@ -64,9 +66,9 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
         {task.error && <span className="mt-1.5 flex items-start gap-1 text-xs text-bad"><AlertTriangle className="mt-0.5 size-3 shrink-0" strokeWidth={1.5} /><span className="line-clamp-2">{task.error}</span></span>}
       </button>
       {targets.length > 0 && (
-        <select value="" onChange={(e) => e.target.value && onMove(e.target.value)} aria-label={`Déplacer « ${task.title} » vers…`}
+        <select value="" onChange={(e) => e.target.value && onMove(e.target.value)} aria-label={t('Déplacer « {title} » vers…', { title: task.title })}
           className="mt-2 h-7 w-full rounded-md border border-line bg-paper px-1.5 text-xs text-ink-soft focus:border-ink focus:outline-none md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100">
-          <option value="">Déplacer vers…</option>
+          <option value="">{t('Déplacer vers…')}</option>
           {targets.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
       )}
@@ -96,15 +98,15 @@ function Column({ col, workflow, canWrite, dragging, onOpen, onMove, onAdd }: {
         <span className="font-mono text-xs text-ink-faint">{col.tasks.length}</span>
       </header>
       <ul className="min-h-12 space-y-2" data-status={col.key}>
-        {col.tasks.map((t) => (
-          <Card key={t.id} task={t} draggable={canWrite && moveTargets(workflow.manual, t.status).length > 0}
-            targets={canWrite ? moveTargets(workflow.manual, t.status) : []}
-            onOpen={() => onOpen(t.id)} onMove={(to) => onMove(t.id, t.status, to)} />
+        {col.tasks.map((k) => (
+          <Card key={k.id} task={k} draggable={canWrite && moveTargets(workflow.manual, k.status).length > 0}
+            targets={canWrite ? moveTargets(workflow.manual, k.status) : []}
+            onOpen={() => onOpen(k.id)} onMove={(to) => onMove(k.id, k.status, to)} />
         ))}
       </ul>
       {onAdd && (
         <button type="button" onClick={onAdd} className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-sm text-ink-faint transition-colors hover:bg-raised hover:text-ink">
-          <Plus className="size-3.5" strokeWidth={1.5} />Ajouter
+          <Plus className="size-3.5" strokeWidth={1.5} />{t('Ajouter')}
         </button>
       )}
     </section>
@@ -123,11 +125,11 @@ function NewBoard({ inst, onClose, onCreated }: { inst: string; onClose: () => v
   });
   const ok = BOARD_RE.test(slug);
   return (
-    <Sheet title="Nouveau tableau" onClose={onClose} onSubmit={() => ok && create.mutate()}
-      footer={<><Button type="button" onClick={onClose}>Annuler</Button><Button type="submit" variant="primary" disabled={!ok || create.isPending}>Créer le tableau</Button></>}>
-      <Field label="Nom"><Input value={name} maxLength={100} onChange={(e) => { setName(e.target.value); if (!slug || slug === slugify(name)) setSlug(slugify(e.target.value)); }} placeholder="Ventes" autoFocus /></Field>
-      <Field label="Identifiant" hint="Minuscules, chiffres, - et _ ; ne change plus ensuite">
-        <Input value={slug} maxLength={64} onChange={(e) => setSlug(e.target.value)} placeholder="ventes" aria-invalid={slug !== '' && !ok} />
+    <Sheet title={t('Nouveau tableau')} onClose={onClose} onSubmit={() => ok && create.mutate()}
+      footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!ok || create.isPending}>{t('Créer le tableau')}</Button></>}>
+      <Field label={t('Nom')}><Input value={name} maxLength={100} onChange={(e) => { setName(e.target.value); if (!slug || slug === slugify(name)) setSlug(slugify(e.target.value)); }} placeholder={t('Ventes')} autoFocus /></Field>
+      <Field label={t('Identifiant')} hint={t('Minuscules, chiffres, - et _ ; ne change plus ensuite')}>
+        <Input value={slug} maxLength={64} onChange={(e) => setSlug(e.target.value)} placeholder={t('ventes')} aria-invalid={slug !== '' && !ok} />
       </Field>
       <ErrorText error={create.error} />
     </Sheet>
@@ -139,21 +141,21 @@ const slugify = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowe
 // No "todo" start: Hermes promotes a todo task without unfinished parents to ready at once. "Planifiée" is the
 // state it leaves alone.
 const START: { value: KanbanStart; label: string }[] = [
-  { value: 'scheduled', label: 'Planifiée (rien ne se lance)' },
-  { value: 'ready', label: 'Prête à lancer' },
-  { value: 'triage', label: 'Triage' },
+  { value: 'scheduled', label: t('Planifiée (rien ne se lance)') },
+  { value: 'ready', label: t('Prête à lancer') },
+  { value: 'triage', label: t('Triage') },
 ];
 
 function startHint(start: KanbanStart, agent: boolean, autoDecompose: boolean): string {
-  if (start === 'scheduled') return 'Elle attend que vous la passiez en « Prête à lancer »';
+  if (start === 'scheduled') return t('Elle attend que vous la passiez en « Prête à lancer »');
   if (start === 'triage') {
     return autoDecompose
-      ? 'Hermes la découpera et lancera les morceaux s’il a un modèle auxiliaire (orchestration « découper automatiquement »)'
-      : 'Elle attend d’être précisée ou découpée depuis son panneau';
+      ? t('Hermes la découpera et lancera les morceaux s’il a un modèle auxiliaire (orchestration « découper automatiquement »)')
+      : t('Elle attend d’être précisée ou découpée depuis son panneau');
   }
   return agent
-    ? 'Le répartiteur la lancera à son prochain passage (toutes les 60 s) ou avec « Répartir »'
-    : 'Sans agent, rien ne se lance : elle attend que vous en choisissiez un';
+    ? t('Le répartiteur la lancera à son prochain passage (toutes les 60 s) ou avec « Répartir »')
+    : t('Sans agent, rien ne se lance : elle attend que vous en choisissiez un');
 }
 
 function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: {
@@ -170,29 +172,29 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
     onSuccess: async (r) => { await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] }); onCreated(r.task.id); },
   });
   return (
-    <Sheet title="Nouvelle tâche" onClose={onClose} onSubmit={() => f.title.trim() && create.mutate()}
-      footer={<><Button type="button" onClick={onClose}>Annuler</Button><Button type="submit" variant="primary" disabled={!f.title.trim() || create.isPending}>Créer la tâche</Button></>}>
-      <Field label="Titre"><Input value={f.title} maxLength={200} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Comparer les ventes de mars" autoFocus required /></Field>
-      <Field label="Description" hint="Ce que l’agent doit faire et rendre">
+    <Sheet title={t('Nouvelle tâche')} onClose={onClose} onSubmit={() => f.title.trim() && create.mutate()}
+      footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!f.title.trim() || create.isPending}>{t('Créer la tâche')}</Button></>}>
+      <Field label={t('Titre')}><Input value={f.title} maxLength={200} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={t('Comparer les ventes de mars')} autoFocus required /></Field>
+      <Field label={t('Description')} hint={t('Ce que l’agent doit faire et rendre')}>
         <textarea value={f.body} maxLength={20_000} rows={5} onChange={(e) => setF({ ...f, body: e.target.value })} className={TEXTAREA} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Agent">
+        <Field label={t('Agent')}>
           <select className={SELECT} value={f.assignee} onChange={(e) => setF({ ...f, assignee: e.target.value })}>
-            <option value="">Aucun</option>
+            <option value="">{t('Aucun')}</option>
             {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </Field>
-        <Field label="Priorité"><Input type="number" min={-1000} max={1000} value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.valueAsNumber || 0 })} /></Field>
+        <Field label={t('Priorité')}><Input type="number" min={-1000} max={1000} value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.valueAsNumber || 0 })} /></Field>
       </div>
-      <Field label="État de départ" hint={startHint(f.start, Boolean(f.assignee), autoDecompose)}>
+      <Field label={t('État de départ')} hint={startHint(f.start, Boolean(f.assignee), autoDecompose)}>
         <select className={SELECT} value={f.start} onChange={(e) => setF({ ...f, start: e.target.value as KanbanStart })}>
           {START.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
       </Field>
-      <Field label="Workspace (facultatif)" hint="L’agent travaillera dans un dossier kanban/… de ce workspace">
+      <Field label={t('Workspace (facultatif)')} hint={t('L’agent travaillera dans un dossier kanban/… de ce workspace')}>
         <select className={SELECT} value={f.workspace} onChange={(e) => setF({ ...f, workspace: e.target.value })}>
-          <option value="">Aucun</option>
+          <option value="">{t('Aucun')}</option>
           {mine.map((w) => <option key={w.slug} value={w.slug}>{w.name}</option>)}
         </select>
       </Field>
@@ -210,20 +212,23 @@ function Dispatch({ inst, board, onClose }: { inst: string; board: string; onClo
   });
   const p = run.data ?? preview.data;
   return (
-    <Sheet title="Répartir les tâches prêtes" onClose={onClose}
-      footer={run.data ? <Button onClick={onClose}>Fermer</Button> : <>
-        <Button onClick={onClose}>Annuler</Button>
-        <Button variant="primary" disabled={!preview.data || run.isPending} onClick={() => run.mutate()}><Play className={ICON} strokeWidth={1.5} />Lancer</Button>
+    <Sheet title={t('Répartir les tâches prêtes')} onClose={onClose}
+      footer={run.data ? <Button onClick={onClose}>{t('Fermer')}</Button> : <>
+        <Button onClick={onClose}>{t('Annuler')}</Button>
+        <Button variant="primary" disabled={!preview.data || run.isPending} onClick={() => run.mutate()}><Play className={ICON} strokeWidth={1.5} />{t('Lancer')}</Button>
       </>}>
       <ErrorText error={preview.error ?? run.error} />
-      {!p ? <p className="text-sm text-ink-faint">Calcul de la répartition…</p> : (
+      {!p ? <p className="text-sm text-ink-faint">{t('Calcul de la répartition…')}</p> : (
         <>
-          <p className="text-sm">{run.data ? 'Lancées' : 'Hermes lancerait'} : <span className="font-medium">{p.spawned.length}</span> tâche{p.spawned.length > 1 ? 's' : ''} (8 au plus).</p>
+          <p className="text-sm">{(() => {
+            const count = <span className="font-medium">{plural(p.spawned.length, '{n} tâche', '{n} tâches', { n: p.spawned.length })}</span>;
+            return run.data ? <T k="Lancées : {count} (8 au plus)." vars={{ count }} /> : <T k="Hermes lancerait : {count} (8 au plus)." vars={{ count }} />;
+          })()}</p>
           <ul className="space-y-1 text-sm">
             {p.spawned.map((s) => <li key={s.taskId} className="flex gap-2"><span className="font-mono text-[12px] text-ink-faint">{s.taskId}</span>{s.assignee}</li>)}
           </ul>
-          {p.skippedUnassigned.length > 0 && <p className="text-sm text-ink-soft">{p.skippedUnassigned.length} tâche(s) prête(s) sans agent, laissée(s) de côté.</p>}
-          {!run.data && <p className="text-xs text-ink-faint">Hermes répartit aussi tout seul chaque minute : d’ici votre confirmation, il peut en avoir lancé d’autres.</p>}
+          {p.skippedUnassigned.length > 0 && <p className="text-sm text-ink-soft">{plural(p.skippedUnassigned.length, '{n} tâche prête sans agent, laissée de côté.', '{n} tâches prêtes sans agent, laissées de côté.')}</p>}
+          {!run.data && <p className="text-xs text-ink-faint">{t('Hermes répartit aussi tout seul chaque minute : d’ici votre confirmation, il peut en avoir lancé d’autres.')}</p>}
         </>
       )}
     </Sheet>
@@ -243,28 +248,28 @@ function Orchestration({ inst, assignees, onClose }: { inst: string; assignees: 
   });
   const sel = (value: string, set: (v: string) => void, label: string) => (
     <select className={SELECT} value={value} onChange={(e) => set(e.target.value)} aria-label={label}>
-      <option value="">Aucun (Hermes choisit)</option>
+      <option value="">{t('Aucun (Hermes choisit)')}</option>
       {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
     </select>
   );
   return (
-    <Sheet title="Orchestration" onClose={onClose} onSubmit={() => f && save.mutate()}
-      footer={<><Button type="button" onClick={onClose}>Annuler</Button><Button type="submit" variant="primary" disabled={!f || save.isPending}>Enregistrer</Button></>}>
+    <Sheet title={t('Orchestration')} onClose={onClose} onSubmit={() => f && save.mutate()}
+      footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!f || save.isPending}>{t('Enregistrer')}</Button></>}>
       <ErrorText error={o.error ?? save.error} />
       {f && (
         <>
-          <Field label="Agent orchestrateur" hint="Celui qui découpe les tâches en triage">{sel(f.orchestrator, (v) => setF({ ...f, orchestrator: v }), 'Agent orchestrateur')}</Field>
-          <Field label="Agent par défaut" hint="Donné aux tâches prêtes qui n’en ont pas">{sel(f.assignee, (v) => setF({ ...f, assignee: v }), 'Agent par défaut')}</Field>
+          <Field label={t('Agent orchestrateur')} hint={t('Celui qui découpe les tâches en triage')}>{sel(f.orchestrator, (v) => setF({ ...f, orchestrator: v }), t('Agent orchestrateur'))}</Field>
+          <Field label={t('Agent par défaut')} hint={t('Donné aux tâches prêtes qui n’en ont pas')}>{sel(f.assignee, (v) => setF({ ...f, assignee: v }), t('Agent par défaut'))}</Field>
           <label className="flex items-start gap-3 text-sm">
             <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.decompose} onChange={(e) => setF({ ...f, decompose: e.target.checked })} />
-            <span>Découper automatiquement<span className="block text-xs text-ink-faint">Hermes découpe les tâches en triage et lance les morceaux</span></span>
+            <span>{t('Découper automatiquement')}<span className="block text-xs text-ink-faint">{t('Hermes découpe les tâches en triage et lance les morceaux')}</span></span>
           </label>
           <label className="flex items-start gap-3 text-sm">
             <input type="checkbox" className="mt-1 accent-[var(--color-ink)]" checked={f.promote} onChange={(e) => setF({ ...f, promote: e.target.checked })} />
-            <span>Lancer les sous-tâches dès que possible<span className="block text-xs text-ink-faint">Une sous-tâche passe en « prête » quand ses dépendances sont finies</span></span>
+            <span>{t('Lancer les sous-tâches dès que possible')}<span className="block text-xs text-ink-faint">{t('Une sous-tâche passe en « prête » quand ses dépendances sont finies')}</span></span>
           </label>
           <p className="text-xs text-ink-faint">
-            Hermes écrit ces réglages dans la configuration de l’agent {o.data?.activeProfile ?? 'default'} ; Intendia en garde une copie (onglet Historique de la Configuration).
+            {t('Hermes écrit ces réglages dans la configuration de l’agent {profile} ; Intendia en garde une copie (onglet Historique de la Configuration).', { profile: o.data?.activeProfile ?? 'default' })}
           </p>
         </>
       )}
@@ -331,38 +336,38 @@ export function KanbanPage() {
 
   return (
     <div onDragStart={(e) => {
-      const from = [...e.dataTransfer.types].find((t) => t.startsWith('text/x-from-'));
+      const from = [...e.dataTransfer.types].find((ty) => ty.startsWith('text/x-from-'));
       setDragging(from ? from.slice('text/x-from-'.length) : null);
     }} onDragEnd={() => setDragging(null)} onDrop={() => setDragging(null)}>
       <PageHeader
         title="Kanban"
-        subtitle={<>Le tableau de tâches de {current ? <span className="text-ink">{current.label}</span> : 'l’instance'}, commun à tous ses agents.{live.polling ? ' Mise à jour toutes les 5 s.' : ''}</>}
+        subtitle={<><T k="Le tableau de tâches de {inst}, commun à tous ses agents." vars={{ inst: current ? <span className="text-ink">{current.label}</span> : t('l’instance') }} />{live.polling ? ` ${t('Mise à jour toutes les 5 s.')}` : ''}</>}
         action={a.available && board ? (
           <div className="flex flex-wrap gap-2">
-            {can('setOrchestration') && <Button onClick={() => setDialog('orchestration')}><Settings2 className={ICON} strokeWidth={1.5} />Orchestration</Button>}
-            {can('dispatch') && <Button onClick={() => setDialog('dispatch')}><Play className={ICON} strokeWidth={1.5} />Répartir</Button>}
-            {canMission && <Button onClick={() => setMissionId(null)}><Split className={ICON} strokeWidth={1.5} />Nouvelle mission</Button>}
-            {can('createTask') && <Button variant="primary" onClick={() => setDialog('task')}><Plus className={ICON} strokeWidth={1.5} />Nouvelle tâche</Button>}
+            {can('setOrchestration') && <Button onClick={() => setDialog('orchestration')}><Settings2 className={ICON} strokeWidth={1.5} />{t('Orchestration')}</Button>}
+            {can('dispatch') && <Button onClick={() => setDialog('dispatch')}><Play className={ICON} strokeWidth={1.5} />{t('Répartir')}</Button>}
+            {canMission && <Button onClick={() => setMissionId(null)}><Split className={ICON} strokeWidth={1.5} />{t('Nouvelle mission')}</Button>}
+            {can('createTask') && <Button variant="primary" onClick={() => setDialog('task')}><Plus className={ICON} strokeWidth={1.5} />{t('Nouvelle tâche')}</Button>}
           </div>
         ) : undefined}
       />
       <div className="space-y-5 pb-10">
         <div className="space-y-4 px-4 md:px-8">
           <div className="empty:hidden">
-            <ModuleNotice instanceId={inst} module="kanban" title="Le kanban" required={REQUIRED} optional={OPTIONAL} />
+            <ModuleNotice instanceId={inst} module="kanban" title={t('Le kanban')} required={REQUIRED} optional={OPTIONAL} />
           </div>
           {a.available && (
             <div className="flex flex-wrap items-center gap-2">
-              <select className={cx(SELECT.replace('w-full', 'w-auto'), 'min-w-48')} value={board ?? ''} onChange={(e) => go({ board: e.target.value })} aria-label="Tableau">
+              <select className={cx(SELECT.replace('w-full', 'w-auto'), 'min-w-48')} value={board ?? ''} onChange={(e) => go({ board: e.target.value })} aria-label={t('Tableau')}>
                 {(boards.data ?? []).map((b) => <option key={b.slug} value={b.slug}>{b.name} ({b.slug === board && view.data ? columns.reduce((n, c) => n + c.tasks.length, 0) : b.total})</option>)}
               </select>
-              {can('createBoard') && <Button variant="ghost" onClick={() => setDialog('board')}><Plus className={ICON} strokeWidth={1.5} />Nouveau tableau</Button>}
-              <span className="text-xs text-ink-faint">Hermes ne gère ni échéance ni tags sur les tâches.</span>
+              {can('createBoard') && <Button variant="ghost" onClick={() => setDialog('board')}><Plus className={ICON} strokeWidth={1.5} />{t('Nouveau tableau')}</Button>}
+              <span className="text-xs text-ink-faint">{t('Hermes ne gère ni échéance ni tags sur les tâches.')}</span>
             </div>
           )}
           {(missions.data ?? []).length > 0 && (
             <div className="flex flex-wrap items-center gap-2" data-missions>
-              <span className="text-xs font-medium text-ink-soft">Missions</span>
+              <span className="text-xs font-medium text-ink-soft">{t('Missions')}</span>
               {missions.data!.map((m) => (
                 <button key={m.id} type="button" onClick={() => setMissionId(m.id)} data-mission={m.id}
                   className={cx(chipClass(false), 'max-w-72 gap-1.5', m.state === 'held' && 'border-accent/50', m.state === 'failed' && 'text-bad')}>
@@ -378,7 +383,7 @@ export function KanbanPage() {
           <>
             {!wide ? (
               <div className="space-y-3 px-4">
-                <div className="-mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Colonnes">
+                <div className="-mx-1 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label={t('Colonnes')}>
                   {columns.map((c) => (
                     <button key={c.key} type="button" role="tab" aria-selected={c.key === shownCol?.key} onClick={() => setMobileCol(c.key)}
                       className={cx(chipClass(c.key === shownCol?.key), 'shrink-0 gap-1.5')}>
@@ -389,7 +394,7 @@ export function KanbanPage() {
                 {shownCol && <Column col={shownCol} workflow={wf} canWrite={can('updateTask')} dragging={null} onOpen={(id) => go({ task: id })} onMove={(id, _f, to) => move.mutate({ id, to })} />}
               </div>
             ) : (
-              <div className="flex items-start gap-3 overflow-x-auto px-7 pb-4" aria-label="Colonnes">
+              <div className="flex items-start gap-3 overflow-x-auto px-7 pb-4" aria-label={t('Colonnes')}>
                 {columns.map((c, i) => (
                   <Column key={c.key} col={c} workflow={wf} canWrite={can('updateTask')} dragging={dragging}
                     onAdd={i === 0 && can('createTask') ? () => setDialog('task') : undefined}

@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 /**
  * Names of the subscription cards: the brand first (Hermes names some cards after the product only, e.g. « ChatGPT
  * or Codex Subscription » for OpenAI). The Hermes name stays below when it differs.
@@ -5,8 +7,8 @@
 const NAMES: Record<string, string> = {
   'openai-codex': 'OpenAI — ChatGPT / Codex',
   anthropic: 'Anthropic — Claude (Pro / Max)',
-  'claude-code': 'Anthropic — identifiants de Claude Code',
-  'minimax-oauth': 'MiniMax — abonnement international (minimax.io)',
+  'claude-code': t('Anthropic — identifiants de Claude Code'),
+  'minimax-oauth': t('MiniMax — abonnement international (minimax.io)'),
   'xai-oauth': 'xAI — Grok (SuperGrok / Premium+)',
   nous: 'Nous Portal',
   'qwen-oauth': 'Qwen — Qwen Code',

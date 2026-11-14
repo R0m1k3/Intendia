@@ -7,6 +7,7 @@ import { api } from '../api';
 import { useCurrentInstance } from '../instance/current';
 import { fileItems, flatItems, moveIndex, paletteGroups, SEARCH_MIN, type PaletteGroup, type PaletteItem, type PaletteMode, type PaletteSources } from './palette';
 import { cx } from './ui';
+import { t } from '../i18n';
 
 /** "⌘ K" on a Mac, else "Ctrl K". */
 export const shortcutLabel = (): string => (typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac') ? '⌘ K' : 'Ctrl K');
@@ -26,8 +27,8 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => setQ(text.trim()), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(timer);
   }, [text]);
 
   const { id: inst } = useCurrentInstance();
@@ -53,7 +54,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
   const fileGroups = useMemo<PaletteGroup[]>(() => {
     if (!fileQuery || text.trim() !== q || !files.data) return [];
     const items = fileItems(inst!, files.data.results, mine);
-    return items.length ? [{ id: 'files', label: 'Fichiers', items }] : [];
+    return items.length ? [{ id: 'files', label: t('Fichiers'), items }] : [];
   }, [fileQuery, text, q, files.data, inst, mine]);
   const groups = mode === 'files' ? fileGroups : allGroups;
   const items = flatItems(groups);
@@ -94,7 +95,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
       <div
-        role="dialog" aria-modal="true" aria-label={mode === 'files' ? 'Ouvrir un fichier' : 'Rechercher'} onMouseDown={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={mode === 'files' ? t('Ouvrir un fichier') : t('Rechercher')} onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-4">
@@ -103,12 +104,12 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
             ref={input} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list"
             aria-activedescendant={current ? `${id}-${current.id}` : undefined}
-            placeholder={mode === 'files' ? 'Nom d’un fichier de l’instance (2 lettres au moins)…' : 'Rechercher une page, un workspace, un cron, une session…'}
+            placeholder={mode === 'files' ? t('Nom d’un fichier de l’instance (2 lettres au moins)…') : t('Rechercher une page, un workspace, un cron, une session…')}
             className="h-13 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-faint"
           />
-          <kbd className="shrink-0 rounded border border-line px-1.5 font-mono text-[11px] text-ink-faint">Échap</kbd>
+          <kbd className="shrink-0 rounded border border-line px-1.5 font-mono text-[11px] text-ink-faint">{t('Échap')}</kbd>
         </div>
-        <div id={`${id}-list`} role="listbox" aria-label="Résultats" className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div id={`${id}-list`} role="listbox" aria-label={t('Résultats')} className="min-h-0 flex-1 overflow-y-auto p-2">
           {groups.map((g) => (
             <div key={g.id} role="group" aria-labelledby={`${id}-g-${g.id}`} className="pb-1">
               <p id={`${id}-g-${g.id}`} className="px-2.5 pb-1 pt-2 text-xs font-medium text-ink-faint">{g.label}</p>
@@ -127,18 +128,18 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
           ))}
           {items.length === 0 && mode === 'files' && (
             <p className="px-2.5 py-6 text-center text-sm text-ink-soft">
-              {text.trim().length < SEARCH_MIN ? 'Tapez au moins 2 lettres du nom' : files.isFetching || text.trim() !== q ? 'Recherche…' : 'Aucun fichier'}
+              {text.trim().length < SEARCH_MIN ? t('Tapez au moins 2 lettres du nom') : files.isFetching || text.trim() !== q ? t('Recherche…') : t('Aucun fichier')}
             </p>
           )}
-          {mode === 'files' && files.data?.truncated && text.trim() === q && <p className="px-2.5 py-1 text-xs text-ink-faint">Recherche coupée : précisez le nom</p>}
+          {mode === 'files' && files.data?.truncated && text.trim() === q && <p className="px-2.5 py-1 text-xs text-ink-faint">{t('Recherche coupée : précisez le nom')}</p>}
           {items.length === 0 && mode === 'all' && (
             <p className="px-2.5 py-6 text-center text-sm text-ink-soft">
-              {q.length >= SEARCH_MIN && (found.isFetching || !searching) ? 'Recherche…' : 'Aucun résultat'}
+              {q.length >= SEARCH_MIN && (found.isFetching || !searching) ? t('Recherche…') : t('Aucun résultat')}
             </p>
           )}
-          {mode === 'all' && items.length > 0 && q.length >= SEARCH_MIN && found.isFetching && <p className="px-2.5 py-1 text-xs text-ink-faint">Recherche dans les sessions…</p>}
+          {mode === 'all' && items.length > 0 && q.length >= SEARCH_MIN && found.isFetching && <p className="px-2.5 py-1 text-xs text-ink-faint">{t('Recherche dans les sessions…')}</p>}
           {partial.map((name) => (
-            <p key={name} className="px-2.5 py-1 text-xs text-ink-faint">Sur {name}, seuls les titres des sessions Intendia sont cherchés</p>
+            <p key={name} className="px-2.5 py-1 text-xs text-ink-faint">{t('Sur {name}, seuls les titres des sessions Intendia sont cherchés', { name })}</p>
           ))}
         </div>
       </div>

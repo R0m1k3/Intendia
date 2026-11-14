@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useCurrentInstance } from '../instance/current';
 import { Button, ErrorText, Field, Input } from './ui';
+import { t } from '../i18n';
 
 export function slugify(name: string): string {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -47,20 +48,20 @@ export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: (
   return (
     <form onSubmit={submit} className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Nom">
-          <Input value={name} required autoFocus maxLength={80} placeholder="Magasins"
+        <Field label={t('Nom')}>
+          <Input value={name} required autoFocus maxLength={80} placeholder={t('Magasins')}
             onChange={(e) => { setName(e.target.value); if (!slugEdited) setSlug(slugify(e.target.value)); }} />
         </Field>
-        <Field label="Identifiant" hint={root ? `Dossier ${root}/${slug || '…'} chez Hermes ; définitif` : 'Définitif'}>
+        <Field label={t('Identifiant')} hint={root ? t('Dossier {path} chez Hermes ; définitif', { path: `${root}/${slug || '…'}` }) : t('Définitif')}>
           <Input value={slug} required pattern="[a-z0-9][a-z0-9\-]{0,39}" className="font-mono"
             onChange={(e) => { setSlug(e.target.value); setSlugEdited(true); }} />
         </Field>
         {list.length > 1 && current && (
-          <Field label="Instance" hint="Celle choisie en haut de la barre latérale">
+          <Field label={t('Instance')} hint={t('Celle choisie en haut de la barre latérale')}>
             <p className="flex h-9 items-center text-sm" data-new-workspace-instance="">{current.label}</p>
           </Field>
         )}
-        <Field label="Agent" hint="Profil Hermes qui sert ce workspace">
+        <Field label={t('Agent')} hint={t('Profil Hermes qui sert ce workspace')}>
           <select value={profile} onChange={(e) => setProfile(e.target.value)}
             className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-ink focus:outline-none">
             <option value="default">default</option>
@@ -70,13 +71,13 @@ export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: (
       </div>
       {current && !root && (
         <p className="text-sm text-bad" data-no-files-root="">
-          {current.files?.reason ?? 'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.'}
+          {current.files?.reason ?? t('Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.')}
         </p>
       )}
       <ErrorText error={error} />
       <div className="flex gap-2">
-        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? 'Création…' : 'Créer le workspace'}</Button>
-        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>}
+        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? t('Création…') : t('Créer le workspace')}</Button>
+        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>{t('Annuler')}</Button>}
       </div>
     </form>
   );

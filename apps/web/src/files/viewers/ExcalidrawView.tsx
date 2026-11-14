@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { readExcalidraw, type Shape } from './excalidraw';
 import { OFFICE_READ_MAX } from './office';
 import { readBytes } from './read';
+import { t } from '../../i18n';
 
 function ShapeSvg({ s }: { s: Shape }) {
   const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
@@ -11,7 +12,7 @@ function ShapeSvg({ s }: { s: Shape }) {
       return (
         <g transform={transform}>
           <rect x={s.x} y={s.y} width={s.w} height={s.h} stroke={s.stroke} fill={s.fill} strokeWidth={s.width} />
-          {s.kind === 'image' && <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={14} fill="#6b7280">image</text>}
+          {s.kind === 'image' && <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={14} fill="#6b7280">{t('image')}</text>}
         </g>
       );
     case 'ellipse':
@@ -47,11 +48,11 @@ export default function ExcalidrawView({ url, version }: { url: string; version?
   });
   if (q.error) return <p className="p-6 text-sm text-ink-soft">{(q.error as Error).message}</p>;
   if (q.data === undefined) return null;
-  if (q.data === null) return <p className="p-6 text-sm text-ink-soft">Aperçu impossible : ce n’est pas un dessin Excalidraw lisible.</p>;
+  if (q.data === null) return <p className="p-6 text-sm text-ink-soft">{t('Aperçu impossible : ce n’est pas un dessin Excalidraw lisible.')}</p>;
   const [x, y, w, h] = q.data.viewBox;
   return (
     <div data-viewer="excalidraw" className="flex min-h-full items-center justify-center bg-white p-4">
-      <svg viewBox={`${x} ${y} ${w} ${h}`} className="max-h-[75vh] w-full" role="img" aria-label="Dessin Excalidraw">
+      <svg viewBox={`${x} ${y} ${w} ${h}`} className="max-h-[75vh] w-full" role="img" aria-label={t('Dessin Excalidraw')}>
         {q.data.shapes.map((s, i) => <ShapeSvg key={i} s={s} />)}
       </svg>
     </div>

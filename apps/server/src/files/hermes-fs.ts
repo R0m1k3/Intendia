@@ -12,6 +12,7 @@ import { callOp, hermesDetail, HermesError, ModuleUnavailableError, streamOp, ty
 import type { CompatReport } from '../connectors/types.js';
 import { SLUG_RE, WorkspaceFsError } from '../workspaces/fs.js';
 import { hiddenByHermes, normalizeRel } from './paths.js';
+import { msg } from '../i18n/index.js';
 
 export interface FsEntry {
   name: string;
@@ -27,8 +28,6 @@ export interface FsEntry {
 }
 
 export const UPLOAD_TIMEOUT_MS = 600_000;
-const LINK_REFUSED = "c'est un lien symbolique ; Intendia ne le modifie pas";
-const LINK_OUT_OF_ROOT = "un lien symbolique de ce dossier sort de la racine d'Hermes ; demandez à l'agent de le supprimer";
 
 const parentOf = (vol: string) => (vol.includes('/') ? vol.slice(0, vol.lastIndexOf('/')) : '');
 const nameOf = (vol: string) => vol.slice(vol.lastIndexOf('/') + 1);
@@ -50,19 +49,19 @@ export async function mapLimit<T, R>(items: T[], n: number, fn: (item: T) => Pro
 /** Hermes (or network) failure → WorkspaceFsError with a message for the owner. */
 export function fsError(err: unknown, vol: string, what: 'list' | 'other' = 'other'): Error {
   if (err instanceof WorkspaceFsError) return err;
-  if (err instanceof ModuleUnavailableError) return new WorkspaceFsError('no_root', `Fichiers indisponibles sur cette instance : ${err.reasons.at(-1) ?? err.message}`);
+  if (err instanceof ModuleUnavailableError) return new WorkspaceFsError('no_root', msg('Fichiers indisponibles sur cette instance : {reason}', { reason: err.reasons.at(-1) ?? err.message }));
   if (err instanceof HermesError) {
     if (err.kind !== 'http') {
-      return new WorkspaceFsError('unreachable', err.kind === 'unconfigured' ? `Fichiers indisponibles : ${err.message}` : 'Hermes injoignable');
+      return new WorkspaceFsError('unreachable', err.kind === 'unconfigured' ? msg('Fichiers indisponibles : {reason}', { reason: err.message }) : msg('Hermes injoignable'));
     }
     const status = err.detail.status ?? 0;
     const detail = hermesDetail(err);
-    if (status === 400) return new WorkspaceFsError('invalid', `Chemin refusé par Hermes : ${vol || '/'} (${detail})`);
-    if (status === 403) return new WorkspaceFsError('outside', what === 'list' ? `${vol || '/'} : ${LINK_OUT_OF_ROOT}` : `Refusé par Hermes : ${vol || '/'} (${detail})`);
-    if (status === 404) return new WorkspaceFsError('not_found', `Introuvable : ${vol || '/'}`);
-    if (status === 409) return new WorkspaceFsError('exists', `Existe déjà chez Hermes : ${vol}`);
-    if (status === 413) return new WorkspaceFsError('too_large', 'Fichier trop gros pour Hermes (100 Mo au plus)');
-    return new WorkspaceFsError('unreachable', `Hermes a répondu HTTP ${status}`);
+    if (status === 400) return new WorkspaceFsError('invalid', msg('Chemin refusé par Hermes : {path} ({detail})', { path: vol || '/', detail }));
+    if (status === 403) return new WorkspaceFsError('outside', what === 'list' ? msg("{path} : un lien symbolique de ce dossier sort de la racine d'Hermes ; demandez à l'agent de le supprimer", { path: vol || '/' }) : msg('Refusé par Hermes : {path} ({detail})', { path: vol || '/', detail }));
+    if (status === 404) return new WorkspaceFsError('not_found', msg('Introuvable : {path}', { path: vol || '/' }));
+    if (status === 409) return new WorkspaceFsError('exists', msg('Existe déjà chez Hermes : {path}', { path: vol }));
+    if (status === 413) return new WorkspaceFsError('too_large', msg('Fichier trop gros pour Hermes (100 Mo au plus)'));
+    return new WorkspaceFsError('unreachable', msg('Hermes a répondu HTTP {status}', { status }));
   }
   return err as Error;
 }
@@ -74,8 +73,8 @@ export class FileRoots {
   /** `<workspaceRoot>` of the instance, or `no_root` with the reason. */
   root(instanceId: string): string {
     const files = this.compat.get(instanceId)?.files;
-    if (!files) throw new WorkspaceFsError('no_root', 'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages');
-    if (!files.workspaceRoot) throw new WorkspaceFsError('no_root', files.reason ?? 'Fichiers indisponibles sur cette instance');
+    if (!files) throw new WorkspaceFsError('no_root', msg('Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages'));
+    if (!files.workspaceRoot) throw new WorkspaceFsError('no_root', files.reason ?? msg('Fichiers indisponibles sur cette instance'));
     return files.workspaceRoot;
   }
 
@@ -98,7 +97,7 @@ export class HermesFs {
   /** Absolute path on the Hermes side; `vol` must start with a workspace slug. */
   private abs(vol: string): string {
     const v = normalizeRel(vol);
-    if (!SLUG_RE.test(v.split('/')[0]!)) throw new WorkspaceFsError('invalid', `Chemin invalide : ${vol}`);
+    if (!SLUG_RE.test(v.split('/')[0]!)) throw new WorkspaceFsError('invalid', msg('Chemin invalide : {path}', { path: vol }));
     return `${this.root}/${v}`;
   }
 
@@ -180,13 +179,13 @@ export class HermesFs {
 
   private refuseHidden(vol: string): void {
     if (hiddenByHermes(normalizeRel(vol))) {
-      throw new WorkspaceFsError('invalid', `${nameOf(normalizeRel(vol))} : Hermes cache ce nom (fichier d'identifiants), Intendia ne l'écrit pas`);
+      throw new WorkspaceFsError('invalid', msg("{name} : Hermes cache ce nom (fichier d'identifiants), Intendia ne l'écrit pas", { name: nameOf(normalizeRel(vol)) }));
     }
   }
 
   private async refuseLink(vol: string): Promise<FsEntry | null> {
     const e = await this.entry(vol);
-    if (e?.isLink) throw new WorkspaceFsError('outside', `${vol} : ${LINK_REFUSED}`);
+    if (e?.isLink) throw new WorkspaceFsError('outside', msg("{path} : c'est un lien symbolique ; Intendia ne le modifie pas", { path: vol }));
     return e;
   }
 
@@ -210,7 +209,7 @@ export class HermesFs {
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      if (res.status === 400) throw new WorkspaceFsError('not_file', `Pas un fichier : ${vol}`);
+      if (res.status === 400) throw new WorkspaceFsError('not_file', msg('Pas un fichier : {path}', { path: vol }));
       throw fsError(new HermesError('http', `dash GET download: HTTP ${res.status}`, { status: res.status, body: body.slice(0, 500) }), vol);
     }
     const len = Number(res.headers.get('content-length'));
@@ -229,7 +228,7 @@ export class HermesFs {
       size += value.length;
       if (size > max) {
         await reader.cancel().catch(() => undefined);
-        throw new WorkspaceFsError('too_large', `${vol} dépasse ${Math.round(max / 1024)} Kio`);
+        throw new WorkspaceFsError('too_large', msg('{path} dépasse {n} Kio', { path: vol, n: Math.round(max / 1024) }));
       }
       chunks.push(value);
     }
@@ -280,14 +279,14 @@ export class HermesFs {
           tooLarge = true;
           await reader.cancel().catch(() => undefined);
           abort.abort(new Error('too large'));
-          c.error(new WorkspaceFsError('too_large', 'Fichier trop gros'));
+          c.error(new WorkspaceFsError('too_large', msg('Fichier trop gros')));
           return;
         }
         c.enqueue(value);
       },
       cancel() { void reader.cancel().catch(() => undefined); },
     });
-    const tooBig = () => new WorkspaceFsError('too_large', `Fichier trop gros (${Math.round(max / 1048576)} Mo au plus)`);
+    const tooBig = () => new WorkspaceFsError('too_large', msg('Fichier trop gros ({n} Mo au plus)', { n: Math.round(max / 1048576) }));
     let res: Response;
     try {
       res = await streamOp(this.http, this.report, 'files', 'upload', {
@@ -306,7 +305,7 @@ export class HermesFs {
     }
     await res.body?.cancel().catch(() => undefined);
     const e = await this.entry(vol);
-    if (!e) throw new WorkspaceFsError('not_found', `Introuvable après l'envoi : ${vol}`);
+    if (!e) throw new WorkspaceFsError('not_found', msg("Introuvable après l'envoi : {path}", { path: vol }));
     return e;
   }
 

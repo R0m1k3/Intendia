@@ -1,3 +1,4 @@
+import { msg } from '../i18n/index.js';
 import type { CompatService } from '../compat/service.js';
 import { callOp, HermesError, ModuleUnavailableError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
@@ -64,7 +65,7 @@ export function lineTitle(title: unknown, preview: unknown): string {
   if (t) return t;
   const p = text(preview);
   if (p) return p.length > 80 ? `${p.slice(0, 79)}…` : p;
-  return 'Session sans titre';
+  return msg('Session sans titre');
 }
 
 /** Both sources in one list, most recent first, without duplicates (a Hermes may list a session under two profiles). */
@@ -75,7 +76,7 @@ export function mergeRecent(
 ): RecentSession[] {
   const out: RecentSession[] = intendia.map((s) => ({
     kind: 'intendia', instanceId: s.instanceId, profile: s.profile, id: s.id, source: 'intendia',
-    title: s.title || 'Nouvelle session', sub: s.workspaceName, workspace: s.workspace, at: s.lastActiveAt ?? s.createdAt,
+    title: s.title || msg('Nouvelle session'), sub: s.workspaceName, workspace: s.workspace, at: s.lastActiveAt ?? s.createdAt,
     snippet: s.snippet ?? null,
   }));
   const seen = new Set(out.map((s) => `${s.instanceId}:${s.id}`));
@@ -130,7 +131,7 @@ export class RecentService {
 
   private instance(instanceId: string) {
     const inst = this.store.get(instanceId);
-    if (!inst) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!inst) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return inst;
   }
 
