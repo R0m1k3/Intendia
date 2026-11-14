@@ -70,6 +70,9 @@ export { FAKE_PLUGIN_CATALOG } from './plugins.js';
 export { FAKE_MCP_CATALOG } from './mcp-catalog.js';
 import { SkillStore } from './skills.js';
 
+/** FAKE_LANG=en: English texts for the README screenshots (default and file scenes only). */
+const EN = process.env.FAKE_LANG === 'en';
+
 /**
  * Recording the fake replays by default and the server tests rely on: the one made on a used
  * instance (a session, a cron, a provider key). Newer recordings come from an empty container
@@ -361,16 +364,16 @@ class Simulator {
     }
     if (/roman/i.test(run.input)) return this.finish(run, run.romanText ?? '');
     if (/modifie/i.test(run.input)) return this.playModified(run, step);
-    if (/fichier/i.test(run.input)) return this.playFile(run, step);
+    if (/fichier/i.test(run.input) || (EN && /\bfile\b/i.test(run.input))) return this.playFile(run, step);
     if (/coffre/i.test(run.input)) return this.playVault(run, step);
     if (/fond/i.test(run.input)) return this.playBackground(run, step);
     if (/delegue/i.test(run.input)) return this.playDelegate(run, step);
     if (/t[aâ]ches/i.test(run.input)) return this.playTodos(run, step);
     if (/artefact/i.test(run.input)) return this.playArtifact(run, step);
     await sleep(step);
-    this.push(run, { event: 'message.delta', delta: 'Je regarde ' });
+    this.push(run, { event: 'message.delta', delta: EN ? 'Looking at ' : 'Je regarde ' });
     await sleep(step);
-    this.push(run, { event: 'message.delta', delta: 'le dossier.' });
+    this.push(run, { event: 'message.delta', delta: EN ? 'the folder.' : 'le dossier.' });
     await sleep(step);
     this.push(run, { event: 'tool.started', tool: 'terminal', preview: 'ls -la', call_id: 'call_1' });
     await sleep(step);
@@ -381,15 +384,15 @@ class Simulator {
     }
     this.addMessage(run.sessionId, 'tool', 'AGENTS.md\nfiles\ninbox\nsessions', { tool_name: 'terminal' });
     await sleep(step);
-    this.finish(run, 'Je regarde le dossier. Il contient `AGENTS.md`, `files`, `inbox` et `sessions`.');
+    this.finish(run, EN ? 'Looking at the folder. It holds `AGENTS.md`, `files`, `inbox` and `sessions`.' : 'Je regarde le dossier. Il contient `AGENTS.md`, `files`, `inbox` et `sessions`.');
   }
 
   private async playFile(run: SimRun, step: number) {
     const dir = /dans (\S+\/sessions\/[^/\s]+)\/\./.exec(run.instructions)?.[1] ?? '/workspace/sessions/inconnue';
-    const path = `${dir}/rapport.md`;
+    const path = `${dir}/${EN ? 'report' : 'rapport'}.md`;
     if (path.startsWith(`${this.filesRoot}/`)) {
       mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
-      writeFileSync(path, '# Rapport\n\nFichier écrit par fake-hermes.\n\n| Magasin | Ventes |\n|---|---|\n| Frouard | 1 240 |\n| Houdemont | 980 |\n');
+      writeFileSync(path, EN ? '# Report\n\nFile written by fake-hermes.\n\n| Store | Sales |\n|---|---|\n| Frouard | 1,240 |\n| Houdemont | 980 |\n' : '# Rapport\n\nFichier écrit par fake-hermes.\n\n| Magasin | Ventes |\n|---|---|\n| Frouard | 1 240 |\n| Houdemont | 980 |\n');
     }
     await sleep(step);
     this.push(run, { event: 'tool.started', tool: 'write_file', preview: path, call_id: 'call_1' });
@@ -397,7 +400,7 @@ class Simulator {
     this.push(run, { event: 'tool.completed', tool: 'write_file', duration: 0.05, error: false, preview: path, call_id: 'call_1' });
     this.addMessage(run.sessionId, 'tool', `Wrote ${path}`, { tool_name: 'write_file' });
     await sleep(step);
-    this.finish(run, `Voilà le rapport : \`${path}\`. Il reprend les ventes des deux magasins.`);
+    this.finish(run, EN ? `Here is the report: \`${path}\`. It covers the sales of both stores.` : `Voilà le rapport : \`${path}\`. Il reprend les ventes des deux magasins.`);
   }
 
   /** "modifie" scenario: write_file then a V4A patch that updates that file and adds another one. */
