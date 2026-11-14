@@ -137,7 +137,7 @@ export function ErrorText({ error }: { error: unknown }) {
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span aria-hidden className={cx('grid shrink-0 place-items-center rounded-[7px] bg-[#0e0e10] font-semibold text-accent dark:ring-1 dark:ring-line', size === 'lg' ? 'size-8 text-[15px]' : 'size-6 text-[13px]')}>I</span>
+      <span aria-hidden className={cx('grid shrink-0 place-items-center rounded-[7px] bg-accent font-semibold text-on-accent', size === 'lg' ? 'size-8 text-[15px]' : 'size-6 text-[13px]')}>I</span>
       <span className={cx('font-semibold', size === 'lg' ? 'text-lg' : 'text-base')}>Intendia</span>
     </span>
   );

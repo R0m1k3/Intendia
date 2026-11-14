@@ -223,12 +223,12 @@ function CopyReply({ text }: { text: string }) {
   );
 }
 
-/** Round 28 px avatar with an initial: the agent on black with an orange letter, the user on grey. */
+/** Round 28 px avatar with an initial: the agent on orange with a black letter, the user on grey. */
 export function Avatar({ name, agent }: { name: string; agent: boolean }) {
   return (
     <span aria-hidden className={cx(
       'grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold uppercase',
-      agent ? 'bg-[#0e0e10] text-accent dark:ring-1 dark:ring-line' : 'bg-raised text-ink',
+      agent ? 'bg-accent text-on-accent' : 'bg-raised text-ink',
     )}>
       {Array.from(name)[0] ?? 'H'}
     </span>
