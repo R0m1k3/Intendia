@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
 import { showCopy } from './Dialog';
@@ -133,11 +133,34 @@ export function ErrorText({ error }: { error: unknown }) {
   return <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{(error as Error).message}</p>;
 }
 
-/** Black rounded square with an orange I, then the name. */
+/**
+ * The mark: a black chat bubble carrying an orange wing (Hermes, the messenger) on an orange squircle
+ * (accent → accent-strong). Same drawing as `public/favicon.svg`; the gradient id is per instance (several marks on one page).
+ */
+export function LogoMark({ className }: { className?: string }) {
+  const id = `logo${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden className={className}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ff9445" />
+          <stop offset="1" stopColor="#f26d0d" />
+        </linearGradient>
+      </defs>
+      <path d="M16 0C27.4 0 32 4.6 32 16S27.4 32 16 32 0 27.4 0 16 4.6 0 16 0z" fill={`url(#${id})`} />
+      <g transform="translate(-1 -.5)">
+        <path d="M12.5 7.5h9A5.5 5.5 0 0 1 27 13v3.5a5.5 5.5 0 0 1-5.5 5.5h-4.3l-4.2 3.5c-.5.4-1.2.1-1.2-.6V22A5.5 5.5 0 0 1 7 16.5V13a5.5 5.5 0 0 1 5.5-5.5z" fill="#0e0e10" />
+        <path d="M7 24.5C7 15 13.5 8.2 25.5 6.8c.5 0 .8.4.7.9-.7 3-2.6 4.6-5.6 5 1 .4 1.1 1.6.2 2.4-1.5 1.5-3.3 2.2-5.4 2.3.9.5.8 1.7-.1 2.4-1.8 1.5-3.8 2.2-6 2.2-.6 1.6-1.5 2.4-2.3 2.5z" transform="translate(7.04 5.36) scale(.6)" fill="#ff8a33" />
+      </g>
+    </svg>
+  );
+}
+
+/** The mark, then the name. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span aria-hidden className={cx('grid shrink-0 place-items-center rounded-[7px] bg-accent font-semibold text-on-accent', size === 'lg' ? 'size-8 text-[15px]' : 'size-6 text-[13px]')}>I</span>
+      <LogoMark className={cx('shrink-0', size === 'lg' ? 'size-8' : 'size-6')} />
       <span className={cx('font-semibold', size === 'lg' ? 'text-lg' : 'text-base')}>Intendia</span>
     </span>
   );
