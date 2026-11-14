@@ -1,4 +1,5 @@
 import { goalRoutes } from './routes/goal.js';
+import { msg, translateResponses } from './i18n/index.js';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { existsSync, readFileSync } from 'node:fs';
@@ -72,6 +73,8 @@ export function createApp(deps: AppDeps) {
   const { auth, store, compat, config } = deps;
   const app = new Hono();
 
+  // first: sees the final answer of every route and of onError
+  app.use('*', translateResponses());
   app.use('*', async (c, next) => {
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
@@ -143,7 +146,7 @@ export function createApp(deps: AppDeps) {
   x.post('/login', async (c) => {
     auth.rateLimit(auth.clientIp(c));
     const { password } = PasswordBody.parse(await c.req.json());
-    if (!(await auth.checkPassword(password))) return c.json({ error: 'Mot de passe incorrect' }, 401);
+    if (!(await auth.checkPassword(password))) return c.json({ error: msg('Mot de passe incorrect') }, 401);
     auth.createSession(c);
     return c.json({ ok: true });
   });
@@ -176,7 +179,7 @@ export function createApp(deps: AppDeps) {
   priv.post('/instances', async (c) => {
     const inst = InstanceConfigSchema.parse(await c.req.json());
     const { report } = await checkInstance(new HermesHttp(inst, deps.fetchImpl));
-    if (!report.api.reachable) return c.json({ error: `API server injoignable : ${report.api.error ?? '?'}`, report }, 422);
+    if (!report.api.reachable) return c.json({ error: msg('API server injoignable : {error}', { error: report.api.error ?? '?' }), report }, 422);
     store.save(inst);
     const saved = await compat.check(inst.id);
     // share_file: put into Hermes right away when nothing named `intendia` is there (no test, no restart)
@@ -193,7 +196,7 @@ export function createApp(deps: AppDeps) {
   priv.patch('/instances/:id', async (c) => {
     const { label } = z.object({ label: z.string().trim().min(1).max(80) }).parse(await c.req.json());
     const saved = store.rename(c.req.param('id'), label);
-    if (!saved) return c.json({ error: `Instance inconnue : ${c.req.param('id')}` }, 404);
+    if (!saved) return c.json({ error: msg('Instance inconnue : {id}', { id: c.req.param('id') }) }, 404);
     return c.json({ instance: InstanceStore.toPublic(saved, 'db', compat.get(saved.id)?.files ?? null) });
   });
 
@@ -208,7 +211,7 @@ export function createApp(deps: AppDeps) {
 
   priv.post('/compat/:id/check', async (c) => {
     const id = c.req.param('id');
-    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     return c.json(await compat.check(id));
   });
 
@@ -216,19 +219,19 @@ export function createApp(deps: AppDeps) {
   const mcpInfo = (id: string) => ({ url: mcpUrl(config, id), token: mcpToken(deps.db, id), publicUrlSet: Boolean(config.publicUrl) });
   priv.get('/instances/:id/mcp', async (c) => {
     const id = c.req.param('id');
-    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     return c.json({ ...mcpInfo(id), state: await deps.services.mcpLink.state(id) });
   });
   /** Writes the share_file entry into Hermes, then Hermes tests it. */
   priv.post('/instances/:id/mcp/connect', async (c) => {
     const id = c.req.param('id');
-    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     const body = z.object({ replaceOther: z.boolean().optional() }).parse(await c.req.json().catch(() => ({})));
     return c.json(await deps.services.mcpLink.connect(id, { replaceOther: body.replaceOther, test: true }));
   });
   priv.post('/instances/:id/mcp/rotate', async (c) => {
     const id = c.req.param('id');
-    if (!store.get(id)) return c.json({ error: 'instance inconnue' }, 404);
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     const res = await deps.services.mcpLink.rotate(id);
     return c.json({ ...mcpInfo(id), ...res });
   });

@@ -11,12 +11,13 @@ import { NotFoundError, ValidationError, type SessionContext, type WorkspaceServ
 import { createSessionDir, WorkspaceFsError } from '../workspaces/fs.js';
 import { runKey, startingRuns, whenIdle } from '../chat/history.js';
 import type { HermesFs } from '../files/hermes-fs.js';
+import { msg } from '../i18n/index.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
 export const SESSION_ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
 
 const CreateWorkspace = z.object({
-  slug: z.string().regex(SLUG_RE, 'slug : a-z, 0-9 et tiret, 40 caractères au plus'),
+  slug: z.string().regex(SLUG_RE, msg('slug : a-z, 0-9 et tiret, 40 caractères au plus')),
   name: z.string().trim().min(1).max(80),
   instanceId: z.string().min(1),
   profile: z.string().max(64).nullish(),
@@ -30,9 +31,9 @@ const PatchSession = z.object({
   /** Kept by Intendia only (first in the lists). */
   pinned: z.boolean().optional(),
   /** null = Hermes default */
-  model: z.string().trim().min(1).max(200).regex(/^[^\s]+$/, 'nom de modèle sans espace ni saut de ligne').nullable().optional(),
+  model: z.string().trim().min(1).max(200).regex(/^[^\s]+$/, msg('nom de modèle sans espace ni saut de ligne')).nullable().optional(),
   /** Provider of `model` (picker group); accepts `custom:<name>` keys. Only with `model`. */
-  provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, 'fournisseur invalide').nullable().optional(),
+  provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, msg('fournisseur invalide')).nullable().optional(),
   effort: z.enum(EFFORTS).nullable().optional(),
   /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
   personality: z.string().regex(PERSONALITY_RE).nullable().optional(),
@@ -43,27 +44,27 @@ const PatchSession = z.object({
 });
 
 const Ids = z.array(z.string().regex(SESSION_ID_RE)).min(1).max(200)
-  .refine((ids) => new Set(ids).size === ids.length, 'identifiants en double');
+  .refine((ids) => new Set(ids).size === ids.length, msg('identifiants en double'));
 const BulkBody = z.object({
   ids: Ids,
   action: z.enum(['archive', 'unarchive', 'pin', 'unpin', 'delete', 'move']),
   workspace: z.string().regex(SLUG_RE).optional(),
-}).refine((b) => b.action !== 'move' || b.workspace, { message: 'workspace requis pour déplacer', path: ['workspace'] });
+}).refine((b) => b.action !== 'move' || b.workspace, { message: msg('workspace requis pour déplacer'), path: ['workspace'] });
 const RestoreBody = z.object({ ids: Ids });
 
-export const RUN_ACTIVE = 'Un travail est en cours';
-const MOVE_FILES = "Ses fichiers resteraient dans l'ancien workspace";
+export const RUN_ACTIVE = msg('Un travail est en cours');
+const MOVE_FILES = msg("Ses fichiers resteraient dans l'ancien workspace");
 
 export function sessionParams(c: { req: { param: (k: string) => string } }): { inst: string; id: string } {
   const inst = c.req.param('inst');
   const id = c.req.param('id');
-  if (!SESSION_ID_RE.test(id) || !SLUG_RE.test(inst)) throw new ValidationError('identifiant invalide');
+  if (!SESSION_ID_RE.test(id) || !SLUG_RE.test(inst)) throw new ValidationError(msg('identifiant invalide'));
   return { inst, id };
 }
 
 function sourceOf(raw: string | undefined): SessionSource {
   if (raw === undefined || raw === '') return 'all';
-  if (!(SESSION_SOURCES as readonly string[]).includes(raw)) throw new ValidationError(`source : ${SESSION_SOURCES.join(', ')}`);
+  if (!(SESSION_SOURCES as readonly string[]).includes(raw)) throw new ValidationError(msg('source : {sources}', { sources: SESSION_SOURCES.join(', ') }));
   return raw as SessionSource;
 }
 
@@ -80,14 +81,14 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   r.get('/i/:inst/sessions/recent', async (c) => {
     const raw = c.req.query('limit');
     const limit = raw === undefined ? 20 : Number(raw);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ValidationError('limit : entier de 1 à 200');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ValidationError(msg('limit : entier de 1 à 200'));
     return c.json(await deps.services.recent.list(c.req.param('inst'), limit, sourceOf(c.req.query('source'))));
   });
 
   // search: Intendia titles, plus message content through the instance's dashboard
   r.get('/i/:inst/sessions/search', async (c) => {
     const q = (c.req.query('q') ?? '').trim();
-    if (q.length < 2 || q.length > 100) throw new ValidationError('q : de 2 à 100 caractères');
+    if (q.length < 2 || q.length > 100) throw new ValidationError(msg('q : de 2 à 100 caractères'));
     return c.json(await deps.services.recent.search(c.req.param('inst'), q, sourceOf(c.req.query('source'))));
   });
 
@@ -130,7 +131,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
    */
   const moveOne = async (ctx: SessionContext, slug: string): Promise<string | null> => {
     const target = workspaces.getWorkspace(slug);
-    if (target.instanceId !== ctx.instance.id || (target.profile ?? 'default') !== ctx.profile) return 'Autre agent';
+    if (target.instanceId !== ctx.instance.id || (target.profile ?? 'default') !== ctx.profile) return msg('Autre agent');
     if (target.slug === ctx.workspace.slug) return null;
     let refused: string | null = null;
     const idle = await whenIdle(deps.compat, ctx, async () => { refused = await moveFolder(ctx, slug); });
@@ -172,17 +173,17 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
       // a first message on its way keeps the profile it was sent with
       if (startingRuns.has(runKey(inst, id))) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
       if (ctx.session.lastRunId || ctx.session.copiedFrom) {
-        return c.json({ error: 'Cette session a déjà des messages : copiez-la vers l’autre agent', code: 'has_history' }, 409);
+        return c.json({ error: msg('Cette session a déjà des messages : copiez-la vers l’autre agent'), code: 'has_history' }, 409);
       }
       if (body.profile && body.profile !== 'default' && !ctx.instance.profileKeys[body.profile]) {
-        return c.json({ error: `Profil sans clé sur cette instance : ${body.profile}`, code: 'no_key' }, 400);
+        return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile: body.profile }), code: 'no_key' }, 400);
       }
     }
     if (body.autoApprove === true) {
       // relaunches with every action approved by itself: only within a budget (chat/goal.ts)
       const goal = deps.services.goals.get(inst, id);
       if (goal && goal.status !== 'done' && goal.budgetUsd === null) {
-        return c.json({ error: 'Fixez d’abord un budget à l’objectif de cette session', code: 'goal_budget_required' }, 400);
+        return c.json({ error: msg('Fixez d’abord un budget à l’objectif de cette session'), code: 'goal_budget_required' }, 400);
       }
     }
     const session = workspaces.updateSession(inst, id, body);
@@ -205,7 +206,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     const inst = c.req.param('inst');
     const { ids } = RestoreBody.parse(await c.req.json());
     const restored = workspaces.restore(inst, ids);
-    if (!restored.length) return c.json({ error: 'Trop tard : la suppression est faite', code: 'too_late' }, 409);
+    if (!restored.length) return c.json({ error: msg('Trop tard : la suppression est faite'), code: 'too_late' }, 409);
     return c.json({ restored });
   });
 
@@ -219,7 +220,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
       try {
         ctx = workspaces.getSession(inst, id);
       } catch (err) {
-        if (err instanceof NotFoundError) { results.push({ id, ok: false, error: 'Introuvable' }); continue; }
+        if (err instanceof NotFoundError) { results.push({ id, ok: false, error: msg('Introuvable') }); continue; }
         throw err;
       }
       try {

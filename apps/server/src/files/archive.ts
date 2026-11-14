@@ -3,6 +3,7 @@
 // a few files are in memory at once. Paths leaving the folder, links and special files are skipped, never written.
 import { Gunzip, Unzip, UnzipInflate, unzipSync, type UnzipFileInfo } from 'fflate';
 import { checkName } from './paths.js';
+import { msg } from '../i18n/index.js';
 
 export type ArchiveKind = 'zip' | 'tar' | 'tgz';
 
@@ -46,13 +47,13 @@ export function archiveStem(name: string): string {
 export function safePath(raw: string): { path: string } | { reason: string } {
   const parts = raw.replace(/\\/g, '/').split('/').filter((p) => p !== '' && p !== '.');
   if (raw.startsWith('/') || raw.startsWith('\\') || /^[a-zA-Z]:/.test(raw) || parts.includes('..')) {
-    return { reason: 'chemin hors du dossier' };
+    return { reason: msg('chemin hors du dossier') };
   }
-  if (!parts.length) return { reason: 'nom vide' };
+  if (!parts.length) return { reason: msg('nom vide') };
   try {
     for (const p of parts) checkName(p);
   } catch {
-    return { reason: 'nom invalide' };
+    return { reason: msg('nom invalide') };
   }
   return { path: parts.join('/') };
 }
@@ -103,8 +104,8 @@ export async function extractArchive(
       const f = queue.shift()!;
       entries += 1;
       total += f.data.length;
-      if (entries > limits.maxEntries) throw tooBig(`Plus de ${limits.maxEntries} fichiers dans l'archive`);
-      if (total > limits.maxTotal) throw tooBig('Archive trop grosse une fois décompressée');
+      if (entries > limits.maxEntries) throw tooBig(msg("Plus de {max} fichiers dans l'archive", { max: limits.maxEntries }));
+      if (total > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
       if (stop()) throw new StopSignal();
       const r = await write(f.path, f.data);
       if (r === 'written') count += 1;
@@ -156,12 +157,12 @@ function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): void {
   try {
     unzipSync(bytes, { filter: (f) => { infos.push(f); return false; } });
   } catch {
-    throw new ArchiveError('invalid', 'Archive zip illisible');
+    throw new ArchiveError('invalid', msg('Archive zip illisible'));
   }
   const files = infos.filter((f) => !f.name.endsWith('/'));
-  if (files.length > limits.maxEntries) throw tooBig(`Plus de ${limits.maxEntries} fichiers dans l'archive`);
-  if (files.some((f) => f.originalSize > limits.maxFile)) throw tooBig('Un fichier de l’archive dépasse la taille permise');
-  if (files.reduce((n, f) => n + f.originalSize, 0) > limits.maxTotal) throw tooBig('Archive trop grosse une fois décompressée');
+  if (files.length > limits.maxEntries) throw tooBig(msg("Plus de {max} fichiers dans l'archive", { max: limits.maxEntries }));
+  if (files.some((f) => f.originalSize > limits.maxFile)) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
+  if (files.reduce((n, f) => n + f.originalSize, 0) > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
 }
 
 function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits): Reader {
@@ -171,17 +172,17 @@ function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits): R
     const safe = safePath(file.name);
     if ('reason' in safe) { skipped.push({ path: file.name, reason: safe.reason }); return; }
     if (file.compression !== 0 && file.compression !== 8) {
-      skipped.push({ path: safe.path, reason: 'compression non prise en charge' });
+      skipped.push({ path: safe.path, reason: msg('compression non prise en charge') });
       return;
     }
     const chunks: Uint8Array[] = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
       if (failure) return;
-      if (err) { failure = new ArchiveError('invalid', 'Archive zip illisible'); return; }
+      if (err) { failure = new ArchiveError('invalid', msg('Archive zip illisible')); return; }
       size += chunk.length;
       // the central directory may lie: the real size counts
-      if (size > limits.maxFile) { failure = tooBig('Un fichier de l’archive dépasse la taille permise'); file.terminate(); return; }
+      if (size > limits.maxFile) { failure = tooBig(msg('Un fichier de l’archive dépasse la taille permise')); file.terminate(); return; }
       if (chunk.length) chunks.push(chunk);
       if (final) queue.push({ path: safe.path, data: concat(chunks, size) });
     };
@@ -193,7 +194,7 @@ function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits): R
       try {
         unzip.push(chunk, final);
       } catch {
-        failure ??= new ArchiveError('invalid', 'Archive zip illisible');
+        failure ??= new ArchiveError('invalid', msg('Archive zip illisible'));
       }
       if (failure) throw failure;
     },
@@ -223,7 +224,7 @@ function num(b: Uint8Array, off: number, len: number): number {
   }
   const s = field(b, off, len).trim();
   if (!s) return 0;
-  if (!/^[0-7]+$/.test(s)) throw new ArchiveError('invalid', 'Archive tar illisible');
+  if (!/^[0-7]+$/.test(s)) throw new ArchiveError('invalid', msg('Archive tar illisible'));
   return parseInt(s, 8);
 }
 
@@ -238,7 +239,7 @@ function parseHeader(b: Uint8Array): Header | null {
   if (b.every((x) => x === 0)) return null;
   let sum = 0;
   for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 32 : b[i]!;
-  if (sum !== num(b, 148, 8)) throw new ArchiveError('invalid', 'Archive tar illisible');
+  if (sum !== num(b, 148, 8)) throw new ArchiveError('invalid', msg('Archive tar illisible'));
   const name = field(b, 0, 100);
   const prefix = field(b, 257, 6).startsWith('ustar') ? field(b, 345, 155) : '';
   const t = String.fromCharCode(b[156]!);
@@ -249,7 +250,7 @@ function parseHeader(b: Uint8Array): Header | null {
 const META_MAX = 64 * 1024;
 const padOf = (size: number) => (BLOCK - (size % BLOCK)) % BLOCK;
 const isFile = (type: string) => type === '0' || type === '7';
-const KIND_REASON: Record<string, string> = { '1': 'lien', '2': 'lien symbolique', '3': 'fichier spécial', '4': 'fichier spécial', '6': 'fichier spécial' };
+const KIND_REASON: Record<string, string> = { '1': msg('lien'), '2': msg('lien symbolique'), '3': msg('fichier spécial'), '4': msg('fichier spécial'), '6': msg('fichier spécial') };
 
 /** Sizes from the headers of a .tar already in memory, before anything is written. */
 function precheckTar(bytes: Uint8Array, limits: ArchiveLimits): void {
@@ -261,12 +262,12 @@ function precheckTar(bytes: Uint8Array, limits: ArchiveLimits): void {
     if (isFile(h.type)) {
       files += 1;
       total += h.size;
-      if (h.size > limits.maxFile) throw tooBig('Un fichier de l’archive dépasse la taille permise');
+      if (h.size > limits.maxFile) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
     }
     off += BLOCK + h.size + padOf(h.size);
   }
-  if (files > limits.maxEntries) throw tooBig(`Plus de ${limits.maxEntries} fichiers dans l'archive`);
-  if (total > limits.maxTotal) throw tooBig('Archive trop grosse une fois décompressée');
+  if (files > limits.maxEntries) throw tooBig(msg("Plus de {max} fichiers dans l'archive", { max: limits.maxEntries }));
+  if (total > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
 }
 
 /** Pax extended header: "<len> path=<value>\n" lines; only the path is used. */
@@ -306,7 +307,7 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
     let path: string | null = null;
     let reason: string | null = null;
     if (h.type === 'L' || h.type === 'x') {
-      if (h.size > META_MAX) throw new ArchiveError('invalid', 'En-tête d’archive tar trop long');
+      if (h.size > META_MAX) throw new ArchiveError('invalid', msg('En-tête d’archive tar trop long'));
       keep = h.type === 'L' ? 'name' : 'pax';
     }
     else {
@@ -314,12 +315,12 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
       pax = null;
       longName = null;
       if (isFile(h.type)) {
-        if (h.size > limits.maxFile) throw tooBig('Un fichier de l’archive dépasse la taille permise');
+        if (h.size > limits.maxFile) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
         const safe = safePath(name);
         if ('reason' in safe) reason = safe.reason;
         else { path = safe.path; keep = 'file'; }
       } else if (h.type !== '5' && h.type !== 'g' && h.type !== 'K') {
-        reason = KIND_REASON[h.type] ?? 'type d’entrée non pris en charge';
+        reason = KIND_REASON[h.type] ?? msg('type d’entrée non pris en charge');
       }
       if (reason) skipped.push({ path: name, reason });
     }
@@ -333,7 +334,7 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
       if (cur) {
         const take = Math.min(cur.left, chunk.length - i);
         seen += take;
-        if (seen > limits.maxTotal) throw tooBig('Archive trop grosse une fois décompressée');
+        if (seen > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
         if (cur.keep) cur.chunks.push(chunk.slice(i, i + take));
         cur.left -= take;
         i += take;
@@ -360,14 +361,14 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
   };
 
   let failure: ArchiveError | null = null;
-  const gunzip = kind === 'tgz' ? new Gunzip((data) => { if (!failure) { try { feed(data); } catch (err) { failure = err instanceof ArchiveError ? err : new ArchiveError('invalid', 'Archive illisible'); } } }) : null;
+  const gunzip = kind === 'tgz' ? new Gunzip((data) => { if (!failure) { try { feed(data); } catch (err) { failure = err instanceof ArchiveError ? err : new ArchiveError('invalid', msg('Archive illisible')); } } }) : null;
   return {
     push(chunk, final) {
       if (gunzip) {
         try {
           gunzip.push(chunk, final);
         } catch {
-          failure ??= new ArchiveError('invalid', 'Archive gzip illisible');
+          failure ??= new ArchiveError('invalid', msg('Archive gzip illisible'));
         }
         if (failure) throw failure;
       } else {
@@ -376,7 +377,7 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
     },
     end() {
       if (failure) throw failure;
-      if (cur) throw new ArchiveError('invalid', 'Archive tar coupée');
+      if (cur) throw new ArchiveError('invalid', msg('Archive tar coupée'));
     },
   };
 }

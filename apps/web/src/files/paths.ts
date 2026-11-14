@@ -1,3 +1,5 @@
+import { locale, t } from '../i18n';
+
 /**
  * File paths written in the chat. Candidates are only shown as chips once the server confirms
  * they exist (POST …/files/exists), so a loose match costs nothing but one lookup.
@@ -63,7 +65,7 @@ export function baseName(path: string): string {
 }
 
 export function formatSize(n: number): string {
-  if (n < 1024) return `${n} o`;
-  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`;
-  return `${(n / 1048576).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
+  if (n < 1024) return t('{n} o', { n });
+  if (n < 1024 * 1024) return t('{n} Ko', { n: (n / 1024).toLocaleString(locale(), { maximumFractionDigits: 1 }) });
+  return t('{n} Mo', { n: (n / 1048576).toLocaleString(locale(), { maximumFractionDigits: 1 }) });
 }

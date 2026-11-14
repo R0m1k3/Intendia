@@ -5,6 +5,7 @@ import { kanbanMissions } from '../db/schema.js';
 import { HermesError } from '../connectors/runtime.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { KanbanError, LIMITS, type KanbanService, type TaskDetail } from './service.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * Supervised missions (lot 9 C): a goal becomes a root task in triage that Hermes splits (`decompose`) into
@@ -71,7 +72,7 @@ export class MissionService {
 
   private row(instanceId: string, id: string): MissionRow {
     const r = this.db.select().from(kanbanMissions).where(and(eq(kanbanMissions.id, id), eq(kanbanMissions.instanceId, instanceId))).get();
-    if (!r) throw new NotFoundError('Mission introuvable');
+    if (!r) throw new NotFoundError(msg('Mission introuvable'));
     return r as MissionRow;
   }
 
@@ -87,7 +88,7 @@ export class MissionService {
     if (this.jobs.has(id)) return;
     const job = work().catch((err: unknown) => {
       this.log(`${id}: ${err instanceof Error ? err.message : String(err)}`);
-      if (this.stateOf(id) === 'decomposing') this.set(id, { state: 'failed', error: 'Erreur inattendue pendant le découpage' });
+      if (this.stateOf(id) === 'decomposing') this.set(id, { state: 'failed', error: msg('Erreur inattendue pendant le découpage') });
     }).finally(() => this.jobs.delete(id));
     this.jobs.set(id, job);
   }
@@ -102,9 +103,9 @@ export class MissionService {
   /** Answers at once (the route says 202); the split runs detached, written down first so that it can resume. */
   create(instanceId: string, board: string, input: { goal: string; body?: string }): MissionRow {
     const goal = input.goal.trim();
-    if (!goal) throw new ValidationError('But manquant');
-    if (goal.length > LIMITS.title) throw new ValidationError(`But trop long (${LIMITS.title} caractères au plus)`);
-    if (input.body !== undefined && input.body.length > LIMITS.body) throw new ValidationError(`Consigne trop longue (${LIMITS.body} caractères au plus)`);
+    if (!goal) throw new ValidationError(msg('But manquant'));
+    if (goal.length > LIMITS.title) throw new ValidationError(msg('But trop long ({max} caractères au plus)', { max: LIMITS.title }));
+    if (input.body !== undefined && input.body.length > LIMITS.body) throw new ValidationError(msg('Consigne trop longue ({max} caractères au plus)', { max: LIMITS.body }));
     this.kanban.requireOps(instanceId, MISSION_OPS);
     const now = this.now();
     const row: MissionRow = {
@@ -121,7 +122,7 @@ export class MissionService {
     try {
       root = (await this.kanban.createTask(m.instanceId, m.board, { title: m.goal, body, start: 'triage' })).id;
     } catch (err) {
-      this.set(m.id, { state: 'failed', error: `Tâche racine refusée : ${err instanceof Error ? err.message : String(err)}` });
+      this.set(m.id, { state: 'failed', error: msg('Tâche racine refusée : {why}', { why: err instanceof Error ? err.message : String(err) }) });
       return;
     }
     const started = this.now();
@@ -144,7 +145,7 @@ export class MissionService {
       return;
     }
     if (res.fanout === false) {
-      this.set(m.id, { state: 'failed', error: 'Hermes n’a pas découpé ce but en plusieurs tâches' });
+      this.set(m.id, { state: 'failed', error: msg('Hermes n’a pas découpé ce but en plusieurs tâches') });
       return;
     }
     await this.hold(row);
@@ -190,16 +191,16 @@ export class MissionService {
         const now = await this.kanban.task(m.instanceId, m.board, k.task.id).then((d) => d.task.status, () => 'unknown');
         if (HELD_STATES.has(now) || now === 'scheduled') await this.archive(m, k.task.id).catch(() => {});
       }
-      this.set(m.id, { state: 'failed', error: `Hermes n’a pas retenu « ${stuck[0]} » : mission arrêtée et ses tâches archivées` });
+      this.set(m.id, { state: 'failed', error: msg('Hermes n’a pas retenu « {task} » : mission arrêtée et ses tâches archivées', { task: stuck[0] }) });
       return;
     }
-    if (this.stateOf(m.id) === 'decomposing') this.set(m.id, { state: kids.length ? 'held' : 'failed', error: kids.length ? null : 'Hermes n’a créé aucune tâche' });
+    if (this.stateOf(m.id) === 'decomposing') this.set(m.id, { state: kids.length ? 'held' : 'failed', error: kids.length ? null : msg('Hermes n’a créé aucune tâche') });
   }
 
   /** Answer lost: re-reads the root every 10 s until 210 s after the split started. */
   private async settle(m: MissionRow): Promise<void> {
     if (!m.rootId) {
-      this.set(m.id, { state: 'failed', error: 'Découpage interrompu avant la création de la tâche racine, à relancer' });
+      this.set(m.id, { state: 'failed', error: msg('Découpage interrompu avant la création de la tâche racine, à relancer') });
       return;
     }
     const until = (m.decomposeStartedAt ?? m.createdAt) + SETTLE_MS;
@@ -213,7 +214,7 @@ export class MissionService {
         }
       } catch (err) {
         if (err instanceof NotFoundError) {
-          this.set(m.id, { state: 'failed', error: 'Tâche racine disparue chez Hermes' });
+          this.set(m.id, { state: 'failed', error: msg('Tâche racine disparue chez Hermes') });
           return;
         }
         // Hermes unreachable: keep trying until the deadline
@@ -221,7 +222,7 @@ export class MissionService {
       if (this.now() >= until) break;
       await this.sleep(Math.min(SETTLE_EVERY_MS, Math.max(0, until - this.now())));
     }
-    this.set(m.id, { state: 'failed', error: 'Découpage interrompu, à relancer' });
+    this.set(m.id, { state: 'failed', error: msg('Découpage interrompu, à relancer') });
   }
 
   /** Startup: every split cut by a stop of Intendia is settled (past 210 s, at once). */
@@ -259,7 +260,7 @@ export class MissionService {
   }
 
   private async exclusive<T>(id: string, work: () => Promise<T>): Promise<T> {
-    if (this.acting.has(id)) throw new KanbanError('mission_state', 'Une autre action est en cours sur cette mission');
+    if (this.acting.has(id)) throw new KanbanError('mission_state', msg('Une autre action est en cours sur cette mission'));
     this.acting.add(id);
     try {
       return await work();
@@ -270,7 +271,7 @@ export class MissionService {
 
   private async heldMission(instanceId: string, id: string): Promise<Mission> {
     const m = await this.get(instanceId, id);
-    if (m.state !== 'held') throw new KanbanError('mission_state', 'Cette mission n’est plus en relecture');
+    if (m.state !== 'held') throw new KanbanError('mission_state', msg('Cette mission n’est plus en relecture'));
     return m;
   }
 
@@ -281,13 +282,13 @@ export class MissionService {
     return this.exclusive(id, async () => {
       const m = await this.heldMission(instanceId, id);
       const child = m.children.find((c) => c.id === childId && c.held);
-      if (!child) throw new NotFoundError('Tâche retenue introuvable dans cette mission');
+      if (!child) throw new NotFoundError(msg('Tâche retenue introuvable dans cette mission'));
       const waiting = m.children.filter((c) => c.held && c.after.includes(childId));
       if (waiting.length) {
-        throw new KanbanError('mission_dependency', `« ${waiting[0]!.title} » attend cette tâche : retirez-la d’abord`);
+        throw new KanbanError('mission_dependency', msg('« {task} » attend cette tâche : retirez-la d’abord', { task: waiting[0]!.title }));
       }
       if (m.children.filter((c) => c.held).length === 1) {
-        throw new KanbanError('mission_last', 'C’est la dernière tâche retenue : annulez plutôt la mission');
+        throw new KanbanError('mission_last', msg('C’est la dernière tâche retenue : annulez plutôt la mission'));
       }
       await this.kanban.updateTask(instanceId, m.board, childId, { status: 'archived' });
       return this.get(instanceId, id);
@@ -314,7 +315,7 @@ export class MissionService {
   async cancel(instanceId: string, id: string): Promise<MissionRow> {
     return this.exclusive(id, async () => {
       const m = this.row(instanceId, id);
-      if (m.state !== 'held' && m.state !== 'failed') throw new KanbanError('mission_state', 'Seule une mission en relecture ou en échec s’annule ici');
+      if (m.state !== 'held' && m.state !== 'failed') throw new KanbanError('mission_state', msg('Seule une mission en relecture ou en échec s’annule ici'));
       if (m.rootId) {
         const held = m.state === 'held' ? (await this.get(instanceId, id)).children.filter((c) => c.held) : [];
         await this.archive(m, m.rootId);

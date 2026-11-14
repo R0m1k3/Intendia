@@ -3,8 +3,9 @@ import { RefreshCw, Save } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { api } from '../api';
 import { Button, ErrorText, Panel } from '../components/ui';
-import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, useInvalidateConfig, type TabProps } from './common';
+import { configKey, errorCode, errorData, ICON, useInvalidateConfig, type TabProps } from './common';
 import { DiffView } from './DiffView';
+import { t } from '../i18n';
 
 const CodeView = lazy(() => import('../files/CodeView'));
 
@@ -35,7 +36,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
     onError: (err) => { if (errorCode(err) === 'config_changed') setConflict(true); },
   });
 
-  if (raw.isPending) return <p className="text-sm text-ink-soft">Lecture du fichier…</p>;
+  if (raw.isPending) return <p className="text-sm text-ink-soft">{t('Lecture du fichier…')}</p>;
   if (raw.isError || !shown) return <ErrorText error={raw.error} />;
 
   const dirty = draft !== null && draft !== against!.yaml;
@@ -53,40 +54,40 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
     <div className="space-y-4">
       {conflict && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
-          <span>{CHANGED_TEXT} Votre brouillon est gardé.</span>
-          <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />Recharger en gardant mes changements</Button>
+          <span>{t("La configuration a changé dans Hermes depuis l'affichage. Votre brouillon est gardé.")}</span>
+          <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />{t('Recharger en gardant mes changements')}</Button>
         </div>
       )}
-      {saved && !dirty && <p className="text-sm text-ok">Enregistré. Le texte affiché est celui qu’Hermes a réécrit.</p>}
+      {saved && !dirty && <p className="text-sm text-ok">{t('Enregistré. Le texte affiché est celui qu’Hermes a réécrit.')}</p>}
       <Panel
-        title="Fichier de configuration"
+        title={t('Fichier de configuration')}
         action={(
           <div className="flex gap-2">
-            {dirty && <Button variant="ghost" onClick={() => { setDraft(null); setStart(null); setBase(null); setShowDiff(false); setResets((n) => n + 1); save.reset(); }}>Annuler</Button>}
-            <Button disabled={!dirty} onClick={() => setShowDiff((v) => !v)}>{showDiff ? 'Masquer la différence' : 'Voir la différence'}</Button>
+            {dirty && <Button variant="ghost" onClick={() => { setDraft(null); setStart(null); setBase(null); setShowDiff(false); setResets((n) => n + 1); save.reset(); }}>{t('Annuler')}</Button>}
+            <Button disabled={!dirty} onClick={() => setShowDiff((v) => !v)}>{showDiff ? t('Masquer la différence') : t('Voir la différence')}</Button>
             <Button variant="primary" disabled={!dirty || !writable || save.isPending} onClick={() => { setShowDiff(true); save.mutate(); }}>
-              <Save className={ICON} strokeWidth={1.5} />{save.isPending ? 'Enregistrement…' : 'Enregistrer'}
+              <Save className={ICON} strokeWidth={1.5} />{save.isPending ? t('Enregistrement…') : t('Enregistrer')}
             </Button>
           </div>
         )}
         bodyClassName="p-0"
       >
         <div className="h-[60vh] min-h-80 overflow-hidden">
-          <Suspense fallback={<p className="p-5 text-sm text-ink-soft">Chargement de l’éditeur…</p>}>
+          <Suspense fallback={<p className="p-5 text-sm text-ink-soft">{t('Chargement de l’éditeur…')}</p>}>
             <CodeView key={`${shown.version}:${resets}`} name="config.yaml" value={shown.yaml} editable={writable}
               onChange={(v) => { if (!start) setStart(shown); setDraft(v); setSaved(false); }} />
           </Suspense>
         </div>
         <p className="border-t border-line px-4 py-2.5 text-xs text-ink-faint">
-          Les secrets sont affichés « «secret:…» » : laissez-les tels quels pour garder la valeur, ou remplacez-les. Hermes réécrit le fichier : les commentaires ajoutés ici ne sont pas gardés.
+          {t('Les secrets sont affichés « «secret:…» » : laissez-les tels quels pour garder la valeur, ou remplacez-les. Hermes réécrit le fichier : les commentaires ajoutés ici ne sont pas gardés.')}
         </p>
       </Panel>
       {save.error && errorCode(save.error) !== 'config_changed' && (
         <div className="text-sm text-bad">
           <ErrorText error={save.error} />
-          {typeof err.line === 'number' && <p>Ligne {err.line}{typeof err.column === 'number' ? `, colonne ${err.column}` : ''}</p>}
-          {Array.isArray(err.paths) && <p>À corriger : {(err.paths as string[]).join(', ')}</p>}
-          {typeof err.path === 'string' && <p>Chemin : {err.path}</p>}
+          {typeof err.line === 'number' && <p>{typeof err.column === 'number' ? t('Ligne {line}, colonne {column}', { line: err.line, column: err.column }) : t('Ligne {line}', { line: err.line })}</p>}
+          {Array.isArray(err.paths) && <p>{t('À corriger : {list}', { list: (err.paths as string[]).join(', ') })}</p>}
+          {typeof err.path === 'string' && <p>{t('Chemin : {path}', { path: err.path })}</p>}
         </div>
       )}
       {showDiff && dirty && <DiffView before={against!.yaml} after={draft!} />}

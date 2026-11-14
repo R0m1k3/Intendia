@@ -10,6 +10,7 @@ import {
 import { lastRunLines } from '../connectors/actions.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export interface PublicSkill {
   name: string;
@@ -73,7 +74,7 @@ export class ScanRefusedError extends Error {
 export class ActionBusyError extends Error {
   readonly code = 'busy';
   constructor(readonly action: string) {
-    super('Une action identique est en cours');
+    super(msg('Une action identique est en cours'));
     this.name = 'ActionBusyError';
   }
 }
@@ -96,8 +97,8 @@ async function translate<T>(fn: () => Promise<T>, what: string): Promise<T> {
     return await fn();
   } catch (err) {
     if (err instanceof HermesError && err.kind === 'http') {
-      if (err.detail.status === 404) throw new NotFoundError(`${what} : ${hermesDetail(err)}`);
-      if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Requête refusée par Hermes : ${hermesDetail(err)}`);
+      if (err.detail.status === 404) throw new NotFoundError(msg('{what} : {detail}', { what, detail: hermesDetail(err) }));
+      if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Requête refusée par Hermes : {detail}', { detail: hermesDetail(err) }));
     }
     throw err;
   }
@@ -155,16 +156,16 @@ export class SkillService {
   }
 
   /** A Hermes refusal of a write, with secrets and host paths hidden ("already exists at <path>"). */
-  private async writeOp<T = unknown>(instanceId: string, op: string, opts: Parameters<typeof callOp>[4], what = 'Skill introuvable'): Promise<T> {
+  private async writeOp<T = unknown>(instanceId: string, op: string, opts: Parameters<typeof callOp>[4], what = msg('Skill introuvable')): Promise<T> {
     const { http, report } = this.ctx(instanceId);
     try {
       return await callOp<T>(http, report, 'skills', op, opts);
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http') {
         const detail = hostPaths(this.mask.text(hermesDetail(err)));
-        if (err.detail.status === 404) throw new NotFoundError(`${what} : ${detail}`);
-        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Requête refusée par Hermes : ${detail}`);
-        throw new HermesError('http', `Hermes a répondu ${err.detail.status} : ${detail}`, err.detail);
+        if (err.detail.status === 404) throw new NotFoundError(msg('{what} : {detail}', { what, detail }));
+        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Requête refusée par Hermes : {detail}', { detail }));
+        throw new HermesError('http', msg('Hermes a répondu {status} : {detail}', { status: err.detail.status, detail }), err.detail);
       }
       throw err;
     }
@@ -172,9 +173,9 @@ export class SkillService {
 
   private async own(instanceId: string, profile: string, name: string): Promise<PublicSkill> {
     const skill = (await this.list(instanceId, profile)).find((s) => s.name === name);
-    if (!skill) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (!skill) throw new NotFoundError(msg('Skill introuvable : {name}', { name }));
     if (skill.provenance !== ARCHIVABLE_PROVENANCE) {
-      throw new AdminError('protected', 'Seuls les skills écrits par vous ou par l’agent se modifient ici (pas ceux du hub ni ceux fournis)');
+      throw new AdminError('protected', msg('Seuls les skills écrits par vous ou par l’agent se modifient ici (pas ceux du hub ni ceux fournis)'));
     }
     return skill;
   }
@@ -185,17 +186,17 @@ export class SkillService {
    */
   async create(instanceId: string, profile: string, input: { name: string; category?: string; description: string; body: string }): Promise<PublicSkill> {
     const description = input.description.trim();
-    if (!SKILL_NAME_RE.test(input.name)) throw new ValidationError('Nom de skill invalide : minuscules, chiffres, . _ - (64 caractères au plus)');
-    if (input.category && !SKILL_NAME_RE.test(input.category)) throw new ValidationError('Catégorie invalide : minuscules, chiffres, . _ - (64 caractères au plus)');
+    if (!SKILL_NAME_RE.test(input.name)) throw new ValidationError(msg('Nom de skill invalide : minuscules, chiffres, . _ - (64 caractères au plus)'));
+    if (input.category && !SKILL_NAME_RE.test(input.category)) throw new ValidationError(msg('Catégorie invalide : minuscules, chiffres, . _ - (64 caractères au plus)'));
     if (!description || description.length > DESCRIPTION_MAX || /[\r\n]/.test(description)) {
-      throw new ValidationError(`Description d’une ligne, ${DESCRIPTION_MAX} caractères au plus`);
+      throw new ValidationError(msg('Description d’une ligne, {max} caractères au plus', { max: DESCRIPTION_MAX }));
     }
-    if (!input.body.trim()) throw new ValidationError('Le corps du skill est vide');
+    if (!input.body.trim()) throw new ValidationError(msg('Le corps du skill est vide'));
     const content = `---\n${stringify({ name: input.name, description }, { version: '1.1' }).trimEnd()}\n---\n\n${input.body.trim()}\n`;
-    if (content.length > SKILL_MAX) throw new ValidationError(`SKILL.md trop long (${SKILL_MAX} caractères au plus)`);
+    if (content.length > SKILL_MAX) throw new ValidationError(msg('SKILL.md trop long ({max} caractères au plus)', { max: SKILL_MAX }));
     await this.writeOp(instanceId, 'create', { profile, body: { name: input.name, content, ...(input.category ? { category: input.category } : {}) } });
     const skill = (await this.list(instanceId, profile)).find((s) => s.name === input.name);
-    if (!skill) throw new NotFoundError(`Skill introuvable après création : ${input.name}`);
+    if (!skill) throw new NotFoundError(msg('Skill introuvable après création : {name}', { name: input.name }));
     return skill;
   }
 
@@ -203,22 +204,22 @@ export class SkillService {
   async putContent(instanceId: string, profile: string, name: string, draft: string): Promise<{ content: string }> {
     await this.own(instanceId, profile, name);
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), 'Skill introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), msg('Skill introuvable'));
     const current = ContentSchema.parse(raw).content;
-    if (current.length > CONTENT_MAX) throw new AdminError('too_long', 'SKILL.md trop long pour l’éditeur : modifiez-le dans Hermes');
+    if (current.length > CONTENT_MAX) throw new AdminError('too_long', msg('SKILL.md trop long pour l’éditeur : modifiez-le dans Hermes'));
     const content = this.mask.restoreText(draft, current);
-    if (content.length > SKILL_MAX) throw new ValidationError(`SKILL.md trop long (${SKILL_MAX} caractères au plus)`);
-    if (!content.startsWith('---')) throw new ValidationError('Le SKILL.md doit commencer par son en-tête (---)');
+    if (content.length > SKILL_MAX) throw new ValidationError(msg('SKILL.md trop long ({max} caractères au plus)', { max: SKILL_MAX }));
+    if (!content.startsWith('---')) throw new ValidationError(msg('Le SKILL.md doit commencer par son en-tête (---)'));
     await this.writeOp(instanceId, 'putContent', { profile, body: { name, content } });
     return { content: this.mask.text(content) };
   }
 
   /** Locked: the agent and the curator may no longer change it (the user still can). */
   async lock(instanceId: string, profile: string, name: string, locked: boolean): Promise<PublicSkill> {
-    if (!(await this.list(instanceId, profile)).some((s) => s.name === name)) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (!(await this.list(instanceId, profile)).some((s) => s.name === name)) throw new NotFoundError(msg('Skill introuvable : {name}', { name }));
     await this.writeOp(instanceId, 'lock', { profile, body: { name, locked } });
     const skill = (await this.list(instanceId, profile)).find((s) => s.name === name);
-    if (!skill) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (!skill) throw new NotFoundError(msg('Skill introuvable : {name}', { name }));
     return skill;
   }
 
@@ -230,30 +231,30 @@ export class SkillService {
   }
 
   private ctx(instanceId: string) {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
   }
 
   async list(instanceId: string, profile: string): Promise<PublicSkill[]> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'list', { profile }), 'Agent introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'list', { profile }), msg('Agent introuvable'));
     const parsed = SkillListSchema.parse(raw);
     return (Array.isArray(parsed) ? parsed : parsed.data).map(toSkill);
   }
 
   async setEnabled(instanceId: string, profile: string, name: string, enabled: boolean): Promise<PublicSkill> {
     // Hermes accepts any name and adds it to the disabled list: check first
-    if (!(await this.list(instanceId, profile)).some((s) => s.name === name)) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (!(await this.list(instanceId, profile)).some((s) => s.name === name)) throw new NotFoundError(msg('Skill introuvable : {name}', { name }));
     const { http, report } = this.ctx(instanceId);
-    await translate(() => callOp(http, report, 'skills', 'toggle', { profile, body: { name, enabled } }), 'Skill introuvable');
+    await translate(() => callOp(http, report, 'skills', 'toggle', { profile, body: { name, enabled } }), msg('Skill introuvable'));
     const skill = (await this.list(instanceId, profile)).find((s) => s.name === name);
-    if (!skill) throw new NotFoundError(`Skill introuvable : ${name}`);
+    if (!skill) throw new NotFoundError(msg('Skill introuvable : {name}', { name }));
     return skill;
   }
 
   async content(instanceId: string, profile: string, name: string): Promise<{ name: string; content: string; truncated: boolean }> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), 'Skill introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), msg('Skill introuvable'));
     const { content } = ContentSchema.parse(raw);
     // a skill written by the agent may hold a key: shown (and edited) masked
     return { name, content: this.mask.text(content.slice(0, CONTENT_MAX)), truncated: content.length > CONTENT_MAX };
@@ -261,7 +262,7 @@ export class SkillService {
 
   async toolsets(instanceId: string, profile: string): Promise<PublicToolset[]> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'toolsets', { profile }), 'Agent introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'toolsets', { profile }), msg('Agent introuvable'));
     const parsed = ToolsetListSchema.parse(raw);
     return (Array.isArray(parsed) ? parsed : parsed.data).map((t) => ({
       name: t.name,
@@ -275,7 +276,7 @@ export class SkillService {
 
   async official(instanceId: string, profile: string): Promise<{ results: PublicHubResult[]; timedOut: string[] }> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'hubOfficial', { profile }), 'Agent introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'hubOfficial', { profile }), msg('Agent introuvable'));
     return { results: HubOfficialSchema.parse(raw).skills.map((r) => toHub(r)), timedOut: [] };
   }
 
@@ -283,7 +284,7 @@ export class SkillService {
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(
       () => callOp<unknown>(http, report, 'skills', 'hubSearch', { profile, query: { q, limit: 30 }, timeoutMs: SLOW_MS }),
-      'Agent introuvable',
+      msg('Agent introuvable'),
     );
     const parsed = HubSearchSchema.parse(raw);
     return { results: parsed.results.map((r) => toHub(r, parsed.installed)), timedOut: parsed.timed_out ?? [] };
@@ -293,7 +294,7 @@ export class SkillService {
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(
       () => callOp<unknown>(http, report, 'skills', 'hubScan', { profile, query: { identifier }, timeoutMs: SLOW_MS }),
-      'Skill introuvable dans le hub',
+      msg('Skill introuvable dans le hub'),
     );
     return toScan(ScanSchema.parse(raw));
   }
@@ -304,8 +305,8 @@ export class SkillService {
     const allowed = scan.policy === 'allow' || (scan.policy === 'ask' && acknowledged);
     if (!allowed) {
       throw new ScanRefusedError(
-        scan.policy === 'block' ? 'Installation refusée par le scan de sécurité'
-          : scan.policy === 'ask' ? 'Le scan demande une confirmation' : `Résultat de scan inconnu : ${scan.policy}`,
+        scan.policy === 'block' ? msg('Installation refusée par le scan de sécurité')
+          : scan.policy === 'ask' ? msg('Le scan demande une confirmation') : msg('Résultat de scan inconnu : {policy}', { policy: scan.policy }),
         scan,
       );
     }
@@ -325,7 +326,7 @@ export class SkillService {
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(
       () => callOp<unknown>(http, report, 'skills', 'actionStatus', { params: { name: action }, query: { lines: STATUS_LINES } }),
-      'Action inconnue',
+      msg('Action inconnue'),
     );
     const s = ActionStatusSchema.parse(raw);
     return { running: s.running, exitCode: s.exit_code, ...lastRunLines(action, s.lines) };
@@ -333,7 +334,7 @@ export class SkillService {
 
   private async write(instanceId: string, op: 'install' | 'uninstall' | 'update', opts: Parameters<typeof callOp>[4]): Promise<string> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'skills', op, opts), 'Skill introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'skills', op, opts), msg('Skill introuvable'));
     const parsed = ActionStartSchema.safeParse(raw);
     if (!parsed.success) throw new HermesError('schema', `skills.${op}: unexpected response shape`);
     return parsed.data.name;

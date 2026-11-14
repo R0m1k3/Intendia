@@ -8,12 +8,12 @@ import { ListLabel, ListPane } from '../components/Panes';
 import { Button, Chips, ErrorText } from '../components/ui';
 import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
-import { sessionsCount } from './actions';
 import { groupByDay } from './days';
 import { runMarks, withRunning } from './running';
 import { afterRemoveRoute, useRemoveSession, type RemoveTarget } from './remove';
 import { SessionRow } from './SessionRow';
 import { SESSION_LIST_KEYS, showUndo } from './UndoBar';
+import { plural, t } from '../i18n';
 
 const PAGE = 50;
 const MAX = 200;
@@ -22,8 +22,8 @@ const MAX = 200;
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(timer);
   }, [value, ms]);
   return v;
 }
@@ -82,14 +82,14 @@ export function SessionsPane({ openId, onBeside }: {
   const cleanUp = async () => {
     if (!inst) return;
     const ok = await ask({
-      title: 'Faire le ménage ?', danger: true, confirmLabel: 'Supprimer',
-      message: `${sessionsCount(n)} jamais utilisée${n > 1 ? 's' : ''} dans Intendia, créée${n > 1 ? 's' : ''} il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.`,
+      title: t('Faire le ménage ?'), danger: true, confirmLabel: t('Supprimer'),
+      message: plural(n, '{n} session jamais utilisée dans Intendia, créée il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.', '{n} sessions jamais utilisées dans Intendia, créées il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.'),
     });
     if (!ok) return;
     setCleanError(null);
     try {
       const res = await api.cleanup(inst);
-      if (res.ids.length) showUndo({ inst, ids: res.ids, undoUntil: res.undoUntil, label: `${sessionsCount(res.ids.length)} supprimée${res.ids.length > 1 ? 's' : ''}` });
+      if (res.ids.length) showUndo({ inst, ids: res.ids, undoUntil: res.undoUntil, label: plural(res.ids.length, '{n} session supprimée', '{n} sessions supprimées') });
     } catch (err) {
       setCleanError(err);
     }
@@ -105,23 +105,23 @@ export function SessionsPane({ openId, onBeside }: {
 
   return (
     <ListPane
-      title="Sessions"
+      title={t('Sessions')}
       action={n > 0 ? (
-        <Button variant="ghost" onClick={() => void cleanUp()} title="Supprimer les sessions jamais utilisées">
-          <Brush className="size-4" strokeWidth={1.5} />Ménage ({n})
+        <Button variant="ghost" onClick={() => void cleanUp()} title={t('Supprimer les sessions jamais utilisées')}>
+          <Brush className="size-4" strokeWidth={1.5} />{t('Ménage ({n})', { n })}
         </Button>
       ) : undefined}
       head={(
         <>
           <label className="flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-ink-faint focus-within:border-ink">
             <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-            <span className="sr-only">Rechercher dans les sessions</span>
+            <span className="sr-only">{t('Rechercher dans les sessions')}</span>
             <input
-              type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Rechercher un titre ou un mot"
+              type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Rechercher un titre ou un mot')}
               className="w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
             />
           </label>
-          <Chips label="Source" items={FILTERS} value={source} onChange={setSource} />
+          <Chips label={t('Source')} items={FILTERS} value={source} onChange={setSource} />
         </>
       )}
     >
@@ -130,11 +130,11 @@ export function SessionsPane({ openId, onBeside }: {
       <ErrorText error={removeError} />
       {partial.map((name) => (
         <p key={name} data-partial className={`${note} text-ink-soft`}>
-          Recherche dans le contenu indisponible sur {name} : seuls les titres des sessions Intendia y sont cherchés
+          {t('Recherche dans le contenu indisponible sur {name} : seuls les titres des sessions Intendia y sont cherchés', { name })}
         </p>
       ))}
       {active.data?.errors.map((e) => (
-        <p key={e.instance} className={`${note} text-bad`} title={e.message}>{e.instance} : injoignable</p>
+        <p key={e.instance} className={`${note} text-bad`} title={e.message}>{t('{instance} : injoignable', { instance: e.instance })}</p>
       ))}
       {groups.map((g) => (
         <div key={g.label} role="group" aria-label={g.label}>
@@ -147,19 +147,19 @@ export function SessionsPane({ openId, onBeside }: {
       ))}
       {active.isSuccess && rows.length === 0 && (
         <p className="px-3.5 py-6 text-sm text-ink-faint">
-          {searching ? `Aucune session ne contient « ${q} »` : source === 'all' ? 'Aucune session pour l’instant' : 'Aucune session de cette source'}
+          {searching ? t('Aucune session ne contient « {q} »', { q }) : source === 'all' ? t('Aucune session pour l’instant') : t('Aucune session de cette source')}
         </p>
       )}
       {(active.isPending || (searching && found.isFetching)) && rows.length === 0 && inst !== null && (
-        <p className="px-3.5 py-6 text-sm text-ink-faint">Chargement…</p>
+        <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>
       )}
       {searching && found.isSuccess && rows.length >= 30 && (
-        <p className={`${note} text-ink-faint`}>Les 30 premiers résultats : précisez la recherche pour en voir d’autres</p>
+        <p className={`${note} text-ink-faint`}>{t('Les 30 premiers résultats : précisez la recherche pour en voir d’autres')}</p>
       )}
       {more && (
         <div className="px-1.5 pt-2">
           <Button variant="ghost" className="w-full" onClick={() => setLimit((l) => Math.min(MAX, l + PAGE))} disabled={list.isFetching}>
-            {list.isFetching ? 'Chargement…' : 'Afficher plus'}
+            {list.isFetching ? t('Chargement…') : t('Afficher plus')}
           </Button>
         </div>
       )}

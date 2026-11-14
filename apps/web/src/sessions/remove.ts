@@ -5,6 +5,7 @@ import { forgetSideSession } from '../chat/embed';
 import { close, updateChat, type Chat } from '../chat/columns';
 import { ask } from '../components/Dialog';
 import { invalidateSessionLists, showUndo } from './UndoBar';
+import { t } from '../i18n';
 
 export interface RemoveTarget {
   /** `intendia`: hidden now, « Annuler » for a few seconds, deleted at Hermes later; `hermes`: deleted now, after a confirmation */
@@ -21,7 +22,7 @@ export interface RemoveTarget {
  * confirmation is refused, else to the Chat columns once the session's one is closed (null for a session born
  * elsewhere: it never has a column). Where to go next stays with the caller.
  */
-export function useRemoveSession(): { remove: (t: RemoveTarget) => Promise<{ chat: Chat | null } | null>; pending: ReadonlySet<string> } {
+export function useRemoveSession(): { remove: (target: RemoveTarget) => Promise<{ chat: Chat | null } | null>; pending: ReadonlySet<string> } {
   const qc = useQueryClient();
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const mark = useCallback((id: string, on: boolean) => setPending((p) => {
@@ -29,29 +30,29 @@ export function useRemoveSession(): { remove: (t: RemoveTarget) => Promise<{ cha
     if (on) next.add(id); else next.delete(id);
     return next;
   }), []);
-  const remove = useCallback(async (t: RemoveTarget): Promise<{ chat: Chat | null } | null> => {
-    if (t.kind === 'hermes') {
+  const remove = useCallback(async (target: RemoveTarget): Promise<{ chat: Chat | null } | null> => {
+    if (target.kind === 'hermes') {
       const ok = await ask({
-        title: 'Supprimer cette session ?', danger: true, confirmLabel: 'Supprimer',
-        message: 'Hermes la supprime définitivement, messages compris. Pas d’annulation possible.',
+        title: t('Supprimer cette session ?'), danger: true, confirmLabel: t('Supprimer'),
+        message: t('Hermes la supprime définitivement, messages compris. Pas d’annulation possible.'),
       });
       if (!ok) return null;
     }
-    mark(t.id, true);
+    mark(target.id, true);
     try {
-      if (t.kind === 'hermes') {
-        await api.deleteExternal(t.inst, t.id, t.profile);
-        qc.removeQueries({ queryKey: ['external', t.inst, t.profile, t.id] });
+      if (target.kind === 'hermes') {
+        await api.deleteExternal(target.inst, target.id, target.profile);
+        qc.removeQueries({ queryKey: ['external', target.inst, target.profile, target.id] });
         await invalidateSessionLists(qc);
         return { chat: null };
       }
-      const { undoUntil } = await api.deleteSession(t.inst, t.id);
-      showUndo({ inst: t.inst, ids: [t.id], undoUntil, label: 'Session supprimée' });
-      forgetSideSession(t.inst, t.id);
+      const { undoUntil } = await api.deleteSession(target.inst, target.id);
+      showUndo({ inst: target.inst, ids: [target.id], undoUntil, label: t('Session supprimée') });
+      forgetSideSession(target.inst, target.id);
       await invalidateSessionLists(qc);
-      return { chat: updateChat((c) => close(c, t.id)) };
+      return { chat: updateChat((c) => close(c, target.id)) };
     } finally {
-      mark(t.id, false);
+      mark(target.id, false);
     }
   }, [qc, mark]);
   return { remove, pending };
@@ -61,9 +62,9 @@ export function useRemoveSession(): { remove: (t: RemoveTarget) => Promise<{ cha
  * Where to go once the session shown is deleted from the list or its page: the active Chat column left (the rule of
  * the Chat page's `closeCol`), else the workspace of an Intendia session, else the home page.
  */
-export function afterRemoveRoute(chat: Chat | null, t: RemoveTarget): { to: string; params?: Record<string, string> } {
-  if (t.kind === 'hermes') return { to: '/' };
-  const active = chat?.open.find((c) => c.id === chat.active && c.id !== t.id);
+export function afterRemoveRoute(chat: Chat | null, target: RemoveTarget): { to: string; params?: Record<string, string> } {
+  if (target.kind === 'hermes') return { to: '/' };
+  const active = chat?.open.find((c) => c.id === chat.active && c.id !== target.id);
   if (active) return { to: '/w/$slug/s/$sessionId', params: { slug: active.slug, sessionId: active.id } };
-  return t.slug ? { to: '/w/$slug', params: { slug: t.slug } } : { to: '/' };
+  return target.slug ? { to: '/w/$slug', params: { slug: target.slug } } : { to: '/' };
 }

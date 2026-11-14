@@ -1,4 +1,5 @@
 import { PROFILE_RE } from './params.js';
+import { msg, requestLang, toLang, type Lang } from '../i18n/index.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
@@ -46,13 +47,13 @@ function sseFrame(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
-function sseError(status: number, message: string): Response {
-  return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, message })}`, {
+function sseError(status: number, message: string, lang: Lang): Response {
+  return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, message: toLang(message, lang) })}`, {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
 }
 
-const RESERVED = 'Ce début de message est réservé aux messages automatiques d’Intendia';
+const RESERVED = msg('Ce début de message est réservé aux messages automatiques d’Intendia');
 
 export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Hono {
   const { workspaces, compat } = deps;
@@ -67,8 +68,8 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   /** The run must be the session's last run: a session only sees its own runs. */
   const runOf = (ctx: SessionContext, runId: string): string => {
-    if (!RUN_ID_RE.test(runId)) throw new ValidationError('identifiant de run invalide');
-    if (ctx.session.lastRunId !== runId) throw new NotFoundError('Run inconnu pour cette session');
+    if (!RUN_ID_RE.test(runId)) throw new ValidationError(msg('identifiant de run invalide'));
+    if (ctx.session.lastRunId !== runId) throw new NotFoundError(msg('Run inconnu pour cette session'));
     return runId;
   };
 
@@ -87,7 +88,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   const prompts = new PromptService(deps.db);
   const instOf = (c: { req: { param: (k: string) => string | undefined } }) => {
     const id = c.req.param('inst') ?? '';
-    if (!deps.store.get(id)) throw new NotFoundError(`Instance inconnue : ${id}`);
+    if (!deps.store.get(id)) throw new NotFoundError(msg('Instance inconnue : {id}', { id }));
     return id;
   };
 
@@ -116,9 +117,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   const instanceProfile = (instanceId: string, profile: string | undefined): string => {
     const inst = deps.store.get(instanceId);
-    if (!inst) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!inst) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     const p = profile || 'default';
-    if (p !== 'default' && !inst.profileKeys[p]) throw new ValidationError(`Profil inconnu : ${p}`);
+    if (p !== 'default' && !inst.profileKeys[p]) throw new ValidationError(msg('Profil inconnu : {profile}', { profile: p }));
     return p;
   };
 
@@ -157,7 +158,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       const open = new Set(decide(ctx, h.messages).openUnits.map((u) => u.id));
       lost = deps.services.wakes.lose(ctx.instance.id, ctx.session.id, units.filter((u) => open.has(u)));
     });
-    if (!idle) return c.json({ error: 'Un run est en cours', code: 'run_active' }, 409);
+    if (!idle) return c.json({ error: msg('Un run est en cours'), code: 'run_active' }, 409);
     deps.services.watcher.refresh(ctx.instance.id, ctx.session.id);
     return c.json({ lost });
   });
@@ -201,11 +202,11 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         signal: c.req.raw.signal,
       });
     } catch (err) {
-      return sseError(0, (err as Error).message);
+      return sseError(0, (err as Error).message, requestLang(c));
     }
     if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('text/event-stream') || !res.body) {
       await res.body?.cancel();
-      return sseError(res.status, res.status === 404 ? 'Run introuvable chez Hermes' : `Hermes a répondu ${res.status}`);
+      return sseError(res.status, res.status === 404 ? msg('Run introuvable chez Hermes') : msg('Hermes a répondu {status}', { status: res.status }), requestLang(c));
     }
     return new Response(res.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
@@ -235,9 +236,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
     const { answer, requestId } = ClarifyBody.parse(await c.req.json());
-    const unavailable = () => c.json({ error: 'Hermes ne permet pas de répondre à cette question depuis Intendia', code: 'clarify_unavailable' }, 409);
+    const unavailable = () => c.json({ error: msg('Hermes ne permet pas de répondre à cette question depuis Intendia'), code: 'clarify_unavailable' }, 409);
     const s = await status(ctx, runId);
-    if (s.status === 'unknown') return c.json({ error: 'Ce run est terminé', code: 'run_gone' }, 409);
+    if (s.status === 'unknown') return c.json({ error: msg('Ce run est terminé'), code: 'run_gone' }, 409);
     if (typeof RunStatusSchema.safeParse(s.raw).data?.execution_generation !== 'number') return unavailable();
     const built = controlBody('clarify', s.raw, requestId ?? null, answer);
     if ('code' in built) return c.json({ error: CONTROL_ERRORS[built.code], code: built.code }, 409);
@@ -278,7 +279,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       return c.json(res);
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http' && (err.detail.status === 409 || err.detail.status === 404)) {
-        return c.json({ error: 'L’agent n’accepte pas de réorientation maintenant', code: 'steer_refused' }, 409);
+        return c.json({ error: msg('L’agent n’accepte pas de réorientation maintenant'), code: 'steer_refused' }, 409);
       }
       throw err;
     }
@@ -321,7 +322,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.get('/i/:inst/external/:id/messages', async (c) => {
     const inst = c.req.param('inst');
     const id = c.req.param('id');
-    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError('identifiant invalide');
+    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError(msg('identifiant invalide'));
     const profile = instanceProfile(inst, c.req.query('profile'));
     const list = await messages(inst, id, profile);
     return c.json({ messages: list, openUnits: wakeDecision(list, Date.now() / 1000, 0).openUnits.map((u) => u.id) });
@@ -332,10 +333,10 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.delete('/i/:inst/external/:id', async (c) => {
     const inst = c.req.param('inst');
     const id = c.req.param('id');
-    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError('identifiant invalide');
+    if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError(msg('identifiant invalide'));
     const profile = instanceProfile(inst, c.req.query('profile'));
     const owned = workspaces.ownedIds(inst);
-    if (owned.has(id)) return c.json({ error: 'Session d’Intendia : passez par la suppression avec annulation', code: 'owned' }, 409);
+    if (owned.has(id)) return c.json({ error: msg('Session d’Intendia : passez par la suppression avec annulation'), code: 'owned' }, 409);
     const gone = (err: unknown) => err instanceof HermesError && err.kind === 'http' && err.detail.status === 404;
     let session: Record<string, unknown>;
     try {
@@ -345,17 +346,17 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
       throw err;
     }
     if (session.is_internal_child === true) {
-      return c.json({ error: 'Session de sous-agent : supprimez la session parente', code: 'child' }, 409);
+      return c.json({ error: msg('Session de sous-agent : supprimez la session parente'), code: 'child' }, 409);
     }
     if ([session.parent_session_id, session._lineage_root_id].some((p) => typeof p === 'string' && owned.has(p))) {
-      return c.json({ error: 'Cette session continue une session d’Intendia après compression : supprimez la session d’origine dans Intendia', code: 'owned' }, 409);
+      return c.json({ error: msg('Cette session continue une session d’Intendia après compression : supprimez la session d’origine dans Intendia'), code: 'owned' }, 409);
     }
     try {
       await callOp(compat.http(inst), compat.get(inst), 'sessions', 'remove', { params: { session_id: id }, profile });
     } catch (err) {
       if (gone(err)) return c.json({ ok: true });
       if (err instanceof HermesError && err.kind === 'http' && err.detail.status === 409 && /session_active_turn/.test(err.detail.body ?? '')) {
-        return c.json({ error: 'Un tour est en cours dans cette session : réessayez quand il est fini', code: 'run_active' }, 409);
+        return c.json({ error: msg('Un tour est en cours dans cette session : réessayez quand il est fini'), code: 'run_active' }, 409);
       }
       throw err;
     }

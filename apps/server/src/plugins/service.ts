@@ -6,6 +6,7 @@ import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
 import { hostPaths, Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 /** Plugin names in a URL: Hermes refuses `..` and backslashes; Intendia keeps to plain names. */
 export const PLUGIN_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -92,7 +93,7 @@ export class PluginService {
   }
 
   private ctx(instanceId: string) {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
   }
 
@@ -107,16 +108,16 @@ export class PluginService {
     } catch (err) {
       if (err instanceof HermesError && err.kind === 'http') {
         const detail = this.clean(hermesDetail(err));
-        if (err.detail.status === 404) throw new NotFoundError(`Plugin introuvable : ${detail}`);
-        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Refusé par Hermes : ${detail}`);
-        throw new HermesError('http', `Hermes : ${detail}`, err.detail);
+        if (err.detail.status === 404) throw new NotFoundError(msg('Plugin introuvable : {name}', { name: detail }));
+        if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Refusé par Hermes : {detail}', { detail }));
+        throw new HermesError('http', msg('Hermes : {detail}', { detail }), err.detail);
       }
       throw err;
     }
   }
 
   private checkName(name: string): void {
-    if (!PLUGIN_NAME_RE.test(name)) throw new ValidationError('Nom de plugin invalide');
+    if (!PLUGIN_NAME_RE.test(name)) throw new ValidationError(msg('Nom de plugin invalide'));
   }
 
   async list(instanceId: string): Promise<{ plugins: PublicPlugin[] }> {
@@ -177,15 +178,17 @@ export class PluginService {
   async install(instanceId: string, name: string): Promise<{ job: PluginJob }> {
     this.checkName(name);
     this.prune();
-    if (this.running(instanceId)) throw new AdminError('busy', 'Une installation de plugin est déjà en cours sur cette instance');
+    if (this.running(instanceId)) throw new AdminError('busy', msg('Une installation de plugin est déjà en cours sur cette instance'));
     const { entries } = await this.rawCatalog(instanceId);
     const entry = entries.find((e) => e.name === name);
-    if (!entry) throw new NotFoundError(`Absent du catalogue : ${name}`);
-    if (!/^https:\/\//i.test(entry.repo) || !/^[0-9a-f]{40}$/i.test(entry.sha)) throw new ValidationError('Entrée du catalogue sans dépôt ni commit vérifiable');
+    if (!entry) throw new NotFoundError(msg('Absent du catalogue : {name}', { name }));
+    if (!/^https:\/\//i.test(entry.repo) || !/^[0-9a-f]{40}$/i.test(entry.sha)) {
+      throw new ValidationError(msg('Entrée du catalogue sans dépôt ni commit vérifiable'));
+    }
     const installed = (await this.list(instanceId)).plugins.some((p) => p.name === name);
-    if (entry.installed || installed) throw new AdminError('already_installed', `Déjà installé : ${name}`);
+    if (entry.installed || installed) throw new AdminError('already_installed', msg('Déjà installé : {name}', { name }));
     // checked again after the awaits: two clicks at once must not start two installs
-    if (this.running(instanceId)) throw new AdminError('busy', 'Une installation de plugin est déjà en cours sur cette instance');
+    if (this.running(instanceId)) throw new AdminError('busy', msg('Une installation de plugin est déjà en cours sur cette instance'));
     const job: Job = { id: randomUUID(), instanceId, name, state: 'running', startedAt: Date.now(), finishedAt: null, result: null, error: null };
     this.jobs.set(job.id, job);
     void this.run(job, { identifier: entry.repo, ref: entry.sha, catalog_name: entry.name, enable: true, force: false });
@@ -207,7 +210,7 @@ export class PluginService {
     } catch (err) {
       const timeout = err instanceof Error && /timeout|abort/i.test(`${err.message} ${String((err as { cause?: unknown }).cause ?? '')}`);
       job.error = timeout
-        ? 'Hermes n’a pas répondu en 10 minutes : l’installation continue peut-être de son côté, rechargez la liste plus tard'
+        ? msg('Hermes n’a pas répondu en 10 minutes : l’installation continue peut-être de son côté, rechargez la liste plus tard')
         : this.clean(err instanceof Error ? err.message : String(err));
       job.state = 'failed';
     } finally {
@@ -219,7 +222,7 @@ export class PluginService {
     this.ctx(instanceId);
     this.prune();
     const j = this.jobs.get(id);
-    if (!j || j.instanceId !== instanceId) throw new NotFoundError('Tâche inconnue (Intendia a peut-être redémarré)');
+    if (!j || j.instanceId !== instanceId) throw new NotFoundError(msg('Tâche inconnue (Intendia a peut-être redémarré)'));
     return this.toJob(j);
   }
 
@@ -239,8 +242,8 @@ export class PluginService {
   async remove(instanceId: string, name: string): Promise<{ ok: true }> {
     this.checkName(name);
     const p = (await this.list(instanceId)).plugins.find((x) => x.name === name);
-    if (!p) throw new NotFoundError(`Plugin introuvable : ${name}`);
-    if (!p.canRemove) throw new AdminError('protected', 'Ce plugin est fourni avec Hermes : désactivez-le plutôt');
+    if (!p) throw new NotFoundError(msg('Plugin introuvable : {name}', { name }));
+    if (!p.canRemove) throw new AdminError('protected', msg('Ce plugin est fourni avec Hermes : désactivez-le plutôt'));
     await this.call(instanceId, 'remove', { params: { name } });
     return { ok: true };
   }

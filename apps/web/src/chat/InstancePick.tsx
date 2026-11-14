@@ -1,4 +1,5 @@
 import { Chips } from '../components/ui';
+import { plural, t } from '../i18n';
 
 export interface PickInstance { id: string; label: string; workspaces: number }
 
@@ -19,14 +20,14 @@ export function InstancePick({ value, instances, disabled, allowEmpty, onPick }:
     <div data-instance-pick className="mx-auto inline-flex max-w-full flex-col items-center gap-2 rounded-xl border border-line bg-sheet px-4 py-3">
       <p className="text-[12.5px] font-medium text-ink-soft">Instance</p>
       <Chips
-        label="Instance de la session" value={value} disabled={disabled} className="justify-center"
+        label={t('Instance de la session')} value={value} disabled={disabled} className="justify-center"
         onChange={(id) => { if (id !== value) onPick(id); }}
         items={instances.map((i) => ({
           key: i.id,
           label: i.label,
           count: i.workspaces,
           disabled: !allowEmpty && i.workspaces === 0,
-          title: i.workspaces === 0 ? 'Aucun workspace sur cette instance' : `${i.workspaces} workspace${i.workspaces > 1 ? 's' : ''}`,
+          title: i.workspaces === 0 ? t('Aucun workspace sur cette instance') : plural(i.workspaces, '{n} workspace', '{n} workspaces'),
         }))}
       />
     </div>

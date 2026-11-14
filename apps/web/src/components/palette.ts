@@ -1,5 +1,6 @@
 import type { FileEntry, OverviewCron, RecentSession } from '../api';
 import { matchesAll, wordsOf } from './text';
+import { t } from '../i18n';
 
 /** Where an item leads: options for the router's `navigate`. */
 export interface Target { to: string; params?: Record<string, string>; search?: Record<string, unknown> }
@@ -14,13 +15,13 @@ export const PER_GROUP = 5;
 export const SEARCH_MIN = 2;
 
 const GROUP_LABEL: Record<PaletteGroupId, string> = {
-  actions: 'Actions', pages: 'Pages', workspaces: 'Workspaces', crons: 'Crons', sessions: 'Sessions', files: 'Fichiers',
+  actions: t('Actions'), pages: t('Pages'), workspaces: t('Workspaces'), crons: t('Crons'), sessions: t('Sessions'), files: t('Fichiers'),
 };
 
 export const ACTIONS: PaletteItem[] = [
-  { id: 'a:new-session', label: 'Nouvelle session', target: { to: '/chat/nouvelle' } },
-  { id: 'a:new-workspace', label: 'Nouveau workspace', target: { to: '/w' } },
-  { id: 'a:files', label: 'Ouvrir un fichier…', mode: 'files' },
+  { id: 'a:new-session', label: t('Nouvelle session'), target: { to: '/chat/nouvelle' } },
+  { id: 'a:new-workspace', label: t('Nouveau workspace'), target: { to: '/w' } },
+  { id: 'a:files', label: t('Ouvrir un fichier…'), mode: 'files' },
 ];
 
 /** Results shown in the « Fichiers » mode of the palette. */

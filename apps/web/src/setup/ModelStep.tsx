@@ -7,6 +7,8 @@ import { Button, ErrorText } from '../components/ui';
 import { configKey, errorCode, errorData, SELECT } from '../config/common';
 import { MainModel } from '../config/Models';
 import { StepFrame, useStepInstance } from './Frame';
+import { t } from '../i18n';
+import { T } from '../i18n/T';
 
 const PROFILE = 'default';
 
@@ -40,7 +42,7 @@ export function ModelStep() {
       done();
     },
     onError: async (err, input) => {
-      if (errorCode(err) === 'confirm_required') setConfirm({ input, message: String(errorData(err).message ?? 'Confirmer ?') });
+      if (errorCode(err) === 'confirm_required') setConfirm({ input, message: String(errorData(err).message ?? t('Confirmer ?')) });
       if (errorCode(err) === 'config_changed') { setConfirm(null); await models.refetch(); }
     },
   });
@@ -50,39 +52,39 @@ export function ModelStep() {
   const error = set.error && errorCode(set.error) !== 'confirm_required' ? set.error : null;
 
   return (
-    <StepFrame step={1} title="Choisir le modèle principal" next={m?.main.model ? done : null}
-      intro="Le modèle qui répond dans les sessions de l’agent. Vous pourrez en changer à tout moment dans Configuration › Modèles.">
-      {!inst ? <p className="text-sm text-ink-soft">Aucune instance : ajoutez-en une d’abord.</p>
-        : models.isPending ? <p className="text-sm text-ink-soft">Lecture des fournisseurs…</p>
+    <StepFrame step={1} title={t('Choisir le modèle principal')} next={m?.main.model ? done : null}
+      intro={t('Le modèle qui répond dans les sessions de l’agent. Vous pourrez en changer à tout moment dans Configuration › Modèles.')}>
+      {!inst ? <p className="text-sm text-ink-soft">{t('Aucune instance : ajoutez-en une d’abord.')}</p>
+        : models.isPending ? <p className="text-sm text-ink-soft">{t('Lecture des fournisseurs…')}</p>
           : !m ? <ErrorText error={models.error} />
             : (
               <div className="space-y-5">
-                {m.main.model && <p className="text-sm" data-current-model>Modèle actuel : <span className="font-mono text-[12.5px]">{m.main.model}</span> ({m.main.provider})</p>}
-                {!writable && <p className="text-sm text-ink-soft">Changement de modèle indisponible sur cette instance.</p>}
+                {m.main.model && <p className="text-sm" data-current-model><T k="Modèle actuel : {model} ({provider})" vars={{ model: <span className="font-mono text-[12.5px]">{m.main.model}</span>, provider: m.main.provider }} /></p>}
+                {!writable && <p className="text-sm text-ink-soft">{t('Changement de modèle indisponible sur cette instance.')}</p>}
                 {authed.length === 0 ? (
-                  <p className="text-sm text-ink-soft" data-no-provider>Aucun fournisseur n’est connecté : revenez à l’étape précédente, ou passez celle-ci.</p>
+                  <p className="text-sm text-ink-soft" data-no-provider>{t('Aucun fournisseur n’est connecté : revenez à l’étape précédente, ou passez celle-ci.')}</p>
                 ) : (
                   <div className="card space-y-4 p-5 md:p-6">
                     {authed.length > 1 && (
                       <label className="block max-w-xs">
-                        <span className="mb-1.5 block text-[13px] font-medium">Fournisseur</span>
-                        <select className={`${SELECT} w-full`} value={provider} onChange={(e) => { setProvider(e.target.value); setConfirm(null); }} aria-label="Fournisseur connecté">
+                        <span className="mb-1.5 block text-[13px] font-medium">{t('Fournisseur')}</span>
+                        <select className={`${SELECT} w-full`} value={provider} onChange={(e) => { setProvider(e.target.value); setConfirm(null); }} aria-label={t('Fournisseur connecté')}>
                           {authed.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
                         </select>
                       </label>
                     )}
-                    {!canRecommend ? null : rec.isPending ? <p className="text-sm text-ink-faint">Hermes cherche un modèle…</p> : rec.data?.model ? (
+                    {!canRecommend ? null : rec.isPending ? <p className="text-sm text-ink-faint">{t('Hermes cherche un modèle…')}</p> : rec.data?.model ? (
                       <div className="flex flex-wrap items-center gap-3" data-recommended={rec.data.model}>
-                        <p className="min-w-0 flex-1 text-sm">Hermes propose <span className="font-mono text-[12.5px]">{rec.data.model}</span></p>
-                        <Button variant="primary" disabled={!writable || set.isPending} onClick={() => use(provider, rec.data!.model!)}>Utiliser ce modèle</Button>
+                        <p className="min-w-0 flex-1 text-sm"><T k="Hermes propose {model}" vars={{ model: <span className="font-mono text-[12.5px]">{rec.data.model}</span> }} /></p>
+                        <Button variant="primary" disabled={!writable || set.isPending} onClick={() => use(provider, rec.data!.model!)}>{t('Utiliser ce modèle')}</Button>
                       </div>
-                    ) : <p className="text-sm text-ink-soft">Hermes n’a pas de modèle à proposer pour ce fournisseur : choisissez-en un.</p>}
+                    ) : <p className="text-sm text-ink-soft">{t('Hermes n’a pas de modèle à proposer pour ce fournisseur : choisissez-en un.')}</p>}
                     {confirm && (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13.5px] text-warn">
                         <span>{confirm.message}</span>
                         <div className="flex gap-2">
-                          <Button variant="ghost" onClick={() => setConfirm(null)}>Annuler</Button>
-                          <Button variant="primary" onClick={() => set.mutate({ ...confirm.input, confirm: true })}>Confirmer</Button>
+                          <Button variant="ghost" onClick={() => setConfirm(null)}>{t('Annuler')}</Button>
+                          <Button variant="primary" onClick={() => set.mutate({ ...confirm.input, confirm: true })}>{t('Confirmer')}</Button>
                         </div>
                       </div>
                     )}
@@ -90,7 +92,7 @@ export function ModelStep() {
                     {other || !canRecommend || (rec.isSuccess && !rec.data.model) ? (
                       <MainModel data={{ ...m, main: { ...m.main, provider: m.main.provider && m.main.provider !== 'auto' ? m.main.provider : provider } }}
                         disabled={!writable || set.isPending} onSave={use} />
-                    ) : <Button variant="ghost" onClick={() => setOther(true)}>Choisir un autre modèle</Button>}
+                    ) : <Button variant="ghost" onClick={() => setOther(true)}>{t('Choisir un autre modèle')}</Button>}
                   </div>
                 )}
               </div>

@@ -13,6 +13,7 @@ import { Thread } from '../chat/Thread';
 import { Button, cx, ErrorText } from '../components/ui';
 import { sourceLabel } from '../home/labels';
 import { FullScreen, ICON_BTN, when } from './Session';
+import { t } from '../i18n';
 
 /** A Hermes session not started by Intendia (Telegram, CLI, cron, API): read only, in the inbox. */
 export function ExternalSessionPage() {
@@ -40,10 +41,10 @@ export function ExternalSessionPage() {
       const options = (workspaces.data?.workspaces ?? [])
         .filter((w) => w.instanceId === inst && (w.profile ?? 'default') === profile)
         .map((w) => ({ value: w.slug, label: w.name }));
-      if (!options.length) throw new Error(`Créez d’abord un workspace pour l’agent ${agent}`);
+      if (!options.length) throw new Error(t('Créez d’abord un workspace pour l’agent {agent}', { agent }));
       const slug = await askChoice({
-        title: 'Continuer dans Intendia', label: 'Copier la conversation dans le workspace', options, confirmLabel: 'Continuer',
-        message: 'Une copie est créée ; la session d’origine ne change pas.',
+        title: t('Continuer dans Intendia'), label: t('Copier la conversation dans le workspace'), options, confirmLabel: t('Continuer'),
+        message: t('Une copie est créée ; la session d’origine ne change pas.'),
       });
       if (!slug) return null;
       const { session } = await api.continueExternal(inst, sessionId, profile, slug, newKey());
@@ -65,30 +66,30 @@ export function ExternalSessionPage() {
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
         <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
-          <Link to="/" aria-label="Revenir à la liste" className={cx(ICON_BTN, 'border-transparent md:hidden')}>
+          <Link to="/" aria-label={t('Revenir à la liste')} className={cx(ICON_BTN, 'border-transparent md:hidden')}>
             <ArrowLeft className="size-4" strokeWidth={1.5} />
           </Link>
           <div className="min-w-0 flex-1">
-            <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{known?.title ?? 'Session externe'}</h2>
+            <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{known?.title ?? t('Session externe')}</h2>
             <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{meta}</p>
           </div>
           <Button variant="ghost" className="shrink-0" onClick={() => remove.mutate()} disabled={remove.isPending}>
-            <Trash2 className="size-4" strokeWidth={1.5} />Supprimer
+            <Trash2 className="size-4" strokeWidth={1.5} />{t('Supprimer')}
           </Button>
           {canCopy && (
             <Button variant="primary" className="shrink-0" onClick={() => carryOn.mutate()} disabled={carryOn.isPending || !messages.isSuccess}>
-              <MessageSquarePlus className="size-4" strokeWidth={1.5} />Continuer dans Intendia
+              <MessageSquarePlus className="size-4" strokeWidth={1.5} />{t('Continuer dans Intendia')}
             </Button>
           )}
           <FullScreen />
         </div>
       </header>
       <div className="mx-auto w-full max-w-[748px] px-4 py-7 md:px-6">
-        <p className="mb-7 rounded-lg bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft">Lecture seule : cette session vient de Telegram, du CLI, de l’API, d’un cron ou du kanban</p>
+        <p className="mb-7 rounded-lg bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft">{t('Lecture seule : cette session vient de Telegram, du CLI, de l’API, d’un cron ou du kanban')}</p>
         <ErrorText error={messages.error} />
         <ErrorText error={carryOn.error} />
         <ErrorText error={remove.error} />
-        {messages.isSuccess && entries.length === 0 && <p className="text-sm text-ink-faint">Aucun message</p>}
+        {messages.isSuccess && entries.length === 0 && <p className="text-sm text-ink-faint">{t('Aucun message')}</p>}
         <Thread entries={entries} agent={agent} />
       </div>
     </div>

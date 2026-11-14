@@ -1,4 +1,5 @@
 // Persistent goal of an Intendia session (option 7, chat/goal.ts): set, read, edit, pause, resume, remove.
+import { msg } from '../i18n/index.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { isRunActive } from '../chat/history.js';
@@ -21,7 +22,7 @@ const EditBody = z.object({
 });
 const PauseBody = z.object({ reason: z.enum(['user', 'button']).default('button') });
 
-const BUDGET_REQUIRED = { error: 'Avec « Sans confirmation », un budget est obligatoire', code: 'budget_required' } as const;
+const BUDGET_REQUIRED = { error: msg('Avec « Sans confirmation », un budget est obligatoire'), code: 'budget_required' } as const;
 
 export function goalRoutes(deps: StartRunDeps): Hono {
   const { goals, workspaces } = deps;
@@ -50,11 +51,11 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     const id = ctx.session.id;
     if (body.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);
     const key = `${inst}/${id}`;
-    if (creating.has(key)) return c.json({ error: 'Un objectif est déjà en cours de création', code: 'busy' }, 409);
+    if (creating.has(key)) return c.json({ error: msg('Un objectif est déjà en cours de création'), code: 'busy' }, 409);
     creating.add(key);
     try {
-      if (goals.get(inst, id)?.status === 'active') return c.json({ error: 'Cette session a déjà un objectif en cours', code: 'goal_exists' }, 409);
-      if (await isRunActive(deps.compat, ctx)) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
+      if (goals.get(inst, id)?.status === 'active') return c.json({ error: msg('Cette session a déjà un objectif en cours'), code: 'goal_exists' }, 409);
+      if (await isRunActive(deps.compat, ctx)) return c.json({ error: msg('Attendez la fin du run ou arrêtez-le'), code: 'run_active' }, 409);
       // the last run (finished) is not decided on: only the goal's own runs are
       const made = goals.create({ instanceId: inst, sessionId: id, text: body.text, mode: body.mode, maxRelaunches: body.maxRelaunches, budgetUsd: body.budgetUsd, handledRunId: ctx.session.lastRunId });
       try {
@@ -63,7 +64,7 @@ export function goalRoutes(deps: StartRunDeps): Hono {
       } catch (err) {
         // only the goal this request wrote (not one written since)
         if (goals.get(inst, id)?.createdAt === made.createdAt) goals.remove(inst, id);
-        if (err instanceof RunBusyError) return c.json({ error: 'Attendez la fin du run ou arrêtez-le', code: 'run_active' }, 409);
+        if (err instanceof RunBusyError) return c.json({ error: msg('Attendez la fin du run ou arrêtez-le'), code: 'run_active' }, 409);
         if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
         throw err;
       }
@@ -77,7 +78,7 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     const ctx = ctxOf(c);
     const body = EditBody.parse(await c.req.json());
     const g = goals.get(ctx.instance.id, ctx.session.id);
-    if (!g) return c.json({ error: 'Aucun objectif sur cette session', code: 'no_goal' }, 404);
+    if (!g) return c.json({ error: msg('Aucun objectif sur cette session'), code: 'no_goal' }, 404);
     if (body.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);
     return c.json({ goal: view(goals.edit(ctx.instance.id, ctx.session.id, body), ctx.session.lastRunId) });
   });
@@ -95,7 +96,7 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     const inst = ctx.instance.id;
     const id = ctx.session.id;
     const g = goals.get(inst, id);
-    if (!g) return c.json({ error: 'Aucun objectif sur cette session', code: 'no_goal' }, 404);
+    if (!g) return c.json({ error: msg('Aucun objectif sur cette session'), code: 'no_goal' }, 404);
     if (g.status !== 'paused') return c.json({ goal: view(g, ctx.session.lastRunId) });
     if (g.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);
     const spent = goals.spent(g);

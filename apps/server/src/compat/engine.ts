@@ -3,35 +3,38 @@ import { MODULES } from '../connectors/index.js';
 import type { CompatReport, ModuleDef, ModuleReport, ModuleState, OpDef, ResolvedOp, RouteDef } from '../connectors/types.js';
 import { HermesError, type HermesHttp, type Method } from '../hermes/http.js';
 import { discover, routeKey, type Surface } from '../hermes/surface.js';
+import { msg } from '../i18n/index.js';
 
-function errText(err: unknown): string {
+function errText(route: string, err: unknown): string {
   if (err instanceof z.ZodError) {
     const i = err.issues[0];
-    return `réponse inattendue (${i ? `${i.path.join('.') || 'racine'} : ${i.message}` : 'schéma'})`;
+    return i
+      ? msg('{route} : réponse inattendue ({where} : {detail})', { route, where: i.path.join('.') || msg('racine'), detail: i.message })
+      : msg('{route} : réponse inattendue (schéma)', { route });
   }
-  if (err instanceof HermesError) return err.detail.status ? `HTTP ${err.detail.status}` : err.message;
-  return (err as Error).message ?? String(err);
+  const detail = err instanceof HermesError && err.detail.status ? `HTTP ${err.detail.status}` : ((err as Error).message ?? String(err));
+  return msg('{what} : {detail}', { what: route, detail });
 }
 
 /** Picks the concrete route a RouteDef maps to on this instance, or explains why it cannot. */
 function locate(route: RouteDef, surface: Surface): { ok: true; method: Method; path: string } | { ok: false; note: string } {
   const label = `${route.via === 'api' ? 'API server' : 'dashboard'} ${route.method} ${route.path}`;
   if (route.via === 'api') {
-    if (!surface.api.reachable) return { ok: false, note: `${label} : API server injoignable` };
+    if (!surface.api.reachable) return { ok: false, note: msg('{label} : API server injoignable', { label }) };
     if (route.feature && surface.api.features[route.feature] === false) {
-      return { ok: false, note: `${label} : fonction « ${route.feature} » désactivée dans /v1/capabilities` };
+      return { ok: false, note: msg('{label} : fonction « {feature} » désactivée dans /v1/capabilities', { label, feature: route.feature }) };
     }
     if (route.capability && surface.api.endpoints) {
       const announced = surface.api.endpoints[route.capability];
-      if (!announced) return { ok: false, note: `${label} : absente de /v1/capabilities` };
+      if (!announced) return { ok: false, note: msg('{label} : absente de /v1/capabilities', { label }) };
       return { ok: true, method: announced.method.toUpperCase() as Method, path: announced.path };
     }
     return { ok: true, method: route.method, path: route.path };
   }
-  if (!surface.dash.configured) return { ok: false, note: `${label} : dashboard non configuré pour cette instance` };
-  if (!surface.dash.reachable) return { ok: false, note: `${label} : dashboard injoignable` };
+  if (!surface.dash.configured) return { ok: false, note: msg('{label} : dashboard non configuré pour cette instance', { label }) };
+  if (!surface.dash.reachable) return { ok: false, note: msg('{label} : dashboard injoignable', { label }) };
   if (surface.dash.routes && !surface.dash.routes.some((r) => routeKey(r.split(' ')[0]!, r.slice(r.indexOf(' ') + 1)) === routeKey(route.method, route.path))) {
-    return { ok: false, note: `${label} : absente de l'OpenAPI du dashboard` };
+    return { ok: false, note: msg("{label} : absente de l'OpenAPI du dashboard", { label }) };
   }
   return { ok: true, method: route.method, path: route.path };
 }
@@ -53,7 +56,7 @@ export async function resolveOp(http: HermesHttp, surface: Surface, op: OpDef): 
         const body = await http.json(route.via, loc.method, loc.path, { query: op.probeQuery });
         if (op.schema) op.schema.parse(body);
       } catch (err) {
-        notes.push(`${route.via === 'api' ? 'API server' : 'dashboard'} ${loc.method} ${loc.path} : ${errText(err)}`);
+        notes.push(errText(`${route.via === 'api' ? 'API server' : 'dashboard'} ${loc.method} ${loc.path}`, err));
         continue;
       }
     }
@@ -71,17 +74,17 @@ export async function checkModule(http: HermesHttp, surface: Surface, mod: Modul
   for (const [name, op] of Object.entries(mod.ops)) {
     const r = ops[name]!;
     if (r.ok) continue;
-    const why = r.notes.at(-1) ?? 'aucune route';
+    const why = r.notes.at(-1) ?? msg('aucune route');
     if (op.optional) {
-      reasons.push(`Option « ${name} » indisponible — ${why}`);
+      reasons.push(msg('Option « {name} » indisponible — {why}', { name, why }));
     } else if (op.kind === 'read' && op.required) {
       state = 'unavailable';
-      reasons.push(`Lecture « ${name} » impossible — ${why}`);
+      reasons.push(msg('Lecture « {name} » impossible — {why}', { name, why }));
     } else if (op.kind === 'write') {
       if (state === 'full') state = 'readonly';
-      reasons.push(`Écriture « ${name} » indisponible — ${why}`);
+      reasons.push(msg('Écriture « {name} » indisponible — {why}', { name, why }));
     } else {
-      reasons.push(`Lecture secondaire « ${name} » indisponible — ${why}`);
+      reasons.push(msg('Lecture secondaire « {name} » indisponible — {why}', { name, why }));
     }
   }
   return {

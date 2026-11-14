@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { ActivityService } from '../agents/activity.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, type WorkspaceService } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export function activityRoutes(deps: { activity: ActivityService; workspaces: WorkspaceService; store: InstanceStore }): Hono {
   const { activity, workspaces, store } = deps;
@@ -12,7 +13,7 @@ export function activityRoutes(deps: { activity: ActivityService; workspaces: Wo
   // runs ended in the last 24 h: one instance (`?instance=`) or all
   r.get('/activity/finished', (c) => {
     const instance = c.req.query('instance');
-    if (instance !== undefined && !store.get(instance)) throw new NotFoundError(`Instance inconnue : ${instance}`);
+    if (instance !== undefined && !store.get(instance)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instance }));
     return c.json({ runs: workspaces.finishedRuns({ instanceId: instance }) });
   });
   // every instance: the notifications of Intendia answer them without switching instance

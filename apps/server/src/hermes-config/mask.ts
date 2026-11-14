@@ -1,5 +1,6 @@
 import { isMap, isPair, isScalar, isSeq, parseDocument, visit, type Document, type Scalar } from 'yaml';
 import { sign } from '../crypto.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * Secret masking for everything Intendia sends to the browser about an instance's configuration.
@@ -174,13 +175,13 @@ export class Masker {
     const restored: string[] = [];
     const out = draft.replace(PLACEHOLDER_RE, (_, id: string) => {
       const fragment = sources.get(id);
-      if (fragment === undefined) throw new SecretError('secret_placeholder', 'Valeur masquée inconnue : rechargez le texte', {});
+      if (fragment === undefined) throw new SecretError('secret_placeholder', msg('Valeur masquée inconnue : rechargez le texte'), {});
       restored.push(fragment);
       return fragment;
     });
     const remasked = this.text(out);
     if (restored.some((f) => remasked.includes(f))) {
-      throw new SecretError('secret_moved', 'Un secret masqué a été déplacé à un endroit affiché en clair', {});
+      throw new SecretError('secret_moved', msg('Un secret masqué a été déplacé à un endroit affiché en clair'), {});
     }
     return out;
   }
@@ -218,10 +219,10 @@ export class Masker {
     const doc = parse(draft);
     if (doc.errors.length) {
       const pos = doc.errors[0]!.linePos?.[0];
-      throw new SecretError('invalid_yaml', 'YAML invalide', { line: pos?.line ?? null, column: pos?.col ?? null });
+      throw new SecretError('invalid_yaml', msg('YAML invalide'), { line: pos?.line ?? null, column: pos?.col ?? null });
     }
     if (doc.contents !== null && !isMap(doc.contents)) {
-      throw new SecretError('invalid_yaml', 'Le document doit être une table', { line: 1, column: 1 });
+      throw new SecretError('invalid_yaml', msg('Le document doit être une table'), { line: 1, column: 1 });
     }
     const sources = this.sources(current);
     const edits: ScalarEdit[] = [];
@@ -231,14 +232,14 @@ export class Masker {
       const value = node.value.replace(PLACEHOLDER_RE, (_, id: string) => {
         const fragment = sources.get(id);
         if (fragment === undefined) {
-          throw new SecretError('secret_placeholder', `Valeur masquée inconnue à ${pathString(path)}`, { path: pathString(path) });
+          throw new SecretError('secret_placeholder', msg('Valeur masquée inconnue à {path}', { path: pathString(path) }), { path: pathString(path) });
         }
         restored.push(fragment);
         return fragment;
       });
       const remasked = this.string(path, value);
       if (restored.some((f) => remasked.includes(f))) {
-        throw new SecretError('secret_moved', `Un secret ne peut pas être placé à ${pathString(path)}, qui est affiché en clair`, { path: pathString(path) });
+        throw new SecretError('secret_moved', msg('Un secret ne peut pas être placé à {path}, qui est affiché en clair', { path: pathString(path) }), { path: pathString(path) });
       }
       edits.push({ start: node.range[0], end: node.range[1], text: JSON.stringify(value) });
     });

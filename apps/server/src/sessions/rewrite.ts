@@ -1,6 +1,7 @@
 // Edit, retry, branch, undo the last exchange, clear: Hermes 0.23 has no HTTP route that cuts a session, so each is
 // a truncated copy (export, cut before a user message, import under a new id). "replace" puts the copy in the
 // original's place (the original is deleted with the undo window); "branch" puts it next to it.
+import { msg } from '../i18n/index.js';
 import type { CompatService } from '../compat/service.js';
 import { HermesError, callOp } from '../connectors/runtime.js';
 import { readRunStatus, whenIdle } from '../chat/history.js';
@@ -32,9 +33,9 @@ export async function rewriteSession(
   // gives the workspace of the copy; once the purger dropped it, the copy is looked for in each workspace.
   const slugs = row ? [row.workspaceSlug] : workspaces.listWorkspaces().filter((w) => w.instanceId === inst).map((w) => w.slug);
   const done = slugs.map((slug) => workspaces.rowOf(inst, copyId(inst, slug, o.key))).find((r) => r !== null) ?? null;
-  if (done && done.replacesId !== id && !row) throw new NotFoundError(`Session inconnue : ${id}`);
+  if (done && done.replacesId !== id && !row) throw new NotFoundError(msg('Session inconnue : {id}', { id }));
   if (done) {
-    if (done.deletedAt !== null) throw new CopyError('reverted', 'Action déjà annulée', 409);
+    if (done.deletedAt !== null) throw new CopyError('reverted', msg('Action déjà annulée'), 409);
     const newId = done.sessionId;
     const original = done.replacesId ? workspaces.rowOf(inst, done.replacesId) : null;
     const undoUntil = original?.deletedAt ? original.deletedAt + UNDO_MS : null;
@@ -43,7 +44,7 @@ export async function rewriteSession(
       ...(done.replacesId ? { replaced: done.replacesId, undoUntil } : {}),
     };
   }
-  if (!row) throw new NotFoundError(`Session inconnue : ${id}`);
+  if (!row) throw new NotFoundError(msg('Session inconnue : {id}', { id }));
   const newId = copyId(inst, row.workspaceSlug, o.key);
   // alive only: a tab left open on a replaced session does not make a second replacement
   const ctx = workspaces.getSession(inst, id);
@@ -65,7 +66,7 @@ export async function rewriteSession(
           await importCopy(compat, inst, ctx.profile, copyPayload(cut.exported, { id: newId, title: title || 'Nouvelle session' }));
         } catch (err) {
           // Hermes knows the id but has nothing under it: imported, undone and purged before
-          if (err instanceof HermesError && err.detail.status === 409) throw new CopyError('reverted', 'Action déjà annulée', 409);
+          if (err instanceof HermesError && err.detail.status === 409) throw new CopyError('reverted', msg('Action déjà annulée'), 409);
           throw err;
         }
       }
@@ -77,7 +78,7 @@ export async function rewriteSession(
     });
     out = { session: res.session, created: true, ...(o.mode === 'replace' ? { replaced: id, undoUntil: res.undoUntil } : {}) };
   });
-  if (!idle) throw new RunActiveError('Une réponse est en cours : attendez la fin ou arrêtez-la');
+  if (!idle) throw new RunActiveError(msg('Une réponse est en cours : attendez la fin ou arrêtez-la'));
   return out!;
 }
 
@@ -87,7 +88,7 @@ export async function revertRewrite(
   inst: string, newId: string, now = Date.now(),
 ): Promise<PublicSession> {
   const { workspaces, compat } = deps;
-  const tooLate = () => new CopyError('too_late', 'Trop tard : la session d’origine est supprimée', 409);
+  const tooLate = () => new CopyError('too_late', msg('Trop tard : la session d’origine est supprimée'), 409);
   const row = workspaces.rowOf(inst, newId);
   if (!row || row.deletedAt !== null || !row.replacesId) throw tooLate();
   const originalId = row.replacesId;
@@ -98,7 +99,7 @@ export async function revertRewrite(
   const idle = await whenIdle(compat, ctx, () => {
     back = workspaces.swapBack(inst, originalId, newId);
   });
-  if (!idle) throw new RunActiveError('La réponse ne s’arrête pas : réessayez');
+  if (!idle) throw new RunActiveError(msg('La réponse ne s’arrête pas : réessayez'));
   if (!back) throw tooLate();
   return workspaces.getSession(inst, originalId).session;
 }
@@ -117,6 +118,6 @@ async function stopLastRun(compat: CompatService, ctx: SessionContext): Promise<
     await new Promise((r) => setTimeout(r, STOP_POLL_MS));
     if (!(await running())) return;
   }
-  throw new RunActiveError('La réponse ne s’arrête pas : réessayez');
+  throw new RunActiveError(msg('La réponse ne s’arrête pas : réessayez'));
 }
 

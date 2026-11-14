@@ -3,6 +3,7 @@
 // it is never logged nor put in an error.
 import { z } from 'zod';
 import type { InstanceConfig } from '../config.js';
+import { msg } from '../i18n/index.js';
 import { dashboardSocketUrl, defaultFactory, type WsFactory } from './events.js';
 
 export class GatewaySocketError extends Error {
@@ -29,7 +30,7 @@ export async function callGatewaySocket(
   try {
     url = dashboardSocketUrl(instance, '/api/ws');
   } catch {
-    throw new GatewaySocketError(null, 'Dashboard non configuré');
+    throw new GatewaySocketError(null, msg('Dashboard non configuré'));
   }
   return new Promise((resolve, reject) => {
     let done = false;
@@ -42,18 +43,18 @@ export async function callGatewaySocket(
       fn();
     };
     // a wrong token gets no answer to the handshake: the delay covers it
-    const timer = setTimeout(() => finish(() => reject(new GatewaySocketError(null, 'WebSocket du dashboard sans réponse'))), timeoutMs);
+    const timer = setTimeout(() => finish(() => reject(new GatewaySocketError(null, msg('WebSocket du dashboard sans réponse')))), timeoutMs);
     try {
       ws = factory(url);
     } catch {
-      finish(() => reject(new GatewaySocketError(null, 'Connexion au WebSocket du dashboard impossible')));
+      finish(() => reject(new GatewaySocketError(null, msg('Connexion au WebSocket du dashboard impossible'))));
       return;
     }
     ws.addEventListener('open', () => {
       try {
         ws!.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }));
       } catch {
-        finish(() => reject(new GatewaySocketError(null, 'Envoi sur le WebSocket du dashboard impossible')));
+        finish(() => reject(new GatewaySocketError(null, msg('Envoi sur le WebSocket du dashboard impossible'))));
       }
     });
     ws.addEventListener('message', (ev) => {
@@ -72,8 +73,8 @@ export async function callGatewaySocket(
         finish(() => resolve(msg.result));
       }
     });
-    ws.addEventListener('error', () => finish(() => reject(new GatewaySocketError(null, 'WebSocket du dashboard en erreur'))));
-    ws.addEventListener('close', () => finish(() => reject(new GatewaySocketError(null, 'WebSocket du dashboard fermé'))));
+    ws.addEventListener('error', () => finish(() => reject(new GatewaySocketError(null, msg('WebSocket du dashboard en erreur')))));
+    ws.addEventListener('close', () => finish(() => reject(new GatewaySocketError(null, msg('WebSocket du dashboard fermé')))));
   });
 }
 
@@ -89,7 +90,7 @@ export async function oneshot(
 ): Promise<string> {
   const res = await callGatewaySocket(instance, 'llm.oneshot', params, opts);
   const text = res && typeof res === 'object' && typeof (res as { text?: unknown }).text === 'string' ? (res as { text: string }).text : null;
-  if (text === null) throw new GatewaySocketError(null, 'Réponse de llm.oneshot illisible');
+  if (text === null) throw new GatewaySocketError(null, msg('Réponse de llm.oneshot illisible'));
   return text;
 }
 
@@ -116,7 +117,7 @@ type VaultOpts = { factory?: WsFactory; timeoutMs?: number };
 export async function vaultList(instance: InstanceConfig, profile: string, opts: VaultOpts = {}): Promise<HermesVaultItem[]> {
   const res = await callGatewaySocket(instance, 'vault.list', { profile }, { timeoutMs: VAULT_TIMEOUT_MS, ...opts });
   const raw = res && typeof res === 'object' ? (res as { items?: unknown }).items : null;
-  if (!Array.isArray(raw)) throw new GatewaySocketError(null, 'Réponse de vault.list illisible');
+  if (!Array.isArray(raw)) throw new GatewaySocketError(null, msg('Réponse de vault.list illisible'));
   return raw.flatMap((item) => {
     const r = VaultItemSchema.safeParse(item);
     return r.success ? [r.data] : [];
@@ -127,7 +128,7 @@ export async function vaultList(instance: InstanceConfig, profile: string, opts:
 export async function vaultAdd(instance: InstanceConfig, profile: string, body: HermesVaultAdd, opts: VaultOpts = {}): Promise<string> {
   const res = await callGatewaySocket(instance, 'vault.add', { profile, ...body }, { timeoutMs: VAULT_TIMEOUT_MS, ...opts });
   const id = res && typeof res === 'object' ? (res as { id?: unknown }).id : null;
-  if (typeof id !== 'string') throw new GatewaySocketError(null, 'Réponse de vault.add illisible');
+  if (typeof id !== 'string') throw new GatewaySocketError(null, msg('Réponse de vault.add illisible'));
   return id;
 }
 
@@ -169,11 +170,11 @@ export async function probeSocket(instance: InstanceConfig, opts?: { factory?: W
 export async function probeSessionStats(instance: InstanceConfig, opts?: { factory?: WsFactory; timeoutMs?: number }): Promise<{ sessionStats: boolean; note: string }> {
   try {
     await callGatewaySocket(instance, 'session.stats', { session_id: 'intendia-probe' }, opts);
-    return { sessionStats: true, note: 'Le WebSocket du dashboard donne le contexte et les quotas' };
+    return { sessionStats: true, note: msg('Le WebSocket du dashboard donne le contexte et les quotas') };
   } catch (err) {
     const e = err as GatewaySocketError;
-    if (e.code === -32601) return { sessionStats: false, note: 'Dashboard séparé de la passerelle : contexte estimé, quotas indisponibles' };
-    if (e.code !== null) return { sessionStats: true, note: 'Le WebSocket du dashboard donne le contexte et les quotas' };
-    return { sessionStats: false, note: `${e.message} : contexte estimé, quotas indisponibles` };
+    if (e.code === -32601) return { sessionStats: false, note: msg('Dashboard séparé de la passerelle : contexte estimé, quotas indisponibles') };
+    if (e.code !== null) return { sessionStats: true, note: msg('Le WebSocket du dashboard donne le contexte et les quotas') };
+    return { sessionStats: false, note: msg('{error} : contexte estimé, quotas indisponibles', { error: e.message }) };
   }
 }

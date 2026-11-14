@@ -7,6 +7,7 @@ import { normalizeRel } from '../files/paths.js';
 import { sendFile, sendZip } from '../files/send.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 const New = z.object({ path: z.string(), kind: z.enum(['file', 'dir']) });
 const Move = z.object({ from: z.string(), to: z.string() });
@@ -17,7 +18,7 @@ const Extract = z.object({ path: z.string().max(1024) });
 
 export function slugOf(c: { req: { param: (k: string) => string } }): string {
   const slug = c.req.param('slug');
-  if (!SLUG_RE.test(slug)) throw new ValidationError('workspace invalide');
+  if (!SLUG_RE.test(slug)) throw new ValidationError(msg('workspace invalide'));
   return slug;
 }
 

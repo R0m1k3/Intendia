@@ -6,13 +6,15 @@ import { api, type Cron, type CronRun } from '../api';
 import { FOLLOW_INTERVAL_MS, followState, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { whenFr } from '../crons/schedule';
 import { Button, cx, ErrorText } from './ui';
+import { locale, plural, t } from '../i18n';
+import { T } from '../i18n/T';
 
-const fmt = (s: number) => new Date(s * 1000).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const fmt = (s: number) => new Date(s * 1000).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function duration(r: CronRun): string | null {
   if (r.startedAt === null || r.endedAt === null) return null;
   const s = Math.max(0, Math.round(r.endedAt - r.startedAt));
-  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}`;
+  return s < 60 ? t('{s} s', { s }) : t('{min} min {s}', { min: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') });
 }
 
 /** How a follow-up ended: shown above the history of that cron. */
@@ -26,6 +28,9 @@ function dotClass(run: CronRun, live: boolean): string {
   return 'bg-dot-ok';
 }
 
+/** « 3 messages · 2 outils » of a run. */
+const counts = (r: CronRun) => `${plural(r.messageCount, '{n} message', '{n} messages')} · ${plural(r.toolCallCount, '{n} outil', '{n} outils')}`;
+
 function RunLine({ cron, run, live = false }: { cron: Cron; run: CronRun; live?: boolean }) {
   const d = duration(run);
   return (
@@ -33,13 +38,13 @@ function RunLine({ cron, run, live = false }: { cron: Cron; run: CronRun; live?:
       <span aria-hidden className={cx('size-2 shrink-0 rounded-full', dotClass(run, live))} />
       <span className="w-[7.5rem] shrink-0 font-mono text-[12.5px]">{run.startedAt ? fmt(run.startedAt) : '-'}</span>
       <span className="min-w-0 flex-1 text-ink-soft">
-        {live ? 'En cours · ' : ''}{run.messageCount} message{run.messageCount > 1 ? 's' : ''} · {run.toolCallCount} outil{run.toolCallCount > 1 ? 's' : ''}
+        {live ? `${t('En cours')} · ` : ''}{counts(run)}
         {run.costUsd !== null ? ` · ${run.costUsd.toFixed(3)} $` : ''}{run.endReason ? ` · ${run.endReason}` : ''}
       </span>
-      <span className="font-mono text-xs text-ink-faint">{live ? 'en cours' : d ?? 'fin non enregistrée'}</span>
+      <span className="font-mono text-xs text-ink-faint">{live ? t('en cours') : d ?? t('fin non enregistrée')}</span>
       <Link to="/i/$inst/p/$profile/s/$sessionId" params={{ inst: cron.instanceId, profile: cron.profile, sessionId: run.id }}
         className="inline-flex items-center gap-1 text-[13px] text-ink-soft hover:text-ink">
-        Ouvrir
+        {t('Ouvrir')}
         <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
       </Link>
     </li>
@@ -67,8 +72,8 @@ export function CronFollower({ cron, follow, canRuns, onEnd }: {
   });
   const [, tick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), FOLLOW_INTERVAL_MS);
-    return () => clearInterval(t);
+    const timer = setInterval(() => tick((n) => n + 1), FOLLOW_INTERVAL_MS);
+    return () => clearInterval(timer);
   }, []);
   const state = followState(follow, live.data, runs.data);
   useEffect(() => {
@@ -105,20 +110,20 @@ export function CronRuns({ cron, follow, result, canRuns, canCancel }: {
   return (
     <section className="card overflow-hidden" aria-labelledby={`runs-${cron.id}`}>
       <div className="flex items-center gap-3 px-4 py-3">
-        <h3 id={`runs-${cron.id}`} className="text-[15px] font-semibold">Dernières exécutions</h3>
+        <h3 id={`runs-${cron.id}`} className="text-[15px] font-semibold">{t('Dernières exécutions')}</h3>
         {runs.data && <span className="font-mono text-[11px] text-ink-faint">{runs.data.length}</span>}
       </div>
       {following && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line/70 bg-accent-soft/60 px-4 py-3 text-[13px]" aria-live="polite">
           <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
-          <span className="font-medium">Exécution en cours</span>
+          <span className="font-medium">{t('Exécution en cours')}</span>
           <span className="text-ink-soft">
-            {state?.run ? `${state.run.messageCount} message${state.run.messageCount > 1 ? 's' : ''} · ${state.run.toolCallCount} outil${state.run.toolCallCount > 1 ? 's' : ''}` : 'en attente du démarrage'}
+            {state?.run ? counts(state.run) : t('en attente du démarrage')}
           </span>
           {canCancel && (
             <Button type="button" variant="danger" className="ml-auto h-8 px-2.5 text-[13px]" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
               <Square className="size-3.5" strokeWidth={1.5} />
-              {cancel.isPending ? 'Annulation…' : 'Annuler'}
+              {cancel.isPending ? t('Annulation…') : t('Annuler')}
             </Button>
           )}
           {cancel.data && !cancel.data.cancelled && <span className="w-full text-xs text-ink-faint">{cancel.data.detail}</span>}
@@ -128,19 +133,19 @@ export function CronRuns({ cron, follow, result, canRuns, canCancel }: {
       {!following && result && res && (
         <div className={cx(note, res.ok === false && 'bg-bad-soft/60 text-bad')} aria-live="polite">
           {result.timeout
-            ? 'Suivi arrêté après 10 minutes : le run continue peut-être côté Hermes.'
-            : <>Exécution terminée {whenFr(result.cron.lastRunAt)} : <span className="font-medium">{res.label}</span></>}
+            ? t('Suivi arrêté après 10 minutes : le run continue peut-être côté Hermes.')
+            : <T k="Exécution terminée {when} : {status}" vars={{ when: whenFr(result.cron.lastRunAt), status: <span className="font-medium">{res.label}</span> }} />}
           {!result.timeout && result.cron.lastError && <p className="mt-1 break-words font-mono text-[11px]">{result.cron.lastError}</p>}
-          {!result.timeout && result.cron.lastDeliveryError && <p className="mt-1 break-words font-mono text-[11px]">Envoi : {result.cron.lastDeliveryError}</p>}
+          {!result.timeout && result.cron.lastDeliveryError && <p className="mt-1 break-words font-mono text-[11px]">{t('Envoi : {error}', { error: result.cron.lastDeliveryError })}</p>}
         </div>
       )}
       {following && state?.run && <ul><RunLine cron={cron} run={state.run} live /></ul>}
       {!canRuns ? (
-        <p className={`${note} text-ink-soft`}>Historique indisponible sur cette instance (dashboard requis)</p>
+        <p className={`${note} text-ink-soft`}>{t('Historique indisponible sur cette instance (dashboard requis)')}</p>
       ) : runs.isLoading ? (
-        <p className={`${note} text-ink-faint`}>Chargement…</p>
+        <p className={`${note} text-ink-faint`}>{t('Chargement…')}</p>
       ) : history.length === 0 && !following ? (
-        <p className={`${note} text-ink-soft`}>Aucune exécution pour l’instant : « Lancer maintenant » en déclenche une tout de suite.</p>
+        <p className={`${note} text-ink-soft`}>{t('Aucune exécution pour l’instant : « Lancer maintenant » en déclenche une tout de suite.')}</p>
       ) : (
         <ul>{history.map((r) => <RunLine key={r.id} cron={cron} run={r} />)}</ul>
       )}

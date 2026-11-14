@@ -8,6 +8,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 /** A Hermes 400 on a cron write: shown under the matching editor field. */
 export class CronInputError extends Error {
@@ -200,16 +201,16 @@ export function advancedFields(input: CronInput, reset: boolean): Record<string,
 // ---------------------------------------------------------------- service
 
 /** Hermes 400 → CronInputError, 404 → NotFoundError; anything else is rethrown. */
-async function translate<T>(fn: () => Promise<T>, what = 'Cron introuvable'): Promise<T> {
+async function translate<T>(fn: () => Promise<T>, what = msg('Cron introuvable')): Promise<T> {
   try {
     return await fn();
   } catch (err) {
     if (err instanceof HermesError && err.kind === 'http') {
-      if (err.detail.status === 404) throw new NotFoundError(`${what} : ${hermesDetail(err)}`);
+      if (err.detail.status === 404) throw new NotFoundError(msg('{what} : {detail}', { what, detail: hermesDetail(err) }));
       if (err.detail.status === 400 || err.detail.status === 422) {
         const detail = hermesDetail(err);
         const isSchedule = detail.startsWith('Invalid schedule');
-        throw new CronInputError(isSchedule ? 'Planning invalide' : 'Requête refusée par Hermes', isSchedule ? 'schedule' : null, detail);
+        throw new CronInputError(isSchedule ? msg('Planning invalide') : msg('Requête refusée par Hermes'), isSchedule ? 'schedule' : null, detail);
       }
     }
     throw err;
@@ -233,7 +234,7 @@ export class CronService {
   ) {}
 
   private ctx(instanceId: string) {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
   }
 
@@ -260,7 +261,7 @@ export class CronService {
   /** Workspace of the same instance, or a 400. */
   private workspaceFor(instanceId: string, slug: string): Workspace {
     const ws = this.workspaces.getWorkspace(slug);
-    if (ws.instanceId !== instanceId) throw new ValidationError(`Le workspace ${slug} appartient à une autre instance`);
+    if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le workspace {slug} appartient à une autre instance', { slug }));
     return ws;
   }
 
@@ -313,7 +314,7 @@ export class CronService {
   private async checkContext(instanceId: string, profile: string, ids: string[], self?: string): Promise<void> {
     const known = new Set((await this.rawList(instanceId)).filter((j) => (j.profile ?? 'default') === profile && j.id !== self).map((j) => j.id));
     const unknown = ids.filter((id) => !known.has(id));
-    if (unknown.length) throw new ValidationError(`Cron de contexte inconnu pour cet agent : ${unknown.join(', ')}`);
+    if (unknown.length) throw new ValidationError(msg('Cron de contexte inconnu pour cet agent : {ids}', { ids: unknown.join(', ') }));
   }
 
   async update(instanceId: string, id: string, profile: string, input: CronInput): Promise<PublicCron> {
@@ -331,7 +332,7 @@ export class CronService {
       const wsProfile = ws.profile ?? 'default';
       const jobProfile = job.profile ?? profile;
       if (wsProfile !== jobProfile) {
-        throw new ValidationError(`Ce workspace utilise le profil ${wsProfile}, ce cron le profil ${jobProfile}`);
+        throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, ce cron le profil {jobProfile}', { wsProfile, jobProfile }));
       }
       // same workspace: the folder never changes. Another workspace: keep the key only if it is free there
       // (a folder left by a deleted cron must not be reused), else allocate one against the destination
@@ -352,7 +353,7 @@ export class CronService {
   /** Cron templates of a profile (Hermes keeps their prompt to itself). */
   async blueprints(instanceId: string, profile: string): Promise<PublicBlueprint[]> {
     const { http, report } = this.ctx(instanceId);
-    const raw = await translate(() => callOp<unknown>(http, report, 'crons', 'blueprints', { profile }), 'Agent introuvable');
+    const raw = await translate(() => callOp<unknown>(http, report, 'crons', 'blueprints', { profile }), msg('Agent introuvable'));
     return BlueprintListSchema.parse(raw).blueprints.map((b) => ({
       key: b.key,
       title: b.title || b.key,
@@ -382,12 +383,12 @@ export class CronService {
   async instantiate(instanceId: string, profile: string, key: string, values: Record<string, string>, workspace: string | null): Promise<{ cron: PublicCron; attached: boolean }> {
     const { http, report } = this.ctx(instanceId);
     const bp = (await this.blueprints(instanceId, profile)).find((b) => b.key === key);
-    if (!bp) throw new NotFoundError(`Modèle de cron inconnu : ${key}`);
+    if (!bp) throw new NotFoundError(msg('Modèle de cron inconnu : {key}', { key }));
     const names = new Set(bp.fields.map((f) => f.name));
     const extra = Object.keys(values).filter((k) => !names.has(k));
-    if (extra.length) throw new ValidationError(`Champ inconnu pour ce modèle : ${extra.join(', ')}`);
+    if (extra.length) throw new ValidationError(msg('Champ inconnu pour ce modèle : {fields}', { fields: extra.join(', ') }));
     const ws = workspace ? this.workspaceFor(instanceId, workspace) : null;
-    if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(`Ce workspace utilise le profil ${ws.profile ?? 'default'}, pas ${profile}`);
+    if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, pas {profile}', { wsProfile: ws.profile ?? 'default', profile }));
     const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
     if (!ws) return { cron: this.pub(instanceId, job), attached: false };
     try {
@@ -448,7 +449,7 @@ export class CronService {
         const jobs = await this.rawList(inst.id, UPCOMING_TIMEOUT_MS);
         return jobs.filter((j) => j.enabled !== false).map((j): OverviewCron => ({
           instanceId: inst.id, instanceLabel: inst.label ?? inst.id, id: j.id, profile: j.profile ?? 'default',
-          name: j.name || '(sans nom)', schedule: schedule(j.schedule, j.schedule_display),
+          name: j.name || msg('(sans nom)'), schedule: schedule(j.schedule, j.schedule_display),
           nextRunAt: j.next_run_at ?? null, lastRunAt: j.last_run_at ?? null, lastStatus: j.last_status ?? null,
           lastError: j.last_error ?? null, timezone: j.timezone ?? null,
         }));

@@ -3,16 +3,17 @@
 import { z } from 'zod';
 import { AdminError } from '../admin-error.js';
 import type { HermesVaultAdd } from '../hermes/gateway-ws.js';
+import { msg } from '../i18n/index.js';
 
 export type VaultKind = 'login' | 'payment' | 'address';
 
 /** French label of each field (also the names in "Champs obligatoires : …"). */
 export const FIELD_LABEL: Record<string, string> = {
-  kind: 'Type', label: 'Nom', origin: 'Site',
-  identifierType: "Type d'identifiant", identifier: 'Identifiant', password: 'Mot de passe', otpSecret: "Clé d'authentification",
-  cardNumber: 'Numéro de carte', cardholderName: 'Titulaire', expMonth: "Mois d'expiration", expYear: "Année d'expiration",
-  cvc: 'Cryptogramme', billingPostalCode: 'Code postal de facturation',
-  addressLine1: 'Adresse', addressLine2: "Complément d'adresse", city: 'Ville', state: 'Région', postalCode: 'Code postal', country: 'Pays',
+  kind: msg('Type'), label: msg('Nom'), origin: msg('Site'),
+  identifierType: msg("Type d'identifiant"), identifier: msg('Identifiant'), password: msg('Mot de passe'), otpSecret: msg("Clé d'authentification"),
+  cardNumber: msg('Numéro de carte'), cardholderName: msg('Titulaire'), expMonth: msg("Mois d'expiration"), expYear: msg("Année d'expiration"),
+  cvc: msg('Cryptogramme'), billingPostalCode: msg('Code postal de facturation'),
+  addressLine1: msg('Adresse'), addressLine2: msg("Complément d'adresse"), city: msg('Ville'), state: msg('Région'), postalCode: msg('Code postal'), country: msg('Pays'),
 };
 
 /** camelCase field → name in Hermes' `secret` (or top level for label / origin). */
@@ -75,26 +76,26 @@ const VaultInputSchema = z.discriminatedUnion('kind', [Login, Payment, Address])
 export type VaultInput = z.infer<typeof VaultInputSchema>;
 
 const FORMAT: Record<string, string> = {
-  origin: 'Adresse du site invalide (http:// ou https://)',
-  card: 'Numéro de carte invalide',
-  month: 'Mois entre 1 et 12',
-  year: 'Année sur 2 ou 4 chiffres',
-  cvc: '3 ou 4 chiffres',
+  origin: msg('Adresse du site invalide (http:// ou https://)'),
+  card: msg('Numéro de carte invalide'),
+  month: msg('Mois entre 1 et 12'),
+  year: msg('Année sur 2 ou 4 chiffres'),
+  cvc: msg('3 ou 4 chiffres'),
 };
 
 /** The first problem of a refused input, as an `invalid_field` error; never quotes the value. */
 function refusal(issue: z.core.$ZodIssue, body: unknown): AdminError {
   if (issue.code === 'unrecognized_keys') {
-    return new AdminError('invalid_field', 'Champ inconnu', { field: String(issue.keys[0] ?? '') });
+    return new AdminError('invalid_field', msg('Champ inconnu'), { field: String(issue.keys[0] ?? '') });
   }
   const field = String(issue.path[0] ?? 'kind');
   const given = body && typeof body === 'object' ? (body as Record<string, unknown>)[field] : undefined;
-  let message = 'Format invalide';
-  if (given === undefined || given === null || (typeof given === 'string' && given.trim() === '')) message = 'Champ obligatoire';
-  else if (issue.code === 'invalid_union' || issue.code === 'invalid_value') message = 'Valeur non prise en charge';
-  else if (issue.code === 'invalid_type') message = 'Champ obligatoire';
-  else if (issue.code === 'too_small') message = 'Champ obligatoire';
-  else if (issue.code === 'too_big') message = `Trop long (${String(issue.maximum)} caractères au plus)`;
+  let message = msg('Format invalide');
+  if (given === undefined || given === null || (typeof given === 'string' && given.trim() === '')) message = msg('Champ obligatoire');
+  else if (issue.code === 'invalid_union' || issue.code === 'invalid_value') message = msg('Valeur non prise en charge');
+  else if (issue.code === 'invalid_type') message = msg('Champ obligatoire');
+  else if (issue.code === 'too_small') message = msg('Champ obligatoire');
+  else if (issue.code === 'too_big') message = msg('Trop long ({max} caractères au plus)', { max: String(issue.maximum) });
   else {
     // the schema's own `message` names the format (never a value)
     if (FORMAT[issue.message]) message = FORMAT[issue.message]!;

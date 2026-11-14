@@ -7,6 +7,7 @@ import { Panel } from '../components/ui';
 import { Ask } from '../home/Ask';
 import { useCurrentInstance } from '../instance/current';
 import { InstancePick } from '../chat/InstancePick';
+import { t } from '../i18n';
 
 /**
  * Screen of the session list when no session is open: an empty chat, the box to write at the bottom like in a session
@@ -31,10 +32,10 @@ export function HomePage() {
       {id && info.isSuccess && !info.data.model && (
         <div className="px-4 pt-4 md:px-8" data-finish-setup>
           <div className="mx-auto flex max-w-[920px] flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft/40 px-4 py-3 text-sm">
-            <span className="min-w-0 flex-1">L’agent{instance && list.length > 1 ? ` de ${instance.label}` : ''} n’a pas de modèle principal : il ne pourra pas répondre.</span>
+            <span className="min-w-0 flex-1">{instance && list.length > 1 ? t('L’agent de {label} n’a pas de modèle principal : il ne pourra pas répondre.', { label: instance.label }) : t('L’agent n’a pas de modèle principal : il ne pourra pas répondre.')}</span>
             <Link to="/installation/fournisseur" search={{ inst: id }}
               className="inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
-              Terminer l’installation
+              {t('Terminer l’installation')}
             </Link>
           </div>
         </div>
@@ -46,24 +47,24 @@ export function HomePage() {
         )}
         {instances.isSuccess && list.length === 0 ? (
           <Panel>
-            <p className="text-sm text-ink-soft">Intendia n’est relié à aucune instance Hermes pour l’instant</p>
+            <p className="text-sm text-ink-soft">{t('Intendia n’est relié à aucune instance Hermes pour l’instant')}</p>
             <Link
               to={instances.data.declarative ? '/reglages' : '/installation'}
               className="mt-4 inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong"
             >
-              Ajouter une instance
+              {t('Ajouter une instance')}
             </Link>
           </Panel>
         ) : workspaces.isSuccess && list.length > 0 && ws.length === 0 ? (
           <Panel>
-            <p className="text-[15px]">Commencez par un workspace{instance && list.length > 1 ? ` sur ${instance.label}` : ''}</p>
-            <p className="mt-1 text-sm text-ink-soft">Un dossier partagé avec l’agent, ses consignes et ses sessions de travail</p>
+            <p className="text-[15px]">{instance && list.length > 1 ? t('Commencez par un workspace sur {label}', { label: instance.label }) : t('Commencez par un workspace')}</p>
+            <p className="mt-1 text-sm text-ink-soft">{t('Un dossier partagé avec l’agent, ses consignes et ses sessions de travail')}</p>
             <Link to="/w" className="mt-4 inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
-              Créer un workspace
+              {t('Créer un workspace')}
             </Link>
           </Panel>
         ) : (
-          <p className="text-sm text-ink-faint">Nouvelle session{instance && list.length > 1 ? ` sur ${instance.label}` : ''}</p>
+          <p className="text-sm text-ink-faint">{instance && list.length > 1 ? t('Nouvelle session sur {label}', { label: instance.label }) : t('Nouvelle session')}</p>
         )}
       </div>
       {list.length > 0 && ws.length > 0 && (

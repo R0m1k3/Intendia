@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { cx } from '../../components/ui';
 import { OFFICE_READ_MAX, readDocx, readPptx, readXlsxSheet, readXlsxSheets, SHEET_ROWS } from './office';
 import { readBytes } from './read';
+import { locale, t } from '../../i18n';
 
 type Kind = 'docx' | 'xlsx' | 'pptx';
 
@@ -21,7 +22,7 @@ export default function OfficeView({ url, kind, version }: { url: string; kind: 
     retry: false,
   });
   if (q.error) return <p className="p-6 text-sm text-ink-soft">{(q.error as Error).message}</p>;
-  if (!q.data) return <p className="p-6 text-sm text-ink-faint">Lecture…</p>;
+  if (!q.data) return <p className="p-6 text-sm text-ink-faint">{t('Lecture…')}</p>;
   const d = q.data;
   if (d.kind === 'docx') {
     return (
@@ -47,8 +48,8 @@ export default function OfficeView({ url, kind, version }: { url: string; kind: 
       <div data-viewer="pptx" className="space-y-3 p-4">
         {d.slides.map((lines, i) => (
           <section key={i} className="rounded-lg border border-line bg-sheet p-4">
-            <p className="mb-2 font-mono text-[11px] text-ink-faint">Diapositive {i + 1}</p>
-            {lines.length ? lines.map((l, j) => <p key={j} className={cx('text-sm', j === 0 && 'font-semibold')}>{l}</p>) : <p className="text-sm text-ink-faint">(sans texte)</p>}
+            <p className="mb-2 font-mono text-[11px] text-ink-faint">{t('Diapositive {n}', { n: i + 1 })}</p>
+            {lines.length ? lines.map((l, j) => <p key={j} className={cx('text-sm', j === 0 && 'font-semibold')}>{l}</p>) : <p className="text-sm text-ink-faint">{t('(sans texte)')}</p>}
           </section>
         ))}
       </div>
@@ -78,7 +79,7 @@ function Sheets({ book }: { book: Awaited<ReturnType<typeof readXlsxSheets>> }) 
       {error && <p className="p-6 text-sm text-ink-soft">{error}</p>}
       {sheet && (
         <div className="overflow-auto p-4">
-          {sheet.cut && <p className="pb-2 text-xs text-ink-faint">Feuille coupée à {SHEET_ROWS.toLocaleString('fr-FR')} lignes × 50 colonnes</p>}
+          {sheet.cut && <p className="pb-2 text-xs text-ink-faint">{t('Feuille coupée à {rows} lignes × {cols} colonnes', { rows: SHEET_ROWS.toLocaleString(locale()), cols: 50 })}</p>}
           <table className="border-collapse text-[13px]">
             <tbody>{sheet.rows.map((r, j) => <tr key={j}>{r.map((c, k) => <td key={k} className={cell}>{c}</td>)}</tr>)}</tbody>
           </table>

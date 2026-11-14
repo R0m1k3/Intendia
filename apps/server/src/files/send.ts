@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { requestLang, toLang } from '../i18n/index.js';
 import { mimeOf } from './mime.js';
 
 /** Headers of every response that carries content from a workspace (agent-written HTML/SVG included). */
@@ -48,8 +49,11 @@ export function sendZip(body: ReadableStream<Uint8Array>, name: string): Respons
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** Small static error page for /f/* (no script, no external resource). */
-export function errorPage(c: Context, status: 404 | 410 | 502, title: string, detail?: string): Response {
-  const body = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+export function errorPage(c: Context, status: 404 | 410 | 502, titleFr: string, detailFr?: string): Response {
+  const lang = requestLang(c);
+  const title = toLang(titleFr, lang);
+  const detail = detailFr ? toLang(detailFr, lang) : detailFr;
+  const body = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · Intendia</title>
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:34rem;margin:15vh auto;padding:0 1.5rem;color:#23251f;background:#f7f6f1}
 h1{font-size:1.15rem;margin:0 0 .5rem}p{color:#5b5e55;margin:.25rem 0}a{color:#1f4d3a}code{font:13px ui-monospace,monospace;word-break:break-all}

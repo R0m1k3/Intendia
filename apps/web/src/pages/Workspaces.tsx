@@ -9,6 +9,7 @@ import { DetailBody, DetailHeader, ListItemBody, ListLink, ListPane, SplitView, 
 import { pickSelected } from '../components/selection';
 import { Button, ErrorText, Tag } from '../components/ui';
 import { WorkspaceDetail } from '../workspaces/WorkspaceDetail';
+import { t } from '../i18n';
 
 /**
  * /w and /w/$slug: the workspaces of the current instance (a folder shared with the agent, its instructions and its
@@ -29,9 +30,9 @@ export function WorkspacesPage() {
 
   const pane = (
     <ListPane
-      title="Workspaces"
+      title={t('Workspaces')}
       action={!empty && (
-        <Button className="w-[34px] px-0" aria-label="Nouveau workspace" title="Nouveau workspace" onClick={() => setAdding(true)}>
+        <Button className="w-[34px] px-0" aria-label={t('Nouveau workspace')} title={t('Nouveau workspace')} onClick={() => setAdding(true)}>
           <Plus className="size-4" strokeWidth={1.5} />
         </Button>
       )}
@@ -39,10 +40,10 @@ export function WorkspacesPage() {
       <ErrorText error={workspaces.error} />
       {creating && (
         <button type="button" className={listItemClass(true)} onClick={() => setAdding(true)}>
-          <ListItemBody title="Nouveau workspace" sub="Un dossier partagé avec l’agent" />
+          <ListItemBody title={t('Nouveau workspace')} sub={t('Un dossier partagé avec l’agent')} />
         </button>
       )}
-      <ul className="flex flex-col gap-0.5" aria-label="Workspaces">
+      <ul className="flex flex-col gap-0.5" aria-label={t('Workspaces')}>
         {list.map((w) => {
           const on = !creating && w.slug === shown;
           return (
@@ -50,8 +51,8 @@ export function WorkspacesPage() {
               <ListLink link={{ to: '/w/$slug', params: { slug: w.slug } }} selected={on}>
                 <ListItemBody
                   title={w.name}
-                  meta={w.sessionCount !== undefined ? <span title="Sessions en cours">{w.sessionCount}</span> : undefined}
-                  sub={<span title={root ? `${root}/${w.slug}` : undefined}>Agent {w.profile ?? 'default'}{instance ? ` · ${instance.label}` : ''}</span>}
+                  meta={w.sessionCount !== undefined ? <span title={t('Sessions en cours')}>{w.sessionCount}</span> : undefined}
+                  sub={<span title={root ? `${root}/${w.slug}` : undefined}>{instance ? t('Agent {profile} · {instance}', { profile: w.profile ?? 'default', instance: instance.label }) : t('Agent {profile}', { profile: w.profile ?? 'default' })}</span>}
                   tag={<Tag className={on ? 'bg-sheet' : undefined}>{w.slug}</Tag>}
                 />
               </ListLink>
@@ -59,17 +60,17 @@ export function WorkspacesPage() {
           );
         })}
       </ul>
-      {workspaces.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">Chargement…</p>}
+      {workspaces.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
     </ListPane>
   );
 
   return (
-    <SplitView label="Workspaces" selected={Boolean(slug) || adding} list={pane}>
+    <SplitView label={t('Workspaces')} selected={Boolean(slug) || adding} list={pane}>
       {creating ? (
         <>
           <DetailHeader
-            title="Nouveau workspace"
-            sub={`Un dossier partagé avec l’agent, ses consignes et ses sessions${instance && instances.length > 1 ? `, sur ${instance.label}` : ''}`}
+            title={t('Nouveau workspace')}
+            sub={instance && instances.length > 1 ? t('Un dossier partagé avec l’agent, ses consignes et ses sessions, sur {label}', { label: instance.label }) : t('Un dossier partagé avec l’agent, ses consignes et ses sessions')}
             back={adding ? { to: '/w' } : undefined}
           />
           <DetailBody>

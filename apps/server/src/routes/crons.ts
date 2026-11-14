@@ -4,6 +4,7 @@ import type { CronService } from '../crons/service.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { PROFILE_RE } from './params.js';
 import { ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -33,8 +34,8 @@ const UpdateBody = z.object({ ...Fields, schedule: z.string().trim().min(1).max(
 function ids(c: Context): { inst: string; id: string; profile: string } {
   const id = c.req.param('id') ?? '';
   const profile = c.req.query('profile') ?? '';
-  if (!ID_RE.test(id)) throw new ValidationError('identifiant de cron invalide');
-  if (!PROFILE_RE.test(profile)) throw new ValidationError('profil invalide ou absent');
+  if (!ID_RE.test(id)) throw new ValidationError(msg('identifiant de cron invalide'));
+  if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide ou absent'));
   return { inst: c.req.param('inst') ?? '', id, profile };
 }
 
@@ -52,14 +53,14 @@ export function cronRoutes(crons: CronService): Hono {
   r.get('/i/:inst/crons/targets', async (c) => c.json({ targets: await crons.targets(c.req.param('inst')) }));
   r.get('/i/:inst/crons/blueprints', async (c) => {
     const profile = c.req.query('profile') ?? 'default';
-    if (!PROFILE_RE.test(profile)) throw new ValidationError('profil invalide');
+    if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide'));
     return c.json({ blueprints: await crons.blueprints(c.req.param('inst'), profile) });
   });
   r.post('/i/:inst/crons/blueprints/:key', async (c) => {
     const profile = c.req.query('profile') ?? '';
     const key = c.req.param('key');
-    if (!PROFILE_RE.test(profile)) throw new ValidationError('profil invalide ou absent');
-    if (!BLUEPRINT_RE.test(key)) throw new ValidationError('modèle invalide');
+    if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide ou absent'));
+    if (!BLUEPRINT_RE.test(key)) throw new ValidationError(msg('modèle invalide'));
     const body = InstantiateBody.parse(await c.req.json());
     return c.json(await crons.instantiate(c.req.param('inst'), profile, key, body.values, body.workspace), 201);
   });

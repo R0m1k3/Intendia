@@ -1,3 +1,4 @@
+import { msg } from '../i18n/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import type { CompatService } from '../compat/service.js';
@@ -58,7 +59,7 @@ export function cutBefore(exported: Exported, before: number | null): { exported
   const at = rows.findIndex((m) => m.id === before);
   const m = at >= 0 ? rows[at]! : null;
   if (!m || m.role !== 'user' || flag(m.active) === false || m.display_kind === 'steer' || m.display_kind === 'async_delegation_complete') {
-    throw new CopyError('cut_not_found', 'Ce message ne peut plus servir de point de départ (compressé, retiré, réorientation ou résultat de sous-agents)', 409);
+    throw new CopyError('cut_not_found', msg('Ce message ne peut plus servir de point de départ (compressé, retiré, réorientation ou résultat de sous-agents)'), 409);
   }
   return { exported: { ...exported, messages: exported.messages.slice(0, at) }, cutTs: typeof m.timestamp === 'number' ? m.timestamp : null };
 }
@@ -83,7 +84,7 @@ export function copyPayload(exported: Exported, opts: { id: string; title: strin
   } else {
     messages = rows.map((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !MESSAGE_IDS.includes(k))));
   }
-  if (messages.length > MAX_MESSAGES) throw new CopyError('too_many', `Trop de messages (${messages.length}, ${MAX_MESSAGES} au plus)`, 413);
+  if (messages.length > MAX_MESSAGES) throw new CopyError('too_many', msg('Trop de messages ({count}, {max} au plus)', { count: messages.length, max: MAX_MESSAGES }), 413);
   return {
     id: opts.id, source: 'api_server', title: opts.title,
     ...(exported.model ? { model: exported.model } : {}),
@@ -96,7 +97,7 @@ export function copyPayload(exported: Exported, opts: { id: string; title: strin
 /** The dashboard's export of a session (its live part after a compression); `empty` when it has no message yet. */
 export async function exportSession(compat: CompatService, instanceId: string, profile: string, sessionId: string): Promise<Exported> {
   const h = await readHistory(compat, instanceId, sessionId, profile, 1);
-  if (!h.exists) throw new CopyError('empty', 'Session vide : rien à copier ni à exporter', 404);
+  if (!h.exists) throw new CopyError('empty', msg('Session vide : rien à copier ni à exporter'), 404);
   return callOp<Exported>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'export', {
     params: { session_id: h.liveId }, profile,
   });
@@ -120,7 +121,7 @@ export async function importCopy(compat: CompatService, instanceId: string, prof
       body: { sessions: [untitled], request_id: randomUUID(), expected_revision: 0, ...(profile !== 'default' ? { profile } : {}) },
     });
   } catch (err) {
-    if (err instanceof HermesError && err.detail.status === 503) throw new CopyError('busy', 'Hermes est occupé : réessayez dans un instant', 503);
+    if (err instanceof HermesError && err.detail.status === 503) throw new CopyError('busy', msg('Hermes est occupé : réessayez dans un instant'), 503);
     if (err instanceof HermesError && err.detail.status === 409 && (await readHistory(compat, instanceId, id, profile, 1)).exists) {
       await pushHermesTitle(compat, instanceId, profile, id, typeof title === 'string' ? title : null);
       return;
@@ -132,6 +133,6 @@ export async function importCopy(compat: CompatService, instanceId: string, prof
     return;
   }
   const first = res.errors[0];
-  const why = typeof first === 'string' ? first : first && typeof first === 'object' ? String((first as Row).error ?? (first as Row).detail ?? JSON.stringify(first)) : 'copie refusée';
-  throw new CopyError('refused', `Hermes a refusé la copie : ${why}`, 502);
+  const why = typeof first === 'string' ? first : first && typeof first === 'object' ? String((first as Row).error ?? (first as Row).detail ?? JSON.stringify(first)) : msg('copie refusée');
+  throw new CopyError('refused', msg('Hermes a refusé la copie : {why}', { why }), 502);
 }

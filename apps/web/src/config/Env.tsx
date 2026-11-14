@@ -5,6 +5,7 @@ import { api, type EnvVar } from '../api';
 import { Button, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, useInvalidateConfig, type TabProps } from './common';
 import { ask } from '../components/Dialog';
+import { t } from '../i18n';
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -27,13 +28,13 @@ export function ConfigEnv({ inst, profile, can, onSaved, focusKey }: TabProps & 
     });
     const by = new Map<string, EnvVar[]>();
     for (const v of shown) {
-      const g = v.custom ? 'Ajoutées' : (v.category ?? 'Autres');
+      const g = v.custom ? t('Ajoutées') : (v.category ?? t('Autres'));
       by.set(g, [...(by.get(g) ?? []), v]);
     }
     return [...by.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [list, q, onlySet, advanced]);
 
-  if (env.isPending) return <p className="text-sm text-ink-soft">Lecture des variables…</p>;
+  if (env.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des variables…')}</p>;
   if (env.isError) return <ErrorText error={env.error} />;
   const writable = can('putEnv');
 
@@ -42,14 +43,14 @@ export function ConfigEnv({ inst, profile, can, onSaved, focusKey }: TabProps & 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-56 flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
-          <Input className="pl-8" placeholder="Chercher une variable" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Chercher une variable" />
+          <Input className="pl-8" placeholder={t('Chercher une variable')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('Chercher une variable')} />
         </div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlySet} onChange={(e) => setOnlySet(e.target.checked)} />Définies seulement</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />Afficher les avancées</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlySet} onChange={(e) => setOnlySet(e.target.checked)} />{t('Définies seulement')}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />{t('Afficher les avancées')}</label>
       </div>
       {writable && <AddVar inst={inst} profile={profile} existing={list.map((v) => v.key)} onSaved={() => onSaved(true)} />}
-      <p className="text-xs text-ink-faint">Les valeurs ne sont jamais affichées. Une variable change au prochain démarrage de la passerelle.</p>
-      {groups.length === 0 && <p className="text-sm text-ink-soft">Aucune variable.</p>}
+      <p className="text-xs text-ink-faint">{t('Les valeurs ne sont jamais affichées. Une variable change au prochain démarrage de la passerelle.')}</p>
+      {groups.length === 0 && <p className="text-sm text-ink-soft">{t('Aucune variable.')}</p>}
       {groups.map(([g, vars]) => (
         <Panel key={g} title={g} bodyClassName="divide-y divide-line/70 border-t border-line/70">
           {vars.map((v) => (
@@ -82,13 +83,13 @@ function EnvRow({ v, inst, profile, writable, open, onOpen, onSaved }: {
         <div className="min-w-0 flex-1">
           <span className="block break-all font-mono text-[12.5px]">{v.key}</span>
           {v.description && <span className="block text-xs text-ink-faint">{v.description}</span>}
-          {v.channelManaged && <span className="block text-xs text-ink-faint">Gérée par la plateforme de messagerie.</span>}
+          {v.channelManaged && <span className="block text-xs text-ink-faint">{t('Gérée par la plateforme de messagerie.')}</span>}
         </div>
-        <span className="text-xs text-ink-faint">{v.isSet ? 'définie' : 'non définie'}</span>
-        {writable && !open && <Button className="h-8" onClick={() => onOpen(true)}>{v.isSet ? 'Remplacer' : 'Définir'}</Button>}
+        <span className="text-xs text-ink-faint">{v.isSet ? t('définie') : t('non définie')}</span>
+        {writable && !open && <Button className="h-8" onClick={() => onOpen(true)}>{v.isSet ? t('Remplacer') : t('Définir')}</Button>}
         {writable && v.isSet && (
-          <Button variant="ghost" className="h-8 px-2" aria-label={`Supprimer ${v.key}`} disabled={del.isPending}
-            onClick={async () => { if (await ask({ title: `Supprimer ${v.key} ?`, confirmLabel: 'Supprimer', danger: true })) del.mutate(); }}>
+          <Button variant="ghost" className="h-8 px-2" aria-label={t('Supprimer {name}', { name: v.key })} disabled={del.isPending}
+            onClick={async () => { if (await ask({ title: t('Supprimer {name} ?', { name: v.key }), confirmLabel: t('Supprimer'), danger: true })) del.mutate(); }}>
             <Trash2 className={ICON} strokeWidth={1.5} />
           </Button>
         )}
@@ -96,9 +97,9 @@ function EnvRow({ v, inst, profile, writable, open, onOpen, onSaved }: {
       {open && (
         <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); if (value) set.mutate(); }}>
           <Input autoFocus type={v.isPassword ? 'password' : 'text'} autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]"
-            placeholder="Nouvelle valeur" value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Valeur de ${v.key}`} />
-          <Button variant="primary" type="submit" disabled={!value || set.isPending}>{set.isPending ? 'Enregistrement…' : 'Enregistrer'}</Button>
-          <Button variant="ghost" type="button" onClick={() => { setValue(''); onOpen(false); set.reset(); }}>Annuler</Button>
+            placeholder={t('Nouvelle valeur')} value={value} onChange={(e) => setValue(e.target.value)} aria-label={t('Valeur de {name}', { name: v.key })} />
+          <Button variant="primary" type="submit" disabled={!value || set.isPending}>{set.isPending ? t('Enregistrement…') : t('Enregistrer')}</Button>
+          <Button variant="ghost" type="button" onClick={() => { setValue(''); onOpen(false); set.reset(); }}>{t('Annuler')}</Button>
         </form>
       )}
       <ErrorText error={set.error ?? del.error} />
@@ -116,17 +117,17 @@ function AddVar({ inst, profile, existing, onSaved }: { inst: string; profile: s
     onSuccess: async () => { setKey(''); setValue(''); setOpen(false); await invalidate(); onSaved(); },
   });
   const k = key.trim();
-  const keyError = k && !KEY_RE.test(k) ? 'Lettres, chiffres et _ ; pas de chiffre en premier.' : k && existing.includes(k) ? 'Existe déjà : utilisez « Remplacer ».' : null;
-  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />Ajouter une variable</Button>;
+  const keyError = k && !KEY_RE.test(k) ? t('Lettres, chiffres et _ ; pas de chiffre en premier.') : k && existing.includes(k) ? t('Existe déjà : utilisez « Remplacer ».') : null;
+  if (!open) return <Button onClick={() => setOpen(true)}><Plus className={ICON} strokeWidth={1.5} />{t('Ajouter une variable')}</Button>;
   return (
     <form className="space-y-2 rounded-xl border border-line p-4" onSubmit={(e) => { e.preventDefault(); if (k && !keyError && value) add.mutate(); }}>
       <div className="flex flex-wrap gap-2">
         <Input className={cx('w-64 font-mono text-[12.5px]', keyError && 'border-bad')} placeholder="NOM_DE_VARIABLE" value={key}
-          onChange={(e) => setKey(e.target.value)} aria-label="Nom" />
-        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder="Valeur" value={value}
-          onChange={(e) => setValue(e.target.value)} aria-label="Valeur" />
-        <Button variant="primary" type="submit" disabled={!k || !!keyError || !value || add.isPending}>Ajouter</Button>
-        <Button variant="ghost" type="button" onClick={() => setOpen(false)}>Annuler</Button>
+          onChange={(e) => setKey(e.target.value)} aria-label={t('Nom')} />
+        <Input type="password" autoComplete="off" className="min-w-64 flex-1 font-mono text-[12.5px]" placeholder={t('Valeur')} value={value}
+          onChange={(e) => setValue(e.target.value)} aria-label={t('Valeur')} />
+        <Button variant="primary" type="submit" disabled={!k || !!keyError || !value || add.isPending}>{t('Ajouter')}</Button>
+        <Button variant="ghost" type="button" onClick={() => setOpen(false)}>{t('Annuler')}</Button>
       </div>
       {keyError && <p className="text-xs text-bad">{keyError}</p>}
       <ErrorText error={add.error} />

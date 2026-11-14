@@ -10,6 +10,7 @@ import { Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 /** 409 from Hermes, or a kanban state Intendia reports with its own code. */
 export class KanbanError extends Error {
@@ -84,15 +85,24 @@ export interface TaskDetail {
 }
 
 /** Hermes kanban errors → Intendia errors; Hermes' own text is kept (its rules are not copied here). */
-async function translate<T>(fn: () => Promise<T>, what = 'Introuvable'): Promise<T> {
+type Missing = 'any' | 'board' | 'task' | 'link' | 'worker';
+const NOT_FOUND: Record<Missing, (detail: string) => string> = {
+  any: (detail) => msg('Introuvable : {detail}', { detail }),
+  board: (detail) => msg('Tableau introuvable : {detail}', { detail }),
+  task: (detail) => msg('Tâche introuvable : {detail}', { detail }),
+  link: (detail) => msg('Lien introuvable : {detail}', { detail }),
+  worker: (detail) => msg('Worker introuvable : {detail}', { detail }),
+};
+
+async function translate<T>(fn: () => Promise<T>, what: Missing = 'any'): Promise<T> {
   try {
     return await fn();
   } catch (err) {
     if (err instanceof HermesError && err.kind === 'http') {
       const status = err.detail.status;
-      if (status === 404) throw new NotFoundError(`${what} : ${hermesDetail(err)}`);
-      if (status === 400 || status === 422) throw new ValidationError(`Refusé par Hermes : ${hermesDetail(err)}`);
-      if (status === 409) throw new KanbanError('hermes_conflict', `Refusé par Hermes : ${hermesDetail(err)}`);
+      if (status === 404) throw new NotFoundError(NOT_FOUND[what](hermesDetail(err)));
+      if (status === 400 || status === 422) throw new ValidationError(msg('Refusé par Hermes : {detail}', { detail: hermesDetail(err) }));
+      if (status === 409) throw new KanbanError('hermes_conflict', msg('Refusé par Hermes : {detail}', { detail: hermesDetail(err) }));
     }
     throw err;
   }
@@ -102,7 +112,7 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 function textLimit(value: string | undefined, max: number, what: string): void {
-  if (value !== undefined && value.length > max) throw new ValidationError(`${what} trop long (${max} caractères au plus)`);
+  if (value !== undefined && value.length > max) throw new ValidationError(msg('{what} trop long ({max} caractères au plus)', { what, max }));
 }
 
 /** Is `path` inside `root`, by path segments (`/vol/a` does not hold `/vol/ab/x`)? */
@@ -129,15 +139,15 @@ export class KanbanService {
   }
 
   private check(instanceId: string): void {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
   }
 
-  private call<T = unknown>(instanceId: string, op: string, opts: CallOptions = {}, what?: string): Promise<T> {
+  private call<T = unknown>(instanceId: string, op: string, opts: CallOptions = {}, what?: Missing): Promise<T> {
     this.check(instanceId);
     return translate(() => callOp<T>(this.compat.http(instanceId), this.compat.get(instanceId), 'kanban', op, opts), what);
   }
 
-  private onBoard<T = unknown>(instanceId: string, board: string, op: string, opts: CallOptions = {}, what?: string): Promise<T> {
+  private onBoard<T = unknown>(instanceId: string, board: string, op: string, opts: CallOptions = {}, what?: Missing): Promise<T> {
     return this.call<T>(instanceId, op, { ...opts, query: { ...(opts.query ?? {}), board } }, what);
   }
 
@@ -150,7 +160,7 @@ export class KanbanService {
     this.check(instanceId);
     const mod = this.compat.get(instanceId)?.modules.find((m) => m.id === 'kanban');
     for (const op of ops) {
-      if (!this.can(instanceId, op)) throw new ModuleUnavailableError('kanban', op, mod?.ops[op]?.notes ?? ['pas encore vérifié']);
+      if (!this.can(instanceId, op)) throw new ModuleUnavailableError('kanban', op, mod?.ops[op]?.notes ?? [msg('pas encore vérifié')]);
     }
   }
 
@@ -218,7 +228,7 @@ export class KanbanService {
   /** Columns in the workflow order (statuses Hermes adds later go at the end), tasks unframed. */
   async board(instanceId: string, board: string): Promise<{ board: string; columns: PublicColumn[]; latestEventId: number | null }> {
     const [rawBoard, flow] = await Promise.all([
-      this.onBoard(instanceId, board, 'board', {}, 'Tableau introuvable').then((r) => BoardSchema.parse(r)),
+      this.onBoard(instanceId, board, 'board', {}, 'board').then((r) => BoardSchema.parse(r)),
       this.workflow(instanceId),
     ]);
     const list = this.instanceWorkspaces(instanceId);
@@ -250,7 +260,7 @@ export class KanbanService {
   }
 
   async task(instanceId: string, board: string, taskId: string): Promise<TaskDetail> {
-    const d = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'Tâche introuvable'));
+    const d = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'task'));
     const linked = new Map((d.link_tasks ?? []).map((t) => [t.id, t]));
     const side = (ids: string[] | undefined) => (ids ?? []).map((id) => ({ id, title: linked.get(id)?.title ?? null, status: linked.get(id)?.status ?? null }));
     return {
@@ -275,7 +285,7 @@ export class KanbanService {
 
   /** Last 200 lines of the worker log, secrets masked. */
   async log(instanceId: string, board: string, taskId: string): Promise<{ content: string; exists: boolean; truncated: boolean }> {
-    const raw = TaskLogSchema.parse(await this.onBoard(instanceId, board, 'log', { params: { task_id: taskId }, query: { tail: String(LOG_TAIL * 400) } }, 'Tâche introuvable'));
+    const raw = TaskLogSchema.parse(await this.onBoard(instanceId, board, 'log', { params: { task_id: taskId }, query: { tail: String(LOG_TAIL * 400) } }, 'task'));
     const lines = (raw.content ?? '').split('\n');
     const cut = lines.length > LOG_TAIL;
     return { content: this.mask.text(lines.slice(-LOG_TAIL).join('\n')), exists: raw.exists ?? Boolean(raw.content), truncated: cut || Boolean(raw.truncated) };
@@ -289,8 +299,8 @@ export class KanbanService {
     });
     if (!res.ok || !res.body) {
       await res.body?.cancel();
-      if (res.status === 404) throw new NotFoundError('Pièce jointe introuvable');
-      throw new HermesError('http', `Hermes a répondu ${res.status}`, { status: res.status });
+      if (res.status === 404) throw new NotFoundError(msg('Pièce jointe introuvable'));
+      throw new HermesError('http', msg('Hermes a répondu {status}', { status: res.status }), { status: res.status });
     }
     return res;
   }
@@ -299,7 +309,7 @@ export class KanbanService {
   async workers(instanceId: string): Promise<PublicWorker[]> {
     const boards = await this.boards(instanceId);
     const lists = await Promise.all(boards.map(async (b) => {
-      const raw = WorkersSchema.parse(await this.onBoard(instanceId, b.slug, 'workers', {}, 'Tableau introuvable'));
+      const raw = WorkersSchema.parse(await this.onBoard(instanceId, b.slug, 'workers', {}, 'board'));
       return raw.workers.map((w) => ({
         instance: instanceId, board: b.slug, runId: w.run_id, taskId: w.task_id, taskTitle: w.task_title ?? null,
         assignee: w.task_assignee ?? w.profile ?? null, startedAt: w.started_at ?? null,
@@ -311,10 +321,10 @@ export class KanbanService {
   // ---------------------------------------------------------------- writes
 
   async createBoard(instanceId: string, input: { slug: string; name?: string }): Promise<PublicBoard> {
-    textLimit(input.name, LIMITS.boardName, 'Nom du tableau');
+    textLimit(input.name, LIMITS.boardName, msg('Nom du tableau'));
     // Hermes returns the existing board for a known slug: say it instead
     const existing = BoardListSchema.parse(await this.call(instanceId, 'boards')).boards;
-    if (existing.some((b) => b.slug === input.slug)) throw new KanbanError('board_exists', `Le tableau ${input.slug} existe déjà`);
+    if (existing.some((b) => b.slug === input.slug)) throw new KanbanError('board_exists', msg('Le tableau {board} existe déjà', { board: input.slug }));
     const name = input.name?.trim() || input.slug;
     await this.call(instanceId, 'createBoard', { body: { slug: input.slug, name } });
     return { slug: input.slug, name, total: 0 };
@@ -324,9 +334,9 @@ export class KanbanService {
     title: string; body?: string; assignee?: string | null; priority?: number | null; start?: StartState; workspace?: string | null;
   }): Promise<PublicTask> {
     const title = input.title.trim();
-    if (!title) throw new ValidationError('Titre manquant');
-    textLimit(title, LIMITS.title, 'Titre');
-    textLimit(input.body, LIMITS.body, 'Texte');
+    if (!title) throw new ValidationError(msg('Titre manquant'));
+    textLimit(title, LIMITS.title, msg('Titre'));
+    textLimit(input.body, LIMITS.body, msg('Texte'));
     const start = input.start ?? 'scheduled';
     const body: Record<string, unknown> = { title, triage: start === 'triage' };
     // scheduled: created ready without agent (the dispatcher skips it), parked, then given its agent
@@ -335,7 +345,7 @@ export class KanbanService {
     let text = input.body ?? '';
     if (input.workspace) {
       const ws = this.workspaces.getWorkspace(input.workspace);
-      if (ws.instanceId !== instanceId) throw new ValidationError(`Le workspace ${ws.slug} appartient à une autre instance`);
+      if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le workspace {ws} appartient à une autre instance', { ws: ws.slug }));
       const key = `${folderKey(title, [], 'tache')}-${randomBytes(2).toString('hex')}`;
       const path = `${this.workspaces.agentPath(ws)}/kanban/${key}`;
       text = frame(text, blockLines(ws, 'kanban', key, this.workspaces.framingLines(ws, `kanban/${key}`), this.workspaces.agentPath(ws)));
@@ -343,11 +353,11 @@ export class KanbanService {
       body.workspace_path = path;
     }
     if (text) body.body = text;
-    const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'createTask', { body }, 'Tableau introuvable');
+    const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'createTask', { body }, 'board');
     let task = TaskSchema.parse(res.task);
     if (start === 'scheduled') {
       const patch = async (b: Record<string, unknown>) => TaskSchema.parse((await this.onBoard<{ task?: unknown }>(
-        instanceId, board, 'updateTask', { params: { task_id: task.id }, body: b }, 'Tâche introuvable')).task);
+        instanceId, board, 'updateTask', { params: { task_id: task.id }, body: b }, 'task')).task);
       task = await patch({ status: 'scheduled' });
       if (input.assignee) task = await patch({ assignee: input.assignee });
     }
@@ -358,32 +368,32 @@ export class KanbanService {
   async updateTask(instanceId: string, board: string, taskId: string, input: {
     status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string;
   }): Promise<PublicTask> {
-    textLimit(input.title, LIMITS.title, 'Titre');
-    textLimit(input.body, LIMITS.body, 'Texte');
-    textLimit(input.blockReason, LIMITS.blockReason, 'Raison');
+    textLimit(input.title, LIMITS.title, msg('Titre'));
+    textLimit(input.body, LIMITS.body, msg('Texte'));
+    textLimit(input.blockReason, LIMITS.blockReason, msg('Raison'));
     const patch: Record<string, unknown> = {};
     if (input.status !== undefined) patch.status = input.status;
     if (input.assignee !== undefined) patch.assignee = input.assignee;
     if (input.priority !== undefined) patch.priority = input.priority;
     if (input.title !== undefined) {
-      if (!input.title.trim()) throw new ValidationError('Titre manquant');
+      if (!input.title.trim()) throw new ValidationError(msg('Titre manquant'));
       patch.title = input.title.trim();
     }
     if (input.blockReason !== undefined) patch.block_reason = input.blockReason;
     if (input.body !== undefined) {
-      const current = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'Tâche introuvable')).task.body ?? '';
+      const current = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'task')).task.body ?? '';
       const kept = current.slice(0, current.length - unframe(current, 'kanban').prompt.length);
       patch.body = `${kept}${input.body}`;
     }
-    if (!Object.keys(patch).length) throw new ValidationError('Rien à modifier');
-    const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'updateTask', { params: { task_id: taskId }, body: patch }, 'Tâche introuvable');
+    if (!Object.keys(patch).length) throw new ValidationError(msg('Rien à modifier'));
+    const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'updateTask', { params: { task_id: taskId }, body: patch }, 'task');
     return this.toPublic(instanceId, TaskSchema.parse(res.task));
   }
 
   async comment(instanceId: string, board: string, taskId: string, text: string): Promise<{ ok: true }> {
-    if (!text.trim()) throw new ValidationError('Commentaire vide');
-    textLimit(text, LIMITS.comment, 'Commentaire');
-    await this.onBoard(instanceId, board, 'comment', { params: { task_id: taskId }, body: { body: text, author: 'intendia' } }, 'Tâche introuvable');
+    if (!text.trim()) throw new ValidationError(msg('Commentaire vide'));
+    textLimit(text, LIMITS.comment, msg('Commentaire'));
+    await this.onBoard(instanceId, board, 'comment', { params: { task_id: taskId }, body: { body: text, author: 'intendia' } }, 'task');
     return { ok: true };
   }
 
@@ -391,26 +401,26 @@ export class KanbanService {
   async aux(instanceId: string, board: string, taskId: string, op: 'specify' | 'decompose', opts: { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
     const res = await this.onBoard<Record<string, unknown>>(instanceId, board, op, {
       params: { task_id: taskId }, body: { author: 'intendia' }, timeoutMs: opts.timeoutMs ?? 120_000,
-    }, 'Tâche introuvable');
-    if (res.ok === false) throw new KanbanError('aux_failed', `Hermes n’a pas pu le faire : ${this.mask.text(String(res.reason ?? 'raison inconnue'))}`, 422);
+    }, 'task');
+    if (res.ok === false) throw new KanbanError('aux_failed', msg('Hermes n’a pas pu le faire : {why}', { why: res.reason ? this.mask.text(String(res.reason)) : msg('raison inconnue') }), 422);
     return res;
   }
 
   async link(instanceId: string, board: string, parent: string, child: string): Promise<{ ok: true }> {
-    if (parent === child) throw new ValidationError('Une tâche ne peut pas dépendre d’elle-même');
-    await this.onBoard(instanceId, board, 'link', { body: { parent_id: parent, child_id: child } }, 'Tâche introuvable');
+    if (parent === child) throw new ValidationError(msg('Une tâche ne peut pas dépendre d’elle-même'));
+    await this.onBoard(instanceId, board, 'link', { body: { parent_id: parent, child_id: child } }, 'task');
     return { ok: true };
   }
 
   async unlink(instanceId: string, board: string, parent: string, child: string): Promise<{ ok: true }> {
-    await this.onBoard(instanceId, board, 'unlink', { query: { parent_id: parent, child_id: child } }, 'Lien introuvable');
+    await this.onBoard(instanceId, board, 'unlink', { query: { parent_id: parent, child_id: child } }, 'link');
     return { ok: true };
   }
 
   async dispatch(instanceId: string, board: string, dryRun: boolean): Promise<{ spawned: { taskId: string; assignee: string | null }[]; skippedUnassigned: string[]; dryRun: boolean }> {
     const res = await this.onBoard<Record<string, unknown>>(instanceId, board, 'dispatch', {
       query: { dry_run: dryRun ? 'true' : 'false', max: String(DISPATCH_MAX) },
-    }, 'Tableau introuvable');
+    }, 'board');
     const spawned = Array.isArray(res.spawned) ? res.spawned : [];
     return {
       spawned: spawned.map((s) => (Array.isArray(s) ? { taskId: String(s[0]), assignee: str(s[1]) } : { taskId: String(s), assignee: null })),
@@ -428,23 +438,23 @@ export class KanbanService {
     try {
       const res = await this.onBoard<{ task_id?: string }>(instanceId, board, 'terminate', {
         params: { run_id: String(runId) }, body: { reason: 'Arrêté depuis Intendia' },
-      }, 'Worker introuvable');
+      }, 'worker');
       taskId = String(res.task_id ?? '');
     } catch (err) {
       // 409: the run already ended; 404: Hermes does not know it (anymore). Either way nothing runs.
-      if (err instanceof KanbanError || err instanceof NotFoundError) throw new KanbanError('worker_ended', 'Ce worker est déjà terminé');
+      if (err instanceof KanbanError || err instanceof NotFoundError) throw new KanbanError('worker_ended', msg('Ce worker est déjà terminé'));
       throw err;
     }
     if (!taskId) return { taskId: '', status: 'unknown' };
-    const detail = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'Tâche introuvable'));
+    const detail = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'task'));
     if (detail.task.status !== 'ready') return { taskId, status: detail.task.status };
     try {
       await this.onBoard(instanceId, board, 'updateTask', {
         params: { task_id: taskId }, body: { status: 'blocked', block_reason: 'Arrêtée depuis Intendia' },
-      }, 'Tâche introuvable');
+      }, 'task');
     } catch (err) {
       if (err instanceof ValidationError || err instanceof KanbanError) {
-        throw new KanbanError('task_restarted', 'La tâche a été relancée par Hermes avant d’être bloquée');
+        throw new KanbanError('task_restarted', msg('La tâche a été relancée par Hermes avant d’être bloquée'));
       }
       throw err;
     }

@@ -3,6 +3,7 @@ import type { OpRef } from '../components/ModuleNotice';
 import { MoreHorizontal } from 'lucide-react';
 import { Menu } from '../components/Menu';
 import { cx } from '../components/ui';
+import { t } from '../i18n';
 
 /** The reads the Git page cannot do without (the Files page shows its « Git » button only with them). */
 export const GIT_REQUIRED: OpRef[] = [['git', 'root'], ['git', 'status'], ['git', 'list'], ['git', 'diff'], ['git', 'fileDiff']];
@@ -28,10 +29,10 @@ export function groupFiles(files: GitFile[]): GitGroups {
 
 export type GitGroup = keyof GitGroups;
 
-const TITLES: Record<GitGroup, string> = { conflicted: 'En conflit', staged: 'Indexés', unstaged: 'Modifiés', untracked: 'Non suivis' };
+const TITLES: Record<GitGroup, string> = { conflicted: t('En conflit'), staged: t('Indexés'), unstaged: t('Modifiés'), untracked: t('Non suivis') };
 const ORDER: GitGroup[] = ['conflicted', 'staged', 'unstaged', 'untracked'];
 
-const LETTER: Record<string, string> = { M: 'modifié', A: 'ajouté', D: 'supprimé', R: 'renommé', C: 'copié', U: 'en conflit', '?': 'non suivi' };
+const LETTER: Record<string, string> = { M: t('modifié'), A: t('ajouté'), D: t('supprimé'), R: t('renommé'), C: t('copié'), U: t('en conflit'), '?': t('non suivi') };
 
 export interface GitFileActions {
   busy: boolean;
@@ -61,10 +62,10 @@ export function GitFiles({ files, selected, onSelect, actions }: {
           <h3 className="flex items-center justify-between gap-2 px-4 pb-1 pt-3 text-[12.5px] font-medium text-ink-faint">
             <span>{TITLES[k]} <span className="font-mono">{groups[k].length}</span></span>
             {a && k === 'staged' && a.canUnstage && (
-              <button type="button" disabled={a.busy} onClick={a.onUnstageAll} className="rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink disabled:opacity-50">Tout désindexer</button>
+              <button type="button" disabled={a.busy} onClick={a.onUnstageAll} className="rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink disabled:opacity-50">{t('Tout désindexer')}</button>
             )}
             {a && (k === 'unstaged' || k === 'untracked') && a.canStage && (
-              <button type="button" disabled={a.busy} onClick={a.onStageAll} className="rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink disabled:opacity-50">Tout indexer</button>
+              <button type="button" disabled={a.busy} onClick={a.onStageAll} className="rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink disabled:opacity-50">{t('Tout indexer')}</button>
             )}
           </h3>
           <ul className="pb-2">
@@ -74,7 +75,7 @@ export function GitFiles({ files, selected, onSelect, actions }: {
                   <span className="flex w-6 shrink-0 justify-center">
                     {!f.sensitive && (k === 'staged' ? a.canUnstage : a.canStage) && (
                       <input type="checkbox" checked={k === 'staged'} disabled={a.busy} data-stage={f.path}
-                        aria-label={k === 'staged' ? `Désindexer ${f.path}` : `Indexer ${f.path}`}
+                        aria-label={k === 'staged' ? t('Désindexer {path}', { path: f.path }) : t('Indexer {path}', { path: f.path })}
                         onChange={() => a.onStage(f, k !== 'staged')} className="size-3.5 accent-[var(--color-ink)]" />
                     )}
                   </span>
@@ -84,16 +85,16 @@ export function GitFiles({ files, selected, onSelect, actions }: {
                   <span title={LETTER[f.status] ?? f.status} className={cx('w-4 shrink-0 text-center font-mono text-[12px]',
                     f.status === 'D' ? 'text-bad' : f.status === 'A' || f.status === '?' ? 'text-ok' : f.conflicted ? 'text-warn' : 'text-accent-ink')}>{f.status}</span>
                   <span className={cx('min-w-0 flex-1 truncate font-mono text-[13px]', f.sensitive && 'text-ink-faint')}>{f.path}</span>
-                  {f.sensitive && <span className="shrink-0 text-[12px] text-ink-faint">sensible</span>}
+                  {f.sensitive && <span className="shrink-0 text-[12px] text-ink-faint">{t('sensible')}</span>}
                   {!f.dir && (f.added > 0 || f.removed > 0) && (
                     <span className="shrink-0 font-mono text-[12px]"><span className="text-ok">+{f.added}</span> <span className="text-bad">−{f.removed}</span></span>
                   )}
                 </button>
                 {a && a.canRevert && revertable(f) && (
-                  <Menu title={`Actions sur ${f.path}`} align="end"
+                  <Menu title={t('Actions sur {path}', { path: f.path })} align="end"
                     trigger={<MoreHorizontal className="size-4" strokeWidth={1.5} />}
                     triggerClass="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint opacity-60 hover:bg-raised hover:text-ink group-hover:opacity-100"
-                    items={[{ label: f.status === '?' || f.status === 'A' ? 'Supprimer ce nouveau fichier' : 'Annuler les modifications', danger: true, disabled: a.busy, onSelect: () => a.onRevert(f) }]}
+                    items={[{ label: f.status === '?' || f.status === 'A' ? t('Supprimer ce nouveau fichier') : t('Annuler les modifications'), danger: true, disabled: a.busy, onSelect: () => a.onRevert(f) }]}
                   />
                 )}
               </li>

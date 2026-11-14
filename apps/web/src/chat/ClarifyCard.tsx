@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Button, Input, Mark } from '../components/ui';
+import { t } from '../i18n';
 import type { Clarify } from './events';
 import { AGENT_INDENT } from './Thread';
 
@@ -21,7 +22,7 @@ export function ClarifyCard({ clarify, onAnswer, busy, inline, footer, disabled 
       <div className="rounded-xl border border-accent/30 bg-accent-soft/40 p-4" data-clarify={clarify.requestId ?? ''}>
         <div className="flex items-center gap-2 text-sm font-medium">
           <Mark state="readonly" />
-          Hermes vous pose une question
+          {t('Hermes vous pose une question')}
         </div>
         <p className="mt-2 whitespace-pre-wrap text-sm">{clarify.question}</p>
         {!disabled && clarify.choices.length > 0 && !clarify.multiSelect && (
@@ -43,7 +44,7 @@ export function ClarifyCard({ clarify, onAnswer, busy, inline, footer, disabled 
             <div>
               <Button variant="primary" className="mt-2" disabled={busy || picked.length === 0}
                 onClick={() => onAnswer(JSON.stringify(clarify.choices.filter((c) => picked.includes(c))))}>
-                Répondre
+                {t('Répondre')}
               </Button>
             </div>
           </div>
@@ -51,8 +52,8 @@ export function ClarifyCard({ clarify, onAnswer, busy, inline, footer, disabled 
         {!disabled && (
           <form className="mt-4 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (free) onAnswer(free); }}>
             <Input value={text} onChange={(e) => setText(e.target.value)} maxLength={16384} disabled={busy}
-              placeholder={clarify.choices.length ? 'Ou répondre autrement…' : 'Votre réponse…'} aria-label="Votre réponse" />
-            <Button type="submit" variant={clarify.choices.length ? 'secondary' : 'primary'} disabled={busy || !free}>Répondre</Button>
+              placeholder={clarify.choices.length ? t('Ou répondre autrement…') : t('Votre réponse…')} aria-label={t('Votre réponse')} />
+            <Button type="submit" variant={clarify.choices.length ? 'secondary' : 'primary'} disabled={busy || !free}>{t('Répondre')}</Button>
           </form>
         )}
         {footer}

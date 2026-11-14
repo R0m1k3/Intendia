@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type PublicSystemStats } from '../api';
 import { ErrorText, Panel } from '../components/ui';
 import { formatBytes, formatPercent, formatUptime } from './format';
+import { plural, t } from '../i18n';
 
 const POLL_MS = 10_000;
 
@@ -28,26 +29,26 @@ function Row({ k, v }: { k: string; v: string | null }) {
 function Body({ s }: { s: PublicSystemStats }) {
   return (
     <div className="space-y-5">
-      {!s.psutil && <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">psutil absent chez Hermes : métriques limitées (identité et charge).</p>}
+      {!s.psutil && <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t('psutil absent chez Hermes : métriques limitées (identité et charge).')}</p>}
       {s.psutil && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Gauge label="Processeur" percent={s.cpuPercent} detail={s.cpuCount ? `${s.cpuCount} cœurs` : '—'} />
-          <Gauge label="Mémoire" percent={s.memory?.percent ?? null} detail={`${formatBytes(s.memory?.used)} / ${formatBytes(s.memory?.total)}`} />
-          <Gauge label="Disque (home Hermes)" percent={s.disk?.percent ?? null} detail={`${formatBytes(s.disk?.used)} / ${formatBytes(s.disk?.total)}`} />
+          <Gauge label={t('Processeur')} percent={s.cpuPercent} detail={s.cpuCount ? plural(s.cpuCount, '{n} cœur', '{n} cœurs') : '—'} />
+          <Gauge label={t('Mémoire')} percent={s.memory?.percent ?? null} detail={`${formatBytes(s.memory?.used)} / ${formatBytes(s.memory?.total)}`} />
+          <Gauge label={t('Disque (home Hermes)')} percent={s.disk?.percent ?? null} detail={`${formatBytes(s.disk?.used)} / ${formatBytes(s.disk?.total)}`} />
         </div>
       )}
-      <Panel title="Machine" bodyClassName="border-t border-line/70">
+      <Panel title={t('Machine')} bodyClassName="border-t border-line/70">
         <dl className="divide-y divide-line/70">
-          <Row k="Nom d’hôte" v={s.hostname} />
-          <Row k="Système" v={[s.system, s.release, s.arch].filter(Boolean).join(' · ') || null} />
-          <Row k="Charge (1, 5, 15 min)" v={s.loadAvg ? s.loadAvg.map((x) => x.toFixed(2)).join('  ') : null} />
-          <Row k="Démarrée depuis" v={s.uptimeSeconds === null ? null : formatUptime(s.uptimeSeconds)} />
+          <Row k={t('Nom d’hôte')} v={s.hostname} />
+          <Row k={t('Système')} v={[s.system, s.release, s.arch].filter(Boolean).join(' · ') || null} />
+          <Row k={t('Charge (1, 5, 15 min)')} v={s.loadAvg ? s.loadAvg.map((x) => x.toFixed(2)).join('  ') : null} />
+          <Row k={t('Démarrée depuis')} v={s.uptimeSeconds === null ? null : formatUptime(s.uptimeSeconds)} />
           <Row k="Hermes" v={s.hermesVersion} />
           <Row k="Python" v={s.pythonVersion} />
-          {s.process && <Row k="Processus du dashboard" v={`${formatBytes(s.process.rss)} · ${s.process.threads ?? '—'} threads`} />}
+          {s.process && <Row k={t('Processus du dashboard')} v={t('{rss} · {n} threads', { rss: formatBytes(s.process.rss), n: s.process.threads ?? '—' })} />}
         </dl>
       </Panel>
-      <p className="text-xs text-ink-faint">En conteneur, mémoire et processeur sont ceux de la machine hôte, pas les limites du conteneur.</p>
+      <p className="text-xs text-ink-faint">{t('En conteneur, mémoire et processeur sont ceux de la machine hôte, pas les limites du conteneur.')}</p>
     </div>
   );
 }
@@ -57,7 +58,7 @@ export function System({ inst }: { inst: string }) {
   return (
     <div className="space-y-4">
       <ErrorText error={q.error} />
-      {q.isPending && <p className="text-sm text-ink-faint">Chargement…</p>}
+      {q.isPending && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
       {q.data && <Body s={q.data} />}
     </div>
   );

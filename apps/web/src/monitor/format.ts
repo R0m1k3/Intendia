@@ -1,12 +1,13 @@
-// Number formats of the Suivi page (French locale, "—" for a value Hermes did not give).
+// Number formats of the Suivi page (current locale, "—" for a value Hermes did not give).
+import { locale, t } from '../i18n';
 
 const DASH = '—';
-const nf = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat('fr-FR', opts);
+const nf = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat(locale(), opts);
 
 /** 1234 → "1 234", 1 234 567 → "1,2 M". */
 export function formatTokens(v: number | null | undefined): string {
   if (v === null || v === undefined) return DASH;
-  if (Math.abs(v) >= 1e6) return `${nf({ maximumFractionDigits: 1 }).format(v / 1e6)} M`;
+  if (Math.abs(v) >= 1e6) return t('{n} M', { n: nf({ maximumFractionDigits: 1 }).format(v / 1e6) });
   return nf({ maximumFractionDigits: 0 }).format(v);
 }
 
@@ -14,17 +15,19 @@ export function formatTokens(v: number | null | undefined): string {
 export function formatUsd(v: number | null | undefined): string {
   if (v === null || v === undefined) return DASH;
   const digits = v !== 0 && Math.abs(v) < 0.01 ? 4 : 2;
-  return `${nf({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v)} $`;
+  return t('{n} $', { n: nf({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v) });
 }
 
-const UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];
+const UNITS: ((n: string) => string)[] = [
+  (n) => t('{n} o', { n }), (n) => t('{n} Ko', { n }), (n) => t('{n} Mo', { n }), (n) => t('{n} Go', { n }), (n) => t('{n} To', { n }),
+];
 /** Bytes in powers of 1024: "1,5 Go". */
 export function formatBytes(v: number | null | undefined): string {
   if (v === null || v === undefined) return DASH;
   let x = v;
   let i = 0;
   while (Math.abs(x) >= 1024 && i < UNITS.length - 1) { x /= 1024; i++; }
-  return `${nf({ maximumFractionDigits: i === 0 ? 0 : 1 }).format(x)} ${UNITS[i]}`;
+  return UNITS[i]!(nf({ maximumFractionDigits: i === 0 ? 0 : 1 }).format(x));
 }
 
 /** Seconds → "3 j 4 h", "2 h 5 min", "45 min". */
@@ -33,14 +36,14 @@ export function formatUptime(v: number | null | undefined): string {
   const d = Math.floor(v / 86400);
   const h = Math.floor((v % 86400) / 3600);
   const m = Math.floor((v % 3600) / 60);
-  if (d > 0) return `${d} j ${h} h`;
-  if (h > 0) return `${h} h ${m} min`;
-  return `${m} min`;
+  if (d > 0) return t('{d} j {h} h', { d, h });
+  if (h > 0) return t('{h} h {m} min', { h, m });
+  return t('{m} min', { m });
 }
 
 export function formatPercent(v: number | null | undefined): string {
   if (v === null || v === undefined) return DASH;
-  return `${nf({ maximumFractionDigits: 1 }).format(v)} %`;
+  return t('{n} %', { n: nf({ maximumFractionDigits: 1 }).format(v) });
 }
 
 /** Top of the value axis and its 3 ticks (0, half, top), from the largest value; never 0 (flat chart). */

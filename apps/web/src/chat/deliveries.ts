@@ -4,6 +4,7 @@
 // sessions, and how often the page re-reads.
 import type { ChatMessage, DelegationInfo, SubagentChild, SubagentsSummary } from '../api';
 import type { Entry, SubagentNode } from './events';
+import { plural, t } from '../i18n';
 import { formatDuration } from './format';
 
 export const EMPTY_DELIVERY: DelegationInfo = {
@@ -137,18 +138,16 @@ export function attachChildren(entries: Entry[], children: SubagentChild[]): Ent
   });
 }
 
-const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
-
 /** One line above the delivered text (exact strings: see the plan of reviews/2026-11-12-sous-agents-fond). */
 export function deliverySummary(info: DelegationInfo): string {
-  if (info.failedTask !== null) return `Sous-agent ${info.failedTask + 1} en échec (les autres continuent)`;
+  if (info.failedTask !== null) return t('Sous-agent {n} en échec (les autres continuent)', { n: info.failedTask + 1 });
   const T = info.tasks;
   const F = info.failed ?? 0;
   let s: string;
-  if (T === null) s = 'Résultat des sous-agents';
-  else if (F === 0) s = T === 1 ? '1 sous-agent terminé' : `${T} sous-agents terminés`;
-  else if (F === T) s = T === 1 ? '1 sous-agent en échec' : `${T} ${plural(T, 'sous-agent', 'sous-agents')} en échec`;
-  else s = `${T} sous-agents, ${F} en échec`;
+  if (T === null) s = t('Résultat des sous-agents');
+  else if (F === 0) s = plural(T, '{n} sous-agent terminé', '{n} sous-agents terminés');
+  else if (F === T) s = plural(T, '{n} sous-agent en échec', '{n} sous-agents en échec');
+  else s = t('{n} sous-agents, {f} en échec', { n: T, f: F });
   return info.durationSeconds ? `${s} · ${formatDuration(info.durationSeconds * 1000)}` : s;
 }
 

@@ -9,6 +9,7 @@ import { Button, cx, ErrorText, Mark, timeAgo } from '../components/ui';
 import { AgentModelPicker } from './AgentModel';
 import { Gateway } from './Gateway';
 import { keyHint } from './keyHint';
+import { plural, t } from '../i18n';
 
 const CodeView = lazy(() => import('../files/CodeView'));
 const ICON = 'size-4';
@@ -24,7 +25,7 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
   const propose = useMutation({
     mutationFn: () => api.describeAgent(inst, name),
     onSuccess: async (r) => {
-      if (!r.description) { setNone(r.reason ? `Aucune description proposée : ${r.reason}` : 'Aucune description proposée'); return; }
+      if (!r.description) { setNone(r.reason ? t('Aucune description proposée : {reason}', { reason: r.reason }) : t('Aucune description proposée')); return; }
       setNone(null);
       await qc.invalidateQueries({ queryKey: ['agent', inst, name] });
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
@@ -42,14 +43,14 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
     return (
       <div className="space-y-2">
       <div className="flex items-start gap-3">
-        <p className={cx('min-w-0 flex-1 whitespace-pre-wrap text-[15px]', text ? 'text-ink' : 'text-ink-faint')}>{text || 'Pas de description'}</p>
+        <p className={cx('min-w-0 flex-1 whitespace-pre-wrap text-[15px]', text ? 'text-ink' : 'text-ink-faint')}>{text || t('Pas de description')}</p>
         {canPropose && !text && (
-          <Button variant="ghost" className="h-8 px-2" onClick={() => propose.mutate()} disabled={propose.isPending} title="Proposée par le modèle auxiliaire d’Hermes (jusqu’à une minute)">
-            <Sparkles className={ICON} strokeWidth={1.5} />{propose.isPending ? 'Proposition…' : 'Proposer'}
+          <Button variant="ghost" className="h-8 px-2" onClick={() => propose.mutate()} disabled={propose.isPending} title={t('Proposée par le modèle auxiliaire d’Hermes (jusqu’à une minute)')}>
+            <Sparkles className={ICON} strokeWidth={1.5} />{propose.isPending ? t('Proposition…') : t('Proposer')}
           </Button>
         )}
         {editable && (
-          <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft(text)} aria-label="Modifier la description">
+          <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft(text)} aria-label={t('Modifier la description')}>
             <Pencil className={ICON} strokeWidth={1.5} />
           </Button>
         )}
@@ -61,16 +62,24 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
   }
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(draft); }}>
-      <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={4} autoFocus aria-label="Description"
+      <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={4} autoFocus aria-label={t('Description')}
         className="w-full rounded-[10px] border border-line bg-sheet px-3 py-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none" />
       <ErrorText error={save.error} />
       <div className="flex items-center justify-end gap-2">
         <span className="mr-auto font-mono text-[11px] text-ink-faint">{draft.length} / 1000</span>
-        <Button type="button" onClick={() => setDraft(null)}>Annuler</Button>
-        <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? 'Enregistrement…' : 'Enregistrer'}</Button>
+        <Button type="button" onClick={() => setDraft(null)}>{t('Annuler')}</Button>
+        <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? t('Enregistrement…') : t('Enregistrer')}</Button>
       </div>
     </form>
   );
+}
+
+/** "workspaces a, b et 2 sessions": what still uses an agent. */
+function inUseText(u: { workspaces?: string[]; sessions?: number }): string {
+  const ws = u.workspaces?.length
+    ? plural(u.workspaces.length, 'workspace {list}', 'workspaces {list}', { n: u.workspaces.length, list: u.workspaces.join(', ') }) : '';
+  const ss = u.sessions ? plural(u.sessions, '{n} session', '{n} sessions', { n: u.sessions }) : '';
+  return ws && ss ? t('{a} et {b}', { a: ws, b: ss }) : ws || ss;
 }
 
 const codeOf = (e: unknown) => (e instanceof ApiError ? (e.data as { code?: string } | undefined)?.code : undefined);
@@ -95,35 +104,35 @@ function Soul({ inst, name, x, editable }: { inst: string; name: string; x: Agen
           className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left disabled:cursor-default">
           <span className="min-w-0">
             <span className="font-mono text-[13.5px] font-medium">SOUL.md</span>
-            <span className="ml-3 text-xs text-ink-faint">personnalité de l’agent ; les valeurs qui ressemblent à des secrets sont masquées</span>
+            <span className="ml-3 text-xs text-ink-faint">{t('personnalité de l’agent ; les valeurs qui ressemblent à des secrets sont masquées')}</span>
           </span>
           <ChevronDown className={cx('size-4 shrink-0 text-ink-faint transition-transform', open && 'rotate-180')} strokeWidth={1.5} />
         </button>
         {canEdit && draft === null && (
-          <Button className="h-8" onClick={() => { setOpen(true); setDraft(x.soul ?? ''); }}><Pencil className={ICON} strokeWidth={1.5} />Modifier</Button>
+          <Button className="h-8" onClick={() => { setOpen(true); setDraft(x.soul ?? ''); }}><Pencil className={ICON} strokeWidth={1.5} />{t('Modifier')}</Button>
         )}
       </div>
       {open && (
         <div className="border-t border-line/70">
           {draft !== null ? (
-            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">Chargement…</p>}>
+            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">{t('Chargement…')}</p>}>
               {/* starting text only: CodeView is rebuilt on every value */}
               <CodeView key="edit" name="SOUL.md" value={x.soul} editable onChange={setDraft} />
             </Suspense>
           ) : x.soul ? (
-            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">Chargement…</p>}>
+            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">{t('Chargement…')}</p>}>
               {/* another key: Annuler shows the saved text again, not the edited editor */}
               <CodeView key="view" name="SOUL.md" value={x.soul} editable={false} />
             </Suspense>
-          ) : <p className="px-4 py-3 text-sm text-ink-faint">SOUL.md vide</p>}
-          {x.soulTruncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Tronqué à 64 Kio : trop long pour l’éditeur</p>}
+          ) : <p className="px-4 py-3 text-sm text-ink-faint">{t('SOUL.md vide')}</p>}
+          {x.soulTruncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('Tronqué à 64 Kio : trop long pour l’éditeur')}</p>}
           {draft !== null && (
             <div className="space-y-2 border-t border-line/70 px-4 py-3">
-              <p className="text-xs text-ink-faint">Laissez les «secret:…» tels quels : Intendia remet leur valeur à l’enregistrement.</p>
+              <p className="text-xs text-ink-faint">{t('Laissez les «secret:…» tels quels : Intendia remet leur valeur à l’enregistrement.')}</p>
               <ErrorText error={save.error} />
               <div className="flex justify-end gap-2">
-                <Button onClick={() => { setDraft(null); save.reset(); }}>Annuler</Button>
-                <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate(draft)}>{save.isPending ? 'Enregistrement…' : 'Enregistrer'}</Button>
+                <Button onClick={() => { setDraft(null); save.reset(); }}>{t('Annuler')}</Button>
+                <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate(draft)}>{save.isPending ? t('Enregistrement…') : t('Enregistrer')}</Button>
               </div>
             </div>
           )}
@@ -155,7 +164,7 @@ function AgentModel({ inst, name, x, editable }: { inst: string; name: string; x
           <span className="break-all">{x.model ?? '—'}</span>
           <Link to="/i/$inst/config" params={{ inst }} search={{ profile: name, tab: 'modeles' }}
             className="inline-flex items-center gap-1 font-sans text-xs text-ink-soft underline-offset-2 hover:text-ink hover:underline">
-            <Cpu className="size-3.5" strokeWidth={1.5} />Changer le modèle
+            <Cpu className="size-3.5" strokeWidth={1.5} />{t('Changer le modèle')}
           </Link>
         </>
       )}
@@ -177,8 +186,8 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
     onSuccess: async (r) => {
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['profiles', inst] });
-      if (r.pending) { setRemoved('Suppression en cours chez Hermes : réessayez dans quelques secondes si l’agent reste listé.'); return; }
-      if (r.keyLeft) { setRemoved(`Agent supprimé. Retirez sa clé de INTENDIA_INSTANCES (profileKeys.${name}).`); return; }
+      if (r.pending) { setRemoved(t('Suppression en cours chez Hermes : réessayez dans quelques secondes si l’agent reste listé.')); return; }
+      if (r.keyLeft) { setRemoved(t('Agent supprimé. Retirez sa clé de INTENDIA_INSTANCES (profileKeys.{name}).', { name })); return; }
       void navigate({ to: '/i/$inst/agents', params: { inst } });
     },
   });
@@ -187,11 +196,11 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
 
   const askRemove = async () => {
     const typed = await askText({
-      title: `Supprimer l’agent ${name} ?`, confirmLabel: 'Supprimer', label: `Tapez ${name} pour confirmer`,
-      message: 'Hermes efface tout son dossier : configuration, skills, mémoire, sessions et clés de ce profil. Rien n’est gardé.',
+      title: t('Supprimer l’agent {name} ?', { name }), confirmLabel: t('Supprimer'), label: t('Tapez {name} pour confirmer', { name }),
+      message: t('Hermes efface tout son dossier : configuration, skills, mémoire, sessions et clés de ce profil. Rien n’est gardé.'),
     });
     if (typed === null) return;
-    if (typed !== name) { await ask({ title: 'Nom différent', message: `« ${typed} » n’est pas ${name} : rien n’a été supprimé.`, confirmLabel: 'Fermer' }); return; }
+    if (typed !== name) { await ask({ title: t('Nom différent'), message: t('« {typed} » n’est pas {name} : rien n’a été supprimé.', { typed, name }), confirmLabel: t('Fermer') }); return; }
     remove.mutate();
   };
   const inUse = codeOf(remove.error) === 'in_use' ? (remove.error as ApiError).data as { workspaces?: string[]; sessions?: number } : null;
@@ -201,53 +210,53 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
       <DetailHeader
         mono
         title={name}
-        sub={x?.isDefault ? 'Profil par défaut de l’instance' : 'Profil Hermes'}
+        sub={x?.isDefault ? t('Profil par défaut de l’instance') : t('Profil Hermes')}
         back={back ? { to: '/i/$inst/agents', params: { inst } } : undefined}
         actions={x ? (
           <>
-            <Link to="/i/$inst/skills" params={{ inst }} search={{ profile: name }} className={LINK}><Puzzle className={ICON} strokeWidth={1.5} />Skills de cet agent</Link>
-            <Link to="/i/$inst/config" params={{ inst }} search={{ profile: name }} className={DARK}><SlidersHorizontal className={ICON} strokeWidth={1.5} />Ouvrir la configuration</Link>
+            <Link to="/i/$inst/skills" params={{ inst }} search={{ profile: name }} className={LINK}><Puzzle className={ICON} strokeWidth={1.5} />{t('Skills de cet agent')}</Link>
+            <Link to="/i/$inst/config" params={{ inst }} search={{ profile: name }} className={DARK}><SlidersHorizontal className={ICON} strokeWidth={1.5} />{t('Ouvrir la configuration')}</Link>
           </>
         ) : undefined}
       />
       <DetailBody>
         <ErrorText error={agent.error} />
         {removed && <p role="status" className="rounded-[10px] bg-ok-soft px-4 py-3 text-[13.5px]">{removed}</p>}
-        {!x && !agent.error && <p className="text-sm text-ink-faint">Chargement…</p>}
+        {!x && !agent.error && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
         {x && !removed && (
           <>
             {!x.hasKey && instance && (
               <p className="rounded-[10px] bg-warn-soft px-4 py-3 text-[13.5px] text-warn">{keyHint(name, instance.source)}</p>
             )}
             <Facts items={[
-              { label: 'Modèle', mono: true, value: <AgentModel inst={inst} name={name} x={x} editable={has('agents', 'setModel')} /> },
-              { label: 'Fournisseur', value: x.provider ?? '—', mono: true },
-              { label: 'Instance', value: instance?.label ?? inst },
-              { label: 'Skills', value: x.skillCount ?? '—' },
+              { label: t('Modèle'), mono: true, value: <AgentModel inst={inst} name={name} x={x} editable={has('agents', 'setModel')} /> },
+              { label: t('Fournisseur'), value: x.provider ?? '—', mono: true },
+              { label: t('Instance'), value: instance?.label ?? inst },
+              { label: t('Skills'), value: x.skillCount ?? '—' },
               {
-                label: 'Chat depuis Intendia',
-                value: <span className={cx('inline-flex items-center gap-2', x.hasKey ? 'text-ink' : 'text-warn')}><Mark state={x.hasKey ? 'full' : 'unavailable'} />{x.hasKey ? 'prêt' : 'clé manquante'}</span>,
+                label: t('Chat depuis Intendia'),
+                value: <span className={cx('inline-flex items-center gap-2', x.hasKey ? 'text-ink' : 'text-warn')}><Mark state={x.hasKey ? 'full' : 'unavailable'} />{x.hasKey ? t('prêt') : t('clé manquante')}</span>,
               },
             ]} />
 
             {(has('config', 'gatewayStart') || has('config', 'gatewayStop') || has('config', 'restartGateway')) && (
               <section aria-labelledby="ag-gw">
-                <h3 id="ag-gw" className="text-[15px] font-semibold">Passerelle</h3>
-                <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">Elle porte le chat, les runs et les crons de cet agent</p>
+                <h3 id="ag-gw" className="text-[15px] font-semibold">{t('Passerelle')}</h3>
+                <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Elle porte le chat, les runs et les crons de cet agent')}</p>
                 <Gateway inst={inst} profile={name} running={x.gatewayRunning}
                   can={{ start: has('config', 'gatewayStart'), stop: has('config', 'gatewayStop'), restart: has('config', 'restartGateway') }} />
               </section>
             )}
 
             <section aria-labelledby="ag-desc">
-              <h3 id="ag-desc" className="text-[15px] font-semibold">Description</h3>
-              <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">Le kanban s’en sert pour confier des tâches à cet agent</p>
+              <h3 id="ag-desc" className="text-[15px] font-semibold">{t('Description')}</h3>
+              <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Le kanban s’en sert pour confier des tâches à cet agent')}</p>
               <Description inst={inst} name={name} text={x.description} editable={has('agents', 'setDescription')} canPropose={has('agents', 'describeAuto')} />
             </section>
 
             <section className="card overflow-hidden" aria-labelledby="ag-workers">
               <div className="flex items-center gap-2.5 px-4 py-3">
-                <h3 id="ag-workers" className="text-[15px] font-semibold">Workers en cours</h3>
+                <h3 id="ag-workers" className="text-[15px] font-semibold">{t('Workers en cours')}</h3>
                 <span className="font-mono text-xs text-ink-faint">{x.activeWorkers.length}</span>
               </div>
               {x.activeWorkers.length ? (
@@ -264,23 +273,20 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
                   ))}
                 </ul>
               ) : (
-                <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">Aucune tâche du kanban en cours pour cet agent</p>
+                <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{t('Aucune tâche du kanban en cours pour cet agent')}</p>
               )}
             </section>
 
             <Soul inst={inst} name={name} x={x} editable={has('agents', 'setSoul')} />
 
             {canRemove && (
-              <section className="space-y-2 border-t border-line/70 pt-4" aria-label="Supprimer l’agent">
+              <section className="space-y-2 border-t border-line/70 pt-4" aria-label={t('Supprimer l’agent')}>
                 <Button variant="danger" onClick={() => void askRemove()} disabled={remove.isPending}>
-                  <Trash2 className={ICON} strokeWidth={1.5} />{remove.isPending ? 'Suppression…' : 'Supprimer l’agent'}
+                  <Trash2 className={ICON} strokeWidth={1.5} />{remove.isPending ? t('Suppression…') : t('Supprimer l’agent')}
                 </Button>
                 {inUse ? (
                   <p role="alert" className="rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
-                    Agent encore utilisé par Intendia :
-                    {inUse.workspaces?.length ? ` workspace${inUse.workspaces.length > 1 ? 's' : ''} ${inUse.workspaces.join(', ')}` : ''}
-                    {inUse.workspaces?.length && inUse.sessions ? ' et' : ''}
-                    {inUse.sessions ? ` ${inUse.sessions} session${inUse.sessions > 1 ? 's' : ''}` : ''}. Changez leur agent d’abord.
+                    {t('Agent encore utilisé par Intendia : {what}. Changez leur agent d’abord.', { what: inUseText(inUse) })}
                   </p>
                 ) : <ErrorText error={remove.error} />}
               </section>

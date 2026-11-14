@@ -7,6 +7,7 @@ import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
 import { NotFoundError, type WorkspaceService } from '../workspaces/service.js';
 import { pendingFromStatus, readApproval } from './approvals.js';
+import { msg } from '../i18n/index.js';
 
 const WINDOW_MS = 24 * 3600_000;
 const MAX_CANDIDATES = 20;
@@ -148,7 +149,7 @@ export class ActivityService {
    * (`done`), so each computation only reads the statuses of runs still going.
    */
   list(instanceId: string, now = Date.now()): Promise<Activity> {
-    if (!this.store.get(instanceId)) return Promise.reject(new NotFoundError(`Instance inconnue : ${instanceId}`));
+    if (!this.store.get(instanceId)) return Promise.reject(new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId })));
     const going = this.listing.get(instanceId);
     if (going) return going;
     const result = this.computeList(instanceId, now).finally(() => { this.listing.delete(instanceId); });

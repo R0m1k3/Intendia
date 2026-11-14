@@ -1,4 +1,5 @@
 // What the agent is doing while a run is going on (label of the thinking indicator). No React: thinking.test.ts.
+import { t } from '../i18n';
 import type { Entry } from './events';
 
 export interface Thinking {
@@ -13,9 +14,9 @@ export function thinkingState(entries: Entry[]): Thinking {
   const own = entries.slice(start);
   const last = own.at(-1);
   const tool = [...own].reverse().find((e) => e.kind === 'tool' && e.state === 'running');
-  let label = 'Réfléchit';
-  if (tool && tool.kind === 'tool') label = `Utilise ${tool.tool}`;
-  else if (own.some((e) => e.kind === 'subagents' && e.nodes.some((n) => n.status === 'running'))) label = 'Délègue à des sous-agents';
-  else if (last?.kind === 'assistant' && last.streaming) label = 'Écrit';
-  return { label: `${label}…`, inTurn: own.length > 0 };
+  let label = t('Réfléchit…');
+  if (tool && tool.kind === 'tool') label = t('Utilise {tool}…', { tool: tool.tool });
+  else if (own.some((e) => e.kind === 'subagents' && e.nodes.some((n) => n.status === 'running'))) label = t('Délègue à des sous-agents…');
+  else if (last?.kind === 'assistant' && last.streaming) label = t('Écrit…');
+  return { label, inTurn: own.length > 0 };
 }

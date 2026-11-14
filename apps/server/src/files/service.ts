@@ -11,6 +11,7 @@ import { ArchiveError, archiveKind, archiveStem, extractArchive, precheckArchive
 import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
 import { FILE_READ_MAX, idleGuard, MOVE_MAX_BYTES, MOVE_MAX_FILES, walk, type WalkResult } from './walk.js';
 import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
+import { msg } from '../i18n/index.js';
 
 export const LIST_MAX = 2000;
 export const SEARCH_VISIT_MAX = 20_000;
@@ -104,7 +105,7 @@ export class FileService {
 
   private async mustEntry(c: WsCtx, rel: string): Promise<FsEntry> {
     const e = await c.fs.entry(this.vol(c, rel));
-    if (!e) throw new WorkspaceFsError('not_found', `Introuvable : ${rel}`);
+    if (!e) throw new WorkspaceFsError('not_found', msg('Introuvable : {path}', { path: rel }));
     return e;
   }
 
@@ -117,7 +118,7 @@ export class FileService {
     const rel = normalizeRel(relIn, { allowRoot: true });
     if (rel) {
       const e = await this.mustEntry(c, rel);
-      if (!e.isDir || e.isLink) throw new WorkspaceFsError('not_file', `Pas un dossier : ${rel}`);
+      if (!e.isDir || e.isLink) throw new WorkspaceFsError('not_file', msg('Pas un dossier : {path}', { path: rel }));
     }
     const release = zipSlot();
     try {
@@ -155,14 +156,14 @@ export class FileService {
   async create(slug: string, relIn: string, kind: 'file' | 'dir'): Promise<{ path: string }> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn);
-    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', `${rel} est un nom réservé à la racine du workspace`);
+    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du workspace', { path: rel }));
     checkName(nameOf(rel));
     const parent = parentOf(rel);
     if (parent) {
       const p = await c.fs.entry(this.vol(c, parent));
-      if (!p || !p.isDir || p.isLink) throw new WorkspaceFsError('not_found', `Dossier introuvable : ${parent}`);
+      if (!p || !p.isDir || p.isLink) throw new WorkspaceFsError('not_found', msg('Dossier introuvable : {path}', { path: parent }));
     }
-    if (await c.fs.entry(this.vol(c, rel))) throw new WorkspaceFsError('exists', `Existe déjà : ${rel}`);
+    if (await c.fs.entry(this.vol(c, rel))) throw new WorkspaceFsError('exists', msg('Existe déjà : {path}', { path: rel }));
     if (kind === 'dir') await c.fs.mkdir(this.vol(c, rel));
     else await c.fs.create(this.vol(c, rel), '', { overwrite: false });
     return { path: rel };
@@ -205,12 +206,12 @@ export class FileService {
       const candidate = checkName(n === 1 ? name : `${stem} (${n})${ext}`);
       if (!taken.has(candidate)) rel = join2(dir, candidate);
     }
-    if (!rel) throw new WorkspaceFsError('exists', `Trop de fichiers nommés ${name}`);
+    if (!rel) throw new WorkspaceFsError('exists', msg('Trop de fichiers nommés {name}', { name }));
     try {
       // the browser stream can only be read once: a 409 from Hermes is final, no other name is tried
       await c.fs.create(this.vol(c, rel), body, { overwrite: false, maxBytes: this.uploadMaxBytes, signal });
     } catch (err) {
-      if (err instanceof WorkspaceFsError && err.code === 'exists') throw new WorkspaceFsError('exists', 'Un fichier de ce nom existe déjà dans Hermes');
+      if (err instanceof WorkspaceFsError && err.code === 'exists') throw new WorkspaceFsError('exists', msg('Un fichier de ce nom existe déjà dans Hermes'));
       throw err;
     }
     return { path: rel, agentPath: this.agentPath(c, rel) };
@@ -226,8 +227,8 @@ export class FileService {
     const rel = normalizeRel(relIn);
     const name = nameOf(rel);
     const kind = archiveKind(name);
-    if (!kind) throw new ArchiveError('invalid', 'Ce fichier n’est pas une archive .zip, .tar, .tar.gz ou .tgz');
-    if (extracting) throw new ArchiveError('busy', 'Une autre archive est en cours de décompression, réessayez dans un instant');
+    if (!kind) throw new ArchiveError('invalid', msg('Ce fichier n’est pas une archive .zip, .tar, .tar.gz ou .tgz'));
+    if (extracting) throw new ArchiveError('busy', msg('Une autre archive est en cours de décompression, réessayez dans un instant'));
     extracting = true;
     try {
       const started = Date.now();
@@ -242,13 +243,13 @@ export class FileService {
         const candidate = n === 1 ? stem : `${stem} (${n})`;
         if (!taken.has(candidate)) folder = join2(dir, candidate);
       }
-      if (!folder) throw new WorkspaceFsError('exists', `Trop de dossiers nommés ${stem}`);
+      if (!folder) throw new WorkspaceFsError('exists', msg('Trop de dossiers nommés {name}', { name: stem }));
       await c.fs.mkdir(this.vol(c, folder));
       const made = new Set<string>([folder]);
       const res = await extractArchive(bytes, kind, limits, async (path, data) => {
         const target = join2(folder, path);
         const vol = this.vol(c, target);
-        if (hiddenByHermes(vol)) return { path, reason: 'nom caché par Hermes' };
+        if (hiddenByHermes(vol)) return { path, reason: msg('nom caché par Hermes') };
         const parent = dirOf(target);
         if (!made.has(parent)) {
           await c.fs.mkdir(this.vol(c, parent));
@@ -257,7 +258,7 @@ export class FileService {
         try {
           await c.fs.create(vol, data, { overwrite: false });
         } catch (err) {
-          if (err instanceof WorkspaceFsError && (err.code === 'exists' || err.code === 'invalid')) return { path, reason: err.code === 'exists' ? 'en double dans l’archive' : 'nom refusé' };
+          if (err instanceof WorkspaceFsError && (err.code === 'exists' || err.code === 'invalid')) return { path, reason: err.code === 'exists' ? msg('en double dans l’archive') : msg('nom refusé') };
           throw err;
         }
         return 'written';
@@ -272,7 +273,7 @@ export class FileService {
   /** A whole file in memory, at most uploadMaxBytes. */
   private async readBytes(c: WsCtx, rel: string): Promise<Uint8Array> {
     const { body, size } = await c.fs.read(this.vol(c, rel));
-    const tooLarge = () => new ArchiveError('too_big', `Archive de plus de ${Math.round(this.uploadMaxBytes / 1024 / 1024)} Mo`);
+    const tooLarge = () => new ArchiveError('too_big', msg('Archive de plus de {n} Mo', { n: Math.round(this.uploadMaxBytes / 1024 / 1024) }));
     if (size !== null && size > this.uploadMaxBytes) {
       await body.cancel().catch(() => undefined);
       throw tooLarge();
@@ -302,17 +303,17 @@ export class FileService {
     const c = this.ctx(slug);
     const from = normalizeRel(fromIn);
     const to = normalizeRel(toIn);
-    if (PROTECTED.has(from)) throw new WorkspaceFsError('invalid', `${from} ne peut pas être déplacé`);
-    if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', `${to} est un nom réservé à la racine du workspace`);
-    if (to === from || to.startsWith(`${from}/`)) throw new WorkspaceFsError('invalid', 'Un dossier ne peut pas aller dans lui-même');
+    if (PROTECTED.has(from)) throw new WorkspaceFsError('invalid', msg('{path} ne peut pas être déplacé', { path: from }));
+    if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du workspace', { path: to }));
+    if (to === from || to.startsWith(`${from}/`)) throw new WorkspaceFsError('invalid', msg('Un dossier ne peut pas aller dans lui-même'));
     checkName(nameOf(to));
     // Hermes does not list these names: the check below would not see an existing one
-    if (hiddenByHermes(this.vol(c, to))) throw new WorkspaceFsError('invalid', `${nameOf(to)} : Hermes cache ce nom, Intendia n'y écrit pas`);
+    if (hiddenByHermes(this.vol(c, to))) throw new WorkspaceFsError('invalid', msg("{name} : Hermes cache ce nom, Intendia n'y écrit pas", { name: nameOf(to) }));
     const src = await this.mustEntry(c, from);
-    if (src.isLink) throw new WorkspaceFsError('outside', `${from} : c'est un lien symbolique ; Intendia ne le modifie pas`);
+    if (src.isLink) throw new WorkspaceFsError('outside', msg("{path} : c'est un lien symbolique ; Intendia ne le modifie pas", { path: from }));
     const parent = await c.fs.entry(this.vol(c, parentOf(to)));
-    if (parentOf(to) && (!parent || !parent.isDir)) throw new WorkspaceFsError('not_found', `Dossier introuvable : ${parentOf(to)}`);
-    if (await c.fs.entry(this.vol(c, to))) throw new WorkspaceFsError('exists', `Existe déjà : ${to}`);
+    if (parentOf(to) && (!parent || !parent.isDir)) throw new WorkspaceFsError('not_found', msg('Dossier introuvable : {path}', { path: parentOf(to) }));
+    if (await c.fs.entry(this.vol(c, to))) throw new WorkspaceFsError('exists', msg('Existe déjà : {path}', { path: to }));
     if (src.isDir) return this.moveDir(c, from, to);
     const { body } = await c.fs.read(this.vol(c, from));
     await c.fs.create(this.vol(c, to), body, { overwrite: false });
@@ -320,13 +321,13 @@ export class FileService {
     const now = await c.fs.entry(this.vol(c, from));
     if (!now || now.isLink || now.size !== src.size || now.mtimeMs !== src.mtimeMs) {
       await c.fs.remove(this.vol(c, to), false).catch(() => undefined);
-      throw new WorkspaceFsError('exists', `${from} a changé pendant le déplacement : rien n'a été déplacé, réessayer`);
+      throw new WorkspaceFsError('exists', msg("{path} a changé pendant le déplacement : rien n'a été déplacé, réessayer", { path: from }));
     }
     this.links.rewritePaths(c.inst.id, this.vol(c, from), this.vol(c, to));
     try {
       await c.fs.remove(this.vol(c, from), false);
     } catch (err) {
-      throw this.leftAfterCopy(err, from, to, 'le fichier');
+      throw this.leftAfterCopy(err, from, to, msg('le fichier'));
     }
     return { path: to };
   }
@@ -334,7 +335,7 @@ export class FileService {
   private leftAfterCopy(err: unknown, from: string, to: string, what: string): WorkspaceFsError {
     const why = err instanceof Error ? err.message : String(err);
     return new WorkspaceFsError(err instanceof WorkspaceFsError ? err.code : 'unreachable',
-      `Copié vers ${to}, mais ${from} n'a pas pu être supprimé (${why}) : ${what} est en double, les liens pointent sur la copie`);
+      msg("Copié vers {to}, mais {from} n'a pas pu être supprimé ({why}) : {what} est en double, les liens pointent sur la copie", { to, from, why, what }));
   }
 
   private walkDir(c: WsCtx, root: string): Promise<WalkResult> {
@@ -343,7 +344,7 @@ export class FileService {
       maxBytes: this.opts.moveMaxBytes ?? MOVE_MAX_BYTES,
       maxFileBytes: FILE_READ_MAX,
       links: 'fail',
-      tooLarge: "Dossier trop gros pour être déplacé : Hermes ne sait pas renommer, demandez-le à l'agent",
+      tooLarge: msg("Dossier trop gros pour être déplacé : Hermes ne sait pas renommer, demandez-le à l'agent"),
     });
   }
 
@@ -386,7 +387,7 @@ export class FileService {
     }
     if (!after || !sameTree(before, after)) {
       await this.dropCopy(c, to, before.dirs, written);
-      throw new WorkspaceFsError('exists', `${from} a changé pendant le déplacement : rien n'a été déplacé, réessayer`);
+      throw new WorkspaceFsError('exists', msg("{path} a changé pendant le déplacement : rien n'a été déplacé, réessayer", { path: from }));
     }
     this.links.rewritePaths(c.inst.id, this.vol(c, from), this.vol(c, to));
     // the source, never recursively: per folder, each copied file still as copied, then the folders, deepest first
@@ -426,7 +427,7 @@ export class FileService {
         }
       }
     } catch (err) {
-      throw this.leftAfterCopy(err, from, to, 'une partie du dossier');
+      throw this.leftAfterCopy(err, from, to, msg('une partie du dossier'));
     }
     // only the deepest folders are reported (their parents stay because of them)
     const kept = [...leftover].filter((l) => ![...leftover].some((o) => o !== l && o.startsWith(`${l}/`))).sort();
@@ -436,7 +437,7 @@ export class FileService {
   async remove(slug: string, relIn: string): Promise<void> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn);
-    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', `${rel} ne peut pas être supprimé`);
+    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', msg('{path} ne peut pas être supprimé', { path: rel }));
     const e = await this.mustEntry(c, rel);
     await c.fs.remove(this.vol(c, rel), e.isDir);
   }
@@ -445,11 +446,11 @@ export class FileService {
   async writeText(slug: string, relIn: string, text: string, mtime: number): Promise<{ mtime: number }> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn);
-    if (Buffer.byteLength(text, 'utf8') > TEXT_MAX_BYTES) throw new WorkspaceFsError('too_large', 'Fichier texte limité à 1 Mio');
+    if (Buffer.byteLength(text, 'utf8') > TEXT_MAX_BYTES) throw new WorkspaceFsError('too_large', msg('Fichier texte limité à 1 Mio'));
     const e = await this.mustEntry(c, rel);
-    if (e.isLink) throw new WorkspaceFsError('outside', `${rel} : c'est un lien symbolique ; Intendia ne le modifie pas`);
-    if (e.isDir) throw new WorkspaceFsError('not_file', `Pas un fichier : ${rel}`);
-    if (e.mtimeMs !== mtime) throw new WorkspaceFsError('exists', 'Modifié sur le disque depuis l’ouverture : recharger');
+    if (e.isLink) throw new WorkspaceFsError('outside', msg("{path} : c'est un lien symbolique ; Intendia ne le modifie pas", { path: rel }));
+    if (e.isDir) throw new WorkspaceFsError('not_file', msg('Pas un fichier : {path}', { path: rel }));
+    if (e.mtimeMs !== mtime) throw new WorkspaceFsError('exists', msg('Modifié sur le disque depuis l’ouverture : recharger'));
     const saved = await c.fs.create(this.vol(c, rel), text, { overwrite: true });
     return { mtime: saved.mtimeMs };
   }

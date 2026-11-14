@@ -8,6 +8,7 @@ import type { InstanceStore } from '../instances/store.js';
 import type { InstanceConfig } from '../config.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { FIELD_LABEL, HERMES_TO_FIELD, toHermes, type VaultInput } from './input.js';
+import { msg } from '../i18n/index.js';
 
 export interface PublicVaultItem {
   id: string;
@@ -25,9 +26,9 @@ const ID_RE = /^vault_[0-9a-f]{6,40}$/;
 const ID_TYPES = new Set(['email', 'phone', 'username']);
 type Op = 'list' | 'add' | 'remove';
 const FAILED: Record<Op, string> = {
-  list: "Hermes n'a pas pu lire le coffre (un gestionnaire de mots de passe externe peut le bloquer)",
-  add: "Hermes a refusé l'enregistrement",
-  remove: "Hermes n'a pas pu supprimer l'accès",
+  list: msg("Hermes n'a pas pu lire le coffre (un gestionnaire de mots de passe externe peut le bloquer)"),
+  add: msg("Hermes a refusé l'enregistrement"),
+  remove: msg("Hermes n'a pas pu supprimer l'accès"),
 };
 
 /** A refusal of `vault.add` (5095) read for its field names only; never its text. */
@@ -36,25 +37,25 @@ function addRefusal(message: string): AdminError {
   if (req) {
     const fields = req[1]!.split(/,\s*|\s+and\s+/).map((n) => HERMES_TO_FIELD[n.trim()]).filter((f): f is string => Boolean(f));
     if (fields.length) {
-      return new AdminError('invalid_field', `Champs obligatoires : ${fields.map((f) => FIELD_LABEL[f] ?? f).join(', ')}`, { field: fields[0] });
+      return new AdminError('invalid_field', msg('Champs obligatoires : {fields}', { fields: fields.map((f) => FIELD_LABEL[f] ?? f).join(', ') }), { field: fields[0] });
     }
   }
-  if (/origin is required/.test(message)) return new AdminError('invalid_field', 'Champ obligatoire', { field: 'origin' });
-  if (/label is required/.test(message)) return new AdminError('invalid_field', 'Champ obligatoire', { field: 'label' });
-  if (/otp|authenticator/i.test(message)) return new AdminError('invalid_field', "Clé d'authentification invalide", { field: 'otpSecret' });
+  if (/origin is required/.test(message)) return new AdminError('invalid_field', msg('Champ obligatoire'), { field: 'origin' });
+  if (/label is required/.test(message)) return new AdminError('invalid_field', msg('Champ obligatoire'), { field: 'label' });
+  if (/otp|authenticator/i.test(message)) return new AdminError('invalid_field', msg("Clé d'authentification invalide"), { field: 'otpSecret' });
   return new AdminError('invalid_field', FAILED.add);
 }
 
 /** Any failure of a vault call → an error of Intendia with a fixed French message. */
 function convert(err: unknown, op: Op): Error {
   if (err instanceof AdminError || err instanceof NotFoundError) return err;
-  if (!(err instanceof GatewaySocketError)) return new HermesError('schema', "Erreur d'Hermes");
-  if (err.code === -32601) return new AdminError('unsupported', "Cette version d'Hermes ne permet pas de gérer le coffre");
-  if (err.code === 4064) return new NotFoundError('Profil inconnu');
+  if (!(err instanceof GatewaySocketError)) return new HermesError('schema', msg("Erreur d'Hermes"));
+  if (err.code === -32601) return new AdminError('unsupported', msg("Cette version d'Hermes ne permet pas de gérer le coffre"));
+  if (err.code === 4064) return new NotFoundError(msg('Profil inconnu'));
   if (err.code === 5095) return op === 'add' ? addRefusal(err.message) : new HermesError('http', FAILED[op]);
-  if (err.code !== null) return new HermesError('http', `Erreur d'Hermes (code ${err.code})`);
-  if (err.message === 'Dashboard non configuré') return new HermesError('unconfigured', 'Dashboard non configuré');
-  return new HermesError('timeout', 'Hermes ne répond pas');
+  if (err.code !== null) return new HermesError('http', msg("Erreur d'Hermes (code {code})", { code: err.code }));
+  if (err.message === 'Dashboard non configuré') return new HermesError('unconfigured', msg('Dashboard non configuré'));
+  return new HermesError('timeout', msg('Hermes ne répond pas'));
 }
 
 export class VaultService {
@@ -66,9 +67,9 @@ export class VaultService {
 
   private target(instanceId: string): InstanceConfig {
     const inst = this.store.get(instanceId);
-    if (!inst) throw new NotFoundError('Instance inconnue');
+    if (!inst) throw new NotFoundError(msg('Instance inconnue'));
     if (this.compat.get(instanceId)?.socket?.vault !== true) {
-      throw new AdminError('unsupported', "Cette version d'Hermes ne permet pas de gérer le coffre");
+      throw new AdminError('unsupported', msg("Cette version d'Hermes ne permet pas de gérer le coffre"));
     }
     return inst;
   }
@@ -78,7 +79,7 @@ export class VaultService {
   }
 
   private static checkId(id: string): void {
-    if (!ID_RE.test(id)) throw new AdminError('invalid_field', 'Identifiant invalide', { field: 'id' });
+    if (!ID_RE.test(id)) throw new AdminError('invalid_field', msg('Identifiant invalide'), { field: 'id' });
   }
 
   async list(instanceId: string, profile: string): Promise<{ items: PublicVaultItem[]; external: number }> {
@@ -117,7 +118,7 @@ export class VaultService {
     } catch (err) {
       throw convert(err, 'remove');
     }
-    if (!removed) throw new NotFoundError('Accès introuvable');
+    if (!removed) throw new NotFoundError(msg('Accès introuvable'));
   }
 
   /**

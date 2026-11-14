@@ -10,6 +10,7 @@ import { PageHeader } from '../components/Layout';
 import { PendingItem } from '../components/PendingItem';
 import { ErrorText, Mark, Panel } from '../components/ui';
 import { useCurrentInstance } from '../instance/current';
+import { t } from '../i18n';
 
 const POLL_MS = 5_000;
 const FINISHED_POLL_MS = 30_000;
@@ -22,7 +23,7 @@ function useAllInstances(): [boolean, (v: boolean) => void] {
 
 const count = (n: number | undefined) => <span className="font-mono text-xs text-ink-faint">{n ?? ''}</span>;
 const empty = (loaded: boolean, text: string) => (
-  <p className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{loaded ? text : 'Chargement…'}</p>
+  <p className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{loaded ? text : t('Chargement…')}</p>
 );
 
 export function CentrePage() {
@@ -51,24 +52,24 @@ export function CentrePage() {
   // background sub-agents of a session with no run going on (a run of the same session is listed above)
   const subagents = (data?.subagents ?? []).filter((x) => !data?.runs.some((r) => r.instance === x.instance && r.sessionId === x.sessionId));
   const waiting = (approvals.data?.approvals ?? []).filter((a) => (all || a.instanceId === inst) && !answered.has(a.key));
-  const subtitle = all ? 'Toutes les instances.' : `${instance && instances.length > 1 ? `${instance.label}. ` : ''}Runs lancés depuis Intendia et tâches du kanban.`;
+  const subtitle = all ? t('Toutes les instances.') : `${instance && instances.length > 1 ? `${instance.label}. ` : ''}${t('Runs lancés depuis Intendia et tâches du kanban.')}`;
 
   return (
     <div>
-      <PageHeader title="Centre" subtitle={subtitle} action={instances.length > 1 ? (
+      <PageHeader title={t('Centre')} subtitle={subtitle} action={instances.length > 1 ? (
         <label className="flex items-center gap-2 text-sm text-ink-soft">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
-          Toutes les instances
+          {t('Toutes les instances')}
         </label>
       ) : undefined} />
       <div className="max-w-[1000px] space-y-5 px-4 pb-14 md:px-8">
         <ErrorText error={activity.error ?? finished.error} />
         {stopped.length > 0 && (
           <ul role="status" className="space-y-1.5 card px-4 py-3">
-            {stopped.map((t, i) => (
+            {stopped.map((text, i) => (
               <li key={i} className="flex items-center gap-2 text-sm text-ink-soft">
-                <Mark state="unavailable" /><span className="min-w-0 flex-1">{t}</span>
-                <button type="button" className="text-ink-faint hover:text-ink" aria-label="Masquer" onClick={() => setStopped((l) => l.filter((_, j) => j !== i))}>
+                <Mark state="unavailable" /><span className="min-w-0 flex-1">{text}</span>
+                <button type="button" className="text-ink-faint hover:text-ink" aria-label={t('Masquer')} onClick={() => setStopped((l) => l.filter((_, j) => j !== i))}>
                   <X className="size-3.5" strokeWidth={1.5} />
                 </button>
               </li>
@@ -81,7 +82,7 @@ export function CentrePage() {
           </p>
         ))}
 
-        <Panel bodyClassName="p-0" title="Vous attend" action={count(approvals.data ? waiting.length : undefined)}>
+        <Panel bodyClassName="p-0" title={t('Vous attend')} action={count(approvals.data ? waiting.length : undefined)}>
           {waiting.length ? (
             <div className="space-y-2 border-t border-line/70 p-3" data-centre-group="waiting">
               {waiting.map((a) => (
@@ -92,25 +93,25 @@ export function CentrePage() {
                 }} />
               ))}
             </div>
-          ) : empty(Boolean(approvals.data), 'Aucune question en attente')}
+          ) : empty(Boolean(approvals.data), t('Aucune question en attente'))}
         </Panel>
 
-        <Panel bodyClassName="p-0" title="En cours" action={count(data ? data.runs.length + data.workers.length + subagents.length : undefined)}>
+        <Panel bodyClassName="p-0" title={t('En cours')} action={count(data ? data.runs.length + data.workers.length + subagents.length : undefined)}>
           {data && (data.runs.length || data.workers.length || subagents.length) ? (
             <ul className="divide-y divide-line/70 border-t border-line/70" data-centre-group="running">
               {data.runs.map((r) => <RunRow key={`${r.instance}:${r.runId}`} run={r} instanceLabel={label(r.instance)} />)}
               {subagents.map((x) => <SubagentsRow key={`${x.instance}:${x.sessionId}`} item={x} instanceLabel={label(x.instance)} />)}
               {data.workers.map((w) => <WorkerRow key={`${w.instance}:${w.board}:${w.runId}`} worker={w} instanceLabel={label(w.instance)}
-                onStopped={(t) => setStopped((l) => [...l, t])} />)}
+                onStopped={(text) => setStopped((l) => [...l, text])} />)}
             </ul>
-          ) : empty(Boolean(data), 'Rien en cours')}
+          ) : empty(Boolean(data), t('Rien en cours'))}
         </Panel>
 
-        <Panel bodyClassName="p-0" title="Terminé" action={count(finished.data?.runs.length)}>
+        <Panel bodyClassName="p-0" title={t('Terminé')} action={count(finished.data?.runs.length)}>
           {finished.data?.runs.length ? <FinishedList runs={finished.data.runs} instanceLabel={label} />
-            : empty(Boolean(finished.data), 'Aucun run terminé')}
+            : empty(Boolean(finished.data), t('Aucun run terminé'))}
           <p className="border-t border-line/70 px-4 py-2.5 text-[12px] text-ink-faint">
-            Dernières 24 h, runs lancés depuis Intendia (pas ceux de Telegram, des crons ni du kanban).
+            {t('Dernières 24 h, runs lancés depuis Intendia (pas ceux de Telegram, des crons ni du kanban).')}
           </p>
         </Panel>
       </div>

@@ -6,19 +6,20 @@ import { disposition, FILE_CSP } from '../files/send.js';
 import type { ConfigService } from '../hermes-config/service.js';
 import type { MissionService } from '../kanban/missions.js';
 import { KanbanError, LIMITS, START_STATES, type KanbanService } from '../kanban/service.js';
+import { msg, requestLang, toLang } from '../i18n/index.js';
 import { ValidationError } from '../workspaces/service.js';
 import { BOARD_RE, intParam, PROFILE_RE, TASK_RE } from './params.js';
 
 /** `?board=` (required): Intendia never relies on Hermes' global "current board". */
 export function boardOf(c: Context): string {
   const board = c.req.query('board') ?? '';
-  if (!BOARD_RE.test(board)) throw new ValidationError('tableau invalide');
+  if (!BOARD_RE.test(board)) throw new ValidationError(msg('tableau invalide'));
   return board;
 }
 
 function taskOf(c: Context): string {
   const id = c.req.param('id') ?? '';
-  if (!TASK_RE.test(id)) throw new ValidationError('tâche invalide');
+  if (!TASK_RE.test(id)) throw new ValidationError(msg('tâche invalide'));
   return id;
 }
 
@@ -58,7 +59,7 @@ const MISSION_RE = /^m_[0-9a-f]{12}$/;
 
 function missionOf(c: Context): string {
   const id = c.req.param('mid') ?? '';
-  if (!MISSION_RE.test(id)) throw new ValidationError('mission invalide');
+  if (!MISSION_RE.test(id)) throw new ValidationError(msg('mission invalide'));
   return id;
 }
 
@@ -130,7 +131,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
 
   r.get(`${P}/attachments/:aid`, async (c) => {
     const board = boardOf(c);
-    const aid = intParam(c.req.param('aid'), 'pièce jointe');
+    const aid = intParam(c.req.param('aid'), msg('pièce jointe'));
     const res = await kanban.attachment(inst(c), board, aid);
     const fromHermes = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get('content-disposition') ?? '')?.[1];
     let name = `piece-${aid}`;
@@ -155,8 +156,9 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
   r.get(`${P}/events`, (c) => {
     const id = inst(c);
     const board = boardOf(c);
-    if (!kanban.can(id, 'board')) throw new KanbanError('hermes_conflict', 'Kanban indisponible sur cette instance');
+    if (!kanban.can(id, 'board')) throw new KanbanError('hermes_conflict', msg('Kanban indisponible sur cette instance'));
     const instance = deps.compat.http(id).instance;
+    const lang = requestLang(c);
     const enc = new TextEncoder();
     let cleanup = () => {};
     const stream = new ReadableStream<Uint8Array>({
@@ -178,7 +180,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
             send(`event: change\ndata: ${JSON.stringify({ taskIds })}\n\n`);
           },
           onClose: (reason) => {
-            send(`event: closed\ndata: ${JSON.stringify({ reason })}\n\n`);
+            send(`event: closed\ndata: ${JSON.stringify({ reason: toLang(reason, lang) })}\n\n`);
             finish();
           },
         }, deps.wsFactory, deps.wsOpenTimeoutMs);

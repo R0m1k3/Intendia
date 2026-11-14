@@ -3,6 +3,7 @@ import type { FinishedRun } from '../api';
 import { formatCost } from '../chat/format';
 import { Tag, timeAgo } from '../components/ui';
 import { finishedStatus, runLength } from './format';
+import { t } from '../i18n';
 
 const TONE = { good: 'bg-ok-soft text-ok', bad: 'bg-bad-soft text-bad', neutral: undefined } as const;
 
@@ -18,7 +19,7 @@ export function FinishedList({ runs, instanceLabel }: { runs: FinishedRun[]; ins
           <li key={`${r.instance}:${r.runId}`} className="flex flex-wrap items-center gap-x-3.5 gap-y-1 px-4 py-3 text-sm" data-finished-run={r.runId}>
             <div className="min-w-0 flex-1">
               <Link to="/w/$slug/s/$sessionId" params={{ slug: r.workspace, sessionId: r.sessionId }} className="font-medium hover:text-accent-ink">
-                {r.title || 'Session sans titre'}
+                {r.title || t('Session sans titre')}
               </Link>
               <p className="text-[13px] text-ink-faint">
                 {r.workspaceName}{label ? ` · ${label}` : ''} · {timeAgo(r.endedAt)}

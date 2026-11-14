@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../components/ui';
+import { t } from '../i18n';
 
 /** Right-hand sheet (portal: the page wrapper is animated, a `fixed` inside it would be relative to it), above the mobile bar (z-50). */
 export function Sheet({ title, onClose, children, footer, width = 'md:w-[520px]', onSubmit }: {
@@ -18,7 +19,7 @@ export function Sheet({ title, onClose, children, footer, width = 'md:w-[520px]'
       >
         <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
           <h2 className="min-w-0 text-[15px] font-medium">{title}</h2>
-          <Button type="button" variant="ghost" className="size-8 shrink-0 px-0" onClick={onClose} aria-label="Fermer">
+          <Button type="button" variant="ghost" className="size-8 shrink-0 px-0" onClick={onClose} aria-label={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </Button>
         </header>

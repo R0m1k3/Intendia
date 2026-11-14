@@ -1,4 +1,5 @@
 // Manual moves allowed by Hermes' workflow (`manual`): pure, unit-tested in moves.test.ts.
+import { t } from '../i18n';
 
 /** Statuses a task in `from` can be moved to by hand; `running` is never a target (only the dispatcher starts a worker). */
 export function moveTargets(manual: Record<string, string[]>, from: string): string[] {
@@ -11,16 +12,16 @@ export function canMove(manual: Record<string, string[]>, from: string, to: stri
 
 /** Board with a task moved to another column at once (optimistic), at the top of it. */
 export function moveLocally<T extends { id: string; status: string }, C extends { key: string; tasks: T[] }>(columns: C[], taskId: string, to: string): C[] {
-  const task = columns.flatMap((c) => c.tasks).find((t) => t.id === taskId);
+  const task = columns.flatMap((c) => c.tasks).find((k) => k.id === taskId);
   if (!task) return columns;
   return columns.map((c) => {
-    const rest = c.tasks.filter((t) => t.id !== taskId);
+    const rest = c.tasks.filter((k) => k.id !== taskId);
     return { ...c, tasks: c.key === to ? [{ ...task, status: to }, ...rest] : rest };
   });
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  triage: 'Triage', todo: 'À faire', scheduled: 'Planifiée', ready: 'Prête à lancer', running: 'En cours',
-  blocked: 'Bloquée', review: 'En revue', done: 'Terminée', archived: 'Archivée',
+  triage: t('Triage'), todo: t('À faire'), scheduled: t('Planifiée'), ready: t('Prête à lancer'), running: t('En cours'),
+  blocked: t('Bloquée'), review: t('En revue'), done: t('Terminée'), archived: t('Archivée'),
 };
 export const statusLabel = (s: string, fallback?: string) => STATUS_LABEL[s] ?? fallback ?? s;

@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { InstanceConfigSchema, type AppConfig, type InstanceConfig } from '../config.js';
 import { decrypt, encrypt } from '../crypto.js';
+import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
 import { instances } from '../db/schema.js';
 
@@ -19,7 +20,7 @@ export interface PublicInstance {
 /** Instances declared in INTENDIA_INSTANCES are read-only from the UI. */
 export class DeclarativeError extends Error {
   constructor() {
-    super('Instances déclarées par INTENDIA_INSTANCES : changez le nom dans la configuration du conteneur');
+    super(msg('Instances déclarées par INTENDIA_INSTANCES : changez le nom dans la configuration du conteneur'));
     this.name = 'DeclarativeError';
   }
 }

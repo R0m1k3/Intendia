@@ -10,6 +10,7 @@ import { hiddenByHermes, normalizeRel } from './paths.js';
 import { walk } from './walk.js';
 import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
 import { LIST_MAX, searchTree, toFileEntry, type FileEntry } from './service.js';
+import { msg } from '../i18n/index.js';
 
 export type InstanceFileEntry = FileEntry & {
   /** Top-level folder that is an Intendia workspace of this instance (its slug). */
@@ -26,7 +27,7 @@ export class InstanceFileService {
   ) {}
 
   private fs(inst: string) {
-    if (!this.store.get(inst)) throw new NotFoundError(`Instance inconnue : ${inst}`);
+    if (!this.store.get(inst)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: inst }));
     return this.roots.fs(inst);
   }
 
@@ -50,7 +51,7 @@ export class InstanceFileService {
   async zip(inst: string, relIn: string): Promise<{ body: ReadableStream<Uint8Array>; name: string }> {
     const fs = this.fs(inst);
     const rel = normalizeRel(relIn, { allowRoot: true });
-    if (rel && hiddenByHermes(rel)) throw new WorkspaceFsError('not_found', `Introuvable : ${rel}`);
+    if (rel && hiddenByHermes(rel)) throw new WorkspaceFsError('not_found', msg('Introuvable : {path}', { path: rel }));
     const join = (a: string, b: string) => (a && b ? `${a}/${b}` : a || b);
     const release = zipSlot();
     try {
@@ -73,7 +74,7 @@ export class InstanceFileService {
   async read(inst: string, relIn: string, signal?: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; size: number | null; name: string }> {
     const fs = this.fs(inst);
     const rel = normalizeRel(relIn);
-    if (hiddenByHermes(rel)) throw new WorkspaceFsError('not_found', `Introuvable : ${rel}`);
+    if (hiddenByHermes(rel)) throw new WorkspaceFsError('not_found', msg('Introuvable : {path}', { path: rel }));
     const { body, size } = await fs.readAt(rel, { signal });
     return { body, size, name: nameOf(rel) };
   }

@@ -1,17 +1,18 @@
 import type { Skill } from '../api';
 import { fold } from '../components/text';
+import { t } from '../i18n';
 
 export type StateFilter = 'all' | 'on' | 'off';
 export interface SkillFilter { text: string; category: string; state: StateFilter }
 
 export const PROVENANCE_LABEL: Record<string, string> = {
-  bundled: 'fourni',
+  bundled: t('fourni'),
   hub: 'hub',
-  external: 'externe',
-  agent: "créé par l'agent",
+  external: t('externe'),
+  agent: t("créé par l'agent"),
 };
 
-export const provenanceLabel = (p: string | null) => (p ? PROVENANCE_LABEL[p] ?? p : 'origine inconnue');
+export const provenanceLabel = (p: string | null) => (p ? PROVENANCE_LABEL[p] ?? p : t('origine inconnue'));
 
 
 export function filterSkills(skills: Skill[], f: SkillFilter): Skill[] {

@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Button, ErrorText, Field, Input, Wordmark } from '../components/ui';
+import { t } from '../i18n';
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -62,14 +63,14 @@ export function LoginPage() {
 
   return (
     <Shell>
-      <h1 className="text-[26px] font-semibold leading-tight">Connexion</h1>
-      <p className="mt-1 text-sm text-ink-faint">Console de vos agents Hermes</p>
+      <h1 className="text-[26px] font-semibold leading-tight">{t('Connexion')}</h1>
+      <p className="mt-1 text-sm text-ink-faint">{t('Console de vos agents Hermes')}</p>
       <form onSubmit={submit} className="mt-8 space-y-4">
-        <Field label="Mot de passe">
+        <Field label={t('Mot de passe')}>
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="current-password" required />
         </Field>
         <ErrorText error={error} />
-        <Button variant="primary" className="h-10 w-full" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</Button>
+        <Button variant="primary" className="h-10 w-full" disabled={busy}>{busy ? t('Connexion…') : t('Se connecter')}</Button>
       </form>
     </Shell>
   );

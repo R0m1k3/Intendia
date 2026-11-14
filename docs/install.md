@@ -30,8 +30,8 @@ HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace   # any folder that does not con
 
 The agent must run its terminal in the Hermes container (`terminal.backend: local`, the default) so that it sees the
 same paths. Without this variable (or with a root that contains Hermes' configuration, such as `/opt/data`), the
-**Fichiers** module of the instance stays unavailable and no workspace can be created on it; Settings shows the reason
-and the line to add. After changing it, restart Hermes and click « Revérifier ».
+**Files** module of the instance stays unavailable and no workspace can be created on it; Settings shows the reason
+and the line to add. After changing it, restart Hermes and click “Check again” on the Status page.
 
 Do not publish 8642 or 9119 on the host nor in your reverse proxy: these keys control the whole agent, terminal included.
 
@@ -72,7 +72,7 @@ their files. Limits that come from Hermes' file API: 100 MB per file, folders ca
 1. Add `HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace` to each Hermes dashboard container, so that the root is the
    folder that already held the workspaces, and restart it.
 2. Remove the `workspace` volume from Intendia's compose file (the `mount`/`agentMount` keys of `INTENDIA_INSTANCES` are
-   ignored, with a warning in the logs), then restart Intendia and click « Revérifier » on each instance.
+   ignored, with a warning in the logs), then restart Intendia and click “Check again” on each instance.
 3. A second instance used to write its workspaces into the volume of the first one: copy those folders into the root of
    the right Hermes. Until then their page says « Dossier introuvable chez <instance> ».
 
@@ -133,7 +133,7 @@ which your browser cannot open. Intendia picks the return URL in this order:
 - `dashboard.public_url` set in Hermes' config: Hermes' own public callback;
 - `INTENDIA_PUBLIC_URL` set: Intendia writes `<INTENDIA_PUBLIC_URL>/x/mcp-oauth/<instance>/<name>/callback` as the
   server's `redirect_uri` and passes the return on to the dashboard;
-- none: the connection is refused with « Définissez INTENDIA_PUBLIC_URL ».
+- none: the connection is refused and Intendia asks you to set `INTENDIA_PUBLIC_URL`.
 
 The return route is public (the provider's redirect carries no Intendia session). It only passes on a return for a
 connection Intendia started itself in the last 15 minutes (matched by its `state`), once, and is limited to
@@ -189,8 +189,8 @@ and give the returned link in your answer. Never paste the file's content instea
 
 - **Hermes** can stay on `latest`. After each update Intendia re-tests every module; the State screen shows the result,
   and `INTENDIA_WEBHOOK_URL` can notify you when a module changes state.
-- **Intendia** publishes `X.Y.Z`, `X.Y`, `X` and `latest` tags for every release. During development (`0.0.x`)
-  follow `:0.0`: the `:0` and `:latest` tags also move to any later `0.y` release, which may change behaviour. From 1.0,
+- **Intendia** publishes `X.Y.Z`, `X.Y`, `X` and `latest` tags for every release. Before 1.0, follow the minor tag
+  (`:0.1`): the `:0` and `:latest` tags also move to any later `0.y` release, which may change behaviour. From 1.0,
   follow the major tag (`:1`) to receive fixes and compatible additions only.
 - **Database**: before each migration Intendia copies it with `VACUUM INTO` into `/data/backups/` (last five kept).
   Migrations only add tables or columns, so going back one version works without a restore.

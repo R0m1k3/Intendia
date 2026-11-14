@@ -4,6 +4,7 @@ import { api, type ApprovalChoice, type PendingApproval } from '../api';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { ApprovalCard } from '../chat/Thread';
 import { ErrorText } from './ui';
+import { t } from '../i18n';
 
 export const canNotify = () => typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext;
 
@@ -36,11 +37,11 @@ export function PendingItem({ a, onDone, onLater, showInstance = true }: {
     <>
       <ErrorText error={error} />
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <Link to="/w/$slug/s/$sessionId" params={{ slug: a.workspace, sessionId: a.sessionId }} className={link}>Ouvrir la session</Link>
-        {onLater && <button type="button" onClick={onLater} className={link}>{error ? 'Fermer' : 'Plus tard'}</button>}
+        <Link to="/w/$slug/s/$sessionId" params={{ slug: a.workspace, sessionId: a.sessionId }} className={link}>{t('Ouvrir la session')}</Link>
+        {onLater && <button type="button" onClick={onLater} className={link}>{error ? t('Fermer') : t('Plus tard')}</button>}
         {perm === 'default' && (
           <button type="button" className={link} onClick={() => void Notification.requestPermission().then(setPerm)}>
-            Prévenir aussi hors de l’onglet
+            {t('Prévenir aussi hors de l’onglet')}
           </button>
         )}
       </div>
@@ -48,21 +49,21 @@ export function PendingItem({ a, onDone, onLater, showInstance = true }: {
   );
   const clarify = a.kind === 'clarify';
   return (
-    <section role="alertdialog" aria-label={`${clarify ? 'Question' : 'Approbation demandée'} sur ${a.instanceLabel}`} data-approval={a.key}
+    <section role="alertdialog" aria-label={clarify ? t('Question sur {instance}', { instance: a.instanceLabel }) : t('Approbation demandée sur {instance}', { instance: a.instanceLabel })} data-approval={a.key}
       className="enter overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]">
       <p className="truncate px-4 pb-1 pt-3 text-xs text-ink-soft">
         {showInstance && <><span className="font-medium text-ink">{a.instanceLabel}</span> · </>}{a.workspaceName}{a.title ? ` · ${a.title}` : ''}
       </p>
       <div className="px-2 pb-2">
         {clarify ? (
-          <ClarifyCard inline busy={busy} onAnswer={(t) => void answer(t)} disabled={!a.canAnswer} footer={footer}
-            clarify={{ requestId: a.requestId, question: a.question ?? 'Hermes vous pose une question : ouvrez la session pour la voir', choices: a.choices, multiSelect: a.multiSelect }} />
+          <ClarifyCard inline busy={busy} onAnswer={(text) => void answer(text)} disabled={!a.canAnswer} footer={footer}
+            clarify={{ requestId: a.requestId, question: a.question ?? t('Hermes vous pose une question : ouvrez la session pour la voir'), choices: a.choices, multiSelect: a.multiSelect }} />
         ) : (
           <ApprovalCard
             inline busy={busy} onChoose={(c) => void choose(c)} footer={footer}
             approval={{
               requestId: a.requestId,
-              description: a.description ?? (a.command ? null : 'Hermes attend votre accord : ouvrez la session pour voir la demande'),
+              description: a.description ?? (a.command ? null : t('Hermes attend votre accord : ouvrez la session pour voir la demande')),
               command: a.command, choices: a.canAnswer ? a.choices : [],
             }}
           />

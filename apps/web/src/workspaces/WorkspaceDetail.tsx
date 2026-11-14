@@ -13,6 +13,7 @@ import { newKey, useCopyOps } from '../sessions/copies';
 import { SessionSelectList } from '../sessions/Selection';
 import { invalidateSessionLists } from '../sessions/UndoBar';
 import { OtherSessions } from './OtherSessions';
+import { plural, t } from '../i18n';
 
 const ROWS = 8;
 
@@ -40,19 +41,19 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
     },
   });
   const saveAgents = useMutation({
-    mutationFn: (t: string) => api.saveAgentsMd(slug, t),
+    mutationFn: (body: string) => api.saveAgentsMd(slug, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
   });
   const { canCopy } = useCopyOps(w?.instanceId);
   /** A JSON export (Intendia or Hermes) as a new session of this workspace. */
   const importFile = useMutation({
     mutationFn: async (file: File) => {
-      if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop gros (10 Mo au plus)');
+      if (file.size > 10 * 1024 * 1024) throw new Error(t('Fichier trop gros (10 Mo au plus)'));
       let parsed: unknown;
       try {
         parsed = JSON.parse(await file.text());
       } catch {
-        throw new Error('Ce fichier n’est pas un JSON lisible');
+        throw new Error(t('Ce fichier n’est pas un JSON lisible'));
       }
       return api.importSession(slug, parsed, newKey());
     },
@@ -68,7 +69,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   });
   const rename = async () => {
     if (!w) return;
-    const n = await askText({ title: 'Renommer le workspace', label: 'Nom affiché', value: w.name, maxLength: 80, message: `Le dossier reste ${w.slug}/ : seul le nom change.`, confirmLabel: 'Renommer' });
+    const n = await askText({ title: t('Renommer le workspace'), label: t('Nom affiché'), value: w.name, maxLength: 80, message: t('Le dossier reste {slug}/ : seul le nom change.', { slug: w.slug }), confirmLabel: t('Renommer') });
     if (n && n !== w.name) saveName.mutate(n);
   };
   const openFile = (e: FileEntry) => {
@@ -84,22 +85,22 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
     <>
       <DetailHeader
         title={w?.name ?? slug}
-        meta={w && <span title={instance?.files?.workspaceRoot ? `${instance.files.workspaceRoot}/${w.slug}` : undefined}>{w.slug}/ · agent {w.profile ?? 'default'} · {instance?.label ?? w.instanceId}</span>}
+        meta={w && <span title={instance?.files?.workspaceRoot ? `${instance.files.workspaceRoot}/${w.slug}` : undefined}>{t('{slug}/ · agent {profile} · {instance}', { slug: w.slug, profile: w.profile ?? 'default', instance: instance?.label ?? w.instanceId })}</span>}
         back={back ? { to: '/w' } : undefined}
         actions={(
           <>
-            <Button onClick={() => void rename()} disabled={!w || saveName.isPending}><Pencil className="size-4" strokeWidth={1.5} />Renommer</Button>
+            <Button onClick={() => void rename()} disabled={!w || saveName.isPending}><Pencil className="size-4" strokeWidth={1.5} />{t('Renommer')}</Button>
             {canCopy && (
               <label className="inline-flex h-[34px] cursor-pointer items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium transition-colors hover:bg-paper">
-                <Upload className="size-4" strokeWidth={1.5} />Importer
+                <Upload className="size-4" strokeWidth={1.5} />{t('Importer')}
                 <input
-                  type="file" accept=".json,application/json" className="sr-only" aria-label="Importer une session (JSON)" disabled={importFile.isPending}
+                  type="file" accept=".json,application/json" className="sr-only" aria-label={t('Importer une session (JSON)')} disabled={importFile.isPending}
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile.mutate(f); }}
                 />
               </label>
             )}
             <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}>
-              <PenLine className="size-4" strokeWidth={1.5} />{create.isPending ? 'Création…' : 'Nouvelle session ici'}
+              <PenLine className="size-4" strokeWidth={1.5} />{create.isPending ? t('Création…') : t('Nouvelle session ici')}
             </Button>
           </>
         )}
@@ -113,42 +114,42 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
 
         <section aria-labelledby="ws-consignes">
           <div className="flex items-baseline gap-2">
-            <h3 id="ws-consignes" className="text-[15px] font-semibold">Consignes du workspace</h3>
+            <h3 id="ws-consignes" className="text-[15px] font-semibold">{t('Consignes du workspace')}</h3>
             <span className="font-mono text-[11px] text-ink-faint">AGENTS.md</span>
           </div>
-          <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">Envoyées à l’agent avec chaque message de ce dossier (4 premiers Kio)</p>
+          <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Envoyées à l’agent avec chaque message de ce dossier (4 premiers Kio)')}</p>
           <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); saveAgents.mutate(agentsValue); }}>
             <textarea
               value={agentsValue}
               onChange={(e) => setText(e.target.value)}
               rows={5}
               disabled={!agents.isSuccess}
-              aria-label="Consignes du projet"
-              placeholder="Ex. Réponds en français, envoie les fichiers sur Telegram"
+              aria-label={t('Consignes du projet')}
+              placeholder={t('Ex. Réponds en français, envoie les fichiers sur Telegram')}
               className="w-full resize-y rounded-[10px] border border-line bg-sheet p-3 font-mono text-[13px] leading-relaxed placeholder:font-sans placeholder:text-ink-faint focus:border-ink focus:outline-none"
             />
             <ErrorText error={saveAgents.error} />
-            {text !== null && text !== agents.data?.text && <Button variant="dark" disabled={saveAgents.isPending}>Enregistrer</Button>}
+            {text !== null && text !== agents.data?.text && <Button variant="dark" disabled={saveAgents.isPending}>{t('Enregistrer')}</Button>}
           </form>
         </section>
 
         <section className="card overflow-hidden" aria-labelledby="ws-files">
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <h3 id="ws-files" className="flex-1 text-[15px] font-semibold">Fichiers</h3>
+            <h3 id="ws-files" className="flex-1 text-[15px] font-semibold">{t('Fichiers')}</h3>
             <Link to="/w/$slug/fichiers" params={{ slug }}
               className="inline-flex h-[34px] items-center gap-2 rounded-lg px-3 text-[13.5px] font-medium transition-colors hover:bg-raised">
-              <FolderOpen className="size-4" strokeWidth={1.5} />Parcourir
+              <FolderOpen className="size-4" strokeWidth={1.5} />{t('Parcourir')}
             </Link>
           </div>
           <div className="border-t border-line/70">
             {files.length > 0 ? (
               <FileRows scope={scope} entries={files.slice(0, ROWS)} onOpen={openFile} />
             ) : (
-              <p className="px-4 py-3 text-sm text-ink-faint">{tree.isSuccess ? 'Aucun fichier pour l’instant' : tree.isError ? 'Dossier injoignable' : 'Chargement…'}</p>
+              <p className="px-4 py-3 text-sm text-ink-faint">{tree.isSuccess ? t('Aucun fichier pour l’instant') : tree.isError ? t('Dossier injoignable') : t('Chargement…')}</p>
             )}
             {files.length > ROWS && (
               <Link to="/w/$slug/fichiers" params={{ slug }} className="block border-t border-line/70 px-4 py-2.5 text-[13px] text-ink-soft hover:bg-paper hover:text-ink">
-                {files.length - ROWS} autre{files.length - ROWS > 1 ? 's' : ''} élément{files.length - ROWS > 1 ? 's' : ''}
+                {plural(files.length - ROWS, '{n} autre élément', '{n} autres éléments')}
               </Link>
             )}
           </div>
@@ -156,11 +157,11 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
 
         <section className="card overflow-hidden" aria-labelledby="ws-sessions">
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <h3 id="ws-sessions" className="flex-1 text-[15px] font-semibold">{archived ? 'Sessions archivées' : 'Sessions'}</h3>
-            <Button variant="ghost" className="h-8 text-xs" onClick={() => setArchived(!archived)}>{archived ? 'Sessions en cours' : 'Archivées'}</Button>
+            <h3 id="ws-sessions" className="flex-1 text-[15px] font-semibold">{archived ? t('Sessions archivées') : t('Sessions')}</h3>
+            <Button variant="ghost" className="h-8 text-xs" onClick={() => setArchived(!archived)}>{archived ? t('Sessions en cours') : t('Archivées')}</Button>
           </div>
           {sessions.isSuccess && list.length === 0 && (
-            <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{archived ? 'Aucune session archivée' : 'Aucune session : ouvrez-en une pour écrire à l’agent'}</p>
+            <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{archived ? t('Aucune session archivée') : t('Aucune session : ouvrez-en une pour écrire à l’agent')}</p>
           )}
           {w && sessions.data && list.length > 0 && <div className="border-t border-line/70"><SessionSelectList workspace={w} sessions={list} /></div>}
         </section>

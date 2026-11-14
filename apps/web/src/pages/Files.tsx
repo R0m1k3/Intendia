@@ -14,6 +14,7 @@ import { FileRows, isDirEntry } from '../files/FileRows';
 import { Preview } from '../files/Preview';
 import { uploadFiles } from '../files/upload';
 import { workspaceScope } from '../files/scope';
+import { plural, t } from '../i18n';
 
 export interface FilesSearch {
   path?: string;
@@ -35,7 +36,7 @@ export function FilesPage() {
   const instLabel = instances.data?.instances.find((i) => i.id === ws.data?.workspace.instanceId)?.label ?? ws.data?.workspace.instanceId;
   // the workspace folder itself is missing on its Hermes (made in another volume before 0.0.4, or deleted by the agent)
   const treeError = !dir && tree.error instanceof ApiError && tree.error.status === 404
-    ? new Error(`Dossier introuvable chez ${instLabel ?? 'Hermes'} : copiez-le dans la racine des workspaces de cette instance, ou supprimez ce workspace.`)
+    ? new Error(t('Dossier introuvable chez {instance} : copiez-le dans la racine des workspaces de cette instance, ou supprimez ce workspace.', { instance: instLabel ?? 'Hermes' }))
     : tree.error;
   // the repository holding this folder, when it starts in the workspace (never above it)
   const gitOn = useModuleAvailability(ws.data?.workspace.instanceId, 'git', GIT_REQUIRED, []).available && Boolean(ws.data);
@@ -43,7 +44,7 @@ export function FilesPage() {
   const repo = gitRepo.data?.repo ?? null;
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
-  useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
+  useEffect(() => { const timer = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(timer); }, [q]);
   const found = useQuery({ queryKey: ['file-search', slug, debounced], queryFn: () => api.searchFiles(slug, debounced), enabled: debounced.length > 0 });
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,9 +55,9 @@ export function FilesPage() {
 
   const create = async (kind: 'file' | 'dir') => {
     const name = await askText({
-      title: kind === 'file' ? 'Nouveau fichier' : 'Nouveau dossier',
-      label: `Nom (dans ${dir ? `${dir}/` : 'la racine du workspace'})`,
-      value: kind === 'file' ? 'notes.md' : '', confirmLabel: 'Créer',
+      title: kind === 'file' ? t('Nouveau fichier') : t('Nouveau dossier'),
+      label: dir ? t('Nom (dans {dir}/)', { dir }) : t('Nom (dans la racine du workspace)'),
+      value: kind === 'file' ? 'notes.md' : '', confirmLabel: t('Créer'),
     });
     if (!name?.trim()) return;
     setError(null);
@@ -98,43 +99,43 @@ export function FilesPage() {
     <div>
       <PageHeader
         eyebrow={<Link to="/w/$slug" params={{ slug }} className="hover:text-ink">{ws.data?.workspace.name ?? slug}</Link>}
-        title="Fichiers"
-        subtitle="Le dossier du workspace, partagé avec l’agent"
+        title={t('Fichiers')}
+        subtitle={t('Le dossier du workspace, partagé avec l’agent')}
         action={
           <div className="flex items-center gap-2">
             {repo !== null && (
               <Link to="/w/$slug/git" params={{ slug }} search={{ repo }}
                 className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-paper"
-                title={`Dépôt git ${repo || slug}`}>
+                title={t('Dépôt git {repo}', { repo: repo || slug })}>
                 <GitBranch className="size-4" strokeWidth={1.5} />Git
               </Link>
             )}
             <input ref={input} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) void upload(f); }} />
             <Menu
-              title="Nouveau" align="end"
-              trigger={<><Plus className="size-4" strokeWidth={1.5} />Nouveau</>}
+              title={t('Nouveau')} align="end"
+              trigger={<><Plus className="size-4" strokeWidth={1.5} />{t('Nouveau')}</>}
               triggerClass="inline-flex h-[34px] items-center gap-2 rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-paper"
               items={[
-                { label: 'Fichier', icon: <File className="size-4" strokeWidth={1.5} />, onSelect: () => void create('file') },
-                { label: 'Dossier', icon: <Folder className="size-4" strokeWidth={1.5} />, onSelect: () => void create('dir') },
+                { label: t('Fichier'), icon: <File className="size-4" strokeWidth={1.5} />, onSelect: () => void create('file') },
+                { label: t('Dossier'), icon: <Folder className="size-4" strokeWidth={1.5} />, onSelect: () => void create('dir') },
               ]}
             />
             <Button variant="primary" onClick={() => input.current?.click()} disabled={uploading}>
-              <Upload className="size-4" strokeWidth={1.5} />{uploading ? 'Envoi…' : 'Déposer'}
+              <Upload className="size-4" strokeWidth={1.5} />{uploading ? t('Envoi…') : t('Déposer')}
             </Button>
           </div>
         }
       />
       <div className={cx('grid gap-5 px-4 pb-14 md:px-8', open ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]' : 'max-w-[1000px]')}>
-        <DropZone onFiles={(f) => void upload(f)} label={`Déposer dans ${target}/`} className="min-w-0">
+        <DropZone onFiles={(f) => void upload(f)} label={t('Déposer dans {dir}/', { dir: target })} className="min-w-0">
           <Panel
             className="overflow-hidden"
             bodyClassName="border-t border-line/70"
             title={
-              <nav aria-label="Dossier" className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
+              <nav aria-label={t('Dossier')} className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
                 <Link to="/w/$slug" params={{ slug }} className="text-ink-faint hover:text-ink">{slug}</Link>
                 <ChevronRight className="size-3.5 text-ink-faint" strokeWidth={1.5} />
-                <button onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>fichiers</button>
+                <button onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>{t('fichiers')}</button>
                 {crumbs.map((c, i) => (
                   <span key={i} className="flex items-center gap-1">
                     <ChevronRight className="size-3.5 text-ink-faint" strokeWidth={1.5} />
@@ -145,14 +146,14 @@ export function FilesPage() {
             }
             action={
               <div className="flex items-center gap-1">
-              <a href={workspaceScope(slug).zip(dir)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger ce dossier (zip)" aria-label="Télécharger ce dossier (zip)">
+              <a href={workspaceScope(slug).zip(dir)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Télécharger ce dossier (zip)')} aria-label={t('Télécharger ce dossier (zip)')}>
               <FileArchive className="size-4" strokeWidth={1.5} />
             </a>
               <div className="relative w-40 shrink-0 sm:w-48">
                 <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un nom" className="h-9 pl-8" aria-label="Chercher un fichier" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Chercher un nom')} className="h-9 pl-8" aria-label={t('Chercher un fichier')} />
                 {q && (
-                  <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label="Effacer"><X className="size-4" strokeWidth={1.5} /></button>
+                  <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label={t('Effacer')}><X className="size-4" strokeWidth={1.5} /></button>
                 )}
               </div>
               </div>
@@ -162,19 +163,19 @@ export function FilesPage() {
             {notice && (
               <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
                 <span className="flex-1">{notice}</span>
-                <button onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label="Fermer la note"><X className="size-4" strokeWidth={1.5} /></button>
+                <button onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
               </p>
             )}
-            {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? 'Recherche…' : `${entries.length} résultat${entries.length > 1 ? 's' : ''} dans tout le workspace${found.data?.truncated ? ' (liste coupée)' : ''}`}</p>}
+            {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? t('Recherche…') : plural(entries.length, '{n} résultat dans tout le workspace', '{n} résultats dans tout le workspace') + (found.data?.truncated ? t(' (liste coupée)') : '')}</p>}
             {entries.length > 0 ? (
               <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} agentRoot={tree.data?.agentRoot} />
             ) : (tree.isSuccess && !debounced) ? (
               <div className="px-4 py-12 text-center">
-                <p className="text-sm font-medium">Aucun fichier ici</p>
-                <p className="mt-1 text-sm text-ink-faint">Glissez-en un dans cette zone, ou utilisez Déposer</p>
+                <p className="text-sm font-medium">{t('Aucun fichier ici')}</p>
+                <p className="mt-1 text-sm text-ink-faint">{t('Glissez-en un dans cette zone, ou utilisez Déposer')}</p>
               </div>
             ) : null}
-            {tree.data?.truncated && !debounced && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Dossier coupé à 2 000 éléments : utilisez la recherche</p>}
+            {tree.data?.truncated && !debounced && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('Dossier coupé à 2 000 éléments : utilisez la recherche')}</p>}
           </Panel>
         </DropZone>
         {open && (

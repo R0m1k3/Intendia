@@ -1,5 +1,6 @@
 import type { BulkAction, Session } from '../api';
 import { dayLabel } from './days';
+import { plural, t } from '../i18n';
 
 /** Actions offered for a selection: each one only when it changes at least one session. */
 export function selectionActions(sessions: Session[], selected: Set<string>): BulkAction[] {
@@ -15,23 +16,23 @@ export function selectionActions(sessions: Session[], selected: Set<string>): Bu
 }
 
 export const ACTION_LABELS: Record<BulkAction, string> = {
-  pin: 'Épingler', unpin: 'Désépingler', archive: 'Archiver', unarchive: 'Désarchiver', move: 'Déplacer vers…', delete: 'Supprimer',
+  pin: t('Épingler'), unpin: t('Désépingler'), archive: t('Archiver'), unarchive: t('Désarchiver'), move: t('Déplacer vers…'), delete: t('Supprimer'),
 };
 
 /** Pinned sessions first (one group), then one group per day of last activity; the server's order is kept. */
 export function groupSessions(list: Session[], now = Date.now()): { label: string; items: Session[] }[] {
   const out: { label: string; items: Session[] }[] = [];
   const pinned = list.filter((s) => s.pinned);
-  if (pinned.length) out.push({ label: 'Épinglées', items: pinned });
+  if (pinned.length) out.push({ label: t('Épinglées'), items: pinned });
   for (const s of list) {
     if (s.pinned) continue;
     const label = dayLabel(s.lastActiveAt ?? s.createdAt, now);
     const last = out.at(-1);
-    if (last && last.label === label && last.label !== 'Épinglées') last.items.push(s);
+    if (last && last.label === label && last.label !== t('Épinglées')) last.items.push(s);
     else out.push({ label, items: [s] });
   }
   return out;
 }
 
 /** "1 session" / "3 sessions". */
-export const sessionsCount = (n: number): string => `${n} session${n > 1 ? 's' : ''}`;
+export const sessionsCount = (n: number): string => plural(n, '{n} session', '{n} sessions');

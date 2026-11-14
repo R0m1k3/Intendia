@@ -1,8 +1,9 @@
 import type { SessionUsage } from '../api';
 import { cx } from '../components/ui';
+import { locale, t } from '../i18n';
 import { formatTokens } from './format';
 
-const time = (ms: number) => new Date(ms).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const time = (ms: number) => new Date(ms).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 /**
  * Context used by the session: the gateway's figures when the dashboard WebSocket gives them, otherwise the page's
@@ -16,9 +17,11 @@ export function ContextGauge({ usage, estimate }: { usage: SessionUsage | undefi
   const share = max ? Math.min(1, used / max) : null;
   const quota = usage?.quota ?? null;
   const title = [
-    exact ? 'Contexte occupé, compté par Hermes' : 'Contexte estimé par Intendia à partir du fil (sans le prompt système ni les outils)',
-    max ? `Taille du contexte du modèle : ${max.toLocaleString('fr-FR')} jetons` : 'Taille du contexte du modèle inconnue pour ce choix de modèle',
-    quota ? `${quota.label ?? 'Forfait'} : ${Math.round(quota.usedPercent)} % utilisés${quota.resetsAt ? `, remise à zéro ${time(quota.resetsAt)}` : ''}` : null,
+    exact ? t('Contexte occupé, compté par Hermes') : t('Contexte estimé par Intendia à partir du fil (sans le prompt système ni les outils)'),
+    max ? t('Taille du contexte du modèle : {n} jetons', { n: max.toLocaleString(locale()) }) : t('Taille du contexte du modèle inconnue pour ce choix de modèle'),
+    quota ? (quota.resetsAt
+      ? t('{label} : {pct} % utilisés, remise à zéro {when}', { label: quota.label ?? t('Forfait'), pct: Math.round(quota.usedPercent), when: time(quota.resetsAt) })
+      : t('{label} : {pct} % utilisés', { label: quota.label ?? t('Forfait'), pct: Math.round(quota.usedPercent) })) : null,
   ].filter(Boolean).join('\n');
   return (
     <div className="flex min-w-0 items-center gap-2 px-1 text-[11px] text-ink-faint" title={title} data-gauge={exact ? 'exact' : 'estimate'}>
@@ -29,7 +32,7 @@ export function ContextGauge({ usage, estimate }: { usage: SessionUsage | undefi
       )}
       <span className="truncate font-mono tabular-nums">
         {exact ? '' : '≈ '}{formatTokens(used)}{max ? ` / ${formatTokens(max)}` : ''}
-        {quota && <span data-quota> · {quota.label ?? 'Forfait'} {Math.round(quota.usedPercent)} %</span>}
+        {quota && <span data-quota> · {quota.label ?? t('Forfait')} {t('{n} %', { n: Math.round(quota.usedPercent) })}</span>}
       </span>
     </div>
   );

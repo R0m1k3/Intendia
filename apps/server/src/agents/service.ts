@@ -8,6 +8,7 @@ import { Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export const SOUL_MAX = 64 * 1024;
 const DESCRIPTION_MAX = 1000;
@@ -49,13 +50,13 @@ export interface AgentDetail extends PublicAgent {
   activeWorkers: PublicWorker[];
 }
 
-async function translate<T>(fn: () => Promise<T>, what: string): Promise<T> {
+async function translate<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
     if (err instanceof HermesError && err.kind === 'http') {
-      if (err.detail.status === 404) throw new NotFoundError(`${what} : ${hermesDetail(err)}`);
-      if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(`Refusé par Hermes : ${hermesDetail(err)}`);
+      if (err.detail.status === 404) throw new NotFoundError(msg('Agent introuvable : {detail}', { detail: hermesDetail(err) }));
+      if (err.detail.status === 400 || err.detail.status === 422) throw new ValidationError(msg('Refusé par Hermes : {detail}', { detail: hermesDetail(err) }));
     }
     throw err;
   }
@@ -78,12 +79,12 @@ export class AgentService {
 
   private instance(instanceId: string) {
     const inst = this.store.get(instanceId);
-    if (!inst) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!inst) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return inst;
   }
 
-  private call<T = unknown>(instanceId: string, op: string, opts: CallOptions = {}, what = 'Agent introuvable'): Promise<T> {
-    return translate(() => callOp<T>(this.compat.http(instanceId), this.compat.get(instanceId), 'agents', op, opts), what);
+  private call<T = unknown>(instanceId: string, op: string, opts: CallOptions = {}): Promise<T> {
+    return translate(() => callOp<T>(this.compat.http(instanceId), this.compat.get(instanceId), 'agents', op, opts));
   }
 
   /** Hermes profiles (dashboard); without it, `default` plus the profiles that have an API server key. */
@@ -126,7 +127,7 @@ export class AgentService {
 
   async get(instanceId: string, name: string): Promise<AgentDetail> {
     const agent = (await this.list(instanceId)).find((a) => a.name === name);
-    if (!agent) throw new NotFoundError(`Agent introuvable : ${name}`);
+    if (!agent) throw new NotFoundError(msg('Agent introuvable : {name}', { name }));
     let soul: string | null = null;
     let soulTruncated = false;
     try {
@@ -151,14 +152,14 @@ export class AgentService {
   async create(instanceId: string, input: CreateAgentInput): Promise<{ name: string; keySource: 'env' | 'db'; modelError: string | null }> {
     this.instance(instanceId);
     const name = input.name.trim();
-    if (!name || name.length > 64) throw new ValidationError('Nom d’agent manquant ou trop long (64 caractères au plus)');
+    if (!name || name.length > 64) throw new ValidationError(msg('Nom d’agent manquant ou trop long (64 caractères au plus)'));
     const description = (input.description ?? '').trim();
-    if (description.length > DESCRIPTION_MAX) throw new ValidationError(`Description trop longue (${DESCRIPTION_MAX} caractères au plus)`);
-    if (input.soul !== undefined && input.soul.length > SOUL_MAX) throw new ValidationError('SOUL.md trop long (64 Ko au plus)');
-    if (Boolean(input.provider) !== Boolean(input.model)) throw new ValidationError('Choisir le fournisseur et le modèle ensemble');
+    if (description.length > DESCRIPTION_MAX) throw new ValidationError(msg('Description trop longue ({max} caractères au plus)', { max: DESCRIPTION_MAX }));
+    if (input.soul !== undefined && input.soul.length > SOUL_MAX) throw new ValidationError(msg('SOUL.md trop long (64 Ko au plus)'));
+    if (Boolean(input.provider) !== Boolean(input.model)) throw new ValidationError(msg('Choisir le fournisseur et le modèle ensemble'));
     const existing = await this.profiles(instanceId);
-    if (existing.includes(name)) throw new AgentConflictError(`L’agent ${name} existe déjà`);
-    if (input.cloneFrom && !existing.includes(input.cloneFrom)) throw new ValidationError(`Agent à copier inconnu : ${input.cloneFrom}`);
+    if (existing.includes(name)) throw new AgentConflictError(msg('L’agent {name} existe déjà', { name }));
+    if (input.cloneFrom && !existing.includes(input.cloneFrom)) throw new ValidationError(msg('Agent à copier inconnu : {name}', { name: input.cloneFrom }));
     const body: Record<string, unknown> = { name, description };
     if (input.cloneFrom) body.clone_from = input.cloneFrom;
     // clone_all without clone_from would copy `default`: only with an explicit source
@@ -179,10 +180,10 @@ export class AgentService {
    */
   async setSoul(instanceId: string, name: string, draft: string): Promise<{ soul: string }> {
     this.instance(instanceId);
-    if (draft.length > SOUL_MAX) throw new AdminError('too_long', 'SOUL.md trop long (64 Ko au plus)');
+    if (draft.length > SOUL_MAX) throw new AdminError('too_long', msg('SOUL.md trop long (64 Ko au plus)'));
     const current = SoulSchema.parse(await this.call(instanceId, 'soul', { params: { name } })).content ?? '';
     // the editor never had the whole text: writing would cut it
-    if (current.length > SOUL_MAX) throw new AdminError('too_long', 'SOUL.md trop long pour l’éditeur : modifiez-le dans Hermes');
+    if (current.length > SOUL_MAX) throw new AdminError('too_long', msg('SOUL.md trop long pour l’éditeur : modifiez-le dans Hermes'));
     const content = this.mask.restoreText(draft, current);
     await this.call(instanceId, 'setSoul', { params: { name }, body: { content } });
     return { soul: this.mask.text(content) };
@@ -208,10 +209,10 @@ export class AgentService {
    */
   async remove(instanceId: string, name: string): Promise<{ ok: true; keyLeft: boolean; pending: boolean }> {
     const inst = this.instance(instanceId);
-    if (name === 'default') throw new AdminError('protected', 'Le profil principal ne peut pas être supprimé');
+    if (name === 'default') throw new AdminError('protected', msg('Le profil principal ne peut pas être supprimé'));
     const uses = this.workspaces.usesProfile(instanceId, name);
     if (uses.workspaces.length || uses.sessions) {
-      throw new AdminError('in_use', 'Agent encore utilisé par Intendia', { workspaces: uses.workspaces, sessions: uses.sessions });
+      throw new AdminError('in_use', msg('Agent encore utilisé par Intendia'), { workspaces: uses.workspaces, sessions: uses.sessions });
     }
     const res = ProfileDeletedSchema.parse(await this.call(instanceId, 'remove', { params: { name }, query: { profile: name }, timeoutMs: 30_000 }));
     presets.dropProfile(this.db, instanceId, name);
@@ -221,7 +222,7 @@ export class AgentService {
   async setDescription(instanceId: string, name: string, description: string): Promise<{ description: string }> {
     this.instance(instanceId);
     const text = description.trim();
-    if (text.length > DESCRIPTION_MAX) throw new ValidationError(`Description trop longue (${DESCRIPTION_MAX} caractères au plus)`);
+    if (text.length > DESCRIPTION_MAX) throw new ValidationError(msg('Description trop longue ({max} caractères au plus)', { max: DESCRIPTION_MAX }));
     await this.call(instanceId, 'setDescription', { params: { name }, body: { description: text } });
     return { description: text };
   }

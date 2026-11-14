@@ -7,6 +7,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { Masker } from './mask.js';
 import { toConfigError, type PublicRestart } from './service.js';
+import { msg } from '../i18n/index.js';
 
 export const GATEWAY_ACTIONS = ['start', 'stop', 'restart'] as const;
 export type GatewayAction = (typeof GATEWAY_ACTIONS)[number];
@@ -27,7 +28,7 @@ export class GatewayService {
   }
 
   private async call<T = unknown>(instanceId: string, profile: string, op: string, opts: CallOptions = {}): Promise<T> {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return callOp<T>(this.compat.http(instanceId), this.compat.get(instanceId), 'config', op, { profile, ...opts });
   }
 

@@ -12,6 +12,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { mapLimit, type FileRoots, type HermesFs } from '../files/hermes-fs.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
+import { msg } from '../i18n/index.js';
 
 export const TOKEN_RE = /^[0-9A-Za-z]{10}$/;
 export const PUBLIC_MAX_MS = 365 * 86_400_000;
@@ -53,7 +54,7 @@ export class LinkService {
   }
 
   private instance(id: string): void {
-    if (!this.store.get(id)) throw new NotFoundError(`Instance inconnue : ${id}`);
+    if (!this.store.get(id)) throw new NotFoundError(msg('Instance inconnue : {id}', { id }));
   }
 
   /** `<workspace root>/<volumeRel>`; the volume path alone when the instance has no root (yet). */
@@ -89,9 +90,9 @@ export class LinkService {
   async share(instanceId: string, volumeRel: string, opts: { forAgent: boolean }): Promise<Row> {
     this.instance(instanceId);
     const e = await this.roots.fs(instanceId).entry(volumeRel);
-    if (!e) throw new WorkspaceFsError('not_found', `Introuvable : ${volumeRel}`);
-    if (e.isLink) throw new WorkspaceFsError('outside', `${volumeRel} : c'est un lien symbolique`);
-    if (e.isDir) throw new WorkspaceFsError('not_file', `Pas un fichier : ${volumeRel}`);
+    if (!e) throw new WorkspaceFsError('not_found', msg('Introuvable : {path}', { path: volumeRel }));
+    if (e.isLink) throw new WorkspaceFsError('outside', msg("{path} : c'est un lien symbolique", { path: volumeRel }));
+    if (e.isDir) throw new WorkspaceFsError('not_file', msg('Pas un fichier : {path}', { path: volumeRel }));
     const live = this.db.select().from(shareLinks)
       .where(and(eq(shareLinks.instanceId, instanceId), eq(shareLinks.path, volumeRel), eq(shareLinks.revoked, false)))
       .orderBy(desc(shareLinks.createdAt)).all();
@@ -168,17 +169,17 @@ export class LinkService {
 
   private mustGet(token: string): Row {
     const row = this.get(token);
-    if (!row) throw new NotFoundError('Lien inconnu');
+    if (!row) throw new NotFoundError(msg('Lien inconnu'));
     return row;
   }
 
   setPublic(token: string, publicUntil: number | null): Row {
     const row = this.mustGet(token);
-    if (row.revoked) throw new LinkError('Lien révoqué');
+    if (row.revoked) throw new LinkError(msg('Lien révoqué'));
     if (publicUntil !== null) {
       const now = Date.now();
-      if (!Number.isFinite(publicUntil) || publicUntil <= now) throw new ValidationError("La date d'expiration doit être dans le futur");
-      if (publicUntil > now + PUBLIC_MAX_MS) throw new ValidationError("L'expiration est limitée à 365 jours");
+      if (!Number.isFinite(publicUntil) || publicUntil <= now) throw new ValidationError(msg("La date d'expiration doit être dans le futur"));
+      if (publicUntil > now + PUBLIC_MAX_MS) throw new ValidationError(msg("L'expiration est limitée à 365 jours"));
     }
     this.db.update(shareLinks).set({ publicUntil }).where(eq(shareLinks.token, token)).run();
     return { ...row, publicUntil };

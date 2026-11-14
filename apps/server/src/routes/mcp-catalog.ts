@@ -4,13 +4,14 @@ import type { RateLimiter } from '../auth/limiter.js';
 import { CALLBACK_PARAM_MAX, ENV_VALUE_MAX, MCP_NAME_RE, type McpCatalogService } from '../hermes-config/mcp-catalog.js';
 import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
+import { msg, requestLang, toLang, type Lang } from '../i18n/index.js';
 
 const InstallBody = z.object({ env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), z.string().max(ENV_VALUE_MAX)).default({}) });
 const FLOW_ID = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/);
 
 const name = (c: Context) => {
   const n = c.req.param('name') ?? '';
-  if (!MCP_NAME_RE.test(n)) throw new ValidationError('Nom de serveur MCP invalide');
+  if (!MCP_NAME_RE.test(n)) throw new ValidationError(msg('Nom de serveur MCP invalide'));
   return n;
 };
 
@@ -36,15 +37,15 @@ const PAGE_HEADERS = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
 };
-const page = (title: string, text: string) => `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+const page = (lang: Lang, title: string, text: string) => `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${toLang(title, lang)}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1d1d1f}h1{font-size:1.25rem}p{color:#555;line-height:1.5}</style></head>
-<body><h1>${title}</h1><p>${text}</p></body></html>`;
+<body><h1>${toLang(title, lang)}</h1><p>${toLang(text, lang)}</p></body></html>`;
 const PAGES = {
-  ok: [200, page('Connexion terminée', 'Hermes a reçu l’autorisation. Vous pouvez fermer cet onglet et revenir à Intendia.')],
-  failed: [502, page('Échec de la connexion', 'Hermes a refusé ce retour ou ne répond pas. Revenez à Intendia pour voir l’erreur et recommencer.')],
-  unknown: [404, page('Connexion inconnue ou expirée', 'Aucune connexion lancée par Intendia n’attend ce retour. Recommencez depuis Intendia.')],
-  invalid: [400, page('Retour invalide', 'Ce lien de retour est incomplet. Recommencez depuis Intendia.')],
-  limited: [429, page('Trop de tentatives', 'Patientez une minute avant de réessayer.')],
+  ok: [200, msg('Connexion terminée'), msg('Hermes a reçu l’autorisation. Vous pouvez fermer cet onglet et revenir à Intendia.')],
+  failed: [502, msg('Échec de la connexion'), msg('Hermes a refusé ce retour ou ne répond pas. Revenez à Intendia pour voir l’erreur et recommencer.')],
+  unknown: [404, msg('Connexion inconnue ou expirée'), msg('Aucune connexion lancée par Intendia n’attend ce retour. Recommencez depuis Intendia.')],
+  invalid: [400, msg('Retour invalide'), msg('Ce lien de retour est incomplet. Recommencez depuis Intendia.')],
+  limited: [429, msg('Trop de tentatives'), msg('Patientez une minute avant de réessayer.')],
 } as const;
 
 /**
@@ -55,8 +56,8 @@ const PAGES = {
 export function mcpOauthRoutes(mcp: McpCatalogService, limiter: RateLimiter, clientIp: (c: Context) => string): Hono {
   const r = new Hono();
   const send = (c: Context, key: keyof typeof PAGES) => {
-    const [status, body] = PAGES[key];
-    return c.body(body, status, PAGE_HEADERS);
+    const [status, title, text] = PAGES[key];
+    return c.body(page(requestLang(c), title, text), status, PAGE_HEADERS);
   };
   r.get('/mcp-oauth/:inst/:name/callback', async (c) => {
     if (!limiter.hit(clientIp(c))) return send(c, 'limited');

@@ -4,6 +4,7 @@ import { AdminError } from '../admin-error.js';
 import { parseVaultInput } from '../vault/input.js';
 import type { VaultService } from '../vault/service.js';
 import { profileOf } from './skills.js';
+import { msg } from '../i18n/index.js';
 
 const MAX_BODY = 16 * 1024;
 
@@ -15,7 +16,7 @@ async function bodyOf(c: Context): Promise<unknown> {
   try {
     return JSON.parse(await c.req.text()) as unknown;
   } catch {
-    throw new AdminError('invalid_field', 'Corps illisible');
+    throw new AdminError('invalid_field', msg('Corps illisible'));
   }
 }
 
@@ -24,7 +25,7 @@ export function vaultRoutes(vault: VaultService): Hono {
   const r = new Hono();
   r.use('/i/:inst/vault/*', async (c, next) => { await next(); c.header('Cache-Control', 'no-store'); });
   r.use('/i/:inst/vault', async (c, next) => { await next(); c.header('Cache-Control', 'no-store'); });
-  const limit = bodyLimit({ maxSize: MAX_BODY, onError: (c) => c.json({ error: 'Requête trop grosse' }, 413) });
+  const limit = bodyLimit({ maxSize: MAX_BODY, onError: (c) => c.json({ error: msg('Requête trop grosse') }, 413) });
   const inst = (c: Context) => c.req.param('inst') ?? '';
 
   r.get('/i/:inst/vault', async (c) => c.json(await vault.list(inst(c), profileOf(c))));

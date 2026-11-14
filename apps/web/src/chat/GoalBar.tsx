@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type SessionGoal } from '../api';
 import { ask } from '../components/Dialog';
 import { cx, ErrorText } from '../components/ui';
+import { t } from '../i18n';
 import { costLine, goalLine } from './goal';
 
 export const goalKey = (inst: string | undefined, id: string) => ['goal', inst, id] as const;
@@ -64,13 +65,13 @@ export function GoalBar({ inst, sessionId, sessionLastRunId, goal, onEdit }: {
     }
   };
   const remove = async () => {
-    if (!await ask({ title: 'Retirer l’objectif ?', message: 'Les relances automatiques s’arrêtent. Le run en cours continue.', confirmLabel: 'Retirer', danger: true })) return;
+    if (!await ask({ title: t('Retirer l’objectif ?'), message: t('Les relances automatiques s’arrêtent. Le run en cours continue.'), confirmLabel: t('Retirer'), danger: true })) return;
     await act(() => api.clearGoal(inst, sessionId));
   };
 
   const done = goal.status === 'done';
-  const note = goal.spent.priceUnknown ? 'coût inconnu (prix du modèle absent) : seul le plafond de relances limite'
-    : goal.spent.pending ? 'coût en cours de comptage' : null;
+  const note = goal.spent.priceUnknown ? t('coût inconnu (prix du modèle absent) : seul le plafond de relances limite')
+    : goal.spent.pending ? t('coût en cours de comptage') : null;
   return (
     <div className="mb-2" data-goal-bar data-goal-status={goal.status}>
       <div className={cx('flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[13px]', done ? 'border-line bg-sheet' : 'border-accent/40 bg-accent-soft/40')}>
@@ -79,23 +80,23 @@ export function GoalBar({ inst, sessionId, sessionLastRunId, goal, onEdit }: {
           <div className="truncate font-medium" title={goal.text}>{goal.text}</div>
           <div className="flex flex-wrap gap-x-2 text-[12px] text-ink-soft">
             <span data-goal-line>{goalLine(goal)}</span>
-            <span aria-label="Relances" data-goal-count>relance {goal.relaunches}/{goal.maxRelaunches}</span>
-            <span data-goal-cost title="Contrôlé entre les tours, avec un tour de retard possible">{costLine(goal)}</span>
-            {goal.mode === 'click' && <span>après votre clic</span>}
+            <span aria-label={t('Relances')} data-goal-count>{t('relance {n}/{max}', { n: goal.relaunches, max: goal.maxRelaunches })}</span>
+            <span data-goal-cost title={t('Contrôlé entre les tours, avec un tour de retard possible')}>{costLine(goal)}</span>
+            {goal.mode === 'click' && <span>{t('après votre clic')}</span>}
             {note && <span className="text-ink-faint">{note}</span>}
           </div>
         </div>
-        {goal.status === 'active' && <BarButton label="Mettre l’objectif en pause" disabled={busy} onClick={() => void act(() => api.pauseGoal(inst, sessionId, 'button'))}><Pause className="size-4" strokeWidth={1.75} /></BarButton>}
+        {goal.status === 'active' && <BarButton label={t('Mettre l’objectif en pause')} disabled={busy} onClick={() => void act(() => api.pauseGoal(inst, sessionId, 'button'))}><Pause className="size-4" strokeWidth={1.75} /></BarButton>}
         {goal.status === 'paused' && (
           <button
             type="button" disabled={busy} onClick={() => void act(() => api.resumeGoal(inst, sessionId))}
             className="flex h-7 items-center gap-1 rounded-md px-2 text-[12.5px] font-medium text-accent-ink hover:bg-raised disabled:opacity-40"
           >
-            <Play className="size-3.5" strokeWidth={1.75} />{goal.reason === 'click' ? 'Continuer' : 'Reprendre'}
+            <Play className="size-3.5" strokeWidth={1.75} />{goal.reason === 'click' ? t('Continuer') : t('Reprendre')}
           </button>
         )}
-        {!done && <BarButton label="Modifier l’objectif" disabled={busy} onClick={onEdit}><Pencil className="size-3.5" strokeWidth={1.75} /></BarButton>}
-        <BarButton label="Retirer l’objectif" disabled={busy} onClick={() => void remove()}><X className="size-4" strokeWidth={1.75} /></BarButton>
+        {!done && <BarButton label={t('Modifier l’objectif')} disabled={busy} onClick={onEdit}><Pencil className="size-3.5" strokeWidth={1.75} /></BarButton>}
+        <BarButton label={t('Retirer l’objectif')} disabled={busy} onClick={() => void remove()}><X className="size-4" strokeWidth={1.75} /></BarButton>
       </div>
       <div className="mt-1 empty:hidden"><ErrorText error={error} /></div>
     </div>

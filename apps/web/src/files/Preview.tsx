@@ -6,6 +6,7 @@ import { Md } from '../chat/Thread';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { baseName, fileKind, formatSize, isText as isTextKind } from './paths';
 import type { FileScope } from './scope';
+import { t } from '../i18n';
 
 const CodeView = lazy(() => import('./CodeView'));
 const CsvView = lazy(() => import('./viewers/CsvView'));
@@ -22,16 +23,16 @@ export function ShareButton({ slug, path, compact = false }: { slug: string; pat
   const share = async () => {
     try {
       const { url } = await api.shareFile(slug, path);
-      await copyText(absoluteUrl(url), 'Lien de partage');
+      await copyText(absoluteUrl(url), t('Lien de partage'));
       setState('copied');
     } catch {
       setState('error');
     }
     setTimeout(() => setState('idle'), 2500);
   };
-  const label = state === 'copied' ? 'Lien copié' : state === 'error' ? 'Échec' : 'Partager';
+  const label = state === 'copied' ? t('Lien copié') : state === 'error' ? t('Échec') : t('Partager');
   return (
-    <Button variant="ghost" className={cx('h-8 px-2.5', compact && 'size-8 px-0')} onClick={() => void share()} title="Copier un lien de partage privé" aria-label={label}>
+    <Button variant="ghost" className={cx('h-8 px-2.5', compact && 'size-8 px-0')} onClick={() => void share()} title={t('Copier un lien de partage privé')} aria-label={label}>
       <Link2 className="size-4" strokeWidth={1.5} />
       {!compact && <span className="text-[13px]">{label}</span>}
     </Button>
@@ -60,7 +61,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
     queryKey: ['file-text', ...(slug ? [slug] : scope.key), path, entry?.mtime],
     queryFn: async () => {
       const res = await fetch(scope.raw(path), { credentials: 'same-origin' });
-      if (!res.ok) throw new ApiError(res.status, res.status === 404 ? 'Fichier introuvable' : `HTTP ${res.status}`);
+      if (!res.ok) throw new ApiError(res.status, res.status === 404 ? t('Fichier introuvable') : `HTTP ${res.status}`);
       return res.text();
     },
     enabled: isText && Boolean(entry) && !tooBig,
@@ -97,7 +98,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
       setBase(null);
       await qc.invalidateQueries({ queryKey: [...scope.key, parent] });
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 409 ? new Error('Modifié sur le disque depuis l’ouverture : recharger le fichier') : err);
+      setError(err instanceof ApiError && err.status === 409 ? new Error(t('Modifié sur le disque depuis l’ouverture : recharger le fichier')) : err);
     } finally {
       setSaving(false);
     }
@@ -116,7 +117,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
         </div>
         {slug && isText && entry && !tooBig && (editing ? (
           <Button variant="primary" className="h-8 px-3" onClick={() => void save()} disabled={saving}>
-            <Save className="size-4" strokeWidth={1.5} />Enregistrer
+            <Save className="size-4" strokeWidth={1.5} />{t('Enregistrer')}
           </Button>
         ) : (
           <Button variant="ghost" className="h-8 px-2.5" onClick={() => {
@@ -124,45 +125,45 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
             setBase({ text: text.data, mtime: entry.mtime });
             setSource(true);
             setEditing(true);
-          }} disabled={text.data === undefined} title="Modifier">
-            <Pencil className="size-4" strokeWidth={1.5} /><span className="hidden text-[13px] sm:inline">Modifier</span>
+          }} disabled={text.data === undefined} title={t('Modifier')}>
+            <Pencil className="size-4" strokeWidth={1.5} /><span className="hidden text-[13px] sm:inline">{t('Modifier')}</span>
           </Button>
         ))}
         {entry && agentPath && onInsert && (
-          <button onClick={() => onInsert(agentPath)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Insérer dans le message" aria-label="Insérer dans le message">
+          <button onClick={() => onInsert(agentPath)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Insérer dans le message')} aria-label={t('Insérer dans le message')}>
             <MessageSquarePlus className="size-4" strokeWidth={1.5} />
           </button>
         )}
         {entry && agentPath && (
-          <button onClick={() => void copyText(agentPath, 'Chemin')} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Copier le chemin" aria-label="Copier le chemin">
+          <button onClick={() => void copyText(agentPath, t('Chemin'))} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Copier le chemin')} aria-label={t('Copier le chemin')}>
             <ClipboardCopy className="size-4" strokeWidth={1.5} />
           </button>
         )}
         {slug && entry && <ShareButton slug={slug} path={path} compact />}
-        <a href={url} target="_blank" rel="noreferrer" className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Ouvrir dans un onglet" aria-label="Ouvrir">
+        <a href={url} target="_blank" rel="noreferrer" className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Ouvrir dans un onglet')} aria-label={t('Ouvrir')}>
           <ExternalLink className="size-4" strokeWidth={1.5} />
         </a>
-        <a href={scope.raw(path, true)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Télécharger" aria-label="Télécharger">
+        <a href={scope.raw(path, true)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Télécharger')} aria-label={t('Télécharger')}>
           <Download className="size-4" strokeWidth={1.5} />
         </a>
         {onClose && (
-          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label="Fermer l’aperçu" title="Fermer">
+          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer l’aperçu')} title={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </button>
         )}
       </header>
       {rendered && !editing && entry && (kind !== 'markdown' || text.data !== undefined) && (
         <div className="flex gap-1 border-b border-line px-4 py-1.5 text-xs">
-          {([kind === 'csv' ? 'Tableau' : 'Rendu', 'Source'] as const).map((l) => (
-            <button key={l} onClick={() => setSource(l === 'Source')}
-              className={cx('rounded-md px-2 py-1', (l === 'Source') === source ? 'bg-raised text-ink' : 'text-ink-faint hover:text-ink')}>{l}</button>
+          {([[false, kind === 'csv' ? t('Tableau|vue') : t('Rendu')], [true, t('Source')]] as const).map(([isSource, l]) => (
+            <button key={String(isSource)} onClick={() => setSource(isSource)}
+              className={cx('rounded-md px-2 py-1', isSource === source ? 'bg-raised text-ink' : 'text-ink-faint hover:text-ink')}>{l}</button>
           ))}
         </div>
       )}
       <div className="mb-0 empty:hidden px-4 pt-3"><ErrorText error={error ?? text.error ?? listing.error} /></div>
       <div className="min-h-0 flex-1 overflow-auto">
         {missing ? (
-          <p className="p-6 text-sm text-ink-soft">Fichier introuvable : il a peut-être été déplacé ou supprimé.</p>
+          <p className="p-6 text-sm text-ink-soft">{t('Fichier introuvable : il a peut-être été déplacé ou supprimé.')}</p>
         ) : !entry ? null : kind === 'image' ? (
           <div className="flex min-h-full items-center justify-center bg-raised/40 p-4"><img src={url} alt={name} className="max-h-[75vh] max-w-full object-contain" /></div>
         ) : kind === 'pdf' ? (
@@ -193,9 +194,9 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
           )
         ) : (
           <div className="p-6 text-sm text-ink-soft">
-            <p>{tooBig ? 'Fichier trop gros pour l’aperçu.' : 'Pas d’aperçu pour ce type de fichier.'}</p>
+            <p>{tooBig ? t('Fichier trop gros pour l’aperçu.') : t('Pas d’aperçu pour ce type de fichier.')}</p>
             <a href={scope.raw(path, true)} className="mt-3 inline-flex items-center gap-2 text-accent-ink hover:underline">
-              <Download className="size-4" strokeWidth={1.5} />Télécharger
+              <Download className="size-4" strokeWidth={1.5} />{t('Télécharger')}
             </a>
           </div>
         )}

@@ -11,6 +11,7 @@ import { clock } from '../chat/Thread';
 import type { Written } from '../chat/written';
 import { chipClass, copyText, cx } from './ui';
 import { workspaceScope } from '../files/scope';
+import { t } from '../i18n';
 
 /** Links made by share_file (or the preview) for a file of this session's folder. */
 export function sessionLinks(links: ShareLink[], inst: string, slug: string, sessionId: string): ShareLink[] {
@@ -23,10 +24,10 @@ function SharedRow({ l }: { l: ShareLink }) {
   return (
     <li className="flex h-12 min-w-0 items-center gap-2 px-4">
       <span className="min-w-0 flex-1 truncate text-sm" title={l.path}>{baseName(l.path)}</span>
-      {!l.exists && <span className="shrink-0 text-[11px] text-ink-faint">fichier absent</span>}
+      {!l.exists && <span className="shrink-0 text-[11px] text-ink-faint">{t('fichier absent')}</span>}
       <button
-        type="button" title="Copier le lien" aria-label={`Copier le lien de ${baseName(l.path)}`}
-        onClick={() => void copyText(absoluteUrl(l.url), 'Lien').then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
+        type="button" title={t('Copier le lien')} aria-label={t('Copier le lien de {name}', { name: baseName(l.path) })}
+        onClick={() => void copyText(absoluteUrl(l.url), t('Lien')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
         className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink"
       >
         {copied ? <Check className="size-4" strokeWidth={2} /> : <Copy className="size-4" strokeWidth={1.5} />}
@@ -48,11 +49,11 @@ function PathActions({ agentRoot, rel, onInsert }: { agentRoot?: string; rel: st
   return (
     <>
       {onInsert && (
-        <button type="button" className={ICON} title="Insérer dans le message" aria-label={`Insérer ${baseName(rel)} dans le message`} onClick={() => onInsert(p)}>
+        <button type="button" className={ICON} title={t('Insérer dans le message')} aria-label={t('Insérer {name} dans le message', { name: baseName(rel) })} onClick={() => onInsert(p)}>
           <MessageSquarePlus className="size-4" strokeWidth={1.5} />
         </button>
       )}
-      <button type="button" className={ICON} title="Copier le chemin" aria-label={`Copier le chemin de ${baseName(rel)}`} onClick={() => void copyText(p, 'Chemin')}>
+      <button type="button" className={ICON} title={t('Copier le chemin')} aria-label={t('Copier le chemin de {name}', { name: baseName(rel) })} onClick={() => void copyText(p, t('Chemin'))}>
         <ClipboardCopy className="size-4" strokeWidth={1.5} />
       </button>
     </>
@@ -96,9 +97,9 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-16 items-center gap-2 border-b border-line/70 px-4 py-3">
-        <h2 className="sr-only">Fichiers de la session</h2>
-        <div role="tablist" aria-label="Fichiers de la session" className="flex flex-1 gap-1.5">
-          {([['files', 'Fichiers'], ['shared', 'Partagés']] as const).map(([k, label]) => (
+        <h2 className="sr-only">{t('Fichiers de la session')}</h2>
+        <div role="tablist" aria-label={t('Fichiers de la session')} className="flex flex-1 gap-1.5">
+          {([['files', t('Fichiers')], ['shared', t('Partagés')]] as const).map(([k, label]) => (
             <button
               key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               className={chipClass(tab === k)}
@@ -107,11 +108,11 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
             </button>
           ))}
         </div>
-        <Link to="/w/$slug/fichiers" params={{ slug }} search={{ path: dir }} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title="Ouvrir dans l’explorateur" aria-label="Ouvrir dans l’explorateur">
+        <Link to="/w/$slug/fichiers" params={{ slug }} search={{ path: dir }} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Ouvrir dans l’explorateur')} aria-label={t('Ouvrir dans l’explorateur')}>
           <FolderOpen className="size-4" strokeWidth={1.5} />
         </Link>
         {onClose && (
-          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label="Fermer" title="Fermer">
+          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer')} title={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </button>
         )}
@@ -121,15 +122,15 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
           {shared.length ? (
             <ul className="divide-y divide-line/70">{shared.map((l) => <SharedRow key={l.token} l={l} />)}</ul>
           ) : links.isSuccess ? (
-            <p className="px-4 py-3 text-sm text-ink-soft">Aucun lien partagé pour un fichier de cette session</p>
+            <p className="px-4 py-3 text-sm text-ink-soft">{t('Aucun lien partagé pour un fichier de cette session')}</p>
           ) : null}
-          <Link to="/files" search={{ tab: 'liens' }} className="block px-4 py-3 text-xs text-ink-soft hover:text-ink">Tous les liens</Link>
+          <Link to="/files" search={{ tab: 'liens' }} className="block px-4 py-3 text-xs text-ink-soft hover:text-ink">{t('Tous les liens')}</Link>
         </div>
       ) : (
       <div className="min-h-0 flex-1 overflow-y-auto">
         {modified.length > 0 && (
-          <section aria-label="Modifiés par l’agent">
-            <p className="px-4 pb-1 pt-3 text-[11px] text-ink-faint">Modifiés par l’agent</p>
+          <section aria-label={t('Modifiés par l’agent')}>
+            <p className="px-4 pb-1 pt-3 text-[11px] text-ink-faint">{t('Modifiés par l’agent')}</p>
             <ul className="divide-y divide-line/70">
               {modified.map((m) => (
                 <li key={m.path} className="flex min-w-0 items-center gap-1 pr-2" data-modified={m.rel ? 'exists' : 'gone'}>
@@ -142,7 +143,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
                   ) : (
                     <p className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-sm text-ink-faint" title={m.path}>
                       <span className="min-w-0 truncate line-through">{baseName(m.path)}</span>
-                      <span className="shrink-0 text-[11px]">supprimé ou hors du workspace</span>
+                      <span className="shrink-0 text-[11px]">{t('supprimé ou hors du workspace')}</span>
                     </p>
                   )}
                   {m.rel && <PathActions agentRoot={agentRoot} rel={m.rel} onInsert={onInsert} />}
@@ -156,11 +157,11 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
           <FileRows scope={workspaceScope(slug)} entries={own} onOpen={(e) => (e.kind === 'dir' || e.target === 'dir' ? undefined : onOpen(e.path))}
             agentRoot={tree.data?.agentRoot ?? agentRoot} onInsert={onInsert} />
         ) : tree.isSuccess ? (
-          <p className="px-4 py-3 text-sm text-ink-soft">Aucun fichier pour l’instant</p>
+          <p className="px-4 py-3 text-sm text-ink-soft">{t('Aucun fichier pour l’instant')}</p>
         ) : null}
         {elsewhere.length > 0 && (
           <>
-            <p className="px-4 pb-1 pt-5 text-[11px] text-ink-faint">Cités dans le fil</p>
+            <p className="px-4 pb-1 pt-5 text-[11px] text-ink-faint">{t('Cités dans le fil')}</p>
             <ul className="divide-y divide-line">
               {elsewhere.map((e) => (
                 <li key={e.path} className="flex min-w-0 items-center gap-1 pr-2">
@@ -176,9 +177,9 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
         )}
       </div>
       )}
-      <DropZone onFiles={onDrop} label="Déposer dans inbox/ et joindre au message" className="m-3 shrink-0">
+      <DropZone onFiles={onDrop} label={t('Déposer dans inbox/ et joindre au message')} className="m-3 shrink-0">
         <p className="rounded-xl border border-dashed border-line px-4 py-4 text-center text-xs text-ink-faint">
-          Glissez un fichier ici pour le joindre à la session
+          {t('Glissez un fichier ici pour le joindre à la session')}
         </p>
       </DropZone>
     </div>

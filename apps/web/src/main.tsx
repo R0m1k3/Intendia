@@ -4,6 +4,7 @@ import {
 } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { getLang } from './i18n';
 import { api, ApiError, SESSION_SOURCES, type SessionSource } from './api';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
@@ -50,6 +51,7 @@ import './styles.css';
 
 const savedTheme = localStorage.getItem('intendia-theme');
 if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.classList.add(savedTheme);
+document.documentElement.lang = getLang();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,22 +1,23 @@
+import { locale, t } from '../i18n';
 import type { Effort, RunStat } from '../api';
 import type { Entry } from './events';
 
 /** Reasoning effort values of Hermes (`model_options.reasoning_effort`) and their labels. */
 export const EFFORTS: { value: Effort; label: string; hint: string }[] = [
-  { value: 'none', label: 'Aucun', hint: 'Pas de réflexion avant de répondre' },
-  { value: 'minimal', label: 'Minimal', hint: 'Réflexion très courte' },
-  { value: 'low', label: 'Bas', hint: 'Rapide, pour les tâches simples' },
-  { value: 'medium', label: 'Moyen', hint: 'Équilibre entre vitesse et soin' },
-  { value: 'high', label: 'Élevé', hint: 'Plus de réflexion, plus long' },
-  { value: 'xhigh', label: 'Très élevé', hint: 'Pour les problèmes difficiles' },
-  { value: 'max', label: 'Max', hint: 'Le plus long sur la plupart des modèles' },
-  { value: 'ultra', label: 'Ultra', hint: 'Seulement sur certains modèles' },
+  { value: 'none', label: t('Aucun'), hint: t('Pas de réflexion avant de répondre') },
+  { value: 'minimal', label: 'Minimal', hint: t('Réflexion très courte') },
+  { value: 'low', label: t('Bas'), hint: t('Rapide, pour les tâches simples') },
+  { value: 'medium', label: t('Moyen'), hint: t('Équilibre entre vitesse et soin') },
+  { value: 'high', label: t('Élevé'), hint: t('Plus de réflexion, plus long') },
+  { value: 'xhigh', label: t('Très élevé'), hint: t('Pour les problèmes difficiles') },
+  { value: 'max', label: 'Max', hint: t('Le plus long sur la plupart des modèles') },
+  { value: 'ultra', label: 'Ultra', hint: t('Seulement sur certains modèles') },
 ];
 
 export const effortLabel = (e: string | null | undefined): string =>
   e ? EFFORTS.find((x) => x.value === e)?.label ?? e : 'Auto';
 
-const nf = (digits: number) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const nf = (digits: number) => new Intl.NumberFormat(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /** Hermes model id without its provider prefix: anthropic/claude-opus-4.6 → claude-opus-4.6. */
 export function shortModel(id: string): string {
@@ -46,7 +47,7 @@ export function formatTokens(n: number): string {
 
 /** 0,39 $ ; 4 decimals below one cent. */
 export function formatCost(usd: number): string {
-  return `${nf(usd < 0.01 ? 4 : 2).format(usd)} $`;
+  return t('{n} $', { n: nf(usd < 0.01 ? 4 : 2).format(usd) });
 }
 
 /** Share of the input read from the cache (Hermes counts the input cache included); null when unknown. */
@@ -55,7 +56,7 @@ export function cacheShare(r: Pick<RunStat, 'inputTokens' | 'cacheReadTokens'>):
   return Math.min(1, r.cacheReadTokens / r.inputTokens);
 }
 
-export const formatShare = (x: number): string => `${nf(1).format(Math.round(x * 1000) / 10)} %`;
+export const formatShare = (x: number): string => t('{n} %', { n: nf(1).format(Math.round(x * 1000) / 10) });
 
 /**
  * Where each run line goes: key of the history entry after which it is shown (several lines may share one).

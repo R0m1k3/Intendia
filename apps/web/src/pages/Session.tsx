@@ -56,6 +56,8 @@ import { workspaceScope } from '../files/scope';
 const REREAD_TOOLS = new Set(['todo_list', 'write_file', 'patch']);
 import { useInbox } from '../sessions/InboxLayout';
 import { useVaultAvailable } from './Access';
+import { locale, t } from '../i18n';
+import { T } from '../i18n/T';
 
 /** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
 export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg border border-line bg-sheet text-ink transition-colors hover:bg-paper';
@@ -63,8 +65,8 @@ export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg
 /** Session date in the header: "16:21" today, else "2 nov. 16:21" (ms). */
 export function when(ms: number): string {
   const d = new Date(ms);
-  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${time}`;
+  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })} ${time}`;
 }
 
 /** "Plein écran": hides the inbox column (kept in this browser); only from 1280 px, where the column shows. */
@@ -79,7 +81,7 @@ export function FullScreen() {
       )}
     >
       {full ? <Minimize2 className="size-4" strokeWidth={1.5} /> : <Maximize2 className="size-4" strokeWidth={1.5} />}
-      {full ? 'Afficher la liste' : 'Plein écran'}
+      {full ? t('Afficher la liste') : t('Plein écran')}
     </button>
   );
 }
@@ -97,10 +99,10 @@ interface ActiveRun {
 }
 
 const OUTCOME: Record<string, string> = {
-  failed: 'Le run a échoué',
-  cancelled: 'Run arrêté',
-  interrupted: 'Run interrompu',
-  error: 'Flux interrompu',
+  failed: t('Le run a échoué'),
+  cancelled: t('Run arrêté'),
+  interrupted: t('Run interrompu'),
+  error: t('Flux interrompu'),
 };
 
 /**
@@ -198,7 +200,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
     // ended while the page was closed with a reorientation Hermes did not deliver: back in front of the queue, once
     if (isTerminal(s.status) && s.pendingSteer && queueLoaded && firstTime(inst, lastRunId)) {
-      setQueue((q) => pauseQueue(pushHead(q, s.pendingSteer!), 'réorientation non livrée'));
+      setQueue((q) => pauseQueue(pushHead(q, s.pendingSteer!), t('réorientation non livrée')));
     }
   }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
@@ -217,12 +219,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const onEnd = useCallback(async (state: RunState) => {
     // once per run: a reorientation not delivered goes back in front and waits; a run that did not end well stops the queue
     if (state.pendingSteer) {
-      if (firstTime(inst ?? '', endingRun.current ?? '')) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), 'réorientation non livrée'));
-    } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, 'le travail précédent n’a pas abouti'));
+      if (firstTime(inst ?? '', endingRun.current ?? '')) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), t('réorientation non livrée')));
+    } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, t('le travail précédent n’a pas abouti')));
     else setDrain(`end-${Date.now()}`);
     const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
     // a truncated replay may lack earlier delegations: the history's cards (all of them) win then
-    if (tree && !state.truncated) setTrees((t) => [...t, tree]);
+    if (tree && !state.truncated) setTrees((prev) => [...prev, tree]);
     const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
     await Promise.all([
@@ -253,7 +255,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const send = async (text: string, skills?: string[]): Promise<boolean> => (await launch(text, skills)) === null;
   /** Starts a run; the error, or null once started. */
   const launch = async (text: string, skills?: string[]): Promise<unknown> => {
-    if (!inst) return new Error('Instance inconnue');
+    if (!inst) return new Error(t('Instance inconnue'));
     setError(null);
     setOutcome(null);
     setSending(true);
@@ -285,7 +287,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     setQueue(rest);
     void launch(head.text, head.skills).then((err) => {
       if (err === null) return;
-      const reason = err instanceof ApiError && err.status === 409 ? 'un autre onglet a lancé un travail' : 'l’envoi a échoué';
+      const reason = err instanceof ApiError && err.status === 409 ? t('un autre onglet a lancé un travail') : t('l’envoi a échoué');
       setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills), reason));
     });
   }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -302,9 +304,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       return false;
     }
   };
-  const steerDisabled = approval || clarify ? 'Un accord ou une réponse est attendu'
-    : !chat.has('chat', 'steer') ? 'Réorientation indisponible sur cette instance'
-    : live?.status !== 'running' ? 'L’agent n’a pas encore commencé' : undefined;
+  const steerDisabled = approval || clarify ? t('Un accord ou une réponse est attendu')
+    : !chat.has('chat', 'steer') ? t('Réorientation indisponible sur cette instance')
+    : live?.status !== 'running' ? t('L’agent n’a pas encore commencé') : undefined;
 
   const approve = async (choice: ApprovalChoice) => {
     if (!inst || !active || !approval) return;
@@ -381,8 +383,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // « Sans confirmation »: Intendia approves every action of the agent in this session
   const setAutoApprove = async (on: boolean) => {
     if (on && !(await ask({
-      title: 'Travailler sans confirmation ?', danger: true, confirmLabel: 'Activer',
-      message: 'L’agent exécutera ses commandes et ses écritures sans vous demander votre accord, dans cette session seulement, tant que ce réglage reste actif. Les questions qu’il vous pose attendent toujours votre réponse.',
+      title: t('Travailler sans confirmation ?'), danger: true, confirmLabel: t('Activer'),
+      message: t('L’agent exécutera ses commandes et ses écritures sans vous demander votre accord, dans cette session seulement, tant que ce réglage reste actif. Les questions qu’il vous pose attendent toujours votre réponse.'),
     }))) return;
     setOptions.mutate({ autoApprove: on });
   };
@@ -392,8 +394,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (!s || !inst) return;
     if (!s.lastRunId && !s.copiedFrom) { setOptions.mutate({ profile }); return; }
     if (!(await ask({
-      title: `Continuer avec l’agent ${profile} ?`, confirmLabel: 'Copier la conversation',
-      message: `La conversation est copiée chez l’agent ${profile}, dans ce workspace ; cette session reste telle quelle.${s.autoApprove ? ' « Sans confirmation » repart désactivé.' : ''}`,
+      title: t('Continuer avec l’agent {profile} ?', { profile }), confirmLabel: t('Copier la conversation'),
+      message: s.autoApprove
+        ? t('La conversation est copiée chez l’agent {profile}, dans ce workspace ; cette session reste telle quelle. « Sans confirmation » repart désactivé.', { profile })
+        : t('La conversation est copiée chez l’agent {profile}, dans ce workspace ; cette session reste telle quelle.', { profile }),
     }))) return;
     try {
       const { session } = await api.toProfile(inst, sessionId, profile, newKey());
@@ -484,8 +488,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   useEffect(() => {
     if (doneTodoCalls <= seenTodoCalls.current) { seenTodoCalls.current = doneTodoCalls; return; }
     seenTodoCalls.current = doneTodoCalls;
-    const t = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
+    return () => clearTimeout(timer);
   }, [doneTodoCalls, qc, inst, sessionId]);
   const openUnits = history.data?.openUnits;
   const delegations = useMemo(() => delegationState(messages, openUnits), [messages, openUnits]);
@@ -514,13 +518,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const stopWaiting = async () => {
     if (!inst || !openUnits?.length) return;
     if (!(await ask({
-      title: 'Ne plus attendre les sous-agents ?', confirmLabel: 'Ne plus attendre',
-      message: 'Intendia ne montrera plus ces sous-agents comme en cours. Si d’autres ont déjà livré, l’agent reprend avec leurs résultats. Un résultat qui arrive plus tard s’affichera quand même.',
+      title: t('Ne plus attendre les sous-agents ?'), confirmLabel: t('Ne plus attendre'),
+      message: t('Intendia ne montrera plus ces sous-agents comme en cours. Si d’autres ont déjà livré, l’agent reprend avec leurs résultats. Un résultat qui arrive plus tard s’affichera quand même.'),
     }))) return;
     try {
       await api.stopWaitingSubagents(inst, sessionId, openUnits);
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 409 ? new Error('Un travail est en cours dans cette session : réessayez à sa fin.') : err);
+      setError(err instanceof ApiError && err.status === 409 ? new Error(t('Un travail est en cours dans cette session : réessayez à sa fin.')) : err);
     }
     await qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
     invalidateSessionLists(qc);
@@ -564,7 +568,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       workspaces: allWorkspaces.data?.workspaces ?? [], inst: to, chat: loadChat(), last: localStorage.getItem('intendia-last-workspace'),
     });
     if (!slugTo) {
-      setError(new Error(`Aucun workspace sur ${pickable.find((i) => i.id === to)?.label ?? to}`));
+      setError(new Error(t('Aucun workspace sur {label}', { label: pickable.find((i) => i.id === to)?.label ?? to })));
       return;
     }
     setSwitching(true);
@@ -603,7 +607,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     try {
       const res = await api.bulkSessions(inst, [sessionId], 'move', to);
       const r = res.results[0];
-      if (!r?.ok) throw new Error(r?.error ?? 'Déplacement refusé');
+      if (!r?.ok) throw new Error(r?.error ?? t('Déplacement refusé'));
       await invalidateSessionLists(qc);
       goTo.open(to, sessionId);
     } catch (err) {
@@ -679,21 +683,21 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   };
 
   // slash commands of the composer: the same actions as the menu and the thread, with the reason when not possible
-  const rewriteWhy = !sentOnce ? 'La conversation est vide' : running ? 'L’agent travaille' : queued > 0 ? 'Des messages attendent dans la file'
-    : !canCopy ? 'Indisponible sur cette instance' : rewrite.isPending ? 'Une action est en cours' : undefined;
+  const rewriteWhy = !sentOnce ? t('La conversation est vide') : running ? t('L’agent travaille') : queued > 0 ? t('Des messages attendent dans la file')
+    : !canCopy ? t('Indisponible sur cette instance') : rewrite.isPending ? t('Une action est en cours') : undefined;
   const branchKey = lastTurn ?? undefined;
   const commands: Command[] = COMMANDS.map((c) => {
     const disabled = ({
       new: undefined,
       clear: rewriteWhy,
-      undo: rewriteWhy ?? (last ? undefined : 'Le dernier message n’est pas enregistré'),
-      retry: rewriteWhy ?? (last && lastTurn ? undefined : 'Aucune réponse à relancer'),
-      branch: rewriteWhy ?? (branchKey && cutFor(entries, 'branch', branchKey) !== undefined ? undefined : 'Aucune réponse pour la branche'),
+      undo: rewriteWhy ?? (last ? undefined : t('Le dernier message n’est pas enregistré')),
+      retry: rewriteWhy ?? (last && lastTurn ? undefined : t('Aucune réponse à relancer')),
+      branch: rewriteWhy ?? (branchKey && cutFor(entries, 'branch', branchKey) !== undefined ? undefined : t('Aucune réponse pour la branche')),
       title: undefined,
       usage: undefined,
-      stop: running ? undefined : 'Aucun travail en cours',
+      stop: running ? undefined : t('Aucun travail en cours'),
       prompt: undefined,
-      use: skillNames.length ? undefined : 'Aucun skill activé pour cet agent',
+      use: skillNames.length ? undefined : t('Aucun skill activé pour cet agent'),
       goal: undefined,
     } satisfies Record<CommandName, string | undefined>)[c.name];
     return disabled ? { ...c, disabled } : c;
@@ -714,8 +718,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         case 'branch': runRewrite('branch', branchKey); return true;
         case 'title':
           if (arg) await rename.mutateAsync(arg);
-          else if (!canTitleAi) { setError(new Error('Titre par l’IA indisponible sur cette instance : /title suivi du nom renomme la session')); return false; }
-          else if (!sentOnce) { setError(new Error('La conversation est vide : rien pour faire un titre')); return false; }
+          else if (!canTitleAi) { setError(new Error(t('Titre par l’IA indisponible sur cette instance : /title suivi du nom renomme la session'))); return false; }
+          else if (!sentOnce) { setError(new Error(t('La conversation est vide : rien pour faire un titre'))); return false; }
           else await titleAi.mutateAsync();
           return true;
         case 'usage': setUsageOpen(true); void usage.refetch(); return true;
@@ -815,14 +819,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       // several columns on the Chat page: the active one only
       if (inactive.current) return;
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-      const t = e.target as HTMLElement | null;
-      if (t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) {
+      const target = e.target as HTMLElement | null;
+      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
         // in the message field only, and only when the caret is at the edge it moves towards (or the field is empty)
-        if (t.getAttribute('aria-label') !== 'Message') return;
-        const { selectionStart: a, selectionEnd: b, value } = t;
+        if (target.getAttribute('aria-label') !== t('Message')) return;
+        const { selectionStart: a, selectionEnd: b, value } = target;
         const edge = value === '' || (a === b && (e.key === 'ArrowUp' ? a === 0 : a === value.length));
         if (!edge) return;
-      } else if (t?.isContentEditable) return;
+      } else if (target?.isContentEditable) return;
       e.preventDefault();
       jumpRef.current(e.key === 'ArrowUp' ? -1 : 1);
     };
@@ -830,7 +834,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const title = sess.data?.session.title || 'Nouvelle session';
+  const title = sess.data?.session.title || t('Nouvelle session');
   // the reading width, unless the column is one of several on screen
   const narrow = !col || col.wide;
   // the Chat page's tabs show what the column is doing
@@ -898,11 +902,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     <FilePaths.Provider value={filePaths}>
     <div className={col ? 'flex h-full' : 'flex min-h-full'}>
     <Scroller inColumn={Boolean(col)}>
-    <DropZone onFiles={addFiles} label="Déposer dans inbox/ et joindre au message" className={cx('flex min-w-0 flex-1 flex-col', col ? 'min-h-full' : EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
+    <DropZone onFiles={addFiles} label={t('Déposer dans inbox/ et joindre au message')} className={cx('flex min-w-0 flex-1 flex-col', col ? 'min-h-full' : EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
       <header ref={header} className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
         <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
           {!EMBEDDED && (
-            <Link to="/" aria-label="Revenir à la liste" className={cx(ICON_BTN, 'border-transparent md:hidden')}>
+            <Link to="/" aria-label={t('Revenir à la liste')} className={cx(ICON_BTN, 'border-transparent md:hidden')}>
               <ArrowLeft className="size-4" strokeWidth={1.5} />
             </Link>
           )}
@@ -916,48 +920,48 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" className={ICON_BTN} aria-label="Copier le lien de la session" title="Copier le lien de la session"
-              onClick={() => void copyText(window.location.origin + window.location.pathname, 'Lien de la session').then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
+            <button type="button" className={ICON_BTN} aria-label={t('Copier le lien de la session')} title={t('Copier le lien de la session')}
+              onClick={() => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
-            <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label="Fichiers de la session" title="Fichiers de la session"
+            <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
               aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
               <PanelRight className="size-4" strokeWidth={1.5} />
             </button>
             {items.length >= OUTLINE_MIN && <TurnPlan items={items} onJump={jumpTo} triggerClass={ICON_BTN} />}
             <Menu
-              title="Actions de la session"
+              title={t('Actions de la session')}
               trigger={<Ellipsis className="size-4" strokeWidth={1.5} />}
               triggerClass={cx(ICON_BTN, 'aria-expanded:bg-raised')}
               items={[
-                { label: 'Renommer', icon: <Pencil className="size-4" strokeWidth={1.5} />,
-                  onSelect: async () => { const t = await askText({ title: 'Renommer la session', label: 'Nouveau titre', value: sess.data?.session.title ?? '', confirmLabel: 'Renommer' }); if (t) rename.mutate(t); } },
+                { label: t('Renommer'), icon: <Pencil className="size-4" strokeWidth={1.5} />,
+                  onSelect: async () => { const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') }); if (next) rename.mutate(next); } },
                 sess.data?.session.pinned
-                  ? { label: 'Désépingler', icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
-                  : { label: 'Épingler', icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },
+                  ? { label: t('Désépingler'), icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
+                  : { label: t('Épingler'), icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },
                 sess.data?.session.archived
-                  ? { label: 'Désarchiver', icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
-                  : { label: 'Archiver', icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
-                ...(sentOnce && !canCopy ? [] : [{ label: 'Dupliquer', icon: <Copy className="size-4" strokeWidth={1.5} />, disabled: running || duplicate.isPending, onSelect: () => duplicate.mutate(newKey()) }]),
+                  ? { label: t('Désarchiver'), icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
+                  : { label: t('Archiver'), icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
+                ...(sentOnce && !canCopy ? [] : [{ label: t('Dupliquer'), icon: <Copy className="size-4" strokeWidth={1.5} />, disabled: running || duplicate.isPending, onSelect: () => duplicate.mutate(newKey()) }]),
                 times
-                  ? { label: 'Masquer les heures', icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(false) }
-                  : { label: 'Afficher les heures', icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(true) },
+                  ? { label: t('Masquer les heures'), icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(false) }
+                  : { label: t('Afficher les heures'), icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(true) },
                 ...(sentOnce ? [
-                  { label: 'Exporter en Markdown', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'md')) },
-                  { label: 'Exporter en HTML', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
-                  ...(canExportJson ? [{ label: 'Exporter en JSON', icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
+                  { label: t('Exporter en Markdown'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'md')) },
+                  { label: t('Exporter en HTML'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
+                  ...(canExportJson ? [{ label: t('Exporter en JSON'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
                 ] : []),
-                ...(sentOnce && canCopy ? [{ label: 'Annuler le dernier échange', icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
-                ...(sentOnce && canCopy ? [{ label: 'Vider la conversation', icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !canRewrite, onSelect: () => runRewrite('clear') }] : []),
-                ...(sentOnce && canTitleAi ? [{ label: 'Titre par l’IA', icon: <Sparkles className="size-4" strokeWidth={1.5} />, disabled: titleAi.isPending, onSelect: () => titleAi.mutate() }] : []),
+                ...(sentOnce && canCopy ? [{ label: t('Annuler le dernier échange'), icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
+                ...(sentOnce && canCopy ? [{ label: t('Vider la conversation'), icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !canRewrite, onSelect: () => runRewrite('clear') }] : []),
+                ...(sentOnce && canTitleAi ? [{ label: t('Titre par l’IA'), icon: <Sparkles className="size-4" strokeWidth={1.5} />, disabled: titleAi.isPending, onSelect: () => titleAi.mutate() }] : []),
                 sess.data?.session.autoApprove
-                  ? { label: 'Redemander les accords', icon: <ShieldCheck className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(false) }
-                  : { label: 'Sans confirmation…', icon: <ShieldOff className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(true) },
-                { label: 'Supprimer', icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
+                  ? { label: t('Redemander les accords'), icon: <ShieldCheck className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(false) }
+                  : { label: t('Sans confirmation…'), icon: <ShieldOff className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(true) },
+                { label: t('Supprimer'), icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
               ]}
             />
             {col && (
-              <button type="button" className={ICON_BTN} aria-label="Fermer ce chat" title="Fermer ce chat (le travail continue)" onClick={col.hide}>
+              <button type="button" className={ICON_BTN} aria-label={t('Fermer ce chat')} title={t('Fermer ce chat (le travail continue)')} onClick={col.hide}>
                 <X className="size-4" strokeWidth={1.5} />
               </button>
             )}
@@ -976,40 +980,41 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                   onPick={(id) => void switchInstance(id)} />
               </div>
             )}
-            <p className="text-base font-semibold">Nouvelle session dans {ws.data?.workspace.name}</p>
+            <p className="text-base font-semibold">{t('Nouvelle session dans {name}', { name: ws.data?.workspace.name ?? '' })}</p>
             {neverSent && siblings.length > 1 && (
               <div className="mt-2 flex justify-center" data-move-empty>
                 <Picker
-                  title="Workspace de cette session" placement="below" value={slug}
+                  title={t('Workspace de cette session')} placement="below" value={slug}
                   items={siblings.map((w) => ({ value: w.slug, label: w.name }))}
                   onPick={(v) => void moveTo(v)}
-                  label={<>Changer de workspace</>}
+                  label={<>{t('Changer de workspace')}</>}
                 />
               </div>
             )}
-            <p className="mt-1.5 text-sm text-ink-faint">L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session</p>
+            <p className="mt-1.5 text-sm text-ink-faint">{t('L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session')}</p>
           </div>
         )}
-        {messages.length >= 500 && <p className="mb-4 text-center text-xs text-ink-faint">Messages plus anciens non affichés</p>}
+        {messages.length >= 500 && <p className="mb-4 text-center text-xs text-ink-faint">{t('Messages plus anciens non affichés')}</p>}
         {live?.truncated && (
-          <p className="mb-4 text-xs text-ink-faint">Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin</p>
+          <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
         <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined} />
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && deferred && (
-          <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.</p>
+          <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>{t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')}</p>
         )}
         {approval && (
           <div className="mt-5"><ApprovalCard approval={approval} onChoose={approve} busy={busy} /></div>
         )}
         {clarify && (
-          <div className="mt-5"><ClarifyCard key={clarify.requestId ?? ''} clarify={clarify} onAnswer={(t) => void answer(t)} busy={busy} /></div>
+          <div className="mt-5"><ClarifyCard key={clarify.requestId ?? ''} clarify={clarify} onAnswer={(text) => void answer(text)} busy={busy} /></div>
         )}
         {endNote && (
           <div className={cx('mt-5', AGENT_INDENT)}>
             <div className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
-              <span className="font-medium">{OUTCOME[endNote.status]}</span>
-              {endNote.error ? ` : ${endNote.error}` : ''}
+              {endNote.error
+                ? <T k="{outcome} : {error}" vars={{ outcome: <span className="font-medium">{OUTCOME[endNote.status]}</span>, error: endNote.error }} />
+                : <span className="font-medium">{OUTCOME[endNote.status]}</span>}
             </div>
           </div>
         )}
@@ -1043,7 +1048,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             prompts
             draftKey={inst ? sessionDraftKey(inst, sessionId) : undefined}
             onAttachmentsChange={setAttached}
-            onSend={(t, sk) => { setUsageOpen(false); return send(t, sk); }}
+            onSend={(text, sk) => { setUsageOpen(false); return send(text, sk); }}
             skillNames={skillNames}
             notice={notice}
             autoApprove={sess.data?.session.autoApprove ? { onOff: () => void setAutoApprove(false) } : null}
@@ -1076,14 +1081,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? 'En attente de votre approbation' : live?.status === 'waiting_for_clarify' ? 'Hermes vous pose une question' : 'L’agent travaille… Entrée met votre message en file') : entries.length ? `Répondre à ${agent}…` : `Écrire à ${agent}…`}
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? t('En attente de votre approbation') : live?.status === 'waiting_for_clarify' ? t('Hermes vous pose une question') : t('L’agent travaille… Entrée met votre message en file')) : entries.length ? t('Répondre à {agent}…', { agent }) : t('Écrire à {agent}…', { agent })}
             hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
-              : running ? 'Entrée : mettre en file · Réorienter : donner le texte tout de suite' : 'Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes'}
+              : running ? t('Entrée : mettre en file · Réorienter : donner le texte tout de suite') : t('Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes')}
           />
           {usageOpen && (
             <div data-usage-line className="mt-2 flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-[12px] text-ink-soft">
               <p className="min-w-0 flex-1">{usageText(usage.data, estimate, usage.isFetching)}</p>
-              <button type="button" onClick={() => setUsageOpen(false)} aria-label="Fermer" className="text-ink-faint hover:text-ink">
+              <button type="button" onClick={() => setUsageOpen(false)} aria-label={t('Fermer')} className="text-ink-faint hover:text-ink">
                 <X className="size-3.5" strokeWidth={2} />
               </button>
             </div>
@@ -1111,13 +1116,24 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
 
 /** Text of « /usage »: the context (counted by Hermes or estimated) and the plan quota when the gateway gives it. */
 function usageText(usage: Awaited<ReturnType<typeof api.sessionUsage>> | undefined, estimate: number, fetching: boolean): string {
-  if (!usage && fetching) return 'Lecture de l’utilisation…';
+  if (!usage && fetching) return t('Lecture de l’utilisation…');
   const exact = usage?.exact ?? null;
   const max = exact?.max ?? usage?.max ?? null;
-  const used = exact?.used ?? estimate;
-  const context = `Contexte : ${exact ? '' : '≈ '}${formatTokens(used)}${max ? ` sur ${formatTokens(max)} jetons (${Math.round((used / max) * 100)} %)` : ' jetons (taille du modèle inconnue)'}`
-    + (exact ? ', compté par Hermes' : ', estimé à partir du fil');
+  const used = formatTokens(exact?.used ?? estimate);
+  const pct = max ? Math.round(((exact?.used ?? estimate) / max) * 100) : 0;
+  const context = max
+    ? (exact
+      ? t('Contexte : {used} sur {max} jetons ({pct} %), compté par Hermes', { used, max: formatTokens(max), pct })
+      : t('Contexte : ≈ {used} sur {max} jetons ({pct} %), estimé à partir du fil', { used, max: formatTokens(max), pct }))
+    : (exact
+      ? t('Contexte : {used} jetons (taille du modèle inconnue), compté par Hermes', { used })
+      : t('Contexte : ≈ {used} jetons (taille du modèle inconnue), estimé à partir du fil', { used }));
   const q = usage?.quota;
-  const quota = q ? ` · ${q.label ?? 'Forfait'} : ${Math.round(q.usedPercent)} % utilisés${q.resetsAt ? `, remise à zéro ${new Date(q.resetsAt).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}` : '';
-  return context + quota;
+  if (!q) return context;
+  const label = q.label ?? t('Forfait');
+  const usedPct = Math.round(q.usedPercent);
+  const quota = q.resetsAt
+    ? t('{label} : {pct} % utilisés, remise à zéro {when}', { label, pct: usedPct, when: new Date(q.resetsAt).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) })
+    : t('{label} : {pct} % utilisés', { label, pct: usedPct });
+  return `${context} · ${quota}`;
 }

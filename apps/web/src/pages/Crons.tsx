@@ -12,15 +12,16 @@ import { cronKey, pickSelected } from '../components/selection';
 import { Button, cx, ErrorText, Tag } from '../components/ui';
 import { Blueprints } from '../crons/Blueprints';
 import { snapshot, statusLabel, type FollowSnapshot } from '../crons/follow';
-import { describe, hermesParts, offsetOf, whenFr } from '../crons/schedule';
+import { describe, hermesDayDiff, hermesParts, offsetOf, whenFr } from '../crons/schedule';
+import { locale, plural, t } from '../i18n';
 import type { CronsSearch } from '../main';
 
 const REQUIRED: OpRef[] = [['crons', 'list']];
 const OPTIONAL: OptionalOp[] = [
-  ['crons', 'create', 'Créer'], ['crons', 'update', 'Modifier'], ['crons', 'pause', 'Mettre en pause'],
-  ['crons', 'resume', 'Mettre en pause'], ['crons', 'trigger', 'Lancer'], ['crons', 'cancel', 'Annuler un run'],
-  ['crons', 'runs', 'Historique'], ['crons', 'remove', 'Supprimer'], ['crons', 'blueprints', 'Depuis un modèle'],
-  ['crons', 'instantiate', 'Depuis un modèle'],
+  ['crons', 'create', t('Créer')], ['crons', 'update', t('Modifier')], ['crons', 'pause', t('Mettre en pause')],
+  ['crons', 'resume', t('Mettre en pause')], ['crons', 'trigger', t('Lancer')], ['crons', 'cancel', t('Annuler un run')],
+  ['crons', 'runs', t('Historique')], ['crons', 'remove', t('Supprimer')], ['crons', 'blueprints', t('Depuis un modèle')],
+  ['crons', 'instantiate', t('Depuis un modèle')],
 ];
 
 const ICON = 'size-4';
@@ -30,10 +31,10 @@ function nextShort(iso: string | null): string {
   if (!iso) return '';
   const p = hermesParts(iso);
   if (!p) return '';
-  const label = whenFr(iso);
-  if (label.startsWith('aujourd’hui')) return p.time;
-  if (label.startsWith('demain')) return `demain ${p.time}`;
-  return new Date(Date.UTC(p.y, p.mo - 1, p.d)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const diff = hermesDayDiff(iso)?.diff;
+  if (diff === 0) return p.time;
+  if (diff === 1) return t('demain {time}', { time: p.time });
+  return new Date(Date.UTC(p.y, p.mo - 1, p.d)).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
 /** The schedule as Hermes holds it, for the mono line of the detail. */
@@ -49,28 +50,28 @@ function expression(c: Cron): string {
 function StateTag({ cron, running, selected }: { cron: Cron; running: boolean; selected: boolean }) {
   const last = statusLabel(cron.lastStatus);
   const ground = selected ? 'bg-sheet' : undefined;
-  if (running) return <Tag className={cx('text-accent-ink', ground)}>en cours</Tag>;
-  if (!cron.enabled) return <Tag className={ground}>en pause</Tag>;
+  if (running) return <Tag className={cx('text-accent-ink', ground)}>{t('en cours')}</Tag>;
+  if (!cron.enabled) return <Tag className={ground}>{t('en pause')}</Tag>;
   if (last.ok === false) {
     const n = Math.max(1, cron.failureStreak);
-    return <Tag className={cx('text-bad', ground)} title={cron.lastError ?? undefined}>{n} échec{n > 1 ? 's' : ''}</Tag>;
+    return <Tag className={cx('text-bad', ground)} title={cron.lastError ?? undefined}>{plural(n, '{n} échec', '{n} échecs', { n })}</Tag>;
   }
   if (last.ok === true) return <Tag className={cx('text-ok', ground)}>ok</Tag>;
-  return <Tag className={ground}>{cron.lastStatus === null ? 'jamais lancé' : last.label}</Tag>;
+  return <Tag className={ground}>{cron.lastStatus === null ? t('jamais lancé') : last.label}</Tag>;
 }
 
 /** The advanced options set on a cron, for the detail facts (context crons by name when known). */
 function advancedFacts(cron: Cron, all: Cron[]): { label: string; value: string; mono?: boolean }[] {
   const out: { label: string; value: string; mono?: boolean }[] = [];
-  if (cron.repeat) out.push({ label: 'Répétition', value: `${cron.repeatCompleted} / ${cron.repeat} runs` });
-  if (cron.timezone) out.push({ label: 'Fuseau horaire', value: cron.timezone, mono: true });
-  if (cron.enabledToolsets?.length) out.push({ label: 'Outils permis', value: cron.enabledToolsets.join(', '), mono: true });
+  if (cron.repeat) out.push({ label: t('Répétition'), value: t('{done} / {total} runs', { done: cron.repeatCompleted, total: cron.repeat }) });
+  if (cron.timezone) out.push({ label: t('Fuseau horaire'), value: cron.timezone, mono: true });
+  if (cron.enabledToolsets?.length) out.push({ label: t('Outils permis'), value: cron.enabledToolsets.join(', '), mono: true });
   if (cron.catchUp !== null || cron.graceMinutes !== null) {
-    const what = cron.catchUp === null ? 'par défaut' : cron.catchUp ? 'oui' : 'non';
-    out.push({ label: 'Rattrapage', value: `${what}${cron.graceMinutes !== null ? ` · grâce ${cron.graceMinutes} min` : ''}` });
+    const what = cron.catchUp === null ? t('par défaut') : cron.catchUp ? t('oui') : t('non');
+    out.push({ label: t('Rattrapage'), value: cron.graceMinutes !== null ? t('{what} · grâce {n} min', { what, n: cron.graceMinutes }) : what });
   }
   if (cron.contextFrom.length) {
-    out.push({ label: 'Contexte de', value: cron.contextFrom.map((id) => all.find((c) => c.id === id && c.profile === cron.profile)?.name || id).join(', ') });
+    out.push({ label: t('Contexte de'), value: cron.contextFrom.map((id) => all.find((c) => c.id === id && c.profile === cron.profile)?.name || id).join(', ') });
   }
   return out;
 }
@@ -110,31 +111,31 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
   const running = follow !== null;
 
   return (
-    <article aria-label={cron.name || '(sans nom)'} data-cron={cronKey(cron)}>
+    <article aria-label={cron.name || t('(sans nom)')} data-cron={cronKey(cron)}>
       <DetailHeader
-        title={cron.name || '(sans nom)'}
-        meta={`${expression(cron)} · ${instanceLabel} · agent ${cron.profile}`}
+        title={cron.name || t('(sans nom)')}
+        meta={t('{expr} · {instance} · agent {profile}', { expr: expression(cron), instance: instanceLabel, profile: cron.profile })}
         back={{ to: '/i/$inst/crons', params: { inst: cron.instanceId } }}
         actions={(
           <>
             {can(cron.enabled ? 'pause' : 'resume') && (
-              <Button onClick={() => toggle.mutate()} disabled={toggle.isPending} aria-label={cron.enabled ? 'Mettre en pause' : 'Reprendre'}>
-                {cron.enabled ? 'Mettre en pause' : 'Reprendre'}
+              <Button onClick={() => toggle.mutate()} disabled={toggle.isPending} aria-label={cron.enabled ? t('Mettre en pause') : t('Reprendre')}>
+                {cron.enabled ? t('Mettre en pause') : t('Reprendre')}
               </Button>
             )}
             {can('trigger') && (
               <Button variant="dark" onClick={() => trigger.mutate()} disabled={trigger.isPending || running}>
-                {running ? 'En cours…' : 'Lancer maintenant'}
+                {running ? t('En cours…') : t('Lancer maintenant')}
               </Button>
             )}
             {can('update') && (
-              <Button variant="ghost" className="w-[34px] px-0" onClick={onEdit} title="Modifier" aria-label="Modifier">
+              <Button variant="ghost" className="w-[34px] px-0" onClick={onEdit} title={t('Modifier')} aria-label={t('Modifier')}>
                 <Pencil className={ICON} strokeWidth={1.5} />
               </Button>
             )}
             {can('remove') && (
-              <Button variant="ghost" className="w-[34px] px-0 hover:text-bad" title="Supprimer" aria-label="Supprimer" disabled={remove.isPending}
-                onClick={async () => { if (await ask({ title: `Supprimer le cron « ${cron.name} » ?`, message: 'Hermes l’oublie définitivement ; les fichiers déjà produits restent.', confirmLabel: 'Supprimer', danger: true })) remove.mutate(); }}>
+              <Button variant="ghost" className="w-[34px] px-0 hover:text-bad" title={t('Supprimer')} aria-label={t('Supprimer')} disabled={remove.isPending}
+                onClick={async () => { if (await ask({ title: t('Supprimer le cron « {name} » ?', { name: cron.name }), message: t('Hermes l’oublie définitivement ; les fichiers déjà produits restent.'), confirmLabel: t('Supprimer'), danger: true })) remove.mutate(); }}>
                 <Trash2 className={ICON} strokeWidth={1.5} />
               </Button>
             )}
@@ -144,21 +145,21 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
       <DetailBody>
         <div className="empty:hidden"><ErrorText error={toggle.error ?? remove.error ?? trigger.error} /></div>
         <Facts items={[
-          { label: 'Fréquence', value: describe(cron.schedule) },
-          { label: 'Prochaine exécution', value: cron.enabled ? whenFr(cron.nextRunAt) : 'en pause' },
+          { label: t('Fréquence'), value: describe(cron.schedule) },
+          { label: t('Prochaine exécution'), value: cron.enabled ? whenFr(cron.nextRunAt) : t('en pause') },
           {
-            label: 'Dernière exécution',
-            value: running ? 'en cours…' : <>{last.label}{cron.lastRunAt ? ` · ${whenFr(cron.lastRunAt)}` : ''}</>,
+            label: t('Dernière exécution'),
+            value: running ? t('en cours…') : <>{last.label}{cron.lastRunAt ? ` · ${whenFr(cron.lastRunAt)}` : ''}</>,
             className: cx(!running && last.ok === false && 'text-bad', !running && last.ok === true && 'text-ok'),
           },
-          { label: 'Livraison', value: cron.deliver ?? 'local', mono: true },
-          ...(cron.model ? [{ label: 'Modèle', value: cron.model, mono: true }] : []),
-          ...(cron.skills.length ? [{ label: 'Skills', value: cron.skills.join(', '), mono: true }] : []),
+          { label: t('Livraison'), value: cron.deliver ?? 'local', mono: true },
+          ...(cron.model ? [{ label: t('Modèle'), value: cron.model, mono: true }] : []),
+          ...(cron.skills.length ? [{ label: t('Skills'), value: cron.skills.join(', '), mono: true }] : []),
           ...advancedFacts(cron, all),
           ...(cron.workspace ? [{
-            label: 'Workspace',
+            label: t('Workspace'),
             value: cron.workspace.missing
-              ? <span className="text-warn">workspace supprimé ({cron.workspace.slug})</span>
+              ? <span className="text-warn">{t('workspace supprimé ({slug})', { slug: cron.workspace.slug })}</span>
               : (
                 <Link to="/w/$slug/fichiers" params={{ slug: cron.workspace.slug }} search={{ path: `crons/${cron.workspace.folder}`, f: undefined }}
                   className="inline-flex items-center gap-1 font-mono text-[13px] underline-offset-2 hover:underline">
@@ -171,8 +172,8 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
           <p className="break-words rounded-[10px] bg-bad-soft px-4 py-3 font-mono text-xs text-bad">{cron.lastError}</p>
         )}
         <section aria-labelledby={`prompt-${cron.id}`}>
-          <h3 id={`prompt-${cron.id}`} className="text-[15px] font-semibold">Consigne envoyée à l’agent</h3>
-          <p className="mt-2 whitespace-pre-wrap break-words rounded-[10px] bg-paper px-4 py-3.5 text-sm">{cron.prompt || '(vide)'}</p>
+          <h3 id={`prompt-${cron.id}`} className="text-[15px] font-semibold">{t('Consigne envoyée à l’agent')}</h3>
+          <p className="mt-2 whitespace-pre-wrap break-words rounded-[10px] bg-paper px-4 py-3.5 text-sm">{cron.prompt || t('(vide)')}</p>
         </section>
         <CronRuns cron={cron} follow={follow} result={result} canRuns={can('runs')} canCancel={can('cancel')} />
       </DetailBody>
@@ -210,17 +211,17 @@ export function CronsPage() {
 
   const list = (
     <ListPane
-      title="Crons"
+      title={t('Crons')}
       action={a.available && (can('create') || canBlueprints) ? (
         <span className="flex gap-1.5">
           {canBlueprints && (
-            <Button onClick={() => setEditing('blueprint')} title="Depuis un modèle" aria-label="Depuis un modèle" className="w-[34px] px-0">
+            <Button onClick={() => setEditing('blueprint')} title={t('Depuis un modèle')} aria-label={t('Depuis un modèle')} className="w-[34px] px-0">
               <LayoutTemplate className={ICON} strokeWidth={1.5} />
             </Button>
           )}
           {can('create') && (
             <Button variant="primary" onClick={() => setEditing('new')}>
-              <Plus className={ICON} strokeWidth={1.5} />Nouveau
+              <Plus className={ICON} strokeWidth={1.5} />{t('Nouveau')}
             </Button>
           )}
         </span>
@@ -228,17 +229,17 @@ export function CronsPage() {
       head={items.length > 0 ? (
         <label className="flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-ink-faint focus-within:border-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-          <span className="sr-only">Rechercher un cron</span>
-          <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Rechercher"
+          <span className="sr-only">{t('Rechercher un cron')}</span>
+          <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Rechercher')}
             className="w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint" />
         </label>
       ) : undefined}
     >
       <ErrorText error={crons.error} />
-      {a.available && crons.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">Chargement…</p>}
-      {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">Aucun cron sur cette instance</p>}
-      {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">Aucun cron ne correspond</p>}
-      <ul className="flex flex-col gap-0.5" aria-label="Tâches planifiées">
+      {a.available && crons.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron sur cette instance')}</p>}
+      {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron ne correspond')}</p>}
+      <ul className="flex flex-col gap-0.5" aria-label={t('Tâches planifiées')}>
         {shown.map((c) => {
           const k = cronKey(c);
           const on = editing === null && selected !== null && cronKey(selected) === k;
@@ -246,7 +247,7 @@ export function CronsPage() {
             <li key={k} data-cron-item={k}>
               <ListLink link={{ to: '/i/$inst/crons', params: { inst }, search: { cron: k } }} selected={on} onClick={() => setEditing(null)}>
                 <ListItemBody
-                  title={<span className={cx(!c.enabled && 'text-ink-soft')}>{c.name || '(sans nom)'}</span>}
+                  title={<span className={cx(!c.enabled && 'text-ink-soft')}>{c.name || t('(sans nom)')}</span>}
                   meta={c.enabled ? nextShort(c.nextRunAt) : ''}
                   sub={describe(c.schedule)}
                   tag={<StateTag cron={c} running={Boolean(follows[k])} selected={on} />}
@@ -261,12 +262,12 @@ export function CronsPage() {
 
   const notice = (
     <div className="px-4 pt-5 empty:hidden md:px-6">
-      <ModuleNotice instanceId={inst} module="crons" title="La console des crons" required={REQUIRED} optional={OPTIONAL} explainMissing />
+      <ModuleNotice instanceId={inst} module="crons" title={t('La console des crons')} required={REQUIRED} optional={OPTIONAL} explainMissing />
     </div>
   );
 
   return (
-    <SplitView label="Crons" list={list} selected={Boolean(search.cron) || editing !== null}>
+    <SplitView label={t('Crons')} list={list} selected={Boolean(search.cron) || editing !== null}>
       {Object.entries(follows).map(([k, f]) => (
         <CronFollower key={k} cron={f.cron} follow={f.snap} canRuns={can('runs')}
           onEnd={(r) => {
@@ -289,8 +290,8 @@ export function CronsPage() {
           {selected && unattached?.key === cronKey(selected) && (
             <div className="px-4 pt-4 md:px-6">
               <p role="alert" className="flex items-start gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
-                <span className="flex-1">Cron créé, mais pas rattaché au workspace « {unattached.workspace} » : modifiez-le pour le rattacher.</span>
-                <button type="button" aria-label="Masquer" onClick={() => setUnattached(null)}><X className="size-3.5" strokeWidth={1.5} /></button>
+                <span className="flex-1">{t('Cron créé, mais pas rattaché au workspace « {workspace} » : modifiez-le pour le rattacher.', { workspace: unattached.workspace })}</span>
+                <button type="button" aria-label={t('Masquer')} onClick={() => setUnattached(null)}><X className="size-3.5" strokeWidth={1.5} /></button>
               </p>
             </div>
           )}
@@ -309,15 +310,15 @@ export function CronsPage() {
           ) : crons.isSuccess && items.length === 0 ? (
             <Empty
               icon={<CalendarClock strokeWidth={1.5} />}
-              title="Aucun cron pour l’instant"
+              title={t('Aucun cron pour l’instant')}
               actions={can('create') || canBlueprints ? (
                 <>
-                  {can('create') && <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />Créer un cron</Button>}
-                  {canBlueprints && <Button onClick={() => setEditing('blueprint')}><LayoutTemplate className={ICON} strokeWidth={1.5} />Depuis un modèle</Button>}
+                  {can('create') && <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />{t('Créer un cron')}</Button>}
+                  {canBlueprints && <Button onClick={() => setEditing('blueprint')}><LayoutTemplate className={ICON} strokeWidth={1.5} />{t('Depuis un modèle')}</Button>}
                 </>
               ) : undefined}
             >
-              Une tâche planifiée envoie une consigne à l’agent à heure fixe{offset ? ` (heure d’Hermes, ${offset})` : ''}, et livre le résultat où vous voulez.
+              {offset ? t('Une tâche planifiée envoie une consigne à l’agent à heure fixe (heure d’Hermes, {offset}), et livre le résultat où vous voulez.', { offset }) : t('Une tâche planifiée envoie une consigne à l’agent à heure fixe, et livre le résultat où vous voulez.')}
             </Empty>
           ) : null}
         </>

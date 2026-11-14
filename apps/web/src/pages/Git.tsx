@@ -10,6 +10,7 @@ import { Button, cx, ErrorText, Panel } from '../components/ui';
 import DiffView from '../files/viewers/DiffView';
 import { CommitBox } from '../git/CommitBox';
 import { GIT_REQUIRED, GitFiles } from '../git/GitFiles';
+import { t } from '../i18n';
 import { useState } from 'react';
 
 export interface GitSearch {
@@ -23,10 +24,10 @@ const STALE = 10_000;
 
 /** The diffs to show for a file: staged and/or unstaged, or everything against HEAD when Hermes did not tell. */
 function diffsOf(file: GitFile): { which: GitDiffWhich; title: string }[] {
-  if (file.status === '?') return [{ which: 'unstaged', title: 'Nouveau fichier' }];
-  if (file.conflicted || (file.staged && file.unstaged === null)) return [{ which: 'all', title: 'Toutes les modifications' }];
-  if (file.staged && file.unstaged) return [{ which: 'staged', title: 'Indexé' }, { which: 'unstaged', title: 'Non indexé' }];
-  return [file.staged ? { which: 'staged', title: 'Indexé' } : { which: 'unstaged', title: 'Non indexé' }];
+  if (file.status === '?') return [{ which: 'unstaged', title: t('Nouveau fichier') }];
+  if (file.conflicted || (file.staged && file.unstaged === null)) return [{ which: 'all', title: t('Toutes les modifications') }];
+  if (file.staged && file.unstaged) return [{ which: 'staged', title: t('Indexé') }, { which: 'unstaged', title: t('Non indexé') }];
+  return [file.staged ? { which: 'staged', title: t('Indexé') } : { which: 'unstaged', title: t('Non indexé') }];
 }
 
 function FileDiff({ slug, repo, file, version, onClose }: { slug: string; repo: string; file: GitFile; version: number; onClose: () => void }) {
@@ -35,15 +36,15 @@ function FileDiff({ slug, repo, file, version, onClose }: { slug: string; repo: 
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
         <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
-        <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label="Fermer le diff">
+        <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer le diff')}>
           <X className="size-4" strokeWidth={1.5} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {file.dir ? (
-          <p className="p-6 text-sm text-ink-faint">Dossier non suivi : son contenu apparaîtra fichier par fichier une fois indexé.</p>
+          <p className="p-6 text-sm text-ink-faint">{t('Dossier non suivi : son contenu apparaîtra fichier par fichier une fois indexé.')}</p>
         ) : file.sensitive ? (
-          <p className="p-6 text-sm text-ink-faint">Fichier sensible (identifiants) : diff non affiché.</p>
+          <p className="p-6 text-sm text-ink-faint">{t('Fichier sensible (identifiants) : diff non affiché.')}</p>
         ) : diffs.map((d) => (
           <section key={d.which} data-diff={d.which}>
             {diffs.length > 1 && <h3 className="border-b border-line/70 bg-paper px-4 py-1.5 text-[12.5px] font-medium text-ink-faint">{d.title}</h3>}
@@ -93,7 +94,7 @@ export function GitPage() {
       void qc.invalidateQueries({ queryKey: ['tree', slug] });
     }
   };
-  const unstagedNote = (u: string[]) => (u.length ? `Laissés hors de l’index (fichiers sensibles) : ${u.join(', ')}` : null);
+  const unstagedNote = (u: string[]) => (u.length ? t('Laissés hors de l’index (fichiers sensibles) : {files}', { files: u.join(', ') }) : null);
   const actions = st ? {
     busy,
     canStage: has('git', 'stage'), canUnstage: has('git', 'unstage'), canRevert: has('git', 'revert'),
@@ -103,9 +104,9 @@ export function GitPage() {
     onRevert: async (f: GitFile) => {
       const fresh = f.status === '?' || f.status === 'A';
       const yes = await ask({
-        title: fresh ? 'Supprimer ce nouveau fichier ?' : 'Annuler les modifications ?',
-        message: fresh ? `${f.path} sera supprimé.` : `Les modifications de ${f.path} seront perdues (indexées comprises).`,
-        confirmLabel: fresh ? 'Supprimer' : 'Annuler les modifications', cancelLabel: 'Garder', danger: true,
+        title: fresh ? t('Supprimer ce nouveau fichier ?') : t('Annuler les modifications ?'),
+        message: fresh ? t('{path} sera supprimé.', { path: f.path }) : t('Les modifications de {path} seront perdues (indexées comprises).', { path: f.path }),
+        confirmLabel: fresh ? t('Supprimer') : t('Annuler les modifications'), cancelLabel: t('Garder'), danger: true,
       });
       if (yes) void act(async () => { await api.gitRevert(slug, repo, f.path); if (search.f === f.path) void go({ f: undefined }, true); });
     },
@@ -113,11 +114,11 @@ export function GitPage() {
   const switchTo = async (branch: string | null) => {
     if (!branch || branch === st?.branch) return;
     const yes = await ask({
-      title: `Passer sur ${branch} ?`,
-      message: 'git refusera si des modifications seraient perdues. Les sessions en cours dans ce dossier verront les fichiers de l’autre branche.',
-      confirmLabel: 'Changer de branche', cancelLabel: 'Rester',
+      title: t('Passer sur {branch} ?', { branch }),
+      message: t('git refusera si des modifications seraient perdues. Les sessions en cours dans ce dossier verront les fichiers de l’autre branche.'),
+      confirmLabel: t('Changer de branche'), cancelLabel: t('Rester'),
     });
-    if (yes) void act(async () => { await api.gitSwitch(slug, repo, branch); return `Sur la branche ${branch}`; });
+    if (yes) void act(async () => { await api.gitSwitch(slug, repo, branch); return t('Sur la branche {branch}', { branch }); });
   };
 
   return (
@@ -130,10 +131,10 @@ export function GitPage() {
           <div className="flex items-center gap-2">
             <Link to="/w/$slug/fichiers" params={{ slug }} search={repo ? { path: repo } : {}}
               className="inline-flex h-[34px] items-center rounded-lg border border-line bg-sheet px-3.5 text-[13.5px] font-medium text-ink transition-colors hover:bg-paper">
-              Fichiers
+              {t('Fichiers')}
             </Link>
             <Button onClick={refresh} disabled={status.isFetching}>
-              <RefreshCw className={cx('size-4', status.isFetching && 'animate-spin')} strokeWidth={1.5} />Actualiser
+              <RefreshCw className={cx('size-4', status.isFetching && 'animate-spin')} strokeWidth={1.5} />{t('Actualiser')}
             </Button>
           </div>
         }
@@ -148,19 +149,19 @@ export function GitPage() {
           title={
             <span className="flex min-w-0 items-center gap-2 text-[14px]">
               <GitBranch className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
-              <span className="truncate font-mono" data-branch>{st ? (st.detached ? 'HEAD détaché' : st.branch ?? '?') : name}</span>
+              <span className="truncate font-mono" data-branch>{st ? (st.detached ? t('HEAD détaché') : st.branch ?? '?') : name}</span>
               {st && has('git', 'switch') && (branches.data?.branches.length ?? 0) > 1 && (
-                <Picker label="Changer" title="Branches locales" placement="below" disabled={busy}
+                <Picker label={t('Changer')} title={t('Branches locales')} placement="below" disabled={busy}
                   value={st.branch} onPick={(v) => void switchTo(v)}
                   items={(branches.data?.branches ?? []).map((b) => ({ value: b.name, label: b.name, mono: true }))} />
               )}
             </span>
           }
           action={st && (st.ahead > 0 || st.behind > 0) ? (
-            <span className="flex items-center gap-2 font-mono text-[12.5px] text-ink-soft" title="Depuis la dernière récupération (fetch)">
+            <span className="flex items-center gap-2 font-mono text-[12.5px] text-ink-soft" title={t('Depuis la dernière récupération (fetch)')}>
               {st.ahead > 0 && <span className="flex items-center"><ArrowUp className="size-3.5" strokeWidth={1.5} />{st.ahead}</span>}
               {st.behind > 0 && <span className="flex items-center"><ArrowDown className="size-3.5" strokeWidth={1.5} />{st.behind}</span>}
-              <span className="font-sans text-ink-faint">depuis la dernière récupération</span>
+              <span className="font-sans text-ink-faint">{t('depuis la dernière récupération')}</span>
             </span>
           ) : undefined}
         >
@@ -168,24 +169,24 @@ export function GitPage() {
           {note && (
             <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
               <span className="flex-1">{note}</span>
-              <button onClick={() => setNote(null)} className="text-ink-faint hover:text-ink" aria-label="Fermer la note"><X className="size-4" strokeWidth={1.5} /></button>
+              <button onClick={() => setNote(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
             </p>
           )}
           {st && (st.files.length ? (
             <GitFiles files={st.files} selected={search.f ?? null} onSelect={(f) => void go({ f: f.path })} actions={actions} />
           ) : (
             <div className="px-4 py-12 text-center">
-              <p className="text-sm font-medium">Aucune modification</p>
-              <p className="mt-1 text-sm text-ink-faint">Le dossier est identique au dernier commit</p>
+              <p className="text-sm font-medium">{t('Aucune modification')}</p>
+              <p className="mt-1 text-sm text-ink-faint">{t('Le dossier est identique au dernier commit')}</p>
             </div>
           ))}
           {st && (has('git', 'commit') || has('git', 'push')) && (
             <CommitBox slug={slug} repo={repo} status={st} canCommit={has('git', 'commit')} canPush={has('git', 'push')}
               canMessage={oneshotOn && has('git', 'context')} onDone={(n) => { setNote(n); refresh(); }} />
           )}
-          {st?.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">1 000 premiers fichiers affichés</p>}
+          {st?.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('1 000 premiers fichiers affichés')}</p>}
           <p className="border-t border-line/70 px-4 py-2.5 text-xs text-ink-faint">
-            Récupérer les nouveautés (pull) : pas proposé par Hermes 0.23, demandez-le à l’agent.
+            {t('Récupérer les nouveautés (pull) : pas proposé par Hermes 0.23, demandez-le à l’agent.')}
           </p>
         </Panel>
         {selected && (

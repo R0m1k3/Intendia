@@ -4,6 +4,7 @@ import { lazy, Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type Skill } from '../api';
 import { Button, cx, ErrorText, Field, Input } from '../components/ui';
+import { t } from '../i18n';
 
 const CodeView = lazy(() => import('../files/CodeView'));
 const ICON = 'size-4';
@@ -34,29 +35,29 @@ export function NewSkill({ inst, profile, onClose, onCreated }: {
   return createPortal(
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
       <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) create.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[560px] md:border-l md:border-line" aria-label="Nouveau skill">
+        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[560px] md:border-l md:border-line" aria-label={t('Nouveau skill')}>
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
-          <h2 className="text-lg font-semibold">Nouveau skill <span className="ml-1 font-mono text-sm font-normal text-ink-faint">{profile}</span></h2>
-          <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label="Fermer"><X className={ICON} strokeWidth={1.5} /></Button>
+          <h2 className="text-lg font-semibold">{t('Nouveau skill')} <span className="ml-1 font-mono text-sm font-normal text-ink-faint">{profile}</span></h2>
+          <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label={t('Fermer')}><X className={ICON} strokeWidth={1.5} /></Button>
         </header>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
-          <Field label="Nom" hint={name && !nameOk ? <span className="text-bad">Minuscules, chiffres, . _ - ; 64 caractères au plus</span> : 'Minuscules, chiffres, . _ - ; c’est le dossier du skill'}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder="rapport-hebdo" autoFocus className="font-mono" />
+          <Field label={t('Nom')} hint={name && !nameOk ? <span className="text-bad">{t('Minuscules, chiffres, . _ - ; 64 caractères au plus')}</span> : t('Minuscules, chiffres, . _ - ; c’est le dossier du skill')}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder={t('rapport-hebdo')} autoFocus className="font-mono" />
           </Field>
-          <Field label="Catégorie" hint={category && !categoryOk ? <span className="text-bad">Même règle que le nom</span> : 'Facultatif ; un sous-dossier de skills/'}>
-            <Input value={category} onChange={(e) => setCategory(e.target.value)} maxLength={64} placeholder="notes" className="font-mono" />
+          <Field label={t('Catégorie')} hint={category && !categoryOk ? <span className="text-bad">{t('Même règle que le nom')}</span> : t('Facultatif ; un sous-dossier de skills/')}>
+            <Input value={category} onChange={(e) => setCategory(e.target.value)} maxLength={64} placeholder={t('notes')} className="font-mono" />
           </Field>
-          <Field label="Description" hint={<span className={cx(left < 0 && 'text-bad')} data-counter>{description.trim().length} / {DESCRIPTION_MAX} : l’agent la lit pour choisir le skill</span>}>
-            <Input value={description} onChange={(e) => setDescription(e.target.value.replace(/[\r\n]+/g, ' '))} required placeholder="Rédige le rapport de la semaine" />
+          <Field label={t('Description')} hint={<span className={cx(left < 0 && 'text-bad')} data-counter>{t('{n} / {max} : l’agent la lit pour choisir le skill', { n: description.trim().length, max: DESCRIPTION_MAX })}</span>}>
+            <Input value={description} onChange={(e) => setDescription(e.target.value.replace(/[\r\n]+/g, ' '))} required placeholder={t('Rédige le rapport de la semaine')} />
           </Field>
-          <Field label="Instructions" hint="Le corps du SKILL.md, en Markdown : la méthode que l’agent doit suivre">
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} required className={AREA} placeholder={'# Rapport\n\n1. Relire les notes de la semaine\n2. …'} />
+          <Field label={t('Instructions')} hint={t('Le corps du SKILL.md, en Markdown : la méthode que l’agent doit suivre')}>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} required className={AREA} placeholder={t('# Rapport\n\n1. Relire les notes de la semaine\n2. …')} />
           </Field>
           <ErrorText error={create.error} />
         </div>
         <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-3">
-          <Button type="button" onClick={onClose}>Annuler</Button>
-          <Button type="submit" variant="primary" disabled={!ok || create.isPending}>{create.isPending ? 'Création…' : 'Créer le skill'}</Button>
+          <Button type="button" onClick={onClose}>{t('Annuler')}</Button>
+          <Button type="submit" variant="primary" disabled={!ok || create.isPending}>{create.isPending ? t('Création…') : t('Créer le skill')}</Button>
         </footer>
       </form>
     </div>,
@@ -88,32 +89,32 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
       <div className="flex items-center gap-3 border-b border-line/70 px-4 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-faint">skills/{name}/SKILL.md</span>
         {canEdit && draft === null && (
-          <Button className="h-7" onClick={() => setDraft(data.content)}><Pencil className="size-3.5" strokeWidth={1.5} />Modifier</Button>
+          <Button className="h-7" onClick={() => setDraft(data.content)}><Pencil className="size-3.5" strokeWidth={1.5} />{t('Modifier')}</Button>
         )}
       </div>
       {data ? (
         draft !== null ? (
           <>
-            <Suspense fallback={<p className="p-4 text-sm text-ink-faint">Chargement…</p>}>
+            <Suspense fallback={<p className="p-4 text-sm text-ink-faint">{t('Chargement…')}</p>}>
               {/* starting text only: CodeView is rebuilt on every value */}
               <CodeView key="edit" name="SKILL.md" value={data.content} editable onChange={setDraft} />
             </Suspense>
             <div className="space-y-2 border-t border-line/70 px-4 py-3">
-              <p className="text-xs text-ink-faint">Gardez l’en-tête entre les deux lignes --- ; laissez les «secret:…» tels quels, Intendia remet leur valeur.</p>
+              <p className="text-xs text-ink-faint">{t('Gardez l’en-tête entre les deux lignes --- ; laissez les «secret:…» tels quels, Intendia remet leur valeur.')}</p>
               <ErrorText error={save.error} />
               <div className="flex justify-end gap-2">
-                <Button onClick={() => { setDraft(null); save.reset(); }}>Annuler</Button>
-                <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate(draft)}>{save.isPending ? 'Enregistrement…' : 'Enregistrer'}</Button>
+                <Button onClick={() => { setDraft(null); save.reset(); }}>{t('Annuler')}</Button>
+                <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate(draft)}>{save.isPending ? t('Enregistrement…') : t('Enregistrer')}</Button>
               </div>
             </div>
           </>
         ) : (
           <>
             <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-[12.5px] leading-[1.7]">{data.content}</pre>
-            {data.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">Contenu tronqué à 200 000 caractères.</p>}
+            {data.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('Contenu tronqué à 200 000 caractères.')}</p>}
           </>
         )
-      ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <p className="p-4 text-sm text-ink-faint">Chargement…</p>}
+      ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <p className="p-4 text-sm text-ink-faint">{t('Chargement…')}</p>}
     </section>
   );
 }

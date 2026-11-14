@@ -11,6 +11,7 @@ import { ErrorText } from '../components/ui';
 import { uploadFiles } from '../files/upload';
 import { invalidateSessionLists } from '../sessions/UndoBar';
 import { setHandoff } from './handoff';
+import { t } from '../i18n';
 
 const LAST = 'intendia-last-workspace';
 
@@ -83,20 +84,20 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
         prompts
         draftKey={homeDraftKey}
         onAttachmentsChange={onFiles}
-        placeholder="Demander quelque chose à Hermes…"
-        hint="Entrée pour envoyer · une nouvelle session est créée"
+        placeholder={t('Demander quelque chose à Hermes…')}
+        hint={t('Entrée pour envoyer · une nouvelle session est créée')}
         leading={(
           <Picker
-            title="Workspace de la nouvelle session" placement="below" value={ws.slug} disabled={attached > 0}
-            items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? `agent ${w.profile}` : undefined }))}
+            title={t('Workspace de la nouvelle session')} placement="below" value={ws.slug} disabled={attached > 0}
+            items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? t('agent {profile}', { profile: w.profile }) : undefined }))}
             onPick={(v) => v && setSlug(v)}
             triggerClass="flex h-7 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-paper hover:text-ink aria-expanded:bg-paper"
             label={<span className="flex min-w-0 items-center gap-1.5"><Folder className="size-3.5 shrink-0 text-ink-faint" strokeWidth={1.5} /><span className="truncate">{ws.name}</span></span>}
           />
         )}
       />
-      {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">Retirez les pièces jointes pour changer de workspace</p>}
-      {!chat.available && <p className="text-xs text-ink-faint">Le chat n’est pas disponible sur l’instance de ce workspace</p>}
+      {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">{t('Retirez les pièces jointes pour changer de workspace')}</p>}
+      {!chat.available && <p className="text-xs text-ink-faint">{t('Le chat n’est pas disponible sur l’instance de ce workspace')}</p>}
       <ErrorText error={error} />
     </div>
   );

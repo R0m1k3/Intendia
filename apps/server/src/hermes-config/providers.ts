@@ -8,6 +8,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import { Masker } from './mask.js';
 import { ANTHROPIC_KEY_VAR, ANTHROPIC_TOKEN_VARS, ConfigInputError, toConfigError, type ConfigService } from './service.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * Provider accounts (subscriptions connected by a device code) and API keys of the credential pool, per instance
@@ -72,7 +73,7 @@ export class ProvidersService {
   }
 
   private ctx(instanceId: string, profile: string): Ctx {
-    if (!this.store.get(instanceId)) throw new NotFoundError(`Instance inconnue : ${instanceId}`);
+    if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId), instanceId, profile };
   }
 
@@ -80,7 +81,7 @@ export class ProvidersService {
     return Boolean(ctx.report?.modules.find((m) => m.id === 'config')?.ops[op]?.ok);
   }
 
-  private async call<T>(ctx: Ctx, op: string, opts: CallOptions = {}, what = 'Introuvable', scrub?: (s: string) => string): Promise<T> {
+  private async call<T>(ctx: Ctx, op: string, opts: CallOptions = {}, what = msg('Introuvable'), scrub?: (s: string) => string): Promise<T> {
     try {
       return await callOp<T>(ctx.http, ctx.report, 'config', op, { profile: ctx.profile, ...opts });
     } catch (err) {
@@ -134,9 +135,9 @@ export class ProvidersService {
     const ctx = this.ctx(instanceId, profile);
     const copy = await this.config.snapshot(instanceId, profile, 'provider-login').catch(() => null);
     try {
-      const r = await this.call<unknown>(ctx, 'oauthStart', { params: { provider } }, 'Fournisseur inconnu');
+      const r = await this.call<unknown>(ctx, 'oauthStart', { params: { provider } }, msg('Fournisseur inconnu'));
       const s = OAuthStartSchema.parse(r);
-      if (!s.user_code || !s.verification_url) throw new HermesError('schema', 'Hermes n’a pas donné de code de connexion', {});
+      if (!s.user_code || !s.verification_url) throw new HermesError('schema', msg('Hermes n’a pas donné de code de connexion'), {});
       this.config.trimHistory(instanceId, profile);
       return { sessionId: s.session_id, userCode: s.user_code, verificationUrl: s.verification_url, pollInterval: s.poll_interval ?? null, expiresIn: s.expires_in ?? null };
     } catch (err) {
@@ -167,7 +168,7 @@ export class ProvidersService {
   }
 
   async disconnect(instanceId: string, profile: string, provider: string): Promise<{ ok: true }> {
-    await this.call(this.ctx(instanceId, profile), 'oauthDisconnect', { params: { provider } }, 'Fournisseur inconnu');
+    await this.call(this.ctx(instanceId, profile), 'oauthDisconnect', { params: { provider } }, msg('Fournisseur inconnu'));
     return { ok: true };
   }
 
@@ -177,7 +178,7 @@ export class ProvidersService {
     const scrub = (s: string) => s.split(k.apiKey).join('•••');
     const body: Record<string, string> = { provider: k.provider, api_key: k.apiKey };
     if (k.label?.trim()) body.label = k.label.trim();
-    const r = PoolAddSchema.safeParse(await this.call<unknown>(ctx, 'poolAdd', { body }, 'Introuvable', scrub));
+    const r = PoolAddSchema.safeParse(await this.call<unknown>(ctx, 'poolAdd', { body }, msg('Introuvable'), scrub));
     return { count: r.success ? r.data.count ?? null : null };
   }
 
@@ -191,11 +192,11 @@ export class ProvidersService {
     return this.locked(`${instanceId}:${profile}:${k.provider}`, async () => {
       const pool = await this.call<z.infer<typeof PoolSchema>>(ctx, 'poolList');
       const entry = pool.providers.find((p) => p.provider === k.provider)?.entries.find((e) => e.id === k.id);
-      if (!entry) throw new NotFoundError('La clé a déjà été retirée');
+      if (!entry) throw new NotFoundError(msg('La clé a déjà été retirée'));
       if ((entry.source || MANUAL) !== MANUAL || (entry.auth_type ?? 'api_key') !== 'api_key') {
-        throw new ConfigInputError('not_manual', 'Cette clé ne se retire pas ici : elle vient d’une variable ou d’une connexion (onglet Variables ou Abonnements)');
+        throw new ConfigInputError('not_manual', msg('Cette clé ne se retire pas ici : elle vient d’une variable ou d’une connexion (onglet Variables ou Abonnements)'));
       }
-      await this.call(ctx, 'poolRemove', { params: { provider: k.provider, index: String(entry.index) } }, 'Clé introuvable');
+      await this.call(ctx, 'poolRemove', { params: { provider: k.provider, index: String(entry.index) } }, msg('Clé introuvable'));
       return { ok: true as const };
     });
   }

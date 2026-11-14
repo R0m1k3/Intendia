@@ -7,6 +7,7 @@
 import { isMap } from 'yaml';
 import { ConfigInputError } from './service.js';
 import { parse } from './mask.js';
+import { msg } from '../i18n/index.js';
 
 export interface PublicCustomProvider {
   /** Key of `providers` (v12 shape); null for an old `custom_providers` entry. */
@@ -75,18 +76,18 @@ export const keyEnvFor = (slug: string) => `INTENDIA_${slug.toUpperCase().replac
 /** Checks the input of a new endpoint; returns its slug and the cleaned URL. */
 export function checkEndpoint(input: { name: string; baseUrl: string; model?: string }): { slug: string; name: string; baseUrl: string; model: string | null } {
   const name = input.name.trim();
-  if (!name || name.length > 64) throw new ConfigInputError('invalid', 'Nom : 1 à 64 caractères');
+  if (!name || name.length > 64) throw new ConfigInputError('invalid', msg('Nom : 1 à 64 caractères'));
   const slug = slugFor(name);
-  if (!slug) throw new ConfigInputError('invalid', 'Nom : il faut au moins une lettre ou un chiffre');
+  if (!slug) throw new ConfigInputError('invalid', msg('Nom : il faut au moins une lettre ou un chiffre'));
   let url: URL;
   try {
     url = new URL(input.baseUrl.trim());
   } catch {
-    throw new ConfigInputError('invalid', 'Adresse invalide : http://… ou https://…');
+    throw new ConfigInputError('invalid', msg('Adresse invalide : http://… ou https://…'));
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new ConfigInputError('invalid', 'Adresse invalide : http://… ou https://…');
-  if (url.username || url.password) throw new ConfigInputError('invalid', 'Pas d’identifiants dans l’adresse : mettez la clé dans le champ Clé');
-  if (url.search || url.hash) throw new ConfigInputError('invalid', 'Pas de paramètres (?…) dans l’adresse : mettez la clé dans le champ Clé');
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new ConfigInputError('invalid', msg('Adresse invalide : http://… ou https://…'));
+  if (url.username || url.password) throw new ConfigInputError('invalid', msg('Pas d’identifiants dans l’adresse : mettez la clé dans le champ Clé'));
+  if (url.search || url.hash) throw new ConfigInputError('invalid', msg('Pas de paramètres (?…) dans l’adresse : mettez la clé dans le champ Clé'));
   const model = input.model?.trim() || null;
   return { slug, name, baseUrl: input.baseUrl.trim().replace(/\/+$/, ''), model };
 }

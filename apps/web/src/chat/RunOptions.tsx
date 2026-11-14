@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { api, type Effort, type ModelPin, type RunMode } from '../api';
 import { ask, askChoice, askText } from '../components/Dialog';
 import { Picker, type PickerItem as Item } from '../components/Menu';
+import { t } from '../i18n';
 import { EFFORTS, effortLabel, shortModel } from './format';
 import { currentValue, decodeChoice, isPinned, modeOf, modelItems as pickerModels } from './model-items';
 
@@ -41,24 +42,26 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
   };
   const saveMode = async () => {
     const name = await askText({
-      title: 'Enregistrer comme mode', label: 'Nom du mode', maxLength: 60, confirmLabel: 'Enregistrer',
-      message: `Modèle ${model ? shortModel(model) : 'Auto'}, effort ${effortLabel(effort)}${personality ? ', avec la personnalité' : ''}. Le mode ne change pas d’agent.`,
+      title: t('Enregistrer comme mode'), label: t('Nom du mode'), maxLength: 60, confirmLabel: t('Enregistrer'),
+      message: personality
+        ? t('Modèle {model}, effort {effort}, avec la personnalité. Le mode ne change pas d’agent.', { model: model ? shortModel(model) : 'Auto', effort: effortLabel(effort) })
+        : t('Modèle {model}, effort {effort}. Le mode ne change pas d’agent.', { model: model ? shortModel(model) : 'Auto', effort: effortLabel(effort) }),
     });
     if (!name) return;
     const id = globalThis.crypto.randomUUID();
     await setModes([...(modes.data ?? []), { id, name, model, provider, effort, personality: personality ?? null }]);
   };
   const removeMode = async () => {
-    const id = await askChoice({ title: 'Retirer un mode', options: (modes.data ?? []).map((m) => ({ value: m.id, label: m.name })), confirmLabel: 'Retirer' });
+    const id = await askChoice({ title: t('Retirer un mode'), options: (modes.data ?? []).map((m) => ({ value: m.id, label: m.name })), confirmLabel: t('Retirer') });
     if (id) await setModes((modes.data ?? []).filter((m) => m.id !== id));
   };
   const modelItems = pickerModels(list.data, current, manage, { modes: modes.data, pins: pins.data, togglePin, saveMode: () => void saveMode(), removeMode: () => void removeMode() });
   const value = currentValue(list.data, current);
   const effortItems: Item[] = [
-    { value: null, label: 'Auto', hint: 'Le réglage de l’agent Hermes' },
+    { value: null, label: 'Auto', hint: t('Le réglage de l’agent Hermes') },
     ...EFFORTS.map((e) => ({ value: e.value, label: e.label, hint: e.hint })),
   ];
-  const confirmModel = async () => !hasRuns || ask({ title: 'Changer le modèle de cette session ?', message: 'Le nouveau modèle relira toute la conversation sans cache au prochain message, une fois : ce message coûtera plus cher.', confirmLabel: 'Changer de modèle' });
+  const confirmModel = async () => !hasRuns || ask({ title: t('Changer le modèle de cette session ?'), message: t('Le nouveau modèle relira toute la conversation sans cache au prochain message, une fois : ce message coûtera plus cher.'), confirmLabel: t('Changer de modèle') });
   const pickModel = async (v: string | null) => {
     const modeId = modeOf(v);
     if (modeId) {
@@ -73,9 +76,9 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
   };
 
   const newPersonality = async () => {
-    const title = await askText({ title: 'Nouvelle personnalité', label: 'Nom', maxLength: 80, confirmLabel: 'Suivant' });
+    const title = await askText({ title: t('Nouvelle personnalité'), label: t('Nom'), maxLength: 80, confirmLabel: t('Suivant') });
     if (!title) return;
-    const body = await askText({ title: `Personnalité « ${title} »`, label: 'Consigne donnée à l’agent à chaque message', maxLength: 20_000, confirmLabel: 'Enregistrer' });
+    const body = await askText({ title: t('Personnalité « {title} »', { title }), label: t('Consigne donnée à l’agent à chaque message'), maxLength: 20_000, confirmLabel: t('Enregistrer') });
     if (!body) return;
     const { prompt } = await api.createPrompt({ title, body, kind: 'personality' });
     await qc.invalidateQueries({ queryKey: ['personalities'] });
@@ -83,43 +86,43 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
   };
   const personaList = personas.data?.items ?? [];
   const personaItems: Item[] = [
-    { value: null, label: 'Aucune', hint: 'Le comportement réglé pour l’agent' },
-    ...(personaList.some((p) => p.source === 'hermes') ? [{ heading: 'De l’agent' }] : []),
+    { value: null, label: t('Aucune'), hint: t('Le comportement réglé pour l’agent') },
+    ...(personaList.some((p) => p.source === 'hermes') ? [{ heading: t('De l’agent') }] : []),
     ...personaList.filter((p) => p.source === 'hermes').map((p) => ({ value: p.value, label: p.label })),
     ...(personaList.some((p) => p.source === 'intendia') ? [{ heading: 'Intendia' }] : []),
     ...personaList.filter((p) => p.source === 'intendia').map((p) => ({ value: p.value, label: p.label })),
     // a personality removed since: still shown so it can be cleared
-    ...(personality && !personaList.some((p) => p.value === personality) && personas.data ? [{ value: personality, label: personality.replace(/^\w+:/, ''), hint: 'introuvable' }] : []),
-    { action: () => void newPersonality(), label: 'Nouvelle personnalité…' },
+    ...(personality && !personaList.some((p) => p.value === personality) && personas.data ? [{ value: personality, label: personality.replace(/^\w+:/, ''), hint: t('introuvable') }] : []),
+    { action: () => void newPersonality(), label: t('Nouvelle personnalité…') },
   ];
   const personaLabel = personality ? (personaList.find((p) => p.value === personality)?.label ?? personality.replace(/^\w+:/, '')) : null;
 
   const withKey = (agents.data ?? []).filter((a) => a.hasKey);
-  const profileItems: Item[] = withKey.map((a) => ({ value: a.name, label: a.name, ...(a.name === profile ? { hint: 'cette session' } : {}) }));
+  const profileItems: Item[] = withKey.map((a) => ({ value: a.name, label: a.name, ...(a.name === profile ? { hint: t('cette session') } : {}) }));
 
   return (
     <div className="flex min-w-0 items-center gap-0.5">
       {onProfile && withKey.length > 1 && (
         <Picker
-          title="Agent de cette session" items={profileItems} value={profile} disabled={disabled}
+          title={t('Agent de cette session')} items={profileItems} value={profile} disabled={disabled}
           onPick={(v) => { if (v && v !== profile) onProfile(v); }}
-          label={<><span className="hidden sm:inline">Agent : </span>{profile}</>}
+          label={<><span className="hidden sm:inline">{t('Agent : ')}</span>{profile}</>}
         />
       )}
       <Picker
         // not before the agent's models are read: the menu would only offer Auto
-        title="Modèle des prochains messages" items={modelItems} value={value} disabled={disabled || list.isLoading} onPick={pickModel}
+        title={t('Modèle des prochains messages')} items={modelItems} value={value} disabled={disabled || list.isLoading} onPick={pickModel}
         label={model ? <span className="font-mono">{shortModel(model)}</span> : (modelItems.find((i) => 'value' in i && i.value === null) as { label: string }).label}
       />
       <Picker
-        title="Effort de raisonnement" items={effortItems} value={effort} disabled={disabled}
+        title={t('Effort de raisonnement')} items={effortItems} value={effort} disabled={disabled}
         onPick={(v) => onChange({ effort: v as Effort | null })}
-        label={<><span className="hidden sm:inline">Effort : </span><span className="sm:hidden">Effort </span>{effortLabel(effort)}</>}
+        label={<><span className="hidden sm:inline">{t('Effort : ')}</span><span className="sm:hidden">Effort </span>{effortLabel(effort)}</>}
       />
       <Picker
-        title="Personnalité de la session" items={personaItems} value={personality ?? null} disabled={disabled}
+        title={t('Personnalité de la session')} items={personaItems} value={personality ?? null} disabled={disabled}
         onPick={(v) => onChange({ personality: v })}
-        label={personaLabel ? <span className="max-w-[8rem] truncate">{personaLabel}</span> : <span className="hidden lg:inline">Personnalité</span>}
+        label={personaLabel ? <span className="max-w-[8rem] truncate">{personaLabel}</span> : <span className="hidden lg:inline">{t('Personnalité')}</span>}
       />
     </div>
   );

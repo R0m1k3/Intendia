@@ -9,6 +9,7 @@ import { fileKind, formatSize } from './paths';
 import { ShareButton } from './Preview';
 import type { FileScope } from './scope';
 import { ask, askText } from '../components/Dialog';
+import { t } from '../i18n';
 
 export const isDirEntry = (e: FileEntry) => e.kind === 'dir' || e.target === 'dir';
 
@@ -48,16 +49,16 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
   const refresh = () => qc.invalidateQueries({ queryKey: [...scope.key] });
 
   const move = async (e: FileEntry) => {
-    const to = await askText({ title: `Renommer ou déplacer ${e.name}`, label: 'Nouveau chemin (relatif au workspace)', value: e.path, confirmLabel: 'Renommer' });
+    const to = await askText({ title: t('Renommer ou déplacer {name}', { name: e.name }), label: t('Nouveau chemin (relatif au workspace)'), value: e.path, confirmLabel: t('Renommer') });
     if (!to || to === e.path || !slug) return;
     if (e.kind === 'dir' && !(await ask({
-      title: `Déplacer le dossier ${e.path} et tout son contenu ?`,
-      message: 'Évitez pendant qu’une session de ce workspace travaille.', confirmLabel: 'Déplacer',
+      title: t('Déplacer le dossier {path} et tout son contenu ?', { path: e.path }),
+      message: t('Évitez pendant qu’une session de ce workspace travaille.'), confirmLabel: t('Déplacer'),
     }))) return;
     try {
       const res = await api.moveFile(slug, e.path, to);
       if (res.leftover?.length) {
-        onNotice?.(`Déplacé. Restent dans ${res.leftover.join(', ')} des fichiers qu’Hermes ne montre pas (clés, configuration) ou ajoutés ou modifiés pendant le déplacement : ils n’ont pas été supprimés.`);
+        onNotice?.(t('Déplacé. Restent dans {dirs} des fichiers qu’Hermes ne montre pas (clés, configuration) ou ajoutés ou modifiés pendant le déplacement : ils n’ont pas été supprimés.', { dirs: res.leftover.join(', ') }));
       }
       await refresh();
       void qc.invalidateQueries({ queryKey: ['links'] });
@@ -66,8 +67,8 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
     }
   };
   const remove = async (e: FileEntry) => {
-    const what = isDirEntry(e) && e.kind === 'dir' ? `le dossier ${e.path} et tout son contenu` : e.path;
-    if (!slug || !(await ask({ title: `Supprimer ${what} ?`, message: 'Cette suppression est définitive.', confirmLabel: 'Supprimer', danger: true }))) return;
+    const title = isDirEntry(e) && e.kind === 'dir' ? t('Supprimer le dossier {path} et tout son contenu ?', { path: e.path }) : t('Supprimer {path} ?', { path: e.path });
+    if (!slug || !(await ask({ title, message: t('Cette suppression est définitive.'), confirmLabel: t('Supprimer'), danger: true }))) return;
     try {
       await api.deleteFile(slug, e.path);
       await refresh();
@@ -86,7 +87,7 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
               type="button"
               disabled={e.outside}
               onClick={() => onOpen(e)}
-              title={e.outside ? 'Lien symbolique : Intendia ne l’ouvre pas et ne le modifie pas' : e.path}
+              title={e.outside ? t('Lien symbolique : Intendia ne l’ouvre pas et ne le modifie pas') : e.path}
               className="flex h-11 min-w-0 flex-1 items-center gap-3.5 px-4 text-left transition-colors hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Icon className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
@@ -97,22 +98,22 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
             {!e.outside && e.kind !== 'link' && (
               <div className="flex shrink-0 items-center justify-end opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                 {isDirEntry(e) ? (
-                  <a href={scope.zip(e.path)} className={ICON_BTN} title="Télécharger (zip)" aria-label={`Télécharger ${e.name} (zip)`}>
+                  <a href={scope.zip(e.path)} className={ICON_BTN} title={t('Télécharger (zip)')} aria-label={t('Télécharger {name} (zip)', { name: e.name })}>
                     <FileArchive className="size-4" strokeWidth={1.5} />
                   </a>
                 ) : (
-                  <a href={scope.raw(e.path, true)} className={ICON_BTN} title="Télécharger" aria-label={`Télécharger ${e.name}`}>
+                  <a href={scope.raw(e.path, true)} className={ICON_BTN} title={t('Télécharger')} aria-label={t('Télécharger {name}', { name: e.name })}>
                     <Download className="size-4" strokeWidth={1.5} />
                   </a>
                 )}
                 {agentRoot && (
-                  <button className={ICON_BTN} title="Copier le chemin" aria-label={`Copier le chemin de ${e.name}`}
-                    onClick={() => void copyText(`${agentRoot}/${e.path}`, 'Chemin')}>
+                  <button className={ICON_BTN} title={t('Copier le chemin')} aria-label={t('Copier le chemin de {name}', { name: e.name })}
+                    onClick={() => void copyText(`${agentRoot}/${e.path}`, t('Chemin'))}>
                     <ClipboardCopy className="size-4" strokeWidth={1.5} />
                   </button>
                 )}
                 {onInsert && agentRoot && !isDirEntry(e) && (
-                  <button className={ICON_BTN} title="Insérer dans le message" aria-label={`Insérer ${e.name} dans le message`}
+                  <button className={ICON_BTN} title={t('Insérer dans le message')} aria-label={t('Insérer {name} dans le message', { name: e.name })}
                     onClick={() => onInsert(`${agentRoot}/${e.path}`)}>
                     <MessageSquarePlus className="size-4" strokeWidth={1.5} />
                   </button>
@@ -120,10 +121,10 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
                 {actions && slug && (
                   <>
                     {!isDirEntry(e) && <ShareButton slug={slug} path={e.path} compact />}
-                    <button className={ICON_BTN} title="Renommer ou déplacer" aria-label={`Renommer ou déplacer ${e.name}`} onClick={() => void move(e)}>
+                    <button className={ICON_BTN} title={t('Renommer ou déplacer')} aria-label={t('Renommer ou déplacer {name}', { name: e.name })} onClick={() => void move(e)}>
                       <MoveRight className="size-4" strokeWidth={1.5} />
                     </button>
-                    <button className={cx(ICON_BTN, 'hover:text-bad')} title="Supprimer" aria-label={`Supprimer ${e.name}`} onClick={() => void remove(e)}>
+                    <button className={cx(ICON_BTN, 'hover:text-bad')} title={t('Supprimer')} aria-label={t('Supprimer {name}', { name: e.name })} onClick={() => void remove(e)}>
                       <Trash2 className="size-4" strokeWidth={1.5} />
                     </button>
                   </>

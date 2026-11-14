@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { cx } from './ui';
+import { t } from '../i18n';
 
 /**
  * List + detail (the mockup's inbox layout). From 768 px: a sticky list column with its own scroll, the detail
@@ -109,7 +110,7 @@ export function DetailHeader({ title, meta, actions, back, sticky = false, mono 
       sticky && 'sticky top-0 z-20',
     )}>
       {back && (
-        <Link {...(back as { to: string })} aria-label="Revenir à la liste" className="-ml-1 grid size-[34px] place-items-center rounded-lg text-ink-soft hover:bg-raised md:hidden">
+        <Link {...(back as { to: string })} aria-label={t('Revenir à la liste')} className="-ml-1 grid size-[34px] place-items-center rounded-lg text-ink-soft hover:bg-raised md:hidden">
           <ArrowLeft className="size-4" strokeWidth={1.5} />
         </Link>
       )}

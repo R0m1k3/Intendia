@@ -1,5 +1,6 @@
 // Kanban live events: the dashboard WebSocket, opened here only (its token never leaves the server).
 import type { InstanceConfig } from '../config.js';
+import { msg } from '../i18n/index.js';
 
 /** Minimal WebSocket surface used here (the global WebSocket of Node, or a test double). */
 export interface WsLike {
@@ -21,7 +22,7 @@ export interface KanbanEventHandlers {
 
 /** ws(s)://<dashboard base><path>?<query>&token= (base path of the dashboard URL kept). Never log it: it holds the token. */
 export function dashboardSocketUrl(instance: InstanceConfig, path: string, query: Record<string, string> = {}): string {
-  if (!instance.dashboard || !instance.dashboardToken) throw new Error('Dashboard non configuré');
+  if (!instance.dashboard || !instance.dashboardToken) throw new Error(msg('Dashboard non configuré'));
   const u = new URL(instance.dashboard);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
   u.pathname = `${u.pathname.replace(/\/+$/, '')}${path}`;
@@ -56,11 +57,11 @@ export function openKanbanEvents(
   try {
     ws = factory(kanbanEventsUrl(instance, board));
   } catch {
-    queueMicrotask(() => end('Connexion au flux du kanban impossible'));
+    queueMicrotask(() => end(msg('Connexion au flux du kanban impossible')));
     return { close: () => { closed = true; } };
   }
   timer = setTimeout(() => {
-    end('Flux du kanban sans réponse');
+    end(msg('Flux du kanban sans réponse'));
     try { ws.close(1000); } catch { /* not open */ }
   }, openTimeoutMs);
   ws.addEventListener('open', () => {
@@ -77,8 +78,8 @@ export function openKanbanEvents(
       // not JSON: ignored
     }
   });
-  ws.addEventListener('error', () => end('Flux du kanban interrompu'));
-  ws.addEventListener('close', (ev) => end(ev.code === 1008 ? 'Flux du kanban refusé par Hermes' : 'Flux du kanban fermé'));
+  ws.addEventListener('error', () => end(msg('Flux du kanban interrompu')));
+  ws.addEventListener('close', (ev) => end(ev.code === 1008 ? msg('Flux du kanban refusé par Hermes') : msg('Flux du kanban fermé')));
   return {
     close: () => {
       clearTimeout(timer);

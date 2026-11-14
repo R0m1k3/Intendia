@@ -5,19 +5,20 @@ import { api, ApiError, type GatewayAction, type RestartStatus } from '../api';
 import { ask } from '../components/Dialog';
 import { Button, cx, ErrorText } from '../components/ui';
 import { RESTART_CONFIRM } from '../config/restart';
+import { t } from '../i18n';
 
 const POLL_MS = 1500;
 const POLL_MAX_MS = 5 * 60_000;
 const ICON = 'size-4';
 
 const LABEL: Record<GatewayAction, { running: string; done: string; failed: string }> = {
-  start: { running: 'Démarrage de la passerelle…', done: 'Passerelle démarrée.', failed: 'Le démarrage a échoué' },
-  stop: { running: 'Arrêt de la passerelle…', done: 'Passerelle arrêtée.', failed: 'L’arrêt a échoué' },
-  restart: { running: 'Redémarrage de la passerelle…', done: 'Passerelle redémarrée.', failed: 'Le redémarrage a échoué' },
+  start: { running: t('Démarrage de la passerelle…'), done: t('Passerelle démarrée.'), failed: t('Le démarrage a échoué') },
+  stop: { running: t('Arrêt de la passerelle…'), done: t('Passerelle arrêtée.'), failed: t('L’arrêt a échoué') },
+  restart: { running: t('Redémarrage de la passerelle…'), done: t('Passerelle redémarrée.'), failed: t('Le redémarrage a échoué') },
 };
 
 const codeOf = (e: unknown) => (e instanceof ApiError ? (e.data as { code?: string } | undefined)?.code : undefined);
-const MULTIPLEXED = 'Cet agent est servi par la passerelle commune : arrêtez-la ou démarrez-la depuis le profil principal.';
+const MULTIPLEXED = t('Cet agent est servi par la passerelle commune : arrêtez-la ou démarrez-la depuis le profil principal.');
 
 /**
  * Start, stop and restart of an agent's gateway, then the action's log until it ends. Start stays reachable when the
@@ -68,8 +69,10 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
     if (a === 'restart' && !(await ask(RESTART_CONFIRM))) return;
     if (a === 'stop') {
       const ok = await ask({
-        title: `Arrêter la passerelle de ${profile} ?`, danger: true, confirmLabel: 'Arrêter',
-        message: `Le chat, les runs et les crons de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur.${profile === 'default' ? ' Si elle sert aussi d’autres agents (multiplexeur), ils s’arrêtent tous.' : ''}`,
+        title: t('Arrêter la passerelle de {profile} ?', { profile }), danger: true, confirmLabel: t('Arrêter'),
+        message: profile === 'default'
+          ? t('Le chat, les runs et les crons de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur. Si elle sert aussi d’autres agents (multiplexeur), ils s’arrêtent tous.')
+          : t('Le chat, les runs et les crons de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur.'),
       });
       if (!ok) return;
     }
@@ -82,8 +85,8 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
       if (code !== 'refused') return;
       run.reset();
       const force = await ask({
-        title: 'Hermes refuse l’arrêt', danger: true, confirmLabel: 'Interrompre et arrêter',
-        message: `Hermes refuse : ${detail}. Interrompre les sessions en cours et arrêter quand même ?`,
+        title: t('Hermes refuse l’arrêt'), danger: true, confirmLabel: t('Interrompre et arrêter'),
+        message: t('Hermes refuse : {detail}. Interrompre les sessions en cours et arrêter quand même ?', { detail }),
       });
       if (!force) return;
       try {
@@ -104,16 +107,16 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
         {!compact && (
           <span className="mr-auto inline-flex items-center gap-2 text-sm">
             <span className={cx('size-2 rounded-full', running === null ? 'bg-ink-faint' : running ? 'bg-ok' : 'bg-bad')} />
-            {running === null ? 'État inconnu' : running ? 'En marche' : 'Arrêtée'}
+            {running === null ? t('État inconnu') : running ? t('En marche') : t('Arrêtée')}
           </span>
         )}
         {running !== true && can.start && (
-          <Button onClick={() => void go('start')} disabled={busy}><Play className={ICON} strokeWidth={1.5} />Démarrer</Button>
+          <Button onClick={() => void go('start')} disabled={busy}><Play className={ICON} strokeWidth={1.5} />{t('Démarrer')}</Button>
         )}
         {running !== false && !compact && (
           <>
-            {can.restart && <Button onClick={() => void go('restart')} disabled={busy}><RotateCw className={ICON} strokeWidth={1.5} />Redémarrer</Button>}
-            {can.stop && <Button onClick={() => void go('stop')} disabled={busy}><Square className={ICON} strokeWidth={1.5} />Arrêter</Button>}
+            {can.restart && <Button onClick={() => void go('restart')} disabled={busy}><RotateCw className={ICON} strokeWidth={1.5} />{t('Redémarrer')}</Button>}
+            {can.stop && <Button onClick={() => void go('stop')} disabled={busy}><Square className={ICON} strokeWidth={1.5} />{t('Arrêter')}</Button>}
           </>
         )}
       </div>
@@ -124,10 +127,10 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
           <div className="flex items-center justify-between gap-3">
             <span>
               {busy ? l.running
-                : timedOut ? 'L’action ne s’est pas terminée en 5 minutes : voir l’état de l’instance.'
-                : failed ? `${l.failed} (code ${status?.exitCode}).` : l.done}
+                : timedOut ? t('L’action ne s’est pas terminée en 5 minutes : voir l’état de l’instance.')
+                : failed ? t('{failed} (code {code}).', { failed: l.failed, code: String(status?.exitCode) }) : l.done}
             </span>
-            {!busy && <Button variant="ghost" className="h-7" onClick={() => { setDone(false); setTimedOut(false); setStatus(null); setAction(null); }}>Fermer</Button>}
+            {!busy && <Button variant="ghost" className="h-7" onClick={() => { setDone(false); setTimedOut(false); setStatus(null); setAction(null); }}>{t('Fermer')}</Button>}
           </div>
           {status && status.lines.length > 0 && (
             <pre className="max-h-40 overflow-auto rounded-lg bg-raised p-3 font-mono text-[12px] text-ink-soft">{status.lines.join('\n')}</pre>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { api } from '../api';
 import { Menu } from '../components/Menu';
 import { copyText, cx } from '../components/ui';
+import { t } from '../i18n';
 import { SessionPage, SessionView } from '../pages/Session';
 import { useInbox } from '../sessions/InboxLayout';
 import { ColumnContext, type Column } from './column-context';
@@ -134,14 +135,14 @@ function ChatColumns() {
   const copyLink = () => {
     const others = chat.open.filter((x) => x.id !== sessionId);
     const url = `${window.location.origin}/w/${encodeURIComponent(slug)}/s/${encodeURIComponent(sessionId)}${others.length ? `?avec=${toAvec(others)}` : ''}`;
-    void copyText(url, 'Lien des chats ouverts');
+    void copyText(url, t('Lien des chats ouverts'));
   };
 
   return (
     <div className="flex h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] min-h-0 flex-col md:h-[var(--content-h)]" data-chat-page>
-      <div role="tablist" aria-label="Chats ouverts" className="flex h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line px-2">
+      <div role="tablist" aria-label={t('Chats ouverts')} className="flex h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line px-2">
         <button type="button" onClick={() => setFull(!full)} aria-pressed={!full}
-          title={full ? 'Afficher la liste' : 'Replier la liste'} aria-label={full ? 'Afficher la liste' : 'Replier la liste'}
+          title={full ? t('Afficher la liste') : t('Replier la liste')} aria-label={full ? t('Afficher la liste') : t('Replier la liste')}
           className="hidden size-8 shrink-0 place-items-center rounded-lg text-ink-faint hover:bg-raised hover:text-ink md:grid">
           {full ? <PanelLeftOpen className="size-4" strokeWidth={1.5} /> : <PanelLeftClose className="size-4" strokeWidth={1.5} />}
         </button>
@@ -161,17 +162,17 @@ function ChatColumns() {
                   className={cx('size-[7px] shrink-0 rounded-full', waiting ? 'bg-bad' : r?.running ? 'bg-accent' : 'bg-line')} />
                 {instLabel && <span data-tab-inst className="shrink-0 font-mono text-[11px] text-ink-faint">{instLabel}</span>}
                 <span className="truncate">{r?.title ?? '…'}</span>
-                {waiting && <span className="sr-only">(attend votre réponse)</span>}
-                {!waiting && r?.running && <span className="sr-only">(en cours)</span>}
+                {waiting && <span className="sr-only">{t('(attend votre réponse)')}</span>}
+                {!waiting && r?.running && <span className="sr-only">{t('(en cours)')}</span>}
               </button>
-              <Menu title={`Options du chat ${i + 1}`} triggerClass="grid size-6 place-items-center rounded text-ink-faint hover:text-ink"
+              <Menu title={t('Options du chat {n}', { n: i + 1 })} triggerClass="grid size-6 place-items-center rounded text-ink-faint hover:text-ink"
                 trigger={<ChevronDown className="size-3.5" strokeWidth={1.5} />}
                 items={[
-                  { label: 'Afficher seul', icon: <Square className="size-4" strokeWidth={1.5} />, onSelect: () => { change((x) => setLayout(activate(x, c.id), 'one')); focus(c.id); } },
-                  { label: 'Déplacer à gauche', disabled: i === 0, onSelect: () => change((x) => move(x, c.id, -1)) },
-                  { label: 'Déplacer à droite', disabled: i === chat.open.length - 1, onSelect: () => change((x) => move(x, c.id, 1)) },
+                  { label: t('Afficher seul'), icon: <Square className="size-4" strokeWidth={1.5} />, onSelect: () => { change((x) => setLayout(activate(x, c.id), 'one')); focus(c.id); } },
+                  { label: t('Déplacer à gauche'), disabled: i === 0, onSelect: () => change((x) => move(x, c.id, -1)) },
+                  { label: t('Déplacer à droite'), disabled: i === chat.open.length - 1, onSelect: () => change((x) => move(x, c.id, 1)) },
                 ]} />
-              <button type="button" onClick={() => closeCol(c.id)} aria-label={`Fermer ${r?.title ?? 'ce chat'}`} title="Fermer"
+              <button type="button" onClick={() => closeCol(c.id)} aria-label={r?.title ? t('Fermer {title}', { title: r.title }) : t('Fermer ce chat')} title={t('Fermer')}
                 className="mr-1 grid size-6 shrink-0 place-items-center rounded text-ink-faint hover:bg-raised hover:text-ink">
                 <X className="size-3.5" strokeWidth={1.5} />
               </button>
@@ -179,15 +180,15 @@ function ChatColumns() {
           );
         })}
         <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
-          <div className="hidden items-center gap-1 md:flex" role="group" aria-label="Disposition">
-            {([['one', 'Un seul', Square], ['cols', 'Colonnes', Columns3], ['grid', 'Grille', LayoutGrid]] as const).map(([l, label, Icon]) => (
+          <div className="hidden items-center gap-1 md:flex" role="group" aria-label={t('Disposition')}>
+            {([['one', t('Un seul'), Square], ['cols', t('Colonnes'), Columns3], ['grid', t('Grille'), LayoutGrid]] as const).map(([l, label, Icon]) => (
               <button key={l} type="button" aria-pressed={chat.layout === l} onClick={() => change((x) => setLayout(x, l))} title={label} aria-label={label}
                 className={cx('grid size-8 place-items-center rounded-lg border', chat.layout === l ? 'border-ink text-ink' : 'border-transparent text-ink-faint hover:bg-raised hover:text-ink')}>
                 <Icon className="size-4" strokeWidth={1.5} />
               </button>
             ))}
           </div>
-          <button type="button" onClick={copyLink} title="Copier le lien des chats ouverts" aria-label="Copier le lien des chats ouverts"
+          <button type="button" onClick={copyLink} title={t('Copier le lien des chats ouverts')} aria-label={t('Copier le lien des chats ouverts')}
             className="grid size-8 place-items-center rounded-lg text-ink-faint hover:bg-raised hover:text-ink">
             <Link2 className="size-4" strokeWidth={1.5} />
           </button>
@@ -251,7 +252,7 @@ function ChatColumn({ col, active, layout, visible, spanAll, many, width, onFocu
   const px = drag ?? width;
   const style: CSSProperties | undefined = layout === 'cols' && visible ? (px ? { flex: '0 0 auto', width: px } : { flex: '1 1 0' }) : undefined;
   return (
-    <section ref={ref} aria-label={`Chat ${col.id}`} data-chat-column={col.id} data-active={active || undefined}
+    <section ref={ref} aria-label={t('Chat {id}', { id: col.id })} data-chat-column={col.id} data-active={active || undefined}
       inert={!visible} style={style}
       onPointerDownCapture={() => { if (!active) onFocus(col.id); }}
       onFocusCapture={() => { if (!active) onFocus(col.id); }}
@@ -267,7 +268,7 @@ function ChatColumn({ col, active, layout, visible, spanAll, many, width, onFocu
         <SessionView key={col.id} slug={col.slug} sessionId={col.id} />
       </ColumnContext.Provider>
       {layout === 'cols' && visible && many && (
-        <div role="separator" aria-orientation="vertical" aria-label="Largeur du chat" title="Glisser pour régler la largeur, double-clic pour revenir"
+        <div role="separator" aria-orientation="vertical" aria-label={t('Largeur du chat')} title={t('Glisser pour régler la largeur, double-clic pour revenir')}
           onPointerDown={startResize} onDoubleClick={() => onWidth(null)}
           className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize hover:bg-accent/40" />
       )}

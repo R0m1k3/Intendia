@@ -1,6 +1,7 @@
 // Sessions whose agent is working, put forward in the session list (SessionsPane): an « En cours » group on top.
 
 import type { ActiveRun, RecentSession, WorkingSubagents } from '../api';
+import { t } from '../i18n';
 
 /** subagents: no run goes on, background sub-agents of the session still work (the server wakes the agent after) */
 export type RunState = 'running' | 'waiting' | 'subagents';
@@ -12,7 +13,7 @@ export interface RunMark {
 /** A group of the list, as `groupByDay` gives it. */
 export type Group<T> = { label: string; items: T[] };
 
-export const RUNNING_LABEL = 'En cours';
+export const RUNNING_LABEL = t('En cours');
 
 /**
  * Marks by session id: a run listed by `/activity` (every status it keeps: queued, running, stopping…) is running;
@@ -68,7 +69,7 @@ export function withRunning(groups: Group<RecentSession>[], marks: ReadonlyMap<s
       if (!m.workspace || top.some((x) => x.row.id === id)) continue;
       top.push({
         at: m.at,
-        row: { kind: 'intendia', instanceId: inst, profile: m.profile, id, source: 'intendia', title: m.title ?? 'Session sans titre', sub: m.workspaceName, workspace: m.workspace, at: m.at, snippet: null },
+        row: { kind: 'intendia', instanceId: inst, profile: m.profile, id, source: 'intendia', title: m.title ?? t('Session sans titre'), sub: m.workspaceName, workspace: m.workspace, at: m.at, snippet: null },
       });
     }
   }

@@ -4,9 +4,10 @@ import type { ReactNode } from 'react';
 import { api } from '../api';
 import { Button, Wordmark } from '../components/ui';
 import { setTab, useCurrentInstance } from '../instance/current';
+import { t } from '../i18n';
 
 export interface StepSearch { inst?: string }
-const LABELS = ['Fournisseur', 'Modèle', 'Workspace'];
+const LABELS = [t('Fournisseur'), t('Modèle'), t('Workspace')];
 
 /** Instance of the steps: the one just created (`?inst=`), else the current one; profile `default`. */
 export function useStepInstance(): { inst: string | null; label: string | null } {
@@ -18,7 +19,7 @@ export function useStepInstance(): { inst: string | null; label: string | null }
 }
 
 /** Full page like /installation: the step, its title, « Passer » always there. */
-export function StepFrame({ step, title, intro, children, next, nextLabel = 'Continuer', nextDisabled }: {
+export function StepFrame({ step, title, intro, children, next, nextLabel = t('Continuer'), nextDisabled }: {
   step: 0 | 1 | 2; title: string; intro: ReactNode; children: ReactNode;
   /** null: no « Continuer » button (the step goes on by itself) */
   next?: (() => void) | null; nextLabel?: string; nextDisabled?: boolean;
@@ -32,7 +33,7 @@ export function StepFrame({ step, title, intro, children, next, nextLabel = 'Con
   return (
     <div className="min-h-full bg-sheet"><div className="enter mx-auto max-w-3xl p-5 md:p-10" data-setup-step={step}>
       <div className="mb-10"><Wordmark size="lg" /></div>
-      <ol className="mb-6 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint" aria-label="Étapes">
+      <ol className="mb-6 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint" aria-label={t('Étapes')}>
         {LABELS.map((l, i) => (
           <li key={l} aria-current={i === step ? 'step' : undefined} className={i === step ? 'font-medium text-ink' : undefined}>{i + 1}. {l}</li>
         ))}
@@ -42,7 +43,7 @@ export function StepFrame({ step, title, intro, children, next, nextLabel = 'Con
       <div className="mt-8">{children}</div>
       <div className="mt-8 flex flex-wrap items-center gap-2">
         {next !== null && <Button variant="primary" disabled={nextDisabled} onClick={next ?? skip}>{nextLabel}</Button>}
-        <Button variant="ghost" onClick={skip}>{step < 2 ? 'Passer cette étape' : 'Terminer plus tard'}</Button>
+        <Button variant="ghost" onClick={skip}>{step < 2 ? t('Passer cette étape') : t('Terminer plus tard')}</Button>
       </div>
     </div></div>
   );
