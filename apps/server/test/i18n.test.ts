@@ -54,6 +54,10 @@ describe('makeTranslator', () => {
     expect(toLang('Mot de passe incorrect', 'fr')).toBe('Mot de passe incorrect');
     expect(toLang('Mot de passe incorrect', 'en')).toBe('Wrong password');
   });
+  it('never translates names and titles, except the placeholders of Intendia', () => {
+    expect(translateJson({ name: 'Mot de passe incorrect', title: 'Session sans titre', items: [{ name: '(sans nom)', title: 'Nouvelle session' }] }, 'en'))
+      .toEqual({ name: 'Mot de passe incorrect', title: 'Untitled session', items: [{ name: '(no name)', title: 'New session' }] });
+  });
   it('only translates the text fields of a JSON answer', () => {
     expect(translateJson({ error: 'Mot de passe incorrect', label: 'Mot de passe incorrect', reasons: ['Mot de passe incorrect'], errors: [{ message: 'Mot de passe incorrect' }] }, 'en'))
       .toEqual({ error: 'Wrong password', label: 'Mot de passe incorrect', reasons: ['Wrong password'], errors: [{ message: 'Wrong password' }] });

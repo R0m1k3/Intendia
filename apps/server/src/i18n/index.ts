@@ -13,8 +13,12 @@ export const TEXT_FIELDS = new Set([
   'pushError', 'checkError', 'blockReason', 'notes', 'reasonDetail',
 ]);
 
-/** Fields holding user data that may be a fallback text of Intendia ('Session sans titre'): exact match only. */
+/**
+ * Fields holding user data or identifiers (session titles, MCP server names, file names): never translated, except
+ * these placeholders written by Intendia itself when the data is empty.
+ */
 export const EXACT_FIELDS = new Set(['title', 'name']);
+const PLACEHOLDERS = new Set([msg('Session sans titre'), msg('Nouvelle session'), msg('(sans nom)')]);
 
 /** French text with `{name}` replaced; the first argument is also the key of the English dictionary. */
 export function msg(fr: string, vars?: Record<string, string | number | null | undefined>): string {
@@ -88,7 +92,7 @@ export function toLang(text: string, lang: Lang): string {
 export function translateJson(v: unknown, lang: Lang, mode: 'no' | 'text' | 'exact' = 'no'): unknown {
   if (typeof v === 'string') {
     if (mode === 'text') return toLang(v, lang);
-    if (mode === 'exact' && lang === 'en') return (en as Record<string, string>)[v] ?? v;
+    if (mode === 'exact' && lang === 'en' && PLACEHOLDERS.has(v)) return (en as Record<string, string>)[v] ?? v;
     return v;
   }
   if (Array.isArray(v)) return v.map((x) => translateJson(x, lang, mode));
