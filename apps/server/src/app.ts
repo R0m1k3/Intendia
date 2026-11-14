@@ -267,6 +267,7 @@ export function createApp(deps: AppDeps) {
     const indexHtml = readFileSync(join(webDir, 'index.html'), 'utf8');
     app.use('/assets/*', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
     app.use('/favicon.svg', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
+    app.use('/apple-touch-icon.png', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
     app.get('*', (c) => {
       if (c.req.path.startsWith('/x/') || c.req.path.startsWith('/f/')) return c.json({ error: 'not found' }, 404);
       // the app's pages may be framed by the app itself (side chat, ⌘J); API and file responses keep their own rules.
