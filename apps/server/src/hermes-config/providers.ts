@@ -9,6 +9,7 @@ import { NotFoundError } from '../workspaces/service.js';
 import { Masker } from './mask.js';
 import { ANTHROPIC_KEY_VAR, ANTHROPIC_TOKEN_VARS, ConfigInputError, toConfigError, type ConfigService } from './service.js';
 import { msg } from '../i18n/index.js';
+import { KeyedLock } from '../keyed-lock.js';
 
 /**
  * Provider accounts (subscriptions connected by a device code) and API keys of the credential pool, per instance
@@ -61,7 +62,7 @@ function expiresText(v: unknown): string | null {
 
 export class ProvidersService {
   private readonly mask: Masker;
-  private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly locks = new KeyedLock();
 
   constructor(
     private readonly compat: CompatService,
@@ -201,14 +202,7 @@ export class ProvidersService {
     });
   }
 
-  private async locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.locks.get(key) ?? Promise.resolve();
-    const run = prev.catch(() => undefined).then(fn);
-    this.locks.set(key, run);
-    try {
-      return await run;
-    } finally {
-      if (this.locks.get(key) === run) this.locks.delete(key);
-    }
+  private locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    return this.locks.run(key, fn);
   }
 }

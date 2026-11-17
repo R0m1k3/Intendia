@@ -131,6 +131,14 @@ export class CronStore {
     return null;
   }
 
+  /** A change of the prompt made outside Intendia (agent, CLI). False = unknown job. */
+  touch(id: string): boolean {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    job.prompt = `${String(job.prompt ?? '')}\n(modifié ailleurs)`;
+    return true;
+  }
+
   private newJob(body: Record<string, unknown>, profile: string): Job | Response {
     const schedule = parseSchedule(String(body.schedule ?? ''));
     if (!schedule) return json({ detail: `Invalid schedule '${String(body.schedule ?? '')}'. ${SCHEDULE_HELP}` }, 400);

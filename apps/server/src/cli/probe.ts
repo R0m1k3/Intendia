@@ -2,12 +2,14 @@
  * probe — records what a Hermes instance answers, read-only, to write and check connector schemas.
  *
  *   pnpm probe record  [--out DIR] [--strict]   (--strict: exit 3 if a module is degraded; env: PROBE_API, PROBE_API_KEY, PROBE_DASH, PROBE_DASH_TOKEN)
- *   pnpm probe diff DIR_A DIR_B        compare two recordings (routes added/removed, shape changes)
+ *   pnpm probe diff DIR_A DIR_B        compare two recordings: removals and status / type changes are changes,
+ *                                      additions and module states are notes (probe-diff.ts)
+ *                                      exit 0 = no change, 4 = at least one change, 1 = error
  *
  * Secrets are redacted: values of keys that look like credentials, the keys used for the probe,
  * and PROBE_REDACT (comma-separated strings, e.g. a home directory).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InstanceConfigSchema } from '../config.js';
@@ -16,6 +18,7 @@ import { MODULES } from '../connectors/index.js';
 import { HermesHttp, type Via } from '../hermes/http.js';
 import { discover } from '../hermes/surface.js';
 import { fixtureName, redact } from './fixtures.js';
+import { diffRecordings } from './probe-diff.js';
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -105,47 +108,12 @@ async function record(outArg: string | undefined, strict: boolean) {
   }
 }
 
-function shape(x: unknown, depth = 0): string {
-  if (Array.isArray(x)) return x.length ? `[${shape(x[0], depth)}]` : '[]';
-  if (x && typeof x === 'object') {
-    if (depth >= 2) return '{…}';
-    return `{${Object.keys(x).sort().map((k) => `${k}:${shape((x as Record<string, unknown>)[k], depth + 1)}`).join(',')}}`;
-  }
-  return x === null ? 'null' : typeof x;
-}
-
 function diff(a: string, b: string) {
-  const load = (d: string, f: string) => JSON.parse(readFileSync(join(d, f), 'utf8'));
-  const sa = load(a, 'surface.json');
-  const sb = load(b, 'surface.json');
-  console.log(`Hermes ${sa.version} → ${sb.version}\n`);
-  const setDiff = (label: string, x: string[], y: string[]) => {
-    const removed = x.filter((v) => !y.includes(v));
-    const added = y.filter((v) => !x.includes(v));
-    if (removed.length || added.length) console.log(`${label}\n${removed.map((r) => `  - ${r}`).join('\n')}${removed.length && added.length ? '\n' : ''}${added.map((r) => `  + ${r}`).join('\n')}\n`);
-  };
-  const ep = (s: { api: { endpoints: Record<string, { method: string; path: string }> | null } }) =>
-    Object.entries(s.api.endpoints ?? {}).map(([k, v]) => `${k}: ${v.method} ${v.path}`);
-  setDiff('API server endpoints (/v1/capabilities)', ep(sa), ep(sb));
-  const feats = (s: { api: { features: Record<string, unknown> } }) => Object.entries(s.api.features).map(([k, v]) => `${k}=${JSON.stringify(v)}`);
-  setDiff('API server features', feats(sa), feats(sb));
-  setDiff('Dashboard routes (OpenAPI)', sa.dash.routes ?? [], sb.dash.routes ?? []);
-  for (const via of ['api', 'dash']) {
-    if (!existsSync(join(a, via)) || !existsSync(join(b, via))) continue;
-    for (const f of readdirSync(join(a, via))) {
-      if (f === 'openapi.json' || !existsSync(join(b, via, f))) continue;
-      const ra = load(join(a, via), f);
-      const rb = load(join(b, via), f);
-      if (ra.status !== rb.status) console.log(`${via}/${f}: HTTP ${ra.status} → ${rb.status}`);
-      else if (shape(ra.body) !== shape(rb.body)) console.log(`${via}/${f}: shape changed\n  ${shape(ra.body)}\n  ${shape(rb.body)}`);
-    }
-  }
-  const ca = load(a, 'compat-report.json');
-  const cb = load(b, 'compat-report.json');
-  for (const m of cb.modules) {
-    const before = ca.modules.find((x: { id: string }) => x.id === m.id);
-    if (before?.state !== m.state) console.log(`module ${m.id}: ${before?.state ?? 'absent'} → ${m.state}`);
-  }
+  const { header, changes, notes } = diffRecordings(a, b);
+  console.log(`${header}\n`);
+  console.log(changes.length ? changes.join('\n') : 'No change.');
+  if (notes.length) console.log(`\nNotes:\n${notes.map((n) => `  ${n}`).join('\n')}`);
+  process.exit(changes.length ? 4 : 0);
 }
 
 const [cmd = 'record', ...rest] = process.argv.slice(2);

@@ -121,6 +121,16 @@ describe('config: form', () => {
 });
 
 describe('config: YAML editor', () => {
+  it('rereads the file right before the raw write: a change in between gives 409 config_changed, nothing written', async () => {
+    const t = await testApp();
+    const { yaml, version: v } = (await t.request('GET', `${BASE}/raw`)).json;
+    t.fake.config.onRawRead = (n) => { if (n === 2) t.fake.config.externalEdit((raw) => `${raw}x_tiers: 1\n`); };
+    const res = await t.request('PUT', `${BASE}/raw`, { yaml: yaml.replace(/^ {2}compact: false/m, '  compact: true'), version: v });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('config_changed');
+    expect(dashCalls(t, 'PUT', '/api/config/raw')).toHaveLength(0);
+  });
+
   it('puts the secrets back, validates against the schema, accepts model as a table', async () => {
     const t = await testApp();
     const { yaml, version: v } = (await t.request('GET', `${BASE}/raw`)).json;
@@ -224,6 +234,19 @@ describe('config: auxiliary models in one write', () => {
     expect(partial.json.code).toBe('partial_write');
     expect(partial.json.error).toContain('Historique');
     expect(await versions(t)).toHaveLength(1);
+  });
+
+  it('never puts the file back over a change made by someone else in between: 502 partial_write, no raw write', async () => {
+    const t = await testApp();
+    const v = await version(t);
+    const changes = [{ task: 'vision', provider: 'openrouter', model: 'ok-1' }, { task: 'mcp', provider: 'openrouter', model: 'refuse-2' }];
+    // reads: write() (1), after the 1st task (2), before the rollback (3)
+    t.fake.config.onRawRead = (n) => { if (n === 3) t.fake.config.externalEdit((raw) => `${raw}x_tiers: 1\n`); };
+    const res = await t.request('POST', `${BASE}/auxiliary`, { version: v, changes });
+    expect(res.status).toBe(502);
+    expect(res.json.code).toBe('partial_write');
+    expect(dashCalls(t, 'PUT', '/api/config/raw')).toHaveLength(0);
+    expect(t.fake.config.raw).toContain('x_tiers: 1');
   });
 
   it('a refusal at the first task passes through as is', async () => {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { kanbanMissions } from '../db/schema.js';
-import { HermesError } from '../connectors/runtime.js';
+import { lostReply } from '../connectors/runtime.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { KanbanError, LIMITS, type KanbanService, type TaskDetail } from './service.js';
 import { msg } from '../i18n/index.js';
@@ -33,6 +33,8 @@ export interface MissionRow {
 
 export interface MissionChild {
   id: string; title: string; body: string; status: string; assignee: string | null;
+  /** freshness of the title and text (see PublicTask.revision) */
+  revision: string;
   /** ids of the other children it waits for */
   after: string[];
   held: boolean;
@@ -136,7 +138,7 @@ export class MissionService {
         this.set(m.id, { state: 'failed', error: err.message });
         return;
       }
-      if (err instanceof HermesError && (err.kind === 'network' || err.kind === 'timeout')) {
+      if (lostReply(err)) {
         // the answer was lost (time-out, network): Hermes may still finish the split
         await this.settle(row);
         return;
@@ -251,7 +253,7 @@ export class MissionService {
       ...m,
       rootStatus: root.task.status,
       children: kids.map((k) => ({
-        id: k.task.id, title: k.task.title, body: k.task.body, status: k.task.status, assignee: k.task.assignee,
+        id: k.task.id, title: k.task.title, body: k.task.body, status: k.task.status, assignee: k.task.assignee, revision: k.task.revision,
         after: k.parents.map((p) => p.id).filter((p) => ids.has(p)),
         held: held(k),
         lostTracking: held(k) && busy.has(k.task.id),

@@ -100,11 +100,22 @@ export class VaultService {
     return { items, external: raw.length - local.length };
   }
 
+  /**
+   * No idempotency key in Hermes: the ids are listed first; after a timeout (the add may have been done), the single
+   * new item of the same kind and label is returned instead of an error. A failed first list: no recovery.
+   */
   async add(instanceId: string, profile: string, input: VaultInput): Promise<{ id: string }> {
     const inst = this.target(instanceId);
+    const body = toHermes(input);
+    const before = await vaultList(inst, profile, this.opts()).then((l) => new Set(l.map((i) => i.id)), () => null);
     try {
-      return { id: await vaultAdd(inst, profile, toHermes(input), this.opts()) };
+      return { id: await vaultAdd(inst, profile, body, this.opts()) };
     } catch (err) {
+      if (before !== null && err instanceof GatewaySocketError && err.code === null) {
+        const after = await vaultList(inst, profile, this.opts()).catch(() => null);
+        const added = (after ?? []).filter((i) => !before.has(i.id) && i.kind === body.kind && i.label === body.label);
+        if (added.length === 1) return { id: added[0]!.id };
+      }
       throw convert(err, 'add');
     }
   }

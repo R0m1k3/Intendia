@@ -3,7 +3,7 @@ import type { KanbanMissionChild } from '../api';
 import { childNotes, orderChildren } from './mission';
 
 const c = (id: string, after: string[] = [], extra: Partial<KanbanMissionChild> = {}): KanbanMissionChild => ({
-  id, title: id.toUpperCase(), body: '', status: 'scheduled', assignee: 'default', after, held: true, lostTracking: false, ...extra,
+  id, title: id.toUpperCase(), body: '', status: 'scheduled', assignee: 'default', revision: '0000000000000000', after, held: true, lostTracking: false, ...extra,
 });
 
 describe('orderChildren', () => {

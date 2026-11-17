@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
+import { askReload, isStale } from '../components/staleReload';
 import { api, type Skill } from '../api';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { Sheet } from '../kanban/Sheet';
@@ -67,8 +68,16 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
   const qc = useQueryClient();
   const content = useQuery({ queryKey: ['skill-content', inst, profile, name], queryFn: () => api.skillContent(inst, profile, name) });
   const [draft, setDraft] = useState<string | null>(null);
+  /** Revision of the text the edit started from: a newer one in Hermes gives 409 `stale`. */
+  const [base, setBase] = useState('');
   const save = useMutation({
-    mutationFn: (d: string) => api.putSkillContent(inst, profile, name, d),
+    mutationFn: (d: string) => api.putSkillContent(inst, profile, name, d, base),
+    onError: async (err) => {
+      if (!isStale(err) || !(await askReload(draft))) return;
+      setDraft(null);
+      save.reset();
+      await content.refetch();
+    },
     onSuccess: async () => {
       setDraft(null);
       await qc.invalidateQueries({ queryKey: ['skill-content', inst, profile, name] });
@@ -84,7 +93,7 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
       <div className="flex items-center gap-3 border-b border-line/70 px-4 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-faint">skills/{name}/SKILL.md</span>
         {canEdit && draft === null && (
-          <Button className="h-7" onClick={() => setDraft(data.content)}><Pencil className="size-3.5" strokeWidth={1.5} />{t('Modifier')}</Button>
+          <Button className="h-7" onClick={() => { setBase(data.revision); setDraft(data.content); }}><Pencil className="size-3.5" strokeWidth={1.5} />{t('Modifier')}</Button>
         )}
       </div>
       {data ? (

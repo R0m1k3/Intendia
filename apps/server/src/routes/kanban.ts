@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { REVISION_RE } from '../revision.js';
 import { z } from 'zod';
 import type { CompatService } from '../compat/service.js';
 import { openKanbanEvents, type WsFactory } from '../connectors/kanban/index.js';
@@ -42,6 +43,7 @@ const UpdateTask = z.object({
   title: z.string().max(LIMITS.title).optional(),
   body: z.string().max(LIMITS.body).optional(),
   blockReason: z.string().max(LIMITS.blockReason).optional(),
+  base: z.string().regex(REVISION_RE).optional(),
 });
 const Comment = z.object({ body: z.string().min(1).max(LIMITS.comment) });
 const Link = z.object({ parent: task, child: task });

@@ -14,7 +14,7 @@ import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
 import { DeclarativeError, InstanceStore } from './instances/store.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
-import { forgetMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
+import { forgetMcpToken, forgetPreviousMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
@@ -47,7 +47,7 @@ import type { WsFactory } from './connectors/kanban/index.js';
 import { AgentConflictError } from './agents/service.js';
 import { KanbanError } from './kanban/service.js';
 import { configRoutes } from './routes/config.js';
-import { ConfigConflictError, ConfigInputError, ConfirmRequiredError, PartialWriteError } from './hermes-config/service.js';
+import { ConfigConflictError, ConfigInputError, ConfigNotAppliedError, ConfirmRequiredError, PartialWriteError } from './hermes-config/service.js';
 import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
@@ -101,6 +101,7 @@ export function createApp(deps: AppDeps) {
     if (err instanceof AgentConflictError) return c.json({ error: err.message, code: err.code }, 409);
     if (err instanceof ConfigInputError) return c.json({ ...err.extra, error: err.message, code: err.code }, 400);
     if (err instanceof ConfigConflictError) return c.json({ error: err.message, code: err.code }, 409);
+    if (err instanceof ConfigNotAppliedError) return c.json({ error: err.message, code: err.code, ...(err.paths ? { paths: err.paths } : {}) }, 409);
     if (err instanceof ConfirmRequiredError) {
       return c.json({ error: err.message, code: err.code, message: err.prompt, ...(err.task ? { task: err.task } : {}) }, 409);
     }
@@ -247,6 +248,13 @@ export function createApp(deps: AppDeps) {
     if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     const res = await deps.services.mcpLink.rotate(id);
     return c.json({ ...mcpInfo(id), ...res });
+  });
+  /** Ends the 24 h grace of the token before the last rotation (a leaked token). */
+  priv.post('/instances/:id/mcp/revoke-previous', (c) => {
+    const id = c.req.param('id');
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
+    forgetPreviousMcpToken(deps.db, id);
+    return c.json({ ok: true });
   });
 
   const { workspaces, files, links } = deps.services;

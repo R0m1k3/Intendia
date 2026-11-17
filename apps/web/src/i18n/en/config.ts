@@ -454,4 +454,6 @@ export default {
   "Sections": "Sections",
   "Plugins": "Plugins",
   "Agent {profile} sur {instance}": "Agent {profile} on {instance}",
+  'Installation gérée par un gestionnaire de paquets : Hermes ignore les changements faits ici. Modifiez sa configuration là où il est déclaré.': 'Installation managed by a package manager: Hermes ignores the changes made here. Change its configuration where it is declared.',
+  'Non appliqués : {list}': 'Not applied: {list}',
 } satisfies Record<string, string>;

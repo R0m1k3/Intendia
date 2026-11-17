@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Download, FolderOpen, Link2, Pencil, ScrollText, Unlink, Wand2, Split } from 'lucide-react';
 import { useState } from 'react';
+import { askReload, isStale } from '../components/staleReload';
 import { api, kanbanPath, type KanbanMissionRow, type KanbanTask, type KanbanTaskDetail, type KanbanTaskPatch, type KanbanWorkflow } from '../api';
 import { MISSION_STATE } from './mission';
 import { Button, cx, ErrorText, Field, Input, Mark, timeAgo, SkeletonLines } from '../components/ui';
@@ -28,7 +29,8 @@ function Section({ title, children, action }: { title: string; children: React.R
 
 /** Title and text, edited together; the draft is kept until the save succeeds (a failed save loses nothing). */
 function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTaskPatch) => Promise<unknown>; busy: boolean }) {
-  const [draft, setDraft] = useState<{ title: string; body: string } | null>(null);
+  /** `base`: revision of the task when the edit started (409 `stale` when Hermes changed it since). */
+  const [draft, setDraft] = useState<{ title: string; body: string; base: string } | null>(null);
   useDirtyGuard(draft !== null && (draft.title !== task.title || draft.body !== task.body));
   if (!draft) {
     return (
@@ -37,7 +39,7 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
           <p className="text-base font-medium">{task.title}</p>
           <p className={cx('whitespace-pre-wrap text-sm', task.body ? 'text-ink-soft' : 'text-ink-faint')}>{task.body || t('Pas de description')}</p>
         </div>
-        <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft({ title: task.title, body: task.body })} aria-label={t('Modifier la tâche')}>
+        <Button variant="ghost" className="h-8 px-2" onClick={() => setDraft({ title: task.title, body: task.body, base: task.revision })} aria-label={t('Modifier la tâche')}>
           <Pencil className={ICON} strokeWidth={1.5} />
         </Button>
       </div>
@@ -52,9 +54,12 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
         <Button variant="primary" disabled={busy || !draft.title.trim()}
           onClick={() => {
             const sent = draft;
-            save({ ...(sent.title !== task.title ? { title: sent.title } : {}), ...(sent.body !== task.body ? { body: sent.body } : {}) })
+            save({ ...(sent.title !== task.title ? { title: sent.title } : {}), ...(sent.body !== task.body ? { body: sent.body } : {}), base: sent.base })
               // Close only if nothing was typed while the save was pending; the error is shown by the panel.
-              .then(() => setDraft((cur) => (cur && cur.title === sent.title && cur.body === sent.body ? null : cur)), () => {});
+              .then(() => setDraft((cur) => (cur && cur.title === sent.title && cur.body === sent.body ? null : cur)), async (err: unknown) => {
+                // changed in Hermes: reload (the panel refreshes after every update) once the draft is copied
+                if (isStale(err) && await askReload(sent.body)) setDraft(null);
+              });
           }}>
           {t('Enregistrer')}
         </Button>
@@ -63,13 +68,15 @@ function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTa
   );
 }
 
-export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, polling, mission = null, onOpenMission, onClose, onOpen }: {
+export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, polling, mission = null, onOpenMission, onClose, onOpen, warning = null }: {
   inst: string; board: string; taskId: string; workflow: KanbanWorkflow | undefined; assignees: string[];
   /** Live events unavailable: the open task is polled like the board. */
   polling: boolean;
   allTasks: KanbanTask[]; onClose: () => void; onOpen: (id: string) => void;
   /** the mission whose root this task is */
   mission?: KanbanMissionRow | null; onOpenMission?: (id: string) => void;
+  /** Shown on top: a creation that stopped half way (409 `partial_create`), what is left to do. */
+  warning?: string | null;
 }) {
   const qc = useQueryClient();
   const key = ['kanban-task', inst, board, taskId];
@@ -108,6 +115,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
   return (
     <Sheet title={tk ? <span className="flex items-center gap-2"><span className="font-mono text-[12px] text-ink-faint">{tk.id}</span>{statusLabel(tk.status)}</span> : t('Tâche')}
       onClose={onClose} width="md:w-[560px]">
+      {warning && <p role="alert" className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn" data-partial>{warning}</p>}
       <ErrorText error={detail.error ?? error} />
       {notice && <p role="status" className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ink">{notice}</p>}
       {!tk ? <SkeletonLines rows={4} /> : (

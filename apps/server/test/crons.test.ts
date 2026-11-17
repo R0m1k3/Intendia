@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { testApp } from './helpers.js';
 
 const BASE = '/x/i/fake/crons';
+/** PUT of a cron with the `base` of its current revision (what the editor sends). */
+async function putCron(t: { request: (m: string, p: string, b?: unknown) => Promise<{ status: number; json: any }> }, id: string, body: Record<string, unknown>) {
+  const base = (await t.request('GET', `${BASE}/${id}?profile=default`)).json.cron.revision;
+  return t.request('PUT', `${BASE}/${id}?profile=default`, { ...body, base });
+}
 const input = (over: Record<string, unknown> = {}) => ({
   name: 'Rapport du lundi', prompt: 'Fais le rapport.', schedule: '30 8 * * 1', deliver: 'local', skills: [], model: null, workspace: null, ...over,
 });
@@ -61,14 +66,14 @@ describe('crons', () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'ventes', name: 'Ventes', instanceId: 'fake' });
     const { id } = (await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron;
-    const renamed = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ name: 'Autre nom', prompt: 'Nouveau prompt', workspace: 'ventes', schedule: undefined }))).json.cron;
+    const renamed = (await putCron(t, id, input({ name: 'Autre nom', prompt: 'Nouveau prompt', workspace: 'ventes', schedule: undefined }))).json.cron;
     expect(renamed).toMatchObject({ name: 'Autre nom', prompt: 'Nouveau prompt', workspace: { folder: 'rapport-du-lundi' }, schedule: { expr: '30 8 * * 1' } });
     expect(String(hermesJob(t, id).prompt).match(/\[Intendia\]/g)).toHaveLength(1);
     const put = t.fake.requests.findLast((r) => r.method === 'PUT');
     expect(put?.body).toHaveProperty('updates');
     expect((put?.body as { updates: object }).updates).not.toHaveProperty('schedule');
 
-    const detached = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ prompt: 'Seul' }))).json.cron;
+    const detached = (await putCron(t, id, input({ prompt: 'Seul' }))).json.cron;
     expect(detached).toMatchObject({ workspace: null, prompt: 'Seul' });
     expect(hermesJob(t, id).prompt).toBe('Seul');
     expect(hermesJob(t, id).workdir).toBeNull();
@@ -80,11 +85,11 @@ describe('crons', () => {
     const { id } = (await t.request('POST', BASE, input({ workspace: 'ventes' }))).json.cron;
     // a folder left in achats by a deleted cron must not be reused
     mkdirSync(join(t.root, 'achats', 'crons', 'rapport-du-lundi'), { recursive: true });
-    const moved = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'achats' }))).json.cron;
+    const moved = (await putCron(t, id, input({ workspace: 'achats' }))).json.cron;
     expect(moved.workspace).toMatchObject({ slug: 'achats', folder: 'rapport-du-lundi-2' });
     expect(hermesJob(t, id).prompt).toContain(`${t.root}/achats/crons/rapport-du-lundi-2/`);
     // free in stock: the key moves with the cron (its own former key is not counted as taken)
-    const again = (await t.request('PUT', `${BASE}/${id}?profile=default`, input({ workspace: 'stock' }))).json.cron;
+    const again = (await putCron(t, id, input({ workspace: 'stock' }))).json.cron;
     expect(again.workspace).toMatchObject({ slug: 'stock', folder: 'rapport-du-lundi-2' });
   });
 
@@ -103,7 +108,7 @@ describe('crons', () => {
     const cron = (await t.request('POST', BASE, input({ workspace: 'labo' }))).json.cron;
     expect(cron.profile).toBe('recherche');
     const plain = (await t.request('POST', BASE, input())).json.cron;
-    const res = await t.request('PUT', `${BASE}/${plain.id}?profile=default`, input({ workspace: 'labo' }));
+    const res = await putCron(t, plain.id, input({ workspace: 'labo' }));
     expect(res.status).toBe(400);
     expect(res.json.error).toContain('profil recherche');
     // wrong profile for the job: Hermes answers 404
@@ -188,7 +193,7 @@ describe('crons', () => {
     expect(report.state).toBe('readonly');
     const { id } = (await t.request('POST', BASE, input())).json.cron;
     expect((await t.request('GET', BASE)).json.crons).toHaveLength(1);
-    const edited = await t.request('PUT', `${BASE}/${id}?profile=default`, input({ name: 'Via API' }));
+    const edited = await putCron(t, id, input({ name: 'Via API' }));
     expect(edited.json.cron.name).toBe('Via API');
     expect(t.fake.requests.findLast((r) => r.method === 'PATCH')?.body).toMatchObject({ name: 'Via API' });
     expect((await t.request('GET', `${BASE}/${id}/runs?profile=default`)).status).toBe(409);
@@ -213,5 +218,29 @@ describe('crons', () => {
     expect(b.crons).toEqual([]);
     expect(b.errors).toHaveLength(1);
     expect(b.errors[0].instance).toBe('Fake');
+  });
+});
+
+describe('crons: safe writes (lot C)', () => {
+  it('a cron changed in Hermes since the editor opened gives 409 stale; a run does not change the revision', async () => {
+    const t = await testApp();
+    const cron = (await t.request('POST', BASE, input())).json.cron;
+    await t.request('POST', `${BASE}/${cron.id}/trigger?profile=default`);
+    await waitFinished(t, cron.id);
+    expect((await t.request('GET', `${BASE}/${cron.id}?profile=default`)).json.cron.revision).toBe(cron.revision);
+    t.fake.crons.touch(cron.id);
+    const res = await t.request('PUT', `${BASE}/${cron.id}?profile=default`, { ...input({ name: 'Autre' }), base: cron.revision });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('stale');
+    expect((await t.request('PUT', `${BASE}/${cron.id}?profile=default`, input({ name: 'Autre' }))).status).toBe(400);
+  });
+
+  it('a creation whose answer is lost returns the cron created, without a duplicate', async () => {
+    const t = await testApp();
+    t.fake.loseNext = 'cronCreate';
+    const res = await t.request('POST', BASE, input());
+    expect(res.status).toBe(201);
+    expect(res.json.cron.name).toBe('Rapport du lundi');
+    expect((await t.request('GET', BASE)).json.crons).toHaveLength(1);
   });
 });

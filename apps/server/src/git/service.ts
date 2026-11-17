@@ -88,11 +88,28 @@ export interface Repo extends Place { repo: string; abs: string }
 const under = (parent: string, rel: string) => (rel ? `${parent}/${rel}` : parent);
 /** `repo/path` relative to the workspace ('' repo: the workspace itself). */
 const inRepo = (repo: string, path: string) => (repo ? `${repo}/${path}` : path);
+/** Key and credential files never staged by Intendia, on top of what Hermes hides (a list, never complete). */
+const GIT_SENSITIVE_NAMES = new Set([
+  'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', '.npmrc', '.pypirc', '.netrc', '.pgpass', '.htpasswd',
+  'credentials.json', 'secrets.json', 'secrets.yaml', 'secrets.yml', 'terraform.tfvars',
+]);
+const GIT_SENSITIVE_EXT = ['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.tfvars'];
+
+/** A key or credential file by its name (a `.pub` public key never is). */
+export function sensitiveName(path: string): boolean {
+  const name = (path.replace(/\/+$/, '').split('/').pop() ?? '').toLowerCase();
+  if (name.endsWith('.pub')) return false;
+  return GIT_SENSITIVE_NAMES.has(name) || GIT_SENSITIVE_EXT.some((e) => name.endsWith(e));
+}
+
 /**
- * A credential file Hermes hides. Never throws: a name Intendia would refuse from the browser (a backslash, a very
- * long path) must not break the whole list, only its own actions (refused by `checkFile`).
+ * A credential file Hermes hides, or a key file by its name. Never throws: a name Intendia would refuse from the
+ * browser (a backslash, a very long path) must not break the whole list, only its own actions (refused by `checkFile`).
  */
-export const sensitiveIn = (repo: string, path: string) => hiddenByHermes(inRepo(repo, path.replace(/\/+$/, '')));
+export const sensitiveIn = (repo: string, path: string) => {
+  const p = inRepo(repo, path.replace(/\/+$/, ''));
+  return hiddenByHermes(p) || sensitiveName(p);
+};
 
 export class GitService {
   constructor(

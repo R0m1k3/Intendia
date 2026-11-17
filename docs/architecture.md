@@ -769,6 +769,28 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - Never translated: prompts and markers sent to Hermes (`[Intendia] …`, `OBJECTIF ATTEINT`), cron blocks, file
   contents (session export, `_erreurs.txt`), logs, route paths.
 
+## Writes
+
+Every write to Hermes must say the truth about what happened, never overwrite a change made in between, and never
+leave a half-done state or a duplicate silently.
+
+- **Config file**: `ConfigService.write()` is the single path (lock per instance and profile, reread, version check,
+  history copy, Hermes call, reread). A managed installation (`managed`, read from Hermes) is refused before anything
+  (409 `config_managed`). Each source throws `NoChange` when its change is already in place: no call, no copy. A
+  file unchanged after a real change gives 409 `not_applied` (copy dropped); the form also compares the effective
+  values (`paths`). Raw writes go through `putRawOver` (reread, then write only over the text read); a rollback
+  (`replaceMcp`, `setAuxiliary`) is done only over the text after Intendia's last write, else 502 `partial_write`.
+- **Edited texts** (SKILL.md, cron, task title and text, AGENTS.md): each read gives `revision` (HMAC of the raw text,
+  key from `INTENDIA_SECRET`, `revision.ts`), each write sends it back as `base`; a difference is 409 `stale` and the
+  browser asks to reload (`components/staleReload.ts`, draft copied first).
+- **Creations**: a kanban task carries an `idempotency_key` and is sent again once after an uncertain answer
+  (`uncertain()`: lost, timeout, 5xx); a failed later step gives 409 `partial_create` with `taskId` (the panel opens).
+  A cron or a vault item: ids listed first, the single new matching item returned after a lost answer (a template
+  instantiation is never recovered: nothing ties the new job to the request).
+- **MCP token**: written into Hermes first, then stored; the previous one stays valid 24 h (`MCP_GRACE_MS`) or until
+  `POST /instances/:id/mcp/revoke-previous`. After an uncertain write both are accepted and the state is `stale`.
+- **Migrations**: followed by file name; two files of one number, a renamed one or an unknown row stop the start.
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.
@@ -782,3 +804,27 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
    (`compat.test.ts`, schemas in `crons-frame.test.ts`) run on every `fixtures/hermes-*`; the behaviour tests
    and the fake's CLI replay `REFERENCE_FIXTURES` (`apps/fake-hermes/src/index.ts`), a recording made on a used
    instance. CI recordings come from an empty container: move the reference only to a recording with data.
+
+## Tests
+
+Three levels:
+
+- **Unit** (`pnpm -r test`, vitest): server logic against `apps/fake-hermes` in process, web by pure functions.
+- **End-to-end** (`apps/e2e`, Playwright Test): five walks (chat, crons, files, kanban, dialogs) in a real browser
+  against a bench started by `globalSetup` (`bench.ts`: fake-hermes and the repo build on their own ports,
+  `ports.ts`, data in a temporary folder, one sign-in saved as `storageState`). Run `pnpm build && pnpm e2e`; on a
+  machine without `playwright install`, point `E2E_CHROMIUM` at a Chromium. `apps/e2e` has no `test` script, so
+  `pnpm -r test` skips it. CI: job `e2e`, traces in the `e2e-traces` artifact on failure.
+- **Smoke checks** (`.github/scripts/smoke-checks.sh`): one script against a running Intendia (setup, compat,
+  workspace written by the dashboard, reads of every module, a paused cron created and deleted). CI runs it against
+  fake-hermes with the Docker image (job `docker`, `install-smoke.sh`) and against the official Hermes image with
+  the repo build (job `real-hermes`, `start-hermes.sh` + `real-hermes-smoke.sh`): a gap between the fake and Hermes
+  shows as one job red and the other green.
+
+Hermes version: `real-hermes` uses the image `v<newest fixtures/hermes-*>` and checks that exact version, so a new
+Hermes release never turns an unrelated PR red. The weekly `hermes-compat.yml` runs `latest`: `probe record
+--strict` (a module not `full` with the current code), `probe diff` against the newest fixtures and the smoke
+checks. `probe diff` only calls a removal (route, endpoint, feature, response field down to depth 2), a changed
+status or a changed field type a change (exit 4); additions and module states are notes (exit 0); `null` and
+empty arrays tell nothing about a type. A change or a failed smoke opens the issue "Hermes <version>: API changes
+detected"; a clean run comments on and closes the open ones. Then record the new version as in "When Hermes changes".

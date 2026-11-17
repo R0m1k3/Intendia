@@ -8,7 +8,7 @@ import { useModuleAvailability } from '../components/ModuleNotice';
 import { Button, Chips, copyText, cx, ErrorText, Mark, worst } from '../components/ui';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask, askText } from '../components/Dialog';
-import { langSetting, setLangSetting, t, type LangSetting } from '../i18n';
+import { langSetting, locale, setLangSetting, t, type LangSetting } from '../i18n';
 import { T } from '../i18n/T';
 
 type Theme = 'system' | 'light' | 'dark';
@@ -58,11 +58,15 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
   const qc = useQueryClient();
   const info = useQuery({ queryKey: ['mcp', instanceId], queryFn: () => api.mcp(instanceId) });
   const ops = useModuleAvailability(instanceId, 'config', MCP_AUTO_OPS, []);
-  const [result, setResult] = useState<{ test?: McpTest; error?: string } | null>(null);
-  const done = (d: { state: McpState; test?: McpTest; error?: string }) => {
-    setResult({ test: d.test, error: d.error });
+  const [result, setResult] = useState<{ test?: McpTest; error?: string; previousUntil?: number | null } | null>(null);
+  const done = (d: { state: McpState; test?: McpTest; error?: string; restartNeeded?: true; previousUntil?: number | null }) => {
+    setResult({ test: d.test, error: d.error, ...(d.restartNeeded ? { previousUntil: d.previousUntil ?? null } : {}) });
     void qc.invalidateQueries({ queryKey: ['mcp', instanceId] });
   };
+  const revoke = useMutation({
+    mutationFn: () => api.revokePreviousMcp(instanceId),
+    onSuccess: () => setResult((r) => (r ? { ...r, previousUntil: undefined } : r)),
+  });
   const connect = useMutation({
     mutationFn: (replaceOther: boolean) => api.connectMcp(instanceId, replaceOther),
     onMutate: () => setResult(null),
@@ -120,10 +124,21 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
           )}
         </div>
       )}
-      <ErrorText error={connect.error ?? rotate.error} />
+      <ErrorText error={connect.error ?? rotate.error ?? revoke.error} />
       {result && (
         <div className="space-y-1 rounded-[10px] bg-paper px-3.5 py-3 text-[13px]" data-mcp-result={result.test?.ok ? 'ok' : 'error'}>
-          {result.error && <p className="text-bad">{t('Jeton changé dans Intendia, mais Hermes n’a pas été mis à jour : {error}', { error: result.error })}</p>}
+          {result.error && <p className="text-bad">{t('Hermes n’a pas reçu le nouveau jeton : rien n’a changé ({error})', { error: result.error })}</p>}
+          {typeof result.previousUntil === 'number' && (
+            <div className="flex flex-wrap items-center justify-between gap-2" data-mcp-grace>
+              <p>{t('Nouveau jeton envoyé à Hermes. Redémarrez sa passerelle avant {time} : l’ancien jeton cesse alors de fonctionner.', {
+                time: new Date(result.previousUntil).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' }),
+              })}</p>
+              <SmallBtn disabled={revoke.isPending}
+                onClick={async () => { if (await ask({ title: t('Révoquer l’ancien jeton ?'), message: t('La passerelle qui tourne encore avec lui perd l’outil share_file jusqu’à son redémarrage.'), confirmLabel: t('Révoquer'), danger: true })) revoke.mutate(); }}>
+                {t('Révoquer l’ancien jeton')}
+              </SmallBtn>
+            </div>
+          )}
           {result.test?.ok && <p className="flex items-center gap-2"><Check className="size-3.5 text-ok" strokeWidth={2} />{t('Hermes voit l’outil share_file.')}</p>}
           {result.test && !result.test.ok && (
             <p className="text-bad">
@@ -141,7 +156,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
       )}
       {managed && (
         <SmallBtn disabled={busy}
-          onClick={async () => { if (await ask({ title: t('Régénérer le jeton ?'), message: t('L’ancien ne marchera plus. Hermes est mis à jour automatiquement ; redémarrez-le ensuite.'), confirmLabel: t('Régénérer'), danger: true })) rotate.mutate(); }}>
+          onClick={async () => { if (await ask({ title: t('Régénérer le jeton ?'), message: t('Hermes reçoit le nouveau jeton ; l’ancien reste accepté 24 h pour la passerelle en cours. Redémarrez-la ensuite.'), confirmLabel: t('Régénérer'), danger: true })) rotate.mutate(); }}>
           {rotate.isPending ? t('Régénération…') : t('Régénérer le jeton')}
         </SmallBtn>
       )}

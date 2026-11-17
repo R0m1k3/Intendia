@@ -3,6 +3,9 @@ on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -34,3 +37,38 @@ jobs:
       - name: Install and check
         run: .github/scripts/install-smoke.sh
         env: { FAKE_FILES_ROOT: /tmp/fake-files }
+  # the repo build against the official Hermes image of the newest fixtures (pinned: a new Hermes release never
+  # turns an unrelated PR red; `latest` is checked weekly by hermes-compat.yml)
+  real-hermes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_KEY: ci-api-key-0123456789abcdef
+      DASH_TOKEN: ci-dashboard-token-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm build
+      - id: ver
+        run: echo "v=$(ls fixtures | grep '^hermes-' | sed 's/^hermes-//' | sort -V | tail -1)" >> "$GITHUB_OUTPUT"
+      - run: .github/scripts/start-hermes.sh nousresearch/hermes-agent:v${{ steps.ver.outputs.v }}
+      - run: .github/scripts/real-hermes-smoke.sh
+        env: { EXPECT_VERSION: '${{ steps.ver.outputs.v }}' }
+      - if: always()
+        run: docker logs hermes-gw 2>&1 | tail -40; docker logs hermes-dash 2>&1 | tail -20; tail -60 /tmp/intendia.log 2>/dev/null || true
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @intendia/e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: e2e-traces, path: apps/e2e/test-results }

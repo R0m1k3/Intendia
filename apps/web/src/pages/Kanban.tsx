@@ -15,6 +15,7 @@ import { MISSION_STATE } from '../kanban/mission';
 import { canMove, moveLocally, moveTargets, statusLabel } from '../kanban/moves';
 import { Sheet, SELECT, TEXTAREA } from '../kanban/Sheet';
 import { TaskPanel } from '../kanban/TaskPanel';
+import { partialTaskId } from '../kanban/partial';
 import { POLL_MS, useKanbanLive } from '../kanban/useLive';
 
 const REQUIRED: OpRef[] = [['kanban', 'board'], ['kanban', 'boards'], ['kanban', 'workflow']];
@@ -162,7 +163,9 @@ function startHint(start: KanbanStart, agent: boolean, autoDecompose: boolean): 
 }
 
 function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: {
-  inst: string; board: string; assignees: string[]; autoDecompose: boolean; onClose: () => void; onCreated: (id: string) => void;
+  inst: string; board: string; assignees: string[]; autoDecompose: boolean; onClose: () => void;
+  /** `warning`: the task was created but a later step failed (409 `partial_create`). */
+  onCreated: (id: string, warning?: string) => void;
 }) {
   const qc = useQueryClient();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
@@ -173,6 +176,14 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
       title: f.title.trim(), body: f.body || undefined, assignee: f.assignee || null, priority: f.priority || null, start: f.start, workspace: f.workspace || null,
     }),
     onSuccess: async (r) => { guard.release(); await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] }); onCreated(r.task.id); },
+    onError: async (err) => {
+      const id = partialTaskId(err);
+      if (!id) return;
+      // created in Hermes: nothing left to lose
+      guard.release();
+      await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] });
+      onCreated(id, (err as Error).message);
+    },
   });
   const guard = useDirtyGuard(Boolean(f.title || f.body));
   return (
@@ -303,6 +314,8 @@ export function KanbanPage() {
   const [dialog, setDialog] = useState<'board' | 'task' | 'dispatch' | 'orchestration' | null>(null);
   /** undefined: closed; null: a new mission */
   const [missionId, setMissionId] = useState<string | null | undefined>(undefined);
+  /** Warning of a creation that stopped half way, for the panel of that task. */
+  const [partial, setPartial] = useState<{ id: string; text: string } | null>(null);
   const canMission = a.available && MISSION_OPS.every((op) => a.has('kanban', op));
   const missions = useQuery({
     queryKey: ['kanban-missions', inst, board], queryFn: () => api.kanbanMissions(inst, board!).then((r) => r.missions),
@@ -422,7 +435,7 @@ export function KanbanPage() {
       {dialog === 'board' && <NewBoard inst={inst} onClose={() => setDialog(null)} onCreated={(slug) => { setDialog(null); go({ board: slug }); }} />}
       {dialog === 'task' && board && (
         <NewTask inst={inst} board={board} assignees={assignees.data ?? []} autoDecompose={orch.data?.autoDecompose ?? false}
-          onClose={() => setDialog(null)} onCreated={(id) => { setDialog(null); go({ task: id }); }} />
+          onClose={() => setDialog(null)} onCreated={(id, warning) => { setDialog(null); setPartial(warning ? { id, text: warning } : null); go({ task: id }); }} />
       )}
       {dialog === 'dispatch' && board && <Dispatch inst={inst} board={board} onClose={() => setDialog(null)} />}
       {dialog === 'orchestration' && <Orchestration inst={inst} assignees={assignees.data ?? []} onClose={() => setDialog(null)} />}
@@ -430,7 +443,8 @@ export function KanbanPage() {
         <TaskPanel key={search.task} inst={inst} board={board} taskId={search.task} workflow={wf} assignees={assignees.data ?? []} allTasks={allTasks} polling={live.polling}
           mission={missions.data?.find((m) => m.rootId === search.task) ?? null}
           onOpenMission={(id) => { go({ task: undefined }); setMissionId(id); }}
-          onClose={() => go({ task: undefined })} onOpen={(id) => go({ task: id })} />
+          warning={partial?.id === search.task ? partial.text : null}
+          onClose={() => { setPartial(null); go({ task: undefined }); }} onOpen={(id) => go({ task: id })} />
       )}
       {missionId !== undefined && board && (
         <MissionSheet key={missionId ?? 'new'} inst={inst} board={board} missionId={missionId} assignees={assignees.data ?? []}

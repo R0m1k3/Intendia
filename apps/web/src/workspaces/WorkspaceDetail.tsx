@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { FolderOpen, PenLine, Pencil, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { askReload, isStale } from '../components/staleReload';
 import { api, type FileEntry, type PublicInstance } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
@@ -29,6 +30,8 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   const scope = workspaceScope(slug);
   const tree = useQuery({ queryKey: ['tree', slug, ''], queryFn: () => api.tree(slug, '') });
   const [text, setText] = useState<string | null>(null);
+  /** Revision of AGENTS.md when the edit started: a file changed since gives 409 `stale`. */
+  const [agentsBase, setAgentsBase] = useState('');
   useDirtyGuard(text !== null && agents.isSuccess && text !== agents.data.text);
   const w = ws.data?.workspace;
 
@@ -43,8 +46,14 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
     },
   });
   const saveAgents = useMutation({
-    mutationFn: (body: string) => api.saveAgentsMd(slug, body),
+    mutationFn: (body: string) => api.saveAgentsMd(slug, body, agentsBase),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
+    onError: async (err) => {
+      if (!isStale(err) || !(await askReload(text))) return;
+      setText(null);
+      saveAgents.reset();
+      await qc.invalidateQueries({ queryKey: ['agents-md', slug] });
+    },
   });
   const { canCopy } = useCopyOps(w?.instanceId);
   /** A JSON export (Intendia or Hermes) as a new session of this workspace. */
@@ -123,7 +132,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
           <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); saveAgents.mutate(agentsValue); }}>
             <textarea
               value={agentsValue}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => { if (text === null) setAgentsBase(agents.data?.revision ?? ''); setText(e.target.value); }}
               rows={5}
               disabled={!agents.isSuccess}
               aria-label={t('Consignes du projet')}
