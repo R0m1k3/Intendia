@@ -24,17 +24,27 @@ function typeOf(x: unknown): string {
   return x === null ? 'null' : typeof x;
 }
 
-/** Flattens a body into `path → type`, down to depth 2; arrays are described by their first element. */
+/** An empty array tells nothing about its elements: recorded as unknown so its type cannot differ. */
+function fieldType(v: unknown): string {
+  return Array.isArray(v) && v.length === 0 ? 'array?' : typeOf(v);
+}
+
+/**
+ * Flattens a body into `path → type`, down to depth 2; arrays are described by their first element,
+ * whose type is recorded at `path[]` (so `["a"]` → `[1]` is a change, primitives included).
+ */
 export function fields(x: unknown, prefix = '', depth = 0, out = new Map<string, string>()): Map<string, string> {
   if (Array.isArray(x)) {
-    if (x.length) fields(x[0], `${prefix}[]`, depth, out);
+    if (x.length) {
+      out.set(`${prefix}[]`, fieldType(x[0]));
+      fields(x[0], `${prefix}[]`, depth, out);
+    }
     return out;
   }
   if (!x || typeof x !== 'object' || depth > 2) return out;
   for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
     const path = prefix ? `${prefix}.${k}` : k;
-    // an empty array tells nothing about its elements: recorded as unknown so its type cannot differ
-    out.set(path, Array.isArray(v) && v.length === 0 ? 'array?' : typeOf(v));
+    out.set(path, fieldType(v));
     fields(v, path, depth + 1, out);
   }
   return out;

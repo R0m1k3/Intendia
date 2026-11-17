@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { diffRecordings } from '../src/cli/probe-diff.js';
@@ -59,6 +59,22 @@ describe('probe diff (diffRecordings)', () => {
 
     const empty = diffRecordings(base, recording({ sessions: { status: 200, body: { sessions: [], total: 0 } } }));
     expect(empty.changes).toEqual([]);
+  });
+
+  it('an array of primitives whose element type changes is a change; an empty one tells nothing', () => {
+    const f = resolve(import.meta.dirname, '../../../fixtures/hermes-0.23.1');
+    const file = 'dash/GET_api_tools_toolsets.json';
+    const retyped = (tools: unknown[]) => {
+      const d = tempDir();
+      cpSync(f, d, { recursive: true });
+      const rec = JSON.parse(readFileSync(join(d, file), 'utf8'));
+      rec.body[0].tools = tools;
+      writeFileSync(join(d, file), JSON.stringify(rec));
+      return d;
+    };
+    expect(diffRecordings(f, retyped([123])).changes).toEqual([`${file}: [].tools[]: string → number`]);
+    expect(diffRecordings(f, retyped([])).changes).toEqual([]);
+    expect(diffRecordings(retyped([]), f).changes).toEqual([]);
   });
 
   it('a status 200 → 404 is a change', () => {
