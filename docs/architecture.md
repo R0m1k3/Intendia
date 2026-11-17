@@ -655,6 +655,27 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - Never translated: prompts and markers sent to Hermes (`[Intendia] …`, `OBJECTIF ATTEINT`), cron blocks, file
   contents (session export, `_erreurs.txt`), logs, route paths.
 
+## Writes
+
+Every write to Hermes must say the truth about what happened, never overwrite a change made in between, and never
+leave a half-done state or a duplicate silently.
+
+- **Config file**: `ConfigService.write()` is the single path (lock per instance and profile, reread, version check,
+  history copy, Hermes call, reread). A managed installation (`managed`, read from Hermes) is refused before anything
+  (409 `config_managed`). Each source throws `NoChange` when its change is already in place: no call, no copy. A
+  file unchanged after a real change gives 409 `not_applied` (copy dropped); the form also compares the effective
+  values (`paths`). Raw writes go through `putRawOver` (reread, then write only over the text read); a rollback
+  (`replaceMcp`, `setAuxiliary`) is done only over the text after Intendia's last write, else 502 `partial_write`.
+- **Edited texts** (SKILL.md, cron, task title and text, AGENTS.md): each read gives `revision` (HMAC of the raw text,
+  key from `INTENDIA_SECRET`, `revision.ts`), each write sends it back as `base`; a difference is 409 `stale` and the
+  browser asks to reload (`components/staleReload.ts`, draft copied first).
+- **Creations**: a kanban task carries an `idempotency_key` and is sent again once after an uncertain answer
+  (`uncertain()`: lost, timeout, 5xx); a failed later step gives 409 `partial_create` with `taskId` (the panel opens).
+  A cron or a vault item: ids listed first, the single new matching item returned after a lost answer.
+- **MCP token**: written into Hermes first, then stored; the previous one stays valid 24 h (`MCP_GRACE_MS`) or until
+  `POST /instances/:id/mcp/revoke-previous`.
+- **Migrations**: followed by file name; two files of one number, a renamed one or an unknown row stop the start.
+
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
 
 - Only `src/hermes`, `src/connectors`, `src/compat` and `src/cli` import `hermes/http.ts`.

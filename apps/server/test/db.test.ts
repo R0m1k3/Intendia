@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { migrate } from '../src/db/index.js';
@@ -77,5 +77,50 @@ describe('migrations', () => {
       migrate(db, dir, mdir);
     }
     expect(readdirSync(join(dir, 'backups'))).toHaveLength(5);
+  });
+
+  describe('followed by file name (lot C)', () => {
+    const base = () => {
+      const dir = tempDir();
+      const mdir = join(dir, 'migrations');
+      mkdirSync(mdir);
+      copyFileSync(join(MIGRATIONS, '0001_init.sql'), join(mdir, '0001_init.sql'));
+      return { dir, mdir, db: new Database(join(dir, 'intendia.db')) };
+    };
+
+    it('refuses two files of the same number, naming both', () => {
+      const { dir, mdir, db } = base();
+      writeFileSync(join(mdir, '0002_a.sql'), 'SELECT 1;');
+      writeFileSync(join(mdir, '0002_b.sql'), 'SELECT 1;');
+      expect(() => migrate(db, dir, mdir)).toThrow(/0002_a\.sql and 0002_b\.sql share the number 0002/);
+    });
+
+    it('refuses a database migrated by a newer Intendia, pointing to the backups', () => {
+      const { dir, mdir, db } = base();
+      migrate(db, dir, mdir);
+      db.prepare('INSERT INTO _migrations (id, name, applied_at) VALUES (99, ?, 0)').run('0099_x.sql');
+      expect(() => migrate(db, dir, mdir)).toThrow(/newer Intendia \(0099_x\.sql unknown\).*backups/);
+    });
+
+    it('refuses a row whose number has another file name', () => {
+      const { dir, mdir, db } = base();
+      writeFileSync(join(mdir, '0002_old.sql'), 'SELECT 1;');
+      migrate(db, dir, mdir);
+      rmSync(join(mdir, '0002_old.sql'));
+      writeFileSync(join(mdir, '0002_new.sql'), 'SELECT 1;');
+      expect(() => migrate(db, dir, mdir)).toThrow(/0002 applied as 0002_old\.sql, but the code has 0002_new\.sql/);
+    });
+
+    it('an existing database (rows id, name of the old code) replays nothing', () => {
+      const dir = tempDir();
+      const db = new Database(join(dir, 'intendia.db'));
+      migrate(db, dir, MIGRATIONS);
+      expect(migrate(db, dir, MIGRATIONS)).toEqual({ applied: [], backup: null });
+    });
+
+    it('the shipped migrations all have a different number', () => {
+      const numbers = readdirSync(MIGRATIONS).filter((f) => /^\d{4}_.*\.sql$/.test(f)).map((f) => f.slice(0, 4));
+      expect(new Set(numbers).size).toBe(numbers.length);
+    });
   });
 });

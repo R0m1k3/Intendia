@@ -214,6 +214,28 @@ Masking risks: secrets are found by key name, by section (`mcp_servers.*.headers
 shape (token prefixes, Telegram tokens, URL passwords, query values, webhook paths). A secret with an ordinary key and
 an ordinary look would stay visible; a new Hermes section holding secrets needs a rule.
 
+## Writes without effect, freshness, idempotency (read in the 0.23.0 source, lot C, 2026-11-17)
+
+- **Managed installation**: `save_config` (`hermes_cli/config.py`) writes nothing when Hermes is installed by a package
+  manager (`HERMES_MANAGED`, or a `.managed` marker in the HERMES_HOME, set by Nix): it prints on stderr and returns.
+  `PUT /api/config`, `PUT /api/config/raw`, `POST /api/model/set` and the kanban orchestration still answer
+  `{"ok": true}`. `.env` writes (`PUT/DELETE /api/env`) are not concerned. The only flag the dashboard gives is
+  `managed` in `GET /api/shared-metrics/consent?profile=` (per profile: `get_managed_system()` reads the marker of the
+  profile's HERMES_HOME). Intendia reads it (cached 60 s) and refuses config writes with 409 `config_managed`.
+- **Keys fixed by an administrator** are removed by `save_config` without error (`_strip_managed_keys_for_save`), even
+  outside a managed installation. The form compares the effective values after the write (409 `not_applied` + `paths`).
+- **No etag**: `PUT /api/config/raw` replaces the whole file (`merge_existing=False`) outside `_CONFIG_MUTATION_LOCK`.
+  Intendia rereads the file right before every raw write (`putRawOver`); a write by Hermes during that round trip stays
+  possible. Same window for skills, crons, kanban texts and AGENTS.md (`revision`/`base`).
+- **MCP headers** `${VAR}` are resolved when the MCP config is loaded (`tools/mcp_tool_config.py`): an open connection
+  keeps the old token until the gateway restarts. `POST /api/mcp/servers/{name}/test` opens a new connection with the
+  `.env` token, so the new token is used at once. Intendia keeps the previous token valid 24 h after a rotation.
+- **Kanban `idempotency_key`** (`POST /api/plugins/kanban/tasks`): a task not archived with the same key is returned
+  instead of a new one (`plugin_api.py`, `kanban_db.py`). Crons and the vault have nothing like it: Intendia lists the
+  ids before the creation and, after a lost answer, returns the single new matching item.
+- **Memory entries** carry a fingerprint in their id (`memory:<source>:<index>:<fingerprint>`): Hermes answers « stale »
+  when the entry changed (`agent/learning_mutations.py`), Intendia gives 409 `stale`.
+
 ## Provider accounts and API keys (checked on 0.23.0, 2026-11-11)
 
 Kept per profile in the profile's `auth.json` (always pass `?profile=`), not in `config.yaml`.
