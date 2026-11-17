@@ -5,7 +5,8 @@ import {
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getLang } from './i18n';
-import { api, ApiError, SESSION_SOURCES, type SessionSource } from './api';
+import { api, isTransient, SESSION_SOURCES, type SessionSource } from './api';
+import { initConnection } from './connection/connection';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
 import { pruneDrafts } from './chat/draft';
@@ -56,7 +57,8 @@ document.documentElement.lang = getLang();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (n, err) => !(err instanceof ApiError && err.status === 401) && n < 2,
+      // only passing failures (Intendia unreachable): a JSON answer of Intendia is final (403, 404, 409…)
+      retry: (n, err) => n < 2 && isTransient(err),
       staleTime: 10_000,
     },
   },
@@ -67,13 +69,17 @@ syncSessions(queryClient);
 
 const rootRoute = createRootRoute({ component: Outlet });
 
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connexion', component: LoginPage });
+export interface LoginSearch { retour?: string }
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/connexion', component: LoginPage,
+  validateSearch: (s: Record<string, unknown>): LoginSearch => (typeof s.retour === 'string' ? { retour: s.retour } : {}),
+});
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation', component: SetupPage });
 /** First-run steps after the instance (lot 9 D): full pages like /installation, signed in, `?inst=` the instance to set up. */
-const stepGuard = async () => {
+const stepGuard = async ({ location }: { location: { pathname: string; searchStr: string } }) => {
   const s = await queryClient.fetchQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 0 });
   if (s.needsPassword) throw redirect({ to: '/installation' });
-  if (!s.authenticated) throw redirect({ to: '/connexion' });
+  if (!s.authenticated) throw redirect({ to: '/connexion', search: { retour: location.pathname + location.searchStr } });
 };
 const stepSearch = (s: Record<string, unknown>): StepSearch => (typeof s.inst === 'string' && s.inst ? { inst: s.inst } : {});
 const providerStepRoute = createRoute({ getParentRoute: () => rootRoute, path: '/installation/fournisseur', component: ProviderStep, beforeLoad: stepGuard, validateSearch: stepSearch });
@@ -84,10 +90,10 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   component: Layout,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const s = await queryClient.fetchQuery({ queryKey: ['setup'], queryFn: api.setup, staleTime: 0 });
     if (s.needsPassword) throw redirect({ to: '/installation' });
-    if (!s.authenticated) throw redirect({ to: '/connexion' });
+    if (!s.authenticated) throw redirect({ to: '/connexion', search: { retour: location.pathname + location.searchStr } });
     if (s.needsInstance && !s.declarativeInstances) throw redirect({ to: '/installation' });
   },
 });
@@ -288,6 +294,8 @@ const router = createRouter({
   routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
 });
+
+initConnection({ queryClient, router });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }

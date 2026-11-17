@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { retourOf } from '../auth/retour';
 import { Button, ErrorText, Field, Input, Wordmark } from '../components/ui';
 import { t } from '../i18n';
 
@@ -27,6 +28,7 @@ export function LoginPage() {
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const router = useRouter();
   const qc = useQueryClient();
 
   // A share link opened from another site (Telegram) arrives without the SameSite=Strict cookie:
@@ -53,7 +55,10 @@ export function LoginPage() {
       await qc.invalidateQueries();
       const next = followUp();
       if (next) return window.location.assign(next); // full load: /f/* is served by the server, not the app
-      await navigate({ to: '/' });
+      // `?retour=`: the page that sent here (session expired, link opened signed out)
+      const back = retourOf(new URLSearchParams(window.location.search).get('retour'), window.location.origin);
+      if (back) router.history.push(back);
+      else await navigate({ to: '/' });
     } catch (err) {
       setError(err);
     } finally {

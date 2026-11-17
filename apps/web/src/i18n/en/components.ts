@@ -229,4 +229,9 @@ export default {
   'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.': 'Files not checked yet on this instance: click “Check again” in Settings.',
   'Création…': 'Creating…',
   'Créer le workspace': 'Create the workspace',
+  // call(): Intendia unreachable, no answer, answer without JSON
+  'Serveur Intendia injoignable': 'Intendia server unreachable',
+  "Pas de réponse d'Intendia après {s} s": 'No response from Intendia after {s} s',
+  "Pas de réponse d'Intendia après {s} s : l'action a peut-être abouti, vérifiez avant de recommencer": 'No response from Intendia after {s} s: the action may have gone through, check before trying again',
+  'Réponse inattendue du serveur Intendia (HTTP {status})': 'Unexpected answer from the Intendia server (HTTP {status})',
 } satisfies Record<string, string>;

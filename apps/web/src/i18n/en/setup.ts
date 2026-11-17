@@ -161,4 +161,16 @@ export default {
   'Vérification…': 'Checking…',
   'Revérifier': 'Check again',
   'Vérification en cours…': 'Check in progress…',
+  // Settings: security card; session expired dialog
+  'Sécurité': 'Security',
+  'Sessions de connexion à Intendia': 'Sign-in sessions to Intendia',
+  'Une session dure 30 jours sans usage, 90 jours au plus.': 'A session lasts 30 days without use, 90 days at most.',
+  'Déconnecter toutes les sessions': 'Sign out all sessions',
+  'Déconnecter toutes les sessions ?': 'Sign out all sessions?',
+  'Tous les navigateurs connectés à Intendia devront saisir le mot de passe à nouveau. Celui-ci reste connecté.': 'Every browser signed in to Intendia will have to enter the password again. This one stays signed in.',
+  'Déconnecter': 'Sign out',
+  'Toutes les autres sessions sont déconnectées.': 'All other sessions are signed out.',
+  'Session expirée': 'Session expired',
+  'Saisissez le mot de passe pour continuer : cette page et vos modifications restent.': 'Enter the password to continue: this page and your changes stay.',
+  'Se reconnecter': 'Sign in again',
 } satisfies Record<string, string>;
