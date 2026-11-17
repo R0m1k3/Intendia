@@ -50,7 +50,7 @@ export function StatusBars() {
     <div
       role="status" data-status-bar={bar}
       className={cx(
-        'fixed left-1/2 top-2 z-[65] flex max-w-[calc(100%-6rem)] -translate-x-1/2 items-center gap-2 rounded-full px-4 py-1.5 text-[13px] shadow',
+        'fixed inset-x-0 top-2 z-[65] mx-auto flex w-fit max-w-[calc(100%-6rem)] items-center gap-2 rounded-2xl px-4 py-1.5 text-[13px] shadow md:rounded-full',
         hard ? 'bg-bad-soft text-bad' : 'bg-warn-soft text-warn',
       )}
     >
