@@ -150,7 +150,8 @@ describe('instances', () => {
     await t.req('POST', '/x/setup/password', { code: t.auth.setupCode, password: PASSWORD });
     expect((await t.req('GET', '/x/instances')).json).toMatchObject({ declarative: true });
     const res = await t.req('DELETE', '/x/instances/fake');
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('declarative');
     expect(t.store.list()).toHaveLength(1);
     const rename = await t.req('PATCH', '/x/instances/fake', { label: 'Autre' });
     expect(rename.status).toBe(409);

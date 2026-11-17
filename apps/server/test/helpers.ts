@@ -61,6 +61,8 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   kanbanRelayMaxMs?: number;
   /** timeout of one POST /v1/runs (chat/start-run.ts) */
   createRunTimeoutMs?: number;
+  /** Instances saved in the database (editable from the UI) instead of INTENDIA_INSTANCES. */
+  dbInstances?: boolean;
 } = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
@@ -91,10 +93,11 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   });
   const config = loadConfig({
     INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, INTENDIA_TRUST_PROXY: 'true',
-    INTENDIA_INSTANCES: JSON.stringify([inst, ...extra]), ...opts.env,
+    ...(opts.dbInstances ? {} : { INTENDIA_INSTANCES: JSON.stringify([inst, ...extra]) }), ...opts.env,
   });
   const db = openDb(dataDir);
   const store = new InstanceStore(db, config);
+  if (opts.dbInstances) for (const i of [inst, ...extra]) store.save(i);
   const auth = new Auth(db, config);
   const fetchImpl = combineFetch(routes);
   const compat = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl, fakeWebSocketFactory(fake));
