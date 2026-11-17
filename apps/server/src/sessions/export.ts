@@ -1,8 +1,39 @@
 import { isReservedText } from '../chat/goal.js';
-import type { ChatMessage } from '../chat/history.js';
+import { HISTORY_PAGE, readHistory, type ChatMessage } from '../chat/history.js';
+import type { CompatService } from '../compat/service.js';
+import { msg } from '../i18n/index.js';
+import type { SessionContext } from '../workspaces/service.js';
 
 // Markdown and HTML exports of a session, made by Intendia from the messages the session page shows (Hermes only
-// exports JSON). Pure functions.
+// exports JSON). Pure functions, except exportMessages (the pages of messages read for them).
+
+/** Pages of HISTORY_PAGE messages an export reads at most (20 000 messages). */
+export const EXPORT_MAX_PAGES = 40;
+
+/**
+ * Every message of the session, from the start (`order: 'oldest'`): nothing added later shifts the pages read, so
+ * they are concatenated as they are. `capped`: more pages were left after `maxPages`.
+ */
+export async function exportMessages(compat: CompatService, ctx: SessionContext, maxPages = EXPORT_MAX_PAGES) {
+  const messages: ChatMessage[] = [];
+  let liveId = ctx.session.id;
+  let exists = false;
+  let capped = false;
+  for (let page = 0, offset = 0; ; page += 1, offset += HISTORY_PAGE) {
+    if (page >= maxPages) {
+      capped = true;
+      break;
+    }
+    const h = await readHistory(compat, ctx.instance.id, ctx.session.id, ctx.profile, HISTORY_PAGE, { offset, order: 'oldest' });
+    if (page === 0) {
+      liveId = h.liveId;
+      exists = h.exists;
+    }
+    messages.push(...h.messages);
+    if (h.returned < HISTORY_PAGE) break;
+  }
+  return { messages, liveId, exists, capped };
+}
 
 /** Name shown above the agent's answers: the profile when it is not "default", else the instance's label. */
 export function agentName(profile: string, instanceLabel: string): string {
@@ -20,11 +51,18 @@ function who(m: ChatMessage, agent: string): string | null {
 
 const date = (sec: number | null): string => (sec ? new Date(sec * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '');
 
-export interface ExportHead { title: string; startedAt: number | null; agent: string }
+export interface ExportHead {
+  title: string; startedAt: number | null; agent: string;
+  /** the export stopped at this many messages (EXPORT_MAX_PAGES) */
+  capped?: number;
+}
+
+const cappedLine = (n: number) => msg('Export limité aux {n} premiers messages', { n });
 
 export function toMarkdown(head: ExportHead, messages: ChatMessage[]): string {
   const out = [`# ${head.title}`, ''];
   if (head.startedAt) out.push(`_${date(head.startedAt)}_`, '');
+  if (head.capped !== undefined) out.push(`> ${cappedLine(head.capped)}`, '');
   for (const m of messages) {
     const name = who(m, head.agent);
     if (!name) continue;
@@ -52,7 +90,7 @@ export function toHtml(head: ExportHead, messages: ChatMessage[]): string {
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(head.title)}</title>
 <style>body{font:15px/1.55 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#16181b}h1{font-size:1.4rem}h2{font-size:.85rem;margin:0 0 .3rem;color:#555}small{font-weight:400;color:#888}section{border-top:1px solid #e5e5e5;padding:.9rem 0}.text{white-space:pre-wrap}.tool{color:#666;font-size:.85rem;margin:.3rem 0 0}.user .text{background:#f5f5f6;padding:.5rem .7rem;border-radius:8px}</style>
-</head><body><h1>${esc(head.title)}</h1>${head.startedAt ? `<p><small>${esc(date(head.startedAt))}</small></p>` : ''}
+</head><body><h1>${esc(head.title)}</h1>${head.startedAt ? `<p><small>${esc(date(head.startedAt))}</small></p>` : ''}${head.capped !== undefined ? `<p class="capped">${esc(cappedLine(head.capped))}</p>` : ''}
 ${items.join('\n')}
 </body></html>
 `;

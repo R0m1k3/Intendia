@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { COST_SETTLE_MS } from '../src/chat/run-stats.js';
+import { createTimeout, resetSentBodies, START_RUN_BUDGET_MS } from '../src/chat/start-run.js';
 import { readSse, testApp, waitRun } from './helpers.js';
 
 const DEV_KEY = 'dev-profile-key-0000000';
@@ -129,7 +130,7 @@ describe('run stream', () => {
     await waitRun(t, base, run);
     t.fake.sim.runs.clear();
     const ev = await readSse(await t.raw('GET', `${base}/runs/${run}/events`));
-    expect(ev).toEqual([{ id: null, data: { event: 'intendia.error', status: 404, message: 'Run introuvable chez Hermes' } }]);
+    expect(ev).toEqual([{ id: null, data: { event: 'intendia.error', status: 404, code: 'run_gone', message: 'Run introuvable chez Hermes' } }]);
   });
 
   it('only serves the session last run, with valid ids', async () => {
@@ -396,5 +397,183 @@ describe('session title at Hermes', () => {
     await t.request('GET', `${base}/messages`);
     await new Promise((r) => setTimeout(r, 50));
     expect(patches(t, s.id)).toHaveLength(0);
+  });
+});
+
+const until = async (ok: () => boolean | Promise<boolean>) => {
+  for (let i = 0; i < 400; i++) {
+    if (await ok()) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('condition not met');
+};
+
+describe('lost streams', () => {
+  it('a swept stream (404 at Hermes) is one run_gone frame, in 200 text/event-stream; the run goes on', async () => {
+    const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'lent' })).json.runId;
+    await t.fake.api.request(`/_fake/runs/${run}/drop-stream`, { method: 'POST' });
+    const res = await t.raw('GET', `${base}/runs/${run}/events`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    expect((await readSse(res)).map((e) => e.data)).toEqual([expect.objectContaining({ event: 'intendia.error', status: 404, code: 'run_gone' })]);
+    expect(['queued', 'running']).toContain((await t.request('GET', `${base}/runs/${run}`)).json.status);
+  });
+
+  it('Hermes unreachable is hermes_unreachable; an invalid run id is bad_request, still as SSE', async () => {
+    const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, run);
+    const bad = await t.raw('GET', `${base}/runs/not-a-run/events`);
+    expect(bad.status).toBe(200);
+    expect((await readSse(bad))[0]!.data).toMatchObject({ event: 'intendia.error', status: 400, code: 'bad_request' });
+    expect((await readSse(await t.raw('GET', `${base}/runs/run_other0001/events`)))[0]!.data).toMatchObject({ code: 'run_gone', status: 404 });
+    t.store.get('fake')!.api = 'http://unreachable';
+    expect((await readSse(await t.raw('GET', `${base}/runs/${run}/events`)))[0]!.data).toMatchObject({ event: 'intendia.error', code: 'hermes_unreachable' });
+  });
+
+  it('?lastSeq= resumes after that event (a new EventSource of the page)', async () => {
+    const { t, base } = await session();
+    const run = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, run);
+    const rest = await readSse(await t.raw('GET', `${base}/runs/${run}/events?lastSeq=3`));
+    expect(rest.map((e) => e.data.seq)).toEqual([4, 5]);
+    expect(t.fake.requests.at(-1)?.headers['last-event-id']).toBe('3');
+  });
+});
+
+describe('older runs of the session', () => {
+  it('a run replaced by a newer one keeps its status and stream; control routes stay on the last run', async () => {
+    const { t, base } = await session();
+    const a = (await t.request('POST', `${base}/runs`, { input: 'panne' })).json.runId;
+    expect(await waitRun(t, base, a)).toBe('failed');
+    const b = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, b);
+    const old = await t.request('GET', `${base}/runs/${a}`);
+    expect(old.status).toBe(200);
+    expect(old.json).toMatchObject({ status: 'failed' });
+    expect(old.json.error).toBeTruthy();
+    const ev = await t.raw('GET', `${base}/runs/${a}/events`);
+    expect(ev.headers.get('content-type')).toContain('text/event-stream');
+    expect((await readSse(ev)).at(-1)?.data.event).toBe('run.failed');
+    expect((await t.request('POST', `${base}/runs/${a}/stop`, {})).status).toBe(404);
+    expect((await t.request('POST', `${base}/runs/${a}/approval`, { choice: 'once' })).status).toBe(404);
+  });
+
+  it('an older run still running (its row running) is read at Hermes', async () => {
+    const { t, s, base } = await session();
+    const b = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, b);
+    const a = t.fake.sim.create(s.id, 'lent interminable');
+    t.services.workspaces.insertRunStat({ instanceId: 'fake', runId: a.id, sessionId: s.id, status: 'running', requestedModel: null, requestedEffort: null, startedAt: Date.now() - 60_000, costBeforeUsd: null, costBeforeSessionId: null });
+    await until(() => a.status === 'running');
+    expect((await t.request('GET', `${base}/runs/${a.id}`)).json.status).toBe('running');
+    t.fake.sim.stop(a);
+  });
+
+  it('a run of another session is 404 run_unknown', async () => {
+    const one = await session();
+    const run = (await one.t.request('POST', `${one.base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(one.t, one.base, run);
+    const other = (await one.t.request('POST', '/x/workspaces/dev/sessions')).json.session;
+    const res = await one.t.request('GET', `/x/sessions/fake/${other.id}/runs/${run}`);
+    expect(res.status).toBe(404);
+    expect(res.json.code).toBe('run_unknown');
+  });
+});
+
+describe('idempotent run creation', () => {
+  const KEY = 'clientkey-0001';
+  const last = async (t: Awaited<ReturnType<typeof testApp>>) => (await t.fake.api.request('/_fake/runs/last')).json() as Promise<{ postedKeys: string[]; run_id: string }>;
+  const count = (t: Awaited<ReturnType<typeof testApp>>) => t.fake.sim.runsPosted;
+  const rows = (t: Awaited<ReturnType<typeof testApp>>, sid: string) => t.services.workspaces.runStats('fake', sid, { running: true });
+
+  it('a timeout is retried once with the same key: one run, one row, lastRunId on it', async () => {
+    resetSentBodies();
+    const { t, s, base } = await session({ createRunTimeoutMs: 500 });
+    const res = await t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY });
+    expect(res.status).toBe(200);
+    expect(count(t)).toBe(1);
+    expect(rows(t, s.id).map((r) => r.runId)).toEqual([res.json.runId]);
+    expect((await t.request('GET', base)).json.session.lastRunId).toBe(res.json.runId);
+    expect((await last(t)).postedKeys).toEqual([`${s.id}:u-${KEY}`, `${s.id}:u-${KEY}`]);
+  });
+
+  it('no retry without durable idempotency announced: one POST, 504', async () => {
+    resetSentBodies();
+    for (const features of [{ runs_idempotency: undefined }, { runs_idempotency: { supported: true, durable: false } }]) {
+      const { t, base } = await session({ createRunTimeoutMs: 500, features });
+      const res = await t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY });
+      expect(res.status).toBe(504);
+      expect(runsPosted(t)).toHaveLength(1);
+    }
+  });
+
+  it('the same key again: replayed after the run, run_busy during it, refused with another text or skills', async () => {
+    resetSentBodies();
+    const { t, s, base } = await session();
+    const first = await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY });
+    const busy = await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY });
+    expect(busy.status).toBe(409);
+    expect(busy.json.code).toBe('run_busy');
+    await until(() => t.fake.sim.runs.get(first.json.runId)!.status === 'waiting_for_approval');
+    await t.request('POST', `${base}/runs/${first.json.runId}/approval`, { choice: 'once' });
+    await waitRun(t, base, first.json.runId);
+    const again = await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY });
+    expect(again.status).toBe(200);
+    expect(again.json.runId).toBe(first.json.runId);
+    expect(count(t)).toBe(1);
+    expect(rows(t, s.id)).toHaveLength(1);
+    expect((await t.request('POST', `${base}/runs`, { input: 'autre texte', clientKey: KEY })).json.code).toBe('idempotency_conflict');
+    expect((await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY, skills: ['claude-code'] })).json.code).toBe('idempotency_conflict');
+    expect((await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: 'a b' })).status).toBe(400);
+  });
+
+  it('after a restart (bodies forgotten) and changed instructions: Hermes refuses the key, already_sent', async () => {
+    resetSentBodies();
+    const { t, base } = await session();
+    const first = await t.request('POST', `${base}/runs`, { input: 'Bonjour', clientKey: KEY });
+    await waitRun(t, base, first.json.runId);
+    resetSentBodies();
+    writeFileSync(join(t.root, 'dev', 'AGENTS.md'), 'Nouvelles consignes.');
+    const res = await t.request('POST', `${base}/runs`, { input: 'Bonjour', clientKey: KEY });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('already_sent');
+    expect(count(t)).toBe(1);
+  });
+
+  it('a replayed run without a row, older than the last run: its row is added, lastRunId stays', async () => {
+    resetSentBodies();
+    const { t, s, base } = await session({ createRunTimeoutMs: 300, features: { runs_idempotency: { supported: true, durable: false } } });
+    expect((await t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY })).status).toBe(504);
+    const a = t.fake.sim.lastRun!.id;
+    await until(() => t.fake.sim.runs.get(a)!.status === 'completed');
+    const b = (await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).json.runId;
+    await waitRun(t, base, b);
+    const again = await t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY });
+    expect(again.json.runId).toBe(a);
+    expect(count(t)).toBe(2);
+    expect(rows(t, s.id).map((r) => r.runId).sort()).toEqual([a, b].sort());
+    expect(rows(t, s.id).find((r) => r.runId === a)?.costBeforeUsd).toBeNull();
+    expect((await t.request('GET', base)).json.session.lastRunId).toBe(b);
+  });
+
+  it('the row and lastRunId are written together or not at all', async () => {
+    resetSentBodies();
+    const { t, s, base } = await session();
+    const spy = vi.spyOn(t.services.workspaces as never as { setLastRun: () => void }, 'setLastRun').mockImplementation(() => { throw new Error('disk full'); });
+    expect((await t.request('POST', `${base}/runs`, { input: 'Bonjour' })).status).toBe(500);
+    spy.mockRestore();
+    expect(rows(t, s.id)).toHaveLength(0);
+    expect((await t.request('GET', base)).json.session.lastRunId).toBeNull();
+  });
+
+  it('the timeout of a retry is what is left of the budget, and none under 10 s', () => {
+    const start = 1_000_000;
+    const deadline = start + START_RUN_BUDGET_MS;
+    expect(createTimeout(deadline, start, 60_000, false)).toBe(60_000);
+    expect(createTimeout(deadline, start + 60_000, 60_000, true)).toBe(20_000);
+    expect(createTimeout(deadline, start + 71_000, 60_000, true)).toBeNull();
+    expect(createTimeout(deadline, start + 1000, 200_000, false)).toBe(START_RUN_BUDGET_MS - 1000);
   });
 });

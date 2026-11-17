@@ -14,14 +14,16 @@ import { SESSION_ID_RE, sessionParams } from './workspaces.js';
 import { ModelInfoSchema } from '../connectors/config/index.js';
 import { sessionStats, type SessionStats } from '../hermes/gateway-ws.js';
 import { toUsage } from '../chat/usage.js';
-import { readHistory, whenIdle, readRunStatus, type ChatMessage } from '../chat/history.js';
+import { HISTORY_PAGE, readHistory, whenIdle, readRunStatus, type ChatMessage } from '../chat/history.js';
 import { listChildren } from '../chat/subagents.js';
 import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
 import { presets, Modes, Pins } from '../chat/presets.js';
 import { PromptService } from '../prompts/service.js';
 import { listPersonalities } from '../sessions/personalities.js';
 import { SKILLS_MAX } from '../sessions/run-extras.js';
-import { RunBusyError, RunExtrasError, settle as settleRuns, startRun } from '../chat/start-run.js';
+import {
+  AlreadySentError, CLIENT_KEY_RE, IdempotencyConflictError, RunBusyError, RunExtrasError, settle as settleRuns, startRun,
+} from '../chat/start-run.js';
 import { isReservedText } from '../chat/goal.js';
 import { summarize, wakeDecision } from '../chat/wake.js';
 import { profileOf } from './skills.js';
@@ -37,6 +39,8 @@ const SendBody = z.object({
   /** `/use <skill>`: put in the instructions of this run only */
   // same names as the skills routes (`category/name` for same-tier duplicates), never a `..` segment
   skills: z.array(z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/).refine((n) => !n.split('/').includes('..'))).max(SKILLS_MAX).optional(),
+  /** drawn by the page once per composed message: a resend of it never starts a second run (Idempotency-Key) */
+  clientKey: z.string().regex(CLIENT_KEY_RE).optional(),
 });
 const StopWaitingBody = z.object({ units: z.array(z.string().min(1).max(256)).max(50) });
 const ClarifyBody = z.object({ answer: z.string().min(1).max(16_384), requestId: z.string().max(256).optional() });
@@ -47,8 +51,15 @@ function sseFrame(payload: unknown): string {
   return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
-function sseError(status: number, message: string, lang: Lang): Response {
-  return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, message: toLang(message, lang) })}`, {
+/**
+ * Why a stream cannot be served, in one SSE frame (always 200 `text/event-stream`, never JSON: an EventSource only
+ * reads SSE). `run_gone`: Hermes forgot the stream (swept after 300 s without a listener) or the run is not the
+ * session's; `hermes_unreachable`: network or timeout; `hermes_http`: another answer; `bad_request`: invalid run id.
+ */
+type SseCode = 'run_gone' | 'hermes_unreachable' | 'hermes_http' | 'bad_request';
+
+function sseError(status: number, code: SseCode, message: string, lang: Lang): Response {
+  return new Response(`: open\n\n${sseFrame({ event: 'intendia.error', status, code, message: toLang(message, lang) })}`, {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
 }
@@ -73,11 +84,22 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     return runId;
   };
 
+  /**
+   * A run the session may read (status, stream): its last run, or any run with a run_stats row of the session
+   * (running ones included: a column may follow a run a goal relaunch or a wake replaced). The row proves ownership.
+   */
+  const ownRun = (ctx: SessionContext, runId: string): { runId: string; last: boolean } => {
+    if (!RUN_ID_RE.test(runId)) throw new ValidationError(msg('identifiant de run invalide'));
+    if (runId === ctx.session.lastRunId) return { runId, last: true };
+    if (workspaces.runStats(ctx.instance.id, ctx.session.id, { running: true }).some((r) => r.runId === runId)) return { runId, last: false };
+    throw new NotFoundError(msg('Run inconnu pour cette session'));
+  };
+
   const status = (ctx: SessionContext, runId: string) => readRunStatus(compat, ctx.instance.id, ctx.profile, runId);
   const publicStatus = ({ raw: _raw, ...s }: Awaited<ReturnType<typeof status>>) => s;
 
-  const history = (instanceId: string, sessionId: string, profile: string, limit?: number) =>
-    readHistory(compat, instanceId, sessionId, profile, limit);
+  const history = (instanceId: string, sessionId: string, profile: string, limit?: number, page?: Parameters<typeof readHistory>[5]) =>
+    readHistory(compat, instanceId, sessionId, profile, limit, page);
   const messages = async (instanceId: string, sessionId: string, profile: string): Promise<ChatMessage[]> =>
     (await history(instanceId, sessionId, profile)).messages;
 
@@ -125,18 +147,32 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   // ---- Intendia sessions (profile read from the workspace)
 
+  // one page of HISTORY_PAGE messages, counted from the end (`offset`: rows already read); older pages carry only
+  // the messages (no settling, no sub-agents decision: those belong to the latest page)
   r.get('/sessions/:inst/:id/messages', async (c) => {
     const ctx = ctxOf(c);
-    const h = await history(ctx.instance.id, ctx.session.id, ctx.profile);
+    const rawOffset = c.req.query('offset') ?? '0';
+    if (!/^\d{1,9}$/.test(rawOffset)) throw new ValidationError(msg('décalage invalide'));
+    const offset = Number(rawOffset);
+    const h = await history(ctx.instance.id, ctx.session.id, ctx.profile, HISTORY_PAGE, { offset });
+    const hasMore = h.returned >= HISTORY_PAGE;
+    if (offset > 0) return c.json({ messages: h.messages, hasMore });
     // the consumption rows are settled here: the page re-reads the messages when a run ends
     await settle(ctx, { known: h });
     // background sub-agents: the server's decision (chat/wake.ts), same window as its watcher
     const d = decide(ctx, h.messages);
     const subagents = summarize(d, d.key ? deps.services.wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, Date.now() / 1000);
     return c.json({
-      messages: h.messages, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
+      messages: h.messages, hasMore, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
       openUnits: d.openUnits.map((u) => u.id),
     });
+  });
+
+  // cost follow-up of the page: the rows' state and cost, read without any message (runStatus, sessions.get)
+  r.get('/sessions/:inst/:id/run-stats', async (c) => {
+    const ctx = ctxOf(c);
+    await settle(ctx, { liveFromRows: true });
+    return c.json({ runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun) });
   });
 
   /** The watcher's decision on a session (lost units and last wake included). */
@@ -169,14 +205,16 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   // one run creation at a time per session (chat/start-run.ts)
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
-    const { input, skills } = SendBody.parse(await c.req.json());
+    const { input, skills, clientKey } = SendBody.parse(await c.req.json());
     if (isReservedText(input)) return c.json({ error: RESERVED, code: 'reserved_prefix' }, 400);
     // the user writes: an active goal pauses first, so this run goes without the goal's block
     goals.pauseIfActive(ctx.instance.id, ctx.session.id, 'user');
     try {
-      return c.json(await startRun(runDeps, ctx, input, { skills }));
+      return c.json(await startRun(runDeps, ctx, input, { skills, ...(clientKey ? { keySuffix: 'u-' + clientKey } : {}) }));
     } catch (err) {
-      if (err instanceof RunBusyError) return c.json({ error: err.message }, 409);
+      if (err instanceof RunBusyError) return c.json({ error: err.message, code: 'run_busy' }, 409);
+      if (err instanceof IdempotencyConflictError) return c.json({ error: err.message, code: 'idempotency_conflict' }, 409);
+      if (err instanceof AlreadySentError) return c.json({ error: err.message, code: 'already_sent' }, 409);
       if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
       throw err;
     }
@@ -184,15 +222,31 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   r.get('/sessions/:inst/:id/runs/:runId', async (c) => {
     const ctx = ctxOf(c);
-    const runId = runOf(ctx, c.req.param('runId'));
+    let own: { runId: string; last: boolean };
+    try {
+      own = ownRun(ctx, c.req.param('runId'));
+    } catch (err) {
+      if (err instanceof NotFoundError) return c.json({ error: err.message, code: 'run_unknown' }, 404);
+      throw err;
+    }
+    // an older run: its own status at Hermes (settle() gives the last run's)
+    if (!own.last) return c.json(publicStatus(await status(ctx, own.runId)));
     const settled = await settle(ctx);
-    return c.json(publicStatus(settled ?? await status(ctx, runId)));
+    return c.json(publicStatus(settled ?? await status(ctx, own.runId)));
   });
 
   r.get('/sessions/:inst/:id/runs/:runId/events', async (c) => {
     const ctx = ctxOf(c);
-    const runId = runOf(ctx, c.req.param('runId'));
-    const lastEventId = c.req.header('last-event-id');
+    let runId: string;
+    try {
+      runId = ownRun(ctx, c.req.param('runId')).runId;
+    } catch (err) {
+      if (err instanceof ValidationError) return sseError(400, 'bad_request', err.message, requestLang(c));
+      if (err instanceof NotFoundError) return sseError(404, 'run_gone', err.message, requestLang(c));
+      throw err;
+    }
+    // resume after the last event seen: the EventSource's own header, else the page's `?lastSeq=` (a new EventSource)
+    const lastEventId = c.req.header('last-event-id') ?? c.req.query('lastSeq');
     let res: Response;
     try {
       res = await streamOp(http(ctx), report(ctx), 'chat', 'runEvents', {
@@ -202,11 +256,12 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
         signal: c.req.raw.signal,
       });
     } catch (err) {
-      return sseError(0, (err as Error).message, requestLang(c));
+      return sseError(0, 'hermes_unreachable', (err as Error).message, requestLang(c));
     }
     if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('text/event-stream') || !res.body) {
       await res.body?.cancel();
-      return sseError(res.status, res.status === 404 ? msg('Run introuvable chez Hermes') : msg('Hermes a répondu {status}', { status: res.status }), requestLang(c));
+      if (res.status === 404) return sseError(404, 'run_gone', msg('Run introuvable chez Hermes'), requestLang(c));
+      return sseError(res.status, 'hermes_http', msg('Hermes a répondu {status}', { status: res.status }), requestLang(c));
     }
     return new Response(res.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },

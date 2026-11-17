@@ -97,16 +97,28 @@ export async function readRunStatus(compat: CompatService, instanceId: string, p
   }
 }
 
-/** Messages and the live session id (after a compression, the continuation); 404 = no message yet. */
-export async function readHistory(compat: CompatService, instanceId: string, sessionId: string, profile: string, limit?: number) {
+/** Size of one page of messages (the default and the cap of Hermes' `GET /api/sessions/{id}/messages`). */
+export const HISTORY_PAGE = 500;
+
+/**
+ * Messages and the live session id (after a compression, the continuation); 404 = no message yet.
+ * With a `limit`: one page, counted from the end (`order: 'latest'`, the default) or from the start (`'oldest'`),
+ * skipping `offset` rows. `returned` = raw rows Hermes gave (before `session_meta` and hidden rows are dropped):
+ * a full page means there may be more.
+ */
+export async function readHistory(
+  compat: CompatService, instanceId: string, sessionId: string, profile: string, limit?: number,
+  page?: { offset?: number; order?: 'latest' | 'oldest' },
+) {
   try {
     const res = await callOp<{ data: RawMessage[]; session_id?: string | null }>(compat.http(instanceId), compat.get(instanceId), 'sessions', 'messages', {
-      params: { session_id: sessionId }, profile, ...(limit ? { query: { limit, order: 'latest' } } : {}),
+      params: { session_id: sessionId }, profile,
+      ...(limit ? { query: { limit, ...(page?.offset ? { offset: page.offset } : {}), order: page?.order ?? 'latest' } } : {}),
     });
-    return { messages: toChatMessages(res.data), liveId: res.session_id || sessionId, exists: true };
+    return { messages: toChatMessages(res.data), liveId: res.session_id || sessionId, exists: true, returned: res.data.length };
   } catch (err) {
     // an Intendia session before its first message does not exist at Hermes yet
-    if (err instanceof HermesError && err.detail.status === 404) return { messages: [] as ChatMessage[], liveId: sessionId, exists: false };
+    if (err instanceof HermesError && err.detail.status === 404) return { messages: [] as ChatMessage[], liveId: sessionId, exists: false, returned: 0 };
     throw err;
   }
 }
