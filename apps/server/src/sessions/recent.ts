@@ -3,6 +3,7 @@ import type { CompatService } from '../compat/service.js';
 import { callOp, HermesError, ModuleUnavailableError } from '../connectors/runtime.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, type PublicSession, type WorkspaceService } from '../workspaces/service.js';
+import { rawLength } from '../connectors/list.js';
 
 const TIMEOUT_MS = 3_000;
 /** Lines of a search answer. */
@@ -153,7 +154,7 @@ export class RecentService {
                 profile, query: { limit, offset: page * limit, ...(src ? { source: src } : {}) }, timeoutMs: TIMEOUT_MS,
               });
               found.push(...res.data.filter((s) => !owned.has(String(s.id))));
-              if (res.data.length < limit) break;
+              if (rawLength(res.data) < limit) break;
             }
             sessions.push(...found);
           }

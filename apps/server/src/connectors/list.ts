@@ -3,6 +3,16 @@ import { z } from 'zod';
 /** At most one log line per label in this window. */
 export const DROP_LOG_MS = 600_000;
 const lastDropLog = new Map<string, number>();
+/** Rows Hermes sent for each filtered list (dropped items included). */
+const rawLengths = new WeakMap<object, number>();
+
+/**
+ * Rows Hermes sent for a list, before invalid items were dropped: the count pagination needs (a full page of raw
+ * rows means there may be more, and the next offset counts every row Hermes skips). Any other array: its length.
+ */
+export function rawLength(list: readonly unknown[]): number {
+  return rawLengths.get(list) ?? list.length;
+}
 
 /** For tests: forget when each label last logged. */
 export function resetDropLog(): void {
@@ -13,6 +23,7 @@ export function resetDropLog(): void {
  * A read-only list from Hermes that keeps its valid items: one item in an unexpected shape no longer fails the
  * whole list. Dropped items are logged (`[intendia] <label>: …`, once per label every 10 min). A non-empty list
  * with no valid item is still a schema error, so a compat probe never says "ok" for a list it cannot read.
+ * Paginated reads count rows with `rawLength`, never `.length`.
  * Never for lists copied back to Hermes (session export / import): those stay `z.array`.
  */
 export function tolerantArray<T extends z.ZodType>(item: T, label: string) {
@@ -35,6 +46,7 @@ export function tolerantArray<T extends z.ZodType>(item: T, label: string) {
         console.warn(`[intendia] ${label}: ${dropped} élément(s) ignoré(s) sur ${arr.length}`);
       }
     }
+    rawLengths.set(kept, arr.length);
     return kept;
   });
 }
