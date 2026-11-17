@@ -59,11 +59,12 @@ async function drawBadge(color: string | null): Promise<void> {
     if (!ctx) return;
     ctx.drawImage(img, 0, 0, 64, 64);
     ctx.beginPath();
-    ctx.arc(48, 16, 14, 0, Math.PI * 2);
+    // a dot of a third of the icon: still visible at 16 px
+    ctx.arc(46, 18, 18, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(48, 16, 10, 0, Math.PI * 2);
+    ctx.arc(46, 18, 13, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     link.type = 'image/png';

@@ -36,10 +36,11 @@ function sections(): { title: string; rows: Row[] }[] {
 
 /** « ? » or the sidebar's link: the keyboard shortcuts, in a window built like the palette. Escape, the backdrop or X closes it. */
 export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
-  const close = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
-  useLayoutEffect(() => { close.current?.focus(); }, []);
+  // the window itself takes the focus (Tab then reaches X), no ring drawn on the button
+  useLayoutEffect(() => { box.current?.focus(); }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -54,12 +55,12 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div data-overlay className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
       <div
-        role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" onMouseDown={(e) => e.stopPropagation()}
-        className="enter flex max-h-[76vh] w-full max-w-[480px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
+        ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" onMouseDown={(e) => e.stopPropagation()}
+        className="enter flex outline-none max-h-[76vh] w-full max-w-[480px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
       >
         <header className="flex items-center justify-between gap-3 border-b border-line py-2.5 pl-5 pr-2.5">
           <h2 id="shortcuts-title" className="text-[15px] font-semibold">{t('Raccourcis clavier')}</h2>
-          <button ref={close} type="button" onClick={onClose} aria-label={t('Fermer')}
+          <button type="button" onClick={onClose} aria-label={t('Fermer')}
             className="flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink">
             <X className="size-4" strokeWidth={1.5} />
           </button>
