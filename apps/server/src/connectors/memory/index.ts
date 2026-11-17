@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 /** A memory card of the learning graph: one entry of MEMORY.md (`memory`) or USER.md (`profile`). */
@@ -22,9 +23,9 @@ export const GraphNodeSchema = z.looseObject({
   memorySource: z.string().nullish(),
 });
 export const GraphSchema = z.looseObject({
-  nodes: z.array(GraphNodeSchema),
+  nodes: tolerantArray(GraphNodeSchema, 'memory.nodes'),
   edges: z.array(z.looseObject({ source: z.string(), target: z.string() })).nullish(),
-  memory: z.array(MemoryCardSchema).nullish(),
+  memory: tolerantArray(MemoryCardSchema, 'memory.cards').nullish(),
   stats: z.looseObject({
     nodes: z.number().nullish(), related_edges: z.number().nullish(), isolated_pct: z.number().nullish(),
     learned_skills: z.number().nullish(), memory_nodes: z.number().nullish(),

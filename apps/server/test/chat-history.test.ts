@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { exportMessages, toMarkdown } from '../src/sessions/export.js';
 import { testApp, waitRun } from './helpers.js';
 
@@ -61,6 +61,22 @@ describe('long sessions', () => {
     expect(third.messages[0].content).toBe('message 1');
     expect(third.hasMore).toBe(false);
     expect(third.nextOffset).toBe(1301); // the session_meta row counts too
+  });
+
+  it('a full page with one malformed row: still a full page (hasMore, nextOffset count raw rows)', async () => {
+    const { t, s, base } = await session();
+    const rows: unknown[] = Array.from({ length: 499 }, (_, i) => ({ id: i + 1, role: 'user', content: `message ${i + 1}`, timestamp: 1_700_000_000 + i }));
+    rows.splice(250, 0, { id: 'pas-un-nombre', role: 'user', content: 'mal formé' });
+    await t.fake.api.request('/_fake/breaks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: `api GET /api/sessions/${s.id}/messages`, body: { data: rows, session_id: s.id } }),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = (await t.request('GET', `${base}/messages`)).json;
+    warn.mockRestore();
+    expect(first.messages).toHaveLength(499);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextOffset).toBe(500);
   });
 
   it('the markdown export has every message, oldest first', async () => {

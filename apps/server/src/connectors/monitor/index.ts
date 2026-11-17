@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 const num = z.number().nullish();
@@ -9,10 +10,10 @@ export const UsageDaySchema = z.looseObject({
   estimated_cost: num, actual_cost: num, sessions: num, api_calls: num,
 });
 export const UsageSchema = z.looseObject({
-  daily: z.array(UsageDaySchema).default([]),
-  by_model: z.array(z.looseObject({
+  daily: tolerantArray(UsageDaySchema, 'monitor.daily').default([]),
+  by_model: tolerantArray(z.looseObject({
     model: z.string().nullish(), input_tokens: num, output_tokens: num, estimated_cost: num, sessions: num, api_calls: num,
-  })).default([]),
+  }), 'monitor.byModel').default([]),
   totals: z.looseObject({
     total_input: num, total_output: num, total_cache_read: num, total_reasoning: num,
     total_estimated_cost: num, total_actual_cost: num, total_sessions: num, total_api_calls: num,

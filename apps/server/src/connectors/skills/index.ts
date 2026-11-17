@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import { ActionStatusSchema } from '../actions.js';
 import type { ModuleDef } from '../types.js';
 
@@ -15,7 +16,7 @@ export const SkillSchema = z.looseObject({
 export type HermesSkill = z.infer<typeof SkillSchema>;
 
 /** Dashboard: bare array. API server /v1/skills: OpenAI-style `{ data: [...] }`. */
-export const SkillListSchema = z.union([z.array(SkillSchema), z.looseObject({ data: z.array(SkillSchema) })]);
+export const SkillListSchema = z.union([tolerantArray(SkillSchema, 'skills.list'), z.looseObject({ data: tolerantArray(SkillSchema, 'skills.list') })]);
 
 export const ToolsetSchema = z.looseObject({
   name: z.string(),
@@ -27,7 +28,7 @@ export const ToolsetSchema = z.looseObject({
   tools: z.array(z.string()).optional(),
 });
 /** Dashboard /api/tools/toolsets: bare array. API server /v1/toolsets: `{ data: [...] }`. */
-export const ToolsetListSchema = z.union([z.array(ToolsetSchema), z.looseObject({ data: z.array(ToolsetSchema) })]);
+export const ToolsetListSchema = z.union([tolerantArray(ToolsetSchema, 'skills.toolsets'), z.looseObject({ data: tolerantArray(ToolsetSchema, 'skills.toolsets') })]);
 
 export const HubResultSchema = z.looseObject({
   name: z.string(),
@@ -43,11 +44,11 @@ export const HubResultSchema = z.looseObject({
 export type HermesHubResult = z.infer<typeof HubResultSchema>;
 
 export const HubSearchSchema = z.looseObject({
-  results: z.array(HubResultSchema),
+  results: tolerantArray(HubResultSchema, 'skills.hubSearch'),
   timed_out: z.array(z.string()).optional(),
   installed: z.record(z.string(), z.unknown()).optional(),
 });
-export const HubOfficialSchema = z.looseObject({ skills: z.array(HubResultSchema) });
+export const HubOfficialSchema = z.looseObject({ skills: tolerantArray(HubResultSchema, 'skills.hubOfficial') });
 
 export const ScanSchema = z.looseObject({
   verdict: z.string(),

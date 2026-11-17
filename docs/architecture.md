@@ -19,6 +19,9 @@ Each operation of a module (`connectors/<module>/index.ts`) declares:
 - `routes`: candidate routes by preference, each on the API server (`api`) or the dashboard (`dash`);
   an API server route may name its `capability` (key in `/v1/capabilities.endpoints`) and `feature` flag;
 - `schema`: tolerant zod schema of the fields Intendia reads (`looseObject`: unknown fields are kept).
+  Read-only lists use `tolerantArray(item, label)` (`connectors/list.ts`): items in an unexpected shape are dropped and
+  logged (`[intendia] <label>: …`, once per label every 10 min); a non-empty list with no valid item is still a schema
+  error, so the probe fails. Lists copied back to Hermes (session export) stay strict `z.array`.
 
 The compatibility engine (`compat/engine.ts`), for every operation, walks its routes:
 

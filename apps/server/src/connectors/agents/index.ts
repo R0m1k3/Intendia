@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 export const ProfileSchema = z.looseObject({
@@ -11,7 +12,7 @@ export const ProfileSchema = z.looseObject({
   gateway_running: z.boolean().optional(),
   has_env: z.boolean().optional(),
 });
-export const ProfileListSchema = z.looseObject({ profiles: z.array(ProfileSchema) });
+export const ProfileListSchema = z.looseObject({ profiles: tolerantArray(ProfileSchema, 'agents.profiles') });
 export const SoulSchema = z.looseObject({ content: z.string().nullish() });
 export const ProfileCreatedSchema = z.looseObject({ name: z.string().optional(), model_error: z.string().nullish() });
 export const ProfileDeletedSchema = z.looseObject({ ok: z.boolean().optional(), settlement_pending: z.boolean().optional() });

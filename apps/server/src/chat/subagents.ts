@@ -2,6 +2,7 @@ import { callOp } from '../connectors/runtime.js';
 import type { CompatService } from '../compat/service.js';
 import type { SessionContext } from '../workspaces/service.js';
 import { readHistory } from './history.js';
+import { rawLength } from '../connectors/list.js';
 
 /**
  * Sessions of the sub-agents of an Intendia session (Hermes 0.23: one session per child, `source: subagent`,
@@ -56,7 +57,7 @@ export async function listChildren(compat: CompatService, ctx: SessionContext): 
       profile: ctx.profile, query: { include_children: 'true', limit: LIST_LIMIT, offset: page * LIST_LIMIT }, timeoutMs: TIMEOUT_MS,
     });
     rows.push(...res.data);
-    if (res.data.length < LIST_LIMIT) break;
+    if (rawLength(res.data) < LIST_LIMIT) break;
   }
   return rows
     .filter((r) => typeof r.id === 'string' && typeof r.parent_session_id === 'string' && parents.has(r.parent_session_id)
