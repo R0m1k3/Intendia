@@ -55,6 +55,8 @@ export function combineFetch(routes: { hosts: { api: string; dash: string }; fet
 export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   instance?: Partial<InstanceConfig>; extra?: (Partial<InstanceConfig> & { ownFake?: boolean })[]; env?: Record<string, string>;
   uploadTimeoutMs?: number; fileOpts?: import('../src/files/service.js').FileServiceOpts;
+  /** Life of a kanban live relay before it is renewed (default 10 min). */
+  kanbanRelayMaxMs?: number;
 } = {}) {
   const { createApp } = await import('../src/app.js');
   const { Auth } = await import('../src/auth/auth.js');
@@ -95,7 +97,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   await compat.check(inst.id);
   for (const e of extra) await compat.check(e.id);
   const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs, fileOpts: opts.fileOpts });
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300, kanbanRelayMaxMs: opts.kanbanRelayMaxMs });
   const mcp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: 'test' });
 
   let cookie = '';

@@ -47,6 +47,14 @@
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
  * Managed files (`/api/files*`): see files.ts, rooted at `filesRoot`.
+ *
+ * Health and authentication, like Hermes 0.23: `GET /health` (both apps) and, on the dashboard, `GET /api/health`
+ * (`{ok, version}`, light liveness probe), `/api/status` and `/openapi.json` need no token; any other dashboard path
+ * needs `fake.auth.dashToken` (401 otherwise; the kanban WebSocket leaves a wrong token's handshake unanswered).
+ * Test routes (no token): `POST /_fake/dash-token {token}` (dashboard) changes the accepted token;
+ * `POST /_fake/breaks {key, status?, body?}` and `DELETE /_fake/breaks` (API server) set or clear `breaks` at run time.
+ * `fake.down` (in-memory only): sides whose `fakeFetch` throws `TypeError('fetch failed')` and whose
+ * `fakeWebSocketFactory` connections fail (error, then close 1006).
  */
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -744,7 +752,13 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 interface Stores { vault: FakeVault; crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
 
-function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[]): Hono {
+/** Dashboard token the fake accepts, mutable at run time (`fake.auth`, `POST /_fake/dash-token`). */
+export interface FakeAuth { dashToken: string }
+
+/** Paths of the dashboard served without a token, like Hermes 0.23 (`dashboard_auth/public_paths.py`, subset). */
+const DASH_PUBLIC = new Set(['/health', '/api/health', '/api/status', '/openapi.json']);
+
+function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, log: LoggedRequest[], auth: FakeAuth): Hono {
   const { crons, skills, config, profiles, kanban } = stores;
   const app = new Hono();
   const deleted = new Set<string>();
@@ -761,7 +775,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // managed files read their own body (multipart for upload-stream): handled before the JSON parse, logged without body
     if (via === 'dash' && (path === '/api/files' || path.startsWith('/api/files/'))) {
       log.push({ via, method, path, profile, authorization: c.req.header('authorization'), query: c.req.query(), headers: Object.fromEntries(c.req.raw.headers), body: undefined });
-      if (c.req.header('authorization') !== `Bearer ${FAKE_DASH_TOKEN}`) return c.json({ error: 'unauthorized' }, 401);
+      if (c.req.header('authorization') !== `Bearer ${auth.dashToken}`) return c.json({ error: 'unauthorized' }, 401);
       const brk = opts.breaks?.[`dash ${method} ${path}`];
       if (brk?.status) return c.json(brk.body ?? { detail: 'broken by fake-hermes' }, brk.status as 404);
       if (brk && 'body' in brk) return c.json(brk.body as object);
@@ -771,7 +785,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     }
     if (via === 'dash' && (path === '/api/fs/git-root' || path.startsWith('/api/git/'))) {
       log.push({ via, method, path, profile, authorization: c.req.header('authorization'), query: c.req.query(), headers: Object.fromEntries(c.req.raw.headers), body: undefined });
-      if (c.req.header('authorization') !== `Bearer ${FAKE_DASH_TOKEN}`) return c.json({ error: 'unauthorized' }, 401);
+      if (c.req.header('authorization') !== `Bearer ${auth.dashToken}`) return c.json({ error: 'unauthorized' }, 401);
       const brk = opts.breaks?.[`dash ${method} ${path}`];
       if (brk?.status) return c.json(brk.body ?? { detail: 'broken by fake-hermes' }, brk.status as 404);
       const res = await stores.git.handle(method, path, c.req.raw, c.req.query());
@@ -793,6 +807,25 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // tests: the credential vault of a profile, secrets in clear (dashboard port, no token)
     if (via === 'dash' && method === 'GET' && path === '/_fake/vault') return c.json({ items: stores.vault.list(c.req.query('profile') ?? 'default') });
     if (via === 'dash' && method === 'DELETE' && path === '/_fake/vault') { stores.vault.clear(); return c.json({ ok: true }); }
+    // tests: the dashboard token changes (Hermes restarted without HERMES_DASHBOARD_SESSION_TOKEN)
+    if (via === 'dash' && method === 'POST' && path === '/_fake/dash-token') {
+      const token = (body as { token?: unknown } | undefined)?.token;
+      if (typeof token !== 'string' || !token) return c.json({ error: 'token required' }, 400);
+      auth.dashToken = token;
+      return c.json({ ok: true });
+    }
+    // tests: breaks set at run time (Playwright), `{key, status?, body?}`; DELETE removes them all
+    if (via === 'api' && method === 'POST' && path === '/_fake/breaks') {
+      const b = (body ?? {}) as { key?: unknown; status?: unknown; body?: unknown };
+      if (typeof b.key !== 'string' || !/^(api|dash) [A-Z]+ \//.test(b.key)) return c.json({ error: 'key "api|dash METHOD /path" required' }, 400);
+      opts.breaks ??= {};
+      opts.breaks[b.key] = { ...(typeof b.status === 'number' ? { status: b.status } : {}), ...('body' in b ? { body: b.body } : {}) };
+      return c.json({ ok: true, breaks: Object.keys(opts.breaks) });
+    }
+    if (via === 'api' && method === 'DELETE' && path === '/_fake/breaks') {
+      for (const k of Object.keys(opts.breaks ?? {})) delete opts.breaks![k];
+      return c.json({ ok: true });
+    }
     if (method === 'GET' && path === '/_fake/git/calls') return c.json({ calls: stores.git.calls });
     if (method === 'GET' && path === '/_fake/monitor/calls') return c.json({ calls: stores.monitor.calls });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
@@ -836,8 +869,9 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const titleMatch = /^\/_fake\/sessions\/([^/]+)\/title$/.exec(path);
     if (via === 'api' && method === 'GET' && titleMatch) return c.json({ title: sim.titles.get(decodeURIComponent(titleMatch[1]!)) ?? null });
     // like Hermes: the MCP OAuth callback is a public path of the dashboard (the browser of the user calls it)
-    if (path !== '/health' && !(via === 'dash' && path.startsWith('/api/mcp/oauth/callback/'))) {
-      const token = via === 'dash' ? FAKE_DASH_TOKEN : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
+    // public paths: /health of both, and on the dashboard /api/health, /api/status, /openapi.json
+    if (path !== '/health' && !(via === 'dash' && (DASH_PUBLIC.has(path) || path.startsWith('/api/mcp/oauth/callback/')))) {
+      const token = via === 'dash' ? auth.dashToken : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
       if (!token || c.req.header('authorization') !== `Bearer ${token}`) return c.json({ error: 'unauthorized' }, 401);
     }
     // a stopped gateway takes its API server down: only the dashboard answers
@@ -847,6 +881,12 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const brk = opts.breaks?.[key];
     if (brk?.status) return c.json(brk.body ?? { error: 'broken by fake-hermes' }, brk.status as 404);
     if (brk && 'body' in brk) return c.json(brk.body as object);
+
+    // light liveness probe of the dashboard (Hermes 0.23: web_routers/status.py)
+    if (via === 'dash' && method === 'GET' && path === '/api/health') {
+      const status = load(opts.fixturesDir, 'dash', 'GET', '/api/status')?.body as { version?: string } | undefined;
+      return c.json({ ok: true, version: status?.version ?? null });
+    }
 
     if (via === 'dash' && method === 'GET' && path === '/api/sessions/search') return searchSessions(sim, c.req.query(), deleted);
     if (via === 'dash') {
@@ -1180,9 +1220,14 @@ export function createFakeHermes(opts: FakeOptions) {
   const vault = new FakeVault(opts.vault ?? 'on', (name) => profiles.has(name));
   const stores: Stores = { vault, crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
   const requests: LoggedRequest[] = [];
+  const auth: FakeAuth = { dashToken: FAKE_DASH_TOKEN };
   return {
-    api: makeApp('api', opts, sim, stores, requests), dash: makeApp('dash', opts, sim, stores, requests),
+    api: makeApp('api', opts, sim, stores, requests, auth), dash: makeApp('dash', opts, sim, stores, requests, auth),
     requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory, vault,
+    /** Dashboard token accepted, can be changed at run time (tests: a token rotated by Hermes). */
+    auth,
+    /** Sides of Hermes that are down for `fakeFetch` and `fakeWebSocketFactory` (network error), switched by tests. */
+    down: new Set<Via>(),
     /** Can be switched at run time by tests. */
     kanbanWs: opts.kanbanWs ?? true,
     /** Can be switched at run time by tests. */
@@ -1195,8 +1240,8 @@ export function createFakeHermes(opts: FakeOptions) {
 type Fake = ReturnType<typeof createFakeHermes>;
 
 /** Like Hermes 0.23.0, a wrong token gets no answer to its handshake (neither open nor close). */
-export function kanbanWsTokenOk(url: string): boolean {
-  return new URL(url, 'ws://fake-dash').searchParams.get('token') === FAKE_DASH_TOKEN;
+export function kanbanWsTokenOk(url: string, token: string = FAKE_DASH_TOKEN): boolean {
+  return new URL(url, 'ws://fake-dash').searchParams.get('token') === token;
 }
 
 /**
@@ -1207,7 +1252,7 @@ export function kanbanWsTokenOk(url: string): boolean {
 export function connectKanbanEvents(fake: Fake, url: string, io: { send: (text: string) => void; close: (code: number) => void }): () => void {
   const u = new URL(url, 'ws://fake-dash');
   const board = u.searchParams.get('board') ?? 'default';
-  if (!fake.kanbanWs || u.pathname !== '/api/plugins/kanban/events' || !kanbanWsTokenOk(url)
+  if (!fake.kanbanWs || u.pathname !== '/api/plugins/kanban/events' || !kanbanWsTokenOk(url, fake.auth.dashToken)
     || !fake.kanban.boards.get(board) || fake.kanban.boards.get(board)!.archived) {
     io.close(1008);
     return () => {};
@@ -1288,7 +1333,13 @@ export function fakeWebSocketFactory(fake: Fake) {
       fire('close', { code });
     };
     queueMicrotask(() => {
-      if (!kanbanWsTokenOk(url)) return; // handshake left unanswered
+      // dashboard down: the connection fails like a refused TCP connection
+      if (fake.down.has('dash')) {
+        fire('error');
+        end(1006);
+        return;
+      }
+      if (!kanbanWsTokenOk(url, fake.auth.dashToken)) return; // handshake left unanswered
       fire('open');
       const io = { send: (data: string) => { if (open) fire('message', { data }); }, close: end };
       if (new URL(url, 'ws://fake-dash').pathname === '/api/ws') onText = connectGatewaySocket(fake, io);
@@ -1315,6 +1366,7 @@ export function fakeFetch(fake: ReturnType<typeof createFakeHermes>, hosts = { a
     const url = new URL(input);
     const app = url.hostname === hosts.api ? fake.api : url.hostname === hosts.dash ? fake.dash : null;
     if (!app) throw new TypeError(`fetch failed: unknown host ${url.hostname}`);
+    if (fake.down.has(app === fake.api ? 'api' : 'dash')) throw new TypeError('fetch failed');
     const signal = init.signal;
     if (signal?.aborted) throw signal.reason ?? new DOMException('aborted', 'AbortError');
     const answer = Promise.resolve(app.fetch(new Request(url, init)));
