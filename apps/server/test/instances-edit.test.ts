@@ -48,6 +48,19 @@ describe('PATCH /x/instances/:id', () => {
     t.compat.stop();
   });
 
+  it('two overlapping edits: both kept (one write at a time per instance)', async () => {
+    const t = await app();
+    t.fake.auth.dashToken = 'jeton-du-dashboard-2';
+    const [a, b] = await Promise.all([
+      t.request('PATCH', '/x/instances/fake', { dashboardToken: 'jeton-du-dashboard-2' }),
+      t.request('PATCH', '/x/instances/fake', { label: 'Renommée pendant la vérification' }),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(t.store.get('fake')!.dashboardToken).toBe('jeton-du-dashboard-2');
+    expect(t.store.get('fake')!.label).toBe('Renommée pendant la vérification');
+    t.compat.stop();
+  });
+
   it('only the dashboard token while the API server is down: 200 (no 422)', async () => {
     const t = await app();
     t.fake.down.add('api');

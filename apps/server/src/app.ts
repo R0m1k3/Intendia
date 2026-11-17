@@ -12,6 +12,7 @@ import { checkInstance } from './compat/engine.js';
 import { withFilesRoot } from './compat/files-root.js';
 import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
+import { KeyedLock } from './keyed-lock.js';
 import { changedFields, DeclarativeError, InstanceEditError, InstanceStore, mergeInstance, type InstancePatch } from './instances/store.js';
 import type { CompatReport } from './connectors/types.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
@@ -220,20 +221,28 @@ export function createApp(deps: AppDeps) {
     }
   };
 
+  /**
+   * Writes to one instance run one at a time: an edit merges against the saved config, waits for Hermes, then saves the
+   * whole snapshot, so two overlapping edits (or an edit and a delete) would silently undo each other.
+   */
+  const instanceWrites = new KeyedLock();
+
   priv.post('/instances', async (c) => {
     const inst = InstanceConfigSchema.parse(await c.req.json());
     if (store.declarative) throw new DeclarativeError();
-    // a saved instance is changed with PATCH: an overwrite would silently drop a secret left out
-    if (store.get(inst.id)) {
-      return c.json({ error: msg('Une instance « {id} » existe déjà : utilisez Modifier', { id: inst.id }), code: 'instance_exists' }, 409);
-    }
-    const { report } = await checkInstance(new HermesHttp(inst, deps.fetchImpl));
-    const refused = apiRefusal(report);
-    if (refused) return c.json(refused, 422);
-    store.save(inst);
-    const saved = await compat.check(inst.id);
-    await linkMcp(inst.id);
-    return c.json({ instance: InstanceStore.toPublic(inst, 'db', saved.files ?? null), report: saved, mcp: { state: await deps.services.mcpLink.state(inst.id) } });
+    return instanceWrites.run(inst.id, async () => {
+      // a saved instance is changed with PATCH: an overwrite would silently drop a secret left out
+      if (store.get(inst.id)) {
+        return c.json({ error: msg('Une instance « {id} » existe déjà : utilisez Modifier', { id: inst.id }), code: 'instance_exists' }, 409);
+      }
+      const { report } = await checkInstance(new HermesHttp(inst, deps.fetchImpl));
+      const refused = apiRefusal(report);
+      if (refused) return c.json(refused, 422);
+      store.save(inst);
+      const saved = await compat.check(inst.id);
+      await linkMcp(inst.id);
+      return c.json({ instance: InstanceStore.toPublic(inst, 'db', saved.files ?? null), report: saved, mcp: { state: await deps.services.mcpLink.state(inst.id) } });
+    });
   });
 
   /** Merges a PATCH body into the saved instance (404 unknown, 400 secret required or invalid result). */
@@ -260,31 +269,36 @@ export function createApp(deps: AppDeps) {
     const id = c.req.param('id');
     const body = PatchBody.parse(await c.req.json());
     if (store.declarative) throw new DeclarativeError();
-    const current = store.get(id);
-    if (!current) return c.json(unknownInstance(id), 404);
-    const next = InstanceConfigSchema.parse(mergeInstance(current, body));
-    const changed = changedFields(current, next);
-    if (changed.every((k) => k === 'label')) {
-      const saved = changed.length > 0 ? store.rename(id, next.label)! : current;
-      return c.json({ instance: InstanceStore.toPublic(saved, 'db', compat.get(id)?.files ?? null), report: compat.get(id) ?? null });
-    }
-    const { report } = await checkInstance(new HermesHttp(next, deps.fetchImpl));
-    // only a change of the API side needs a working API: a dashboard token can be fixed while the API is down
-    if (changed.some((k) => k === 'api' || k === 'apiKey' || k === 'profileKeys')) {
-      const refused = apiRefusal(report);
-      if (refused) return c.json(refused, 422);
-    }
-    store.save(next);
-    const saved = await compat.check(id);
-    if (changed.includes('api')) await linkMcp(id);
-    return c.json({ instance: InstanceStore.toPublic(next, 'db', saved.files ?? null), report: saved, mcp: { state: await deps.services.mcpLink.state(id) } });
+    return instanceWrites.run(id, async () => {
+      const current = store.get(id);
+      if (!current) return c.json(unknownInstance(id), 404);
+      const next = InstanceConfigSchema.parse(mergeInstance(current, body));
+      const changed = changedFields(current, next);
+      if (changed.every((k) => k === 'label')) {
+        const saved = changed.length > 0 ? store.rename(id, next.label)! : current;
+        return c.json({ instance: InstanceStore.toPublic(saved, 'db', compat.get(id)?.files ?? null), report: compat.get(id) ?? null });
+      }
+      const { report } = await checkInstance(new HermesHttp(next, deps.fetchImpl));
+      // only a change of the API side needs a working API: a dashboard token can be fixed while the API is down
+      if (changed.some((k) => k === 'api' || k === 'apiKey' || k === 'profileKeys')) {
+        const refused = apiRefusal(report);
+        if (refused) return c.json(refused, 422);
+      }
+      store.save(next);
+      const saved = await compat.check(id);
+      if (changed.includes('api')) await linkMcp(id);
+      return c.json({ instance: InstanceStore.toPublic(next, 'db', saved.files ?? null), report: saved, mcp: { state: await deps.services.mcpLink.state(id) } });
+    });
   });
 
   priv.delete('/instances/:id', (c) => {
-    store.remove(c.req.param('id'));
-    forgetMcpToken(deps.db, c.req.param('id'));
-    compat.forget(c.req.param('id'));
-    return c.json({ ok: true });
+    const id = c.req.param('id');
+    return instanceWrites.run(id, async () => {
+      store.remove(id);
+      forgetMcpToken(deps.db, id);
+      compat.forget(id);
+      return c.json({ ok: true });
+    });
   });
 
   priv.get('/compat', (c) => c.json({ reports: compat.all() }));
