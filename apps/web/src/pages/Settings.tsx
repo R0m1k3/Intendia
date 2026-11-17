@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Pencil, Plug, Plus, RefreshCw } from 'lucide-react';
+import { Check, Copy, Pencil, Plug, Plus, RefreshCw, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, type McpState, type McpTest, type ModuleId, type ModuleState } from '../api';
 import { InstanceForm } from '../components/InstanceForm';
@@ -232,6 +232,8 @@ export function SettingsPage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat });
   const [adding, setAdding] = useState(false);
+  /** Instance whose form is open in its row (Modifier). */
+  const [editing, setEditing] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>((localStorage.getItem('intendia-theme') as Theme) ?? 'system');
   const [lang, setLang] = useState<LangSetting>(langSetting);
   const remove = useMutation({
@@ -286,12 +288,21 @@ export function SettingsPage() {
                     <span className="font-mono text-xs text-ink-faint">{i.id}{r?.hermesVersion ? ` · Hermes ${r.hermesVersion}` : ''}</span>
                   </div>
                   <div className="truncate font-mono text-xs text-ink-faint">{i.api}{i.dashboard ? ` · ${i.dashboard}` : ` · ${t('sans dashboard')}`}{i.files?.workspaceRoot ? ` · ${i.files.workspaceRoot}` : ''}</div>
+                  {r?.dash.auth === 'refused' && (
+                    <div className="mt-1 max-w-prose text-xs text-bad" data-token-refused="">{t('Le dashboard refuse le jeton : mettez-le à jour avec « Modifier ».')}</div>
+                  )}
+                  {r?.api.auth === 'refused' && (
+                    <div className="mt-1 max-w-prose text-xs text-bad" data-key-refused="">{t('L’API server refuse la clé : mettez-la à jour avec « Modifier ».')}</div>
+                  )}
                   {i.files && !i.files.workspaceRoot && (
                     <div className="mt-1 max-w-prose text-xs text-bad" data-files-reason="">{i.files.reason}</div>
                   )}
                 </div>
-                {!declarative && (
+                {!declarative && editing !== i.id && (
                   <div className="flex items-center gap-2">
+                    <Button onClick={() => setEditing(i.id)} data-edit-instance={i.id}>
+                      <Settings2 className="size-3.5" strokeWidth={1.5} />{t('Modifier')}
+                    </Button>
                     <Button onClick={() => void askRename(i)} disabled={rename.isPending}>
                       <Pencil className="size-3.5" strokeWidth={1.5} />{t('Renommer')}
                     </Button>
@@ -301,6 +312,12 @@ export function SettingsPage() {
                     >
                       {t('Retirer')}
                     </Button>
+                  </div>
+                )}
+                {!declarative && editing === i.id && (
+                  <div className="basis-full border-t border-line/70 pt-4">
+                    <InstanceForm key={i.id} edit={i} onSaved={async () => { setEditing(null); await qc.invalidateQueries(); }} />
+                    <Button variant="ghost" className="mt-2" onClick={() => setEditing(null)}>{t('Annuler')}</Button>
                   </div>
                 )}
               </div>

@@ -21,6 +21,12 @@ HERMES_DASHBOARD_SESSION_TOKEN=<openssl rand -hex 32>   # or file:/run/secrets/h
 hermes dashboard --host 0.0.0.0 --no-open               # official image: command ["dashboard", "--host", "0.0.0.0", "--no-open"]
 ```
 
+**Keep the dashboard token fixed.** Without `HERMES_DASHBOARD_SESSION_TOKEN`, Hermes draws a new token at every start
+and Intendia loses the dashboard. In Webapp mode (`hermes webapp`) the gateway imposes its own token even with the
+variable, and `hermes webapp --sign-out` changes it: do not use the Webapp mode on an instance Intendia drives. If the
+token changes anyway, Settings › Instances shows "The dashboard refuses the token": click **Edit**, paste the new token,
+**Test the connection**, then **Save**. The share_file (MCP) token of the instance is kept.
+
 **Workspace files**: Intendia reads and writes the workspaces through the dashboard's file API, confined to one folder.
 Set it, in the environment of the **dashboard** container:
 
@@ -41,8 +47,9 @@ Do not publish 8642 or 9119 on the host nor in your reverse proxy: these keys co
 its page says "clé manquante". Give its profile an API server key in Hermes, then add it to the instance:
 - instance declared in `INTENDIA_INSTANCES`: add `"profileKeys": {"<name>": "<key>"}` to that instance, restart
   Intendia;
-- instance added from the setup page: send its whole configuration again with `POST /x/instances` (same `id`, API key
-  and dashboard token included, since a saved instance is replaced), with every `profileKeys` entry it should keep.
+- instance added from the setup page: `PATCH /x/instances/<id>` with `{"profileKeys": {"<name>": "<key>"}}`; the other
+  keys stay (`{"profileKeys": {"<name>": null}}` removes one). `POST /x/instances` with an existing `id` answers 409
+  (`instance_exists`): it never replaces a saved instance.
 
 ## 2. Intendia
 

@@ -75,6 +75,12 @@ export interface InstanceInput {
   dashboardToken?: string;
   dashboardLink?: string;
 }
+/** Change of a saved instance: absent or empty = unchanged, null = removed; profileKeys merged by name (null removes). */
+export interface InstancePatch extends Partial<Omit<InstanceInput, 'id' | 'dashboard' | 'dashboardLink'>> {
+  dashboard?: string | null;
+  dashboardLink?: string | null;
+  profileKeys?: Record<string, string | null>;
+}
 
 export interface Workspace {
   slug: string;
@@ -922,6 +928,10 @@ export const api = {
   saveInstance: (i: InstanceInput) => call<{ instance: PublicInstance; report: CompatReport }>('POST', '/instances', i),
   removeInstance: (id: string) => call<{ ok: true }>('DELETE', `/instances/${encodeURIComponent(id)}`),
   renameInstance: (id: string, label: string) => call<{ instance: PublicInstance }>('PATCH', `/instances/${encodeURIComponent(id)}`, { label }),
+  /** Tests the saved instance with these changes, without saving (the server adds the secrets it keeps). */
+  testInstanceEdit: (id: string, patch: InstancePatch) => call<CompatReport>('POST', `/instances/${encodeURIComponent(id)}/test`, patch),
+  updateInstance: (id: string, patch: InstancePatch) =>
+    call<{ instance: PublicInstance; report: CompatReport | null; mcp?: { state: McpState } }>('PATCH', `/instances/${encodeURIComponent(id)}`, patch),
   compat: () => call<{ reports: CompatReport[] }>('GET', '/compat'),
   recheck: (id: string) => call<CompatReport>('POST', `/compat/${encodeURIComponent(id)}/check`),
 
