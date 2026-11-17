@@ -121,6 +121,13 @@ intendia.example.com {
 Uploads are streamed up to `INTENDIA_UPLOAD_MAX_MB` (default and maximum 100, the limit of Hermes' file API): let the proxy accept bodies that big
 (Nginx Proxy Manager, *Advanced*: `client_max_body_size 200m;`).
 
+Sending a message can wait for Hermes up to 80 s (Intendia retries a slow admission once, with the same
+Idempotency-Key): keep the proxy's read timeout at 90 s or more (`proxy_read_timeout`; Nginx's default is 60 s). A
+502 meanwhile is harmless: sending the same text again finds the same run.
+
+Run **one Intendia per data volume**: two processes on the same database would both run the goal loop and the wake
+of sub-agents.
+
 Never expose port 3001: it is the MCP endpoint for the agents (next section).
 
 ## 3a. MCP servers connected by OAuth (Configuration › MCP)

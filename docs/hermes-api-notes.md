@@ -74,8 +74,22 @@ of the diff are empty lists (no session, no cron in that container).
   FTS5 refuses → 500 « Search failed ».
 - `GET /api/sessions` is paged (`limit`, `offset`, `has_more`). `GET /api/sessions/{id}` wraps the session in
   `{session}`. `GET /api/sessions/{id}/messages` → `{data: [{id, role, content, tool_calls, tool_name, timestamp}]}`,
-  newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
+  roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
 - A run that fails before starting (no provider key) leaves no user message in the session.
+- Event buffer of a run (read in the 0.23.0 source, `gateway/platforms/api_server_runs.py`, 2026-11-17): a run created
+  more than 300 s ago (`_RUN_STREAM_TTL`) loses its buffered events as soon as nobody listens
+  (`_sweep_orphaned_runs_once`); `GET /v1/runs/{id}/events` then answers 404 while `GET /v1/runs/{id}` still answers.
+- `POST /v1/runs` takes `Idempotency-Key` (stripped; empty = none; more than 255 characters or outside visible ASCII →
+  400 `invalid_idempotency_key`). Same key and same body (fingerprint of the whole body, `_run_idempotency_identity`)
+  → the same run, `replayed: true` and `Idempotency-Replayed: true`; same key with another body → 409
+  `idempotency_key_conflict`. Kept 24 h in SQLite (`RunIdempotencyStore`). Announced in `/v1/capabilities`
+  `features.runs_idempotency {supported, durable, retention_seconds}` (0.23.0: true, true, 86400).
+- `GET /api/sessions/{id}/messages`: 500 rows by default and at most (`limit`), `offset`, `order=latest` (the last
+  rows, served oldest first) or `oldest`; `pagination.returned`. Checked on 0.23.0 (2026-11-17): no parameter =
+  `latest`, but `limit` alone answers `oldest`: Intendia always sends `order`. `after_id` is refused with `latest` and with
+  `include_ancestors` (forced on this route), so a cursor cannot page backwards; on a compressed lineage Hermes reads
+  the whole lineage for each page (`hermes_state_messages.py`).
+- `GET /api/sessions/{id}` of a session ended by a compression: `ended_at` set, `end_reason: "compression"`.
 - Session titles are unique (`idx_sessions_title_unique`, checked 2026-11-12): a rename to a title in use → 400
   `invalid_title` « already in use by session … »; an import with one fails the whole write as 503
   `storage_unavailable` (gateway log: `UNIQUE constraint failed: sessions.title`). Hermes numbers its own « title #2 ».
