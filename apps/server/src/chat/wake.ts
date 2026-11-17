@@ -16,7 +16,7 @@ import { delegationState, summarizeOpen } from './delegation.js';
 import { listChildren, type SubagentChild } from './subagents.js';
 import { WAKE_PREFIX } from './goal.js';
 import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from './history.js';
-import { RunBusyError, startRun, type StartRunDeps } from './start-run.js';
+import { AlreadySentError, hashKey, IdempotencyConflictError, RunBusyError, startRun, type StartRunDeps } from './start-run.js';
 
 export const MAX_WAKES = 5;
 /** Never contains « fond »: the fake plays background sub-agents on that word (a wake would delegate again). */
@@ -211,9 +211,18 @@ export class WakeStore {
     return last && last.runId === lastRunId ? last.chain : 0;
   }
 
-  /** At start: a start cut by a restart is abandoned (never retried: at most one wake lost); old rows go. */
-  cleanup(now = Date.now()): void {
-    this.db.update(delegationWakes).set({ state: 'abandoned' }).where(eq(delegationWakes.state, 'starting')).run();
+  /**
+   * At start: a start cut by a restart is abandoned (at most one wake lost), unless its instance replays runs by key
+   * (`retryable`: durable idempotency): then the row goes, the next pass reserves it again with the same key and
+   * Hermes replays the run if it was admitted. Old rows go.
+   */
+  cleanup(now = Date.now(), retryable?: (instanceId: string) => boolean): void {
+    const starting = this.db.select().from(delegationWakes).where(eq(delegationWakes.state, 'starting')).all();
+    for (const r of starting) {
+      const where = this.key(r.instanceId, r.sessionId, r.deliveryKey);
+      if (retryable?.(r.instanceId)) this.db.delete(delegationWakes).where(and(where, eq(delegationWakes.state, 'starting'))).run();
+      else this.db.update(delegationWakes).set({ state: 'abandoned' }).where(and(where, eq(delegationWakes.state, 'starting'))).run();
+    }
     this.db.delete(delegationWakes).where(lt(delegationWakes.createdAt, now - KEEP_ROWS_MS)).run();
   }
 }
@@ -229,7 +238,8 @@ interface Watch {
   tries: number;
 }
 
-type Start = (deps: StartRunDeps, ctx: SessionContext, input: string) => Promise<{ runId: string }>;
+/** `keySuffix`: the intent of the wake (one delivery), so a retried start is started once by Hermes. */
+type Start = (deps: StartRunDeps, ctx: SessionContext, input: string, keySuffix: string) => Promise<{ runId: string }>;
 type Children = (ctx: SessionContext) => Promise<SubagentChild[]>;
 
 export interface WatcherOptions {
@@ -264,7 +274,7 @@ export class DelegationWatcher {
     opts: WatcherOptions = {},
   ) {
     this.log = opts.log ?? ((l) => console.error(l));
-    this.startFn = opts.start ?? ((d, ctx, input) => startRun(d, ctx, input));
+    this.startFn = opts.start ?? ((d, ctx, input, keySuffix) => startRun(d, ctx, input, { keySuffix }));
     this.childrenFn = opts.children ?? ((ctx) => listChildren(this.deps.compat, ctx));
     this.graceS = opts.graceS ?? LOST_GRACE_S;
     this.idleS = opts.idleS ?? IDLE_S;
@@ -388,7 +398,7 @@ export class DelegationWatcher {
       return 'quiet';
     }
     try {
-      const res = await this.startFn(this.deps, ctx, d.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT);
+      const res = await this.startFn(this.deps, ctx, d.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, 'wake-' + hashKey([r.instanceId, r.sessionId, dk]));
       wakes.started(r.instanceId, r.sessionId, dk, res.runId);
       this.log(`[intendia] reprise ${key} : run ${res.runId} (${prev + 1}/${MAX_WAKES})`);
       this.watches.set(key, { run: { ...r, runId: res.runId }, lastRunId: res.runId, calm: false, nextAt: 0, open: null, tries: 0 });
@@ -399,6 +409,13 @@ export class DelegationWatcher {
         wakes.release(r.instanceId, r.sessionId, dk);
         later(EVERY_MS);
         return 'running';
+      }
+      if (err instanceof AlreadySentError || err instanceof IdempotencyConflictError) {
+        // Hermes already admitted a wake for this delivery (with another body): never a second one
+        wakes.abandon(r.instanceId, r.sessionId, dk);
+        w.calm = true;
+        this.log(`[intendia] reprise ${key} : abandonnée, clé déjà reçue (${err.message})`);
+        return 'quiet';
       }
       w.tries += 1;
       if (w.tries >= START_TRIES) {
@@ -430,7 +447,10 @@ export class DelegationWatcher {
 
   start(): void {
     if (this.timer) return;
-    this.deps.wakes.cleanup();
+    this.deps.wakes.cleanup(Date.now(), (inst) => {
+      const r = this.deps.compat.get(inst)?.runs;
+      return Boolean(r?.idempotency && r.durable);
+    });
     this.timer = setInterval(() => void this.pass().catch((err) => this.log(`[intendia] reprise : ${(err as Error).message}`)), EVERY_MS);
     this.timer.unref();
   }

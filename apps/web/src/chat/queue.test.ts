@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { dropItem, EMPTY_QUEUE, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead } from './queue';
+import {
+  clearPendingKey, dropItem, EMPTY_QUEUE, enqueue, firstTime, loadPendingKey, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue,
+  savePendingKey, takeHead,
+} from './queue';
 
 function memory(): Storage {
   const m = new Map<string, string>();
@@ -48,7 +51,7 @@ describe('queue', () => {
     store.setItem('intendia-queue:a:s2', '{pas du json');
     expect(loadQueue('a', 's2', store)).toEqual(EMPTY_QUEUE);
     store.setItem('intendia-queue:a:s3', JSON.stringify({ items: [{ id: 'x', text: ' ' }, { id: 1 }, { id: 'y', text: 'ok' }], paused: 3 }));
-    expect(loadQueue('a', 's3', store)).toEqual({ items: [{ id: 'y', text: 'ok' }], paused: null });
+    expect(loadQueue('a', 's3', store)).toEqual({ items: [{ id: 'y', text: 'ok', key: expect.any(String) }], paused: null });
   });
 
   it('keeps the skills asked with a message (/use), drops unreadable ones', () => {
@@ -60,6 +63,34 @@ describe('queue', () => {
     saveQueue('a', 's', q, store);
     expect(loadQueue('a', 's', store).items[0]!.skills).toEqual(['codex']);
     store.setItem('intendia-queue:a:t', JSON.stringify({ items: [{ id: 'x', text: 'ok', skills: [1] }] }));
-    expect(loadQueue('a', 't', store).items[0]).toEqual({ id: 'x', text: 'ok' });
+    expect(loadQueue('a', 't', store).items[0]).toEqual({ id: 'x', text: 'ok', key: expect.any(String) });
+  });
+
+  it('gives each message a key, kept when put back in front and when stored', () => {
+    const store = memory();
+    const q = enqueue(enqueue(EMPTY_QUEUE, 'un'), 'deux', ['codex']);
+    const keys = q.items.map((i) => i.key);
+    expect(keys.every((k) => /^[A-Za-z0-9-]{8,64}$/.test(k))).toBe(true);
+    expect(new Set(keys).size).toBe(2);
+    expect(pushHead(EMPTY_QUEUE, 'encore', undefined, 'cle-gardee-1').items[0]!.key).toBe('cle-gardee-1');
+    expect(pushHead(EMPTY_QUEUE, 'encore').items[0]!.key).toMatch(/^[A-Za-z0-9-]{8,64}$/);
+    saveQueue('a', 's', q, store);
+    expect(loadQueue('a', 's', store).items.map((i) => i.key)).toEqual(keys);
+    // a queue saved without keys gets one per item
+    store.setItem('intendia-queue:a:old', JSON.stringify({ items: [{ id: 'x', text: 'ok' }, { id: 'y', text: 'ok', skills: ['s'] }] }));
+    const old = loadQueue('a', 'old', store).items;
+    expect(old.every((i) => typeof i.key === 'string' && i.key.length >= 8)).toBe(true);
+    expect(old[1]!.skills).toEqual(['s']);
+  });
+
+  it('keeps the key of the message being sent per session', () => {
+    const store = memory();
+    savePendingKey('a', 's1', { text: 'Bonjour', key: 'cle-envoi-1' }, store);
+    expect(loadPendingKey('a', 's1', store)).toEqual({ text: 'Bonjour', key: 'cle-envoi-1' });
+    expect(loadPendingKey('a', 's2', store)).toBeNull();
+    clearPendingKey('a', 's1', store);
+    expect(loadPendingKey('a', 's1', store)).toBeNull();
+    store.setItem('intendia-pending-key:a:s3', '{x');
+    expect(loadPendingKey('a', 's3', store)).toBeNull();
   });
 });

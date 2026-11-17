@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Bot, Plus, X } from 'lucide-react';
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { api, type Agent } from '../api';
 import { AgentDetail } from '../agents/AgentDetail';
 import { AgentModelPicker } from '../agents/AgentModel';
 import { keyHint } from '../agents/keyHint';
 import { Empty, ListItemBody, ListLink, ListPane, SplitView } from '../components/Panes';
 import { pickSelected } from '../components/selection';
+import { Sheet } from '../kanban/Sheet';
+import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, cx, ErrorText, Field, Input, Tag } from '../components/ui';
 import { plural, t } from '../i18n';
@@ -43,21 +44,22 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
       ...(soul.trim() ? { soul } : {}), ...(model ?? {}),
     }),
     onSuccess: async (r) => {
+      guard.release();
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['profiles', inst] });
       onCreated(r.name, r.keySource, r.modelError);
     },
   });
+  const guard = useDirtyGuard(Boolean(name || description || soul));
   const nameOk = NAME_RE.test(name.trim());
-  return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (nameOk) create.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[480px] md:border-l md:border-line" aria-label={t('Nouvel agent')}>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
-          <h2 className="text-lg font-semibold">{t('Nouvel agent')}</h2>
-          <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label={t('Fermer')}><X className={ICON} strokeWidth={1.5} /></Button>
-        </header>
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+  return (
+    <Sheet
+      title={t('Nouvel agent')} width="md:w-[480px]" onClose={onClose} onSubmit={() => { if (nameOk) create.mutate(); }}
+      footer={<>
+        <Button type="button" onClick={() => void confirmClose(onClose)}>{t('Annuler')}</Button>
+        <Button type="submit" variant="primary" disabled={!nameOk || create.isPending}>{create.isPending ? t('Création…') : t('Créer l’agent')}</Button>
+      </>}
+    >
           <Field label={t('Nom')} hint={t('Minuscules, chiffres, - et _ ; c’est le nom du profil Hermes')}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder={t('recherche')} autoFocus
               aria-invalid={name !== '' && !nameOk} />
@@ -95,14 +97,7 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
               placeholder={t('Tu es un assistant de recherche. Réponds brièvement, avec tes sources.')} />
           </Field>
           <ErrorText error={create.error} />
-        </div>
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-4">
-          <Button type="button" onClick={onClose}>{t('Annuler')}</Button>
-          <Button type="submit" variant="primary" disabled={!nameOk || create.isPending}>{create.isPending ? t('Création…') : t('Créer l’agent')}</Button>
-        </footer>
-      </form>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
@@ -140,7 +135,7 @@ export function AgentsPage() {
           </button>
         </div>
       )}
-      <ErrorText error={agents.error} />
+      <ErrorText error={agents.error} onRetry={() => void agents.refetch()} />
       {a.available && items.length === 0 && (
         <p className="px-3.5 py-6 text-sm text-ink-faint">{agents.isSuccess ? t('Aucun profil') : t('Chargement…')}</p>
       )}
@@ -174,7 +169,7 @@ export function AgentsPage() {
           <AgentDetail key={shown} inst={inst} name={shown} instance={current} available={a.available}
             has={a.has} back={Boolean(name)} />
         ) : (
-          <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? t('Aucun agent') : t('Agents indisponibles')}>
+          <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? t('Aucun agent') : a.onlyPending ? t('Vérification de cette instance en cours') : t('Agents indisponibles')}>
             {a.available ? t('Les profils Hermes de l’instance apparaissent ici') : t('Voir la colonne de gauche')}
           </Empty>
         )}

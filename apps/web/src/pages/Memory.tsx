@@ -62,7 +62,7 @@ function MemoryView({ inst, profile, search }: { inst: string; profile: string; 
         </p>
       ) : undefined}
     >
-      <ErrorText error={q.error} />
+      <ErrorText error={q.error} onRetry={() => void q.refetch()} />
       {a.available && q.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
       {data?.active && (
         <p className="mx-1 mt-3 rounded-[10px] bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft" data-provider>

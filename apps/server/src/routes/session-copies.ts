@@ -3,11 +3,11 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
-import { readHistory, whenIdle } from '../chat/history.js';
+import { whenIdle } from '../chat/history.js';
 import { callOp } from '../connectors/runtime.js';
 import { ExportSchema } from '../connectors/sessions/index.js';
 import { copyId, copyPayload, CopyError, exportSession, importCopy, type Exported } from '../sessions/copy.js';
-import { agentName, attachmentHeader, toHtml, toMarkdown } from '../sessions/export.js';
+import { agentName, attachmentHeader, exportMessages, toHtml, toMarkdown } from '../sessions/export.js';
 import { revertRewrite, rewriteSession, RunActiveError } from '../sessions/rewrite.js';
 import { generateTitle } from '../sessions/title-ai.js';
 import { SLUG_RE } from '../workspaces/fs.js';
@@ -183,7 +183,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
         'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': attachmentHeader(title, 'json'),
       });
     }
-    const h = await readHistory(compat, inst, id, ctx.profile);
+    const h = await exportMessages(compat, ctx);
     if (!h.exists) throw new CopyError('empty', msg('Session vide : rien à exporter'), 404);
     let startedAt: number | null = null;
     try {
@@ -194,7 +194,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     } catch {
       // the date is only a heading
     }
-    const head = { title, startedAt, agent: agentName(ctx.profile, ctx.instance.label) };
+    const head = { title, startedAt, agent: agentName(ctx.profile, ctx.instance.label), ...(h.capped ? { capped: h.messages.length } : {}) };
     if (format === 'md') {
       return c.body(toMarkdown(head, h.messages), 200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Content-Disposition': attachmentHeader(title, 'md') });
     }

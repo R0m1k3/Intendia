@@ -7,7 +7,7 @@ import { useCurrentInstance } from '../instance/current';
 import { Gateway } from '../agents/Gateway';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, host, MODULE_META, moduleLabel, Panel, Tag, timeAgo } from '../components/ui';
-import { plural, t } from '../i18n';
+import { locale, plural, t } from '../i18n';
 
 const STATE_TAG: Record<ModuleReport['state'], { label: string; tag: string; icon: string }> = {
   full: { label: t('complet'), tag: '', icon: 'text-dot-ok' },
@@ -97,9 +97,12 @@ function InstanceCard({ instance, report, current, onPick }: { instance: PublicI
 function InstanceStatus({ report, label }: { report: CompatReport; label: string }) {
   const dash = !report.dash.configured
     ? t('non configuré')
-    : report.dash.reachable
-      ? (report.dash.openapi ? t('joignable, OpenAPI lue') : t('joignable, sans OpenAPI'))
-      : t('injoignable ({error})', { error: report.dash.error ?? '?' });
+    : report.dash.auth === 'refused'
+      ? <span className="text-bad" data-token-refused>{t('jeton refusé ({error})', { error: report.dash.error ?? '?' })}</span>
+      : report.dash.reachable
+        ? (report.dash.openapi ? t('joignable, OpenAPI lue') : t('joignable, sans OpenAPI'))
+        : t('injoignable ({error})', { error: report.dash.error ?? '?' });
+  const since = report.outage ? new Date(report.outage.since).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : '';
   const full = report.modules.filter((m) => m.state === 'full').length;
   return (
     <section className="card overflow-hidden" aria-labelledby={`mods-${report.instanceId}`}>
@@ -110,7 +113,9 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
         <span className="text-[13px] text-ink-faint">{t('{full} sur {total} complets · vérifié {ago}', { full, total: report.modules.length, ago: timeAgo(report.checkedAt) })}</span>
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-line/70 px-4 py-2.5 text-[13px]">
-        <span><span className="text-ink-faint">API server</span> {report.api.reachable ? t('joignable') : <span className="text-bad">{t('injoignable ({error})', { error: report.api.error ?? '?' })}</span>}</span>
+        <span><span className="text-ink-faint">API server</span> {report.api.auth === 'refused'
+          ? <span className="text-bad" data-key-refused>{t('clé refusée ({error})', { error: report.api.error ?? '?' })}</span>
+          : report.api.reachable ? t('joignable') : <span className="text-bad">{t('injoignable ({error})', { error: report.api.error ?? '?' })}</span>}</span>
         <span><span className="text-ink-faint">Dashboard</span> {dash}</span>
         {report.socket && (
           <span data-socket={report.socket.sessionStats ? 'on' : 'off'}>
@@ -130,6 +135,12 @@ function InstanceStatus({ report, label }: { report: CompatReport; label: string
             ? <span className="text-ink-soft" data-unchecked>{plural(report.unchecked.length, '{n} opération pas encore vérifiée', '{n} opérations pas encore vérifiées')}{report.checking ? t(' (vérification en cours)') : ''}</span>
             : null}
       </div>
+      {report.outage && (
+        <div className="flex flex-col gap-0.5 border-t border-line/70 bg-bad-soft px-4 py-2.5 text-[13px] text-bad" data-outage>
+          {report.outage.api && <span>{t('API server injoignable depuis {time} : nouvelle vérification automatique', { time: since })}</span>}
+          {report.outage.dash && <span>{t('Dashboard injoignable depuis {time} : nouvelle vérification automatique', { time: since })}</span>}
+        </div>
+      )}
       <ul>
         {report.modules.map((m) => <ModuleRow key={m.id} m={m} anchor={`${report.instanceId}-${m.id}`} />)}
       </ul>

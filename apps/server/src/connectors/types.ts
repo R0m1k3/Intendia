@@ -53,7 +53,14 @@ export interface ResolvedOp {
   route?: { via: Via; method: Method; path: string };
   /** Why the op is not available (or why a preferred route was skipped). */
   notes: string[];
+  /** Failed op: the probe of its last route failed with a passing error (outage, timeout, 502/503/504). */
+  transient?: true;
+  /** Failed op: why its last route was refused, answered at once by callOp/streamOp without calling Hermes. */
+  code?: OpCode;
 }
+
+export type OpCode = 'hermes_unreachable' | 'dash_token_refused' | 'api_key_refused';
+export type AuthState = 'ok' | 'refused' | 'unknown';
 
 export interface ModuleReport {
   id: ModuleId;
@@ -68,18 +75,30 @@ export interface CompatReport {
   instanceId: string;
   checkedAt: number;
   hermesVersion: string | null;
-  api: { reachable: boolean; error?: string };
-  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
+  /** `auth`: the key (or token) checked by the last full check; absent from reports saved by Intendia 0.1.4 and before. */
+  api: { reachable: boolean; error?: string; auth?: AuthState };
+  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean; auth?: AuthState };
+  /**
+   * A side of Hermes did not answer (network error, timeout, 502/503/504) at the last full check; `since` = first
+   * check that saw this outage. Absent when both sides answer.
+   */
+  outage?: { since: number; api: boolean; dash: boolean };
   modules: ModuleReport[];
   /**
    * Root of the workspaces on this instance (the dashboard's managed files root, `locked_root`), or why the
    * Files module cannot be used. Absent in reports saved before Intendia 0.0.4 (= not checked yet).
    */
-  files?: { workspaceRoot: string | null; reason: string | null };
+  files?: { workspaceRoot: string | null; reason: string | null; /** the root could not be read because of a passing error */ transient?: true };
   /** `session.stats` of the dashboard WebSocket (context, quotas). Absent in reports saved before Intendia 0.0.7. */
   socket?: { sessionStats: boolean; note: string; /** `llm.oneshot` (titles by AI); absent before Intendia 0.0.12. */ oneshot?: boolean;
     /** credential vault (`vault.list|add|remove`); absent from reports saved by Intendia 0.1.0 and before */
     vault?: boolean };
+  /**
+   * `features.runs_idempotency` of /v1/capabilities: Hermes deduplicates `POST /v1/runs` by `Idempotency-Key`
+   * (`idempotency`), and keeps the keys across restarts (`durable`). Absent from reports saved by Intendia 0.1.4
+   * and before (= not checked yet, counted as `chat.runsIdempotency` in `unchecked`).
+   */
+  runs?: { idempotency: boolean; durable: boolean };
   /**
    * Operations known to this version of Intendia but absent from the report (`module.op`), set on a report saved by
    * an older version until the next full check. Never stored.

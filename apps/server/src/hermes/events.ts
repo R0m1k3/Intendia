@@ -40,7 +40,10 @@ export const defaultFactory: WsFactory = (url) => new WebSocket(url) as unknown 
 /** Hermes 0.23.0 never answers the handshake of a wrong token: past this delay the connection is given up. */
 export const OPEN_TIMEOUT_MS = 10_000;
 
-/** Opens the events of one board. Messages and errors never carry the URL (it holds the token). */
+/**
+ * Opens the events of one board. Messages and errors never carry the URL (it holds the token). A half-open connection
+ * is not detected here (no ping in Node's WebSocket): routes/kanban.ts renews each relay after RELAY_MAX_MS.
+ */
 export function openKanbanEvents(
   instance: InstanceConfig, board: string, handlers: KanbanEventHandlers,
   factory: WsFactory = defaultFactory, openTimeoutMs = OPEN_TIMEOUT_MS,

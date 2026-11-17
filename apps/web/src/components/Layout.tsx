@@ -14,6 +14,8 @@ import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
 import { flushDrafts } from '../chat/draft';
 import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
+import { StatusBars } from './StatusBars';
+import { DirtyBlocker } from './dirty';
 import { cx, Wordmark } from './ui';
 import { plural, t } from '../i18n';
 
@@ -60,7 +62,7 @@ const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-li
 const GROUP = 'px-2.5 pb-1 pt-4 text-xs text-ink-faint';
 
 export function Layout() {
-  return EMBEDDED ? <EmbeddedLayout /> : <FullLayout />;
+  return <>{EMBEDDED ? <EmbeddedLayout /> : <FullLayout />}<DirtyBlocker /></>;
 }
 
 /** Inside the side chat's iframe: the page alone; ⌘J goes to the page around it. */
@@ -242,6 +244,7 @@ function FullLayout() {
         </div>
       </main>
 
+      <StatusBars />
       {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
       <Approvals />

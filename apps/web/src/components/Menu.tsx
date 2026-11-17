@@ -45,7 +45,7 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
     const down = (e: MouseEvent) => {
       if (!panel.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
     };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false); btn.current?.focus(); } };
     const close = () => setOpen(false);
     document.addEventListener('mousedown', down);
     document.addEventListener('keydown', key);

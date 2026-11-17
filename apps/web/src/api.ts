@@ -1,4 +1,5 @@
 // Typed client for the Intendia server (/x/*). Mirrors apps/server/src/connectors/types.ts.
+import { t } from './i18n';
 
 export type ModuleState = 'full' | 'readonly' | 'unavailable';
 export type ModuleId = 'health' | 'chat' | 'sessions' | 'crons' | 'skills' | 'config' | 'agents' | 'kanban' | 'git' | 'monitor' | 'memory' | 'plugins';
@@ -7,6 +8,10 @@ export interface ResolvedOp {
   ok: boolean;
   route?: { via: 'api' | 'dash'; method: string; path: string };
   notes: string[];
+  /** Failed op: its last probe failed with a passing error (outage, timeout). */
+  transient?: true;
+  /** Failed op: refused at once by the server (side down, key or token refused). */
+  code?: 'hermes_unreachable' | 'dash_token_refused' | 'api_key_refused';
 }
 export interface ModuleReport {
   id: ModuleId;
@@ -20,11 +25,14 @@ export interface CompatReport {
   instanceId: string;
   checkedAt: number;
   hermesVersion: string | null;
-  api: { reachable: boolean; error?: string };
-  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
+  /** `auth`: key (or token) checked by the last full check: `refused` = Hermes answered 401/403. */
+  api: { reachable: boolean; error?: string; auth?: 'ok' | 'refused' | 'unknown' };
+  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean; auth?: 'ok' | 'refused' | 'unknown' };
+  /** A side of Hermes did not answer at the last check, since `since` (ms); rechecked by itself. */
+  outage?: { since: number; api: boolean; dash: boolean };
   modules: ModuleReport[];
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
-  files?: { workspaceRoot: string | null; reason: string | null };
+  files?: { workspaceRoot: string | null; reason: string | null; transient?: true };
   /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
   socket?: { sessionStats: boolean; oneshot?: boolean; /** credential vault (`vault.*`); absent = not checked yet */ vault?: boolean; note: string };
   /** Ops this Intendia knows that the report has not checked yet (`module.op`; report saved by an older version). */
@@ -776,19 +784,78 @@ export class ApiError extends Error {
   }
 }
 
+/** What `call()` tells the connection module (connection/connection.ts), set by `setCallHooks`. */
+interface CallHooks {
+  /** false: Intendia did not answer (network error, proxy 502/503/504 without JSON); true: it did. */
+  network: (ok: boolean) => void;
+  /** 401 `unauthenticated`: the session expired. */
+  unauthenticated: () => void;
+  /** A write got no answer in time: it may have gone through. */
+  writeTimeout: () => void;
+}
+let hooks: CallHooks = { network: () => {}, unauthenticated: () => {}, writeTimeout: () => {} };
+
+export function setCallHooks(h: Partial<CallHooks>): void {
+  hooks = { ...hooks, ...h };
+}
+
+/** Browser wait for an answer: reads 60 s, writes 150 s (above the longest synchronous server call, 120 s). */
+export const READ_TIMEOUT_MS = 60_000;
+export const WRITE_TIMEOUT_MS = 150_000;
+
+const proxyDown = (status: number, data: unknown) => [502, 503, 504].includes(status) && data == null;
+
+/** Passing failure worth retrying: Intendia unreachable, or a proxy in front of a stopped Intendia (no JSON body). */
+export function isTransient(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  const code = err.data && typeof err.data === 'object' && 'code' in err.data ? (err.data as { code?: unknown }).code : undefined;
+  return (err.status === 0 && code === 'network') || proxyDown(err.status, err.data);
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/x${path}`, {
-    method,
-    credentials: 'same-origin',
-    headers: { 'X-Intendia': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => null);
+  const ms = method === 'GET' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS;
+  let res: Response;
+  let data: unknown;
+  try {
+    res = await fetch(`/x${path}`, {
+      method,
+      credentials: 'same-origin',
+      headers: { 'X-Intendia': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(ms),
+    });
+    data = await res.json().catch((e: unknown) => {
+      if (isTimeout(e)) throw e;
+      return null;
+    });
+  } catch (e) {
+    if (isTimeout(e)) {
+      const s = Math.round(ms / 1000);
+      if (method !== 'GET') hooks.writeTimeout();
+      throw new ApiError(0, method === 'GET'
+        ? t("Pas de réponse d'Intendia après {s} s", { s })
+        : t("Pas de réponse d'Intendia après {s} s : l'action a peut-être abouti, vérifiez avant de recommencer", { s }),
+      { code: 'timeout', timeoutMs: ms });
+    }
+    if (e instanceof TypeError) {
+      hooks.network(false);
+      throw new ApiError(0, t('Serveur Intendia injoignable'), { code: 'network' });
+    }
+    throw e;
+  }
+  hooks.network(!proxyDown(res.status, data));
   if (!res.ok) {
-    const msg = (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') ? data.error : `HTTP ${res.status}`;
+    if (res.status === 401 && data && typeof data === 'object' && (data as { code?: unknown }).code === 'unauthenticated') hooks.unauthenticated();
+    const msg = (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string')
+      ? data.error
+      : t('Réponse inattendue du serveur Intendia (HTTP {status})', { status: res.status });
     throw new ApiError(res.status, msg, data);
   }
   return data as T;
+}
+
+function isTimeout(e: unknown): boolean {
+  return e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError');
 }
 
 export interface UsageTotals {
@@ -818,7 +885,7 @@ export interface PublicSystemStats {
 }
 
 /** Persistent goal of a session (option 7): relaunched by Intendia's server after each run (chat/goal.ts). */
-export type GoalReason = 'user' | 'button' | 'click' | 'blocked' | 'failed' | 'stopped' | 'lost' | 'limit' | 'budget' | 'start_failed' | 'gone' | 'cost_unknown';
+export type GoalReason = 'user' | 'button' | 'click' | 'blocked' | 'failed' | 'stopped' | 'lost' | 'limit' | 'budget' | 'start_failed' | 'gone' | 'cost_unknown' | 'key_conflict';
 export interface SessionGoal {
   text: string;
   status: 'active' | 'paused' | 'done';
@@ -840,6 +907,8 @@ export const api = {
   setPassword: (code: string, password: string) => call<{ ok: true }>('POST', '/setup/password', { code, password }),
   login: (password: string) => call<{ ok: true }>('POST', '/login', { password }),
   logout: () => call<{ ok: true }>('POST', '/logout', {}),
+  /** Deletes every sign-in session; this browser gets a new cookie and stays signed in. */
+  revokeAllSessions: () => call<{ ok: true }>('POST', '/auth/revoke-all', {}),
   instances: () => call<{ declarative: boolean; instances: PublicInstance[] }>('GET', '/instances'),
   testInstance: (i: InstanceInput) => call<CompatReport>('POST', '/instances/test', i),
   saveInstance: (i: InstanceInput) => call<{ instance: PublicInstance; report: CompatReport }>('POST', '/instances', i),
@@ -886,12 +955,23 @@ export const api = {
     call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
-  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  /**
+   * One page of 500 messages from the end (`offset`: raw rows already read, the `nextOffset` of the previous page;
+   * hidden rows count). `hasMore`: an older page may follow.
+   * `runs`, `subagents` and `openUnits` only on the latest page (`offset` 0).
+   */
+  messages: (inst: string, id: string, offset = 0) => call<{ messages: ChatMessage[]; hasMore: boolean; nextOffset?: number; runs?: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>(
+    'GET', `${sessionPath(inst, id)}/messages${offset > 0 ? `?offset=${offset}` : ''}`),
+  /** The session's run rows and their cost, read without any message (cost follow-up after a run). */
+  runStats: (inst: string, id: string) => call<{ runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/run-stats`),
   /** « Ne plus attendre »: the units the page showed open are given up (409 run_active while a run goes on) */
   stopWaitingSubagents: (inst: string, id: string, units: string[]) => call<{ lost: number }>('POST', `${sessionPath(inst, id)}/subagents/stop-waiting`, { units }),
   sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
-  send: (inst: string, id: string, input: string, skills?: string[]) =>
-    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
+  /** `clientKey`: drawn once per composed message, kept until the send succeeded (one run at Hermes per message). */
+  send: (inst: string, id: string, input: string, skills?: string[], clientKey?: string) =>
+    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, {
+      input, ...(skills?.length ? { skills } : {}), ...(clientKey ? { clientKey } : {}),
+    }),
   personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),
   modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
   setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
@@ -900,7 +980,8 @@ export const api = {
   toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),
   sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
   goal: (inst: string, id: string) => call<{ goal: SessionGoal | null }>('GET', `${sessionPath(inst, id)}/goal`),
-  createGoal: (inst: string, id: string, g: GoalSettings) => call<{ runId: string; goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal`, g),
+  createGoal: (inst: string, id: string, g: GoalSettings, clientKey?: string) =>
+    call<{ runId: string; goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal`, { ...g, ...(clientKey ? { clientKey } : {}) }),
   editGoal: (inst: string, id: string, g: Partial<GoalSettings>) => call<{ goal: SessionGoal }>('PATCH', `${sessionPath(inst, id)}/goal`, g),
   pauseGoal: (inst: string, id: string, reason: 'user' | 'button') => call<{ goal: SessionGoal | null }>('POST', `${sessionPath(inst, id)}/goal/pause`, { reason }),
   resumeGoal: (inst: string, id: string) => call<{ goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal/resume`, {}),
@@ -1163,4 +1244,6 @@ export const instanceRawUrl = (inst: string, path: string, download = false) =>
   `/x/i/${enc(inst)}/files/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
 
 /** URL of a run's SSE stream (EventSource). */
-export const runEventsUrl = (inst: string, id: string, runId: string) => `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events`;
+/** `lastSeq`: a new EventSource resumes after that event (the server passes it as Last-Event-ID). */
+export const runEventsUrl = (inst: string, id: string, runId: string, lastSeq?: number) =>
+  `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events${lastSeq !== undefined ? `?lastSeq=${lastSeq}` : ''}`;

@@ -3,6 +3,7 @@ import { ClipboardCopy, Download, ExternalLink, Link2, MessageSquarePlus, Pencil
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
 import { Md } from '../chat/Thread';
+import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { Button, copyText, cx, ErrorText } from '../components/ui';
 import { baseName, fileKind, formatSize, isText as isTextKind } from './paths';
 import type { FileScope } from './scope';
@@ -71,6 +72,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
   // text and mtime as they were when editing began: a refresh of the listing or of the text must neither
   // move the conflict check to the new mtime (silent overwrite) nor replace the editor contents
   const [base, setBase] = useState<{ text: string; mtime: number } | null>(null);
+  useDirtyGuard(editing && draft !== null && base !== null && draft !== base.text);
   const [source, setSource] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -147,7 +149,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
           <Download className="size-4" strokeWidth={1.5} />
         </a>
         {onClose && (
-          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer l’aperçu')} title={t('Fermer')}>
+          <button onClick={() => void confirmClose(onClose)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer l’aperçu')} title={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </button>
         )}

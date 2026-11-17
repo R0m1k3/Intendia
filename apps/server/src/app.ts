@@ -20,7 +20,8 @@ import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
 import { GitError } from './git/service.js';
 import { AdminError } from './admin-error.js';
-import { SecretError } from './hermes-config/mask.js';
+import { Masker, SecretError } from './hermes-config/mask.js';
+import { CODE_MESSAGE, hermesErrorResponse } from './connectors/errors.js';
 import { memoryRoutes } from './routes/memory.js';
 import { vaultRoutes } from './routes/vault.js';
 import { pluginRoutes } from './routes/plugins.js';
@@ -63,6 +64,8 @@ export interface AppDeps {
   wsFactory?: WsFactory;
   /** Delay before an unanswered kanban WebSocket handshake is given up (tests shorten it). */
   wsOpenTimeoutMs?: number;
+  /** Life of one kanban live relay before it is renewed (default 10 min; tests shorten it). */
+  kanbanRelayMaxMs?: number;
   version: string;
 }
 
@@ -72,6 +75,11 @@ const SetupBody = z.object({ code: z.string().min(1).max(64), password: z.string
 export function createApp(deps: AppDeps) {
   const { auth, store, compat, config } = deps;
   const app = new Hono();
+  // Hermes' own error details reach the browser: generic secrets masked, then the exact secrets of the instances
+  const masker = new Masker(config.secret);
+  const mask = (text: string) => masker.known(masker.text(text), store.list().flatMap((i) => [
+    i.apiKey, ...(i.dashboardToken ? [i.dashboardToken] : []), ...Object.values(i.profileKeys ?? {}),
+  ]));
 
   // first: sees the final answer of every route and of onError
   app.use('*', translateResponses());
@@ -85,7 +93,7 @@ export function createApp(deps: AppDeps) {
 
   app.onError((err, c) => {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
-    if (err instanceof z.ZodError) return c.json({ error: 'invalid request', issues: err.issues }, 400);
+    if (err instanceof z.ZodError) return c.json({ error: msg('Requête invalide'), issues: err.issues }, 400);
     if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
     if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
     if (err instanceof ActionBusyError) return c.json({ error: err.message, code: err.code, action: err.action }, 409);
@@ -110,16 +118,17 @@ export function createApp(deps: AppDeps) {
       return c.json({ error: err.message, code: err.code }, FS_ERROR_STATUS[err.code]);
     }
     if (err instanceof ModuleUnavailableError) {
-      return c.json({ error: err.message, module: err.module, op: err.op, reasons: err.reasons }, 409);
+      const body = { error: err.message, module: err.module, op: err.op, reasons: err.reasons };
+      if (!err.code) return c.json(body, 409);
+      return c.json({ ...body, error: CODE_MESSAGE[err.code], code: err.code }, err.code === 'hermes_unreachable' ? 504 : 409);
     }
     if (err instanceof HermesError) {
-      if (err.kind === 'http') return c.json({ error: err.message, hermesStatus: err.detail.status ?? null }, 502);
-      if (err.kind === 'network' || err.kind === 'timeout') return c.json({ error: err.message }, 504);
-      if (err.kind === 'unconfigured') return c.json({ error: err.message }, 422);
-      return c.json({ error: err.message }, 502);
+      const r = hermesErrorResponse(err, mask);
+      for (const [k, v] of Object.entries(r.headers ?? {})) c.header(k, v);
+      return c.json(r.body, r.status);
     }
     console.error(err);
-    return c.json({ error: 'internal error' }, 500);
+    return c.json({ error: msg('Erreur interne du serveur Intendia (voir ses journaux)') }, 500);
   });
 
   const x = new Hono();
@@ -163,6 +172,10 @@ export function createApp(deps: AppDeps) {
   const priv = new Hono();
   priv.use('*', requireAuth(auth));
 
+  priv.post('/auth/revoke-all', (c) => {
+    auth.revokeAll(c);
+    return c.json({ ok: true });
+  });
   priv.get('/instances', (c) => c.json({
     declarative: store.declarative,
     instances: store.list().map((i) => InstanceStore.toPublic(i, store.declarative ? 'env' : 'db', compat.get(i.id)?.files ?? null)),
@@ -255,7 +268,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', vaultRoutes(deps.services.vault));
   priv.route('/', pluginRoutes(deps.services.plugins));
   priv.route('/', mcpCatalogRoutes(deps.services.mcpCatalog));
-  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, missions: deps.services.missions, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs }));
+  priv.route('/', kanbanRoutes({ kanban: deps.services.kanban, missions: deps.services.missions, config: deps.services.config, compat: deps.compat, wsFactory: deps.wsFactory, wsOpenTimeoutMs: deps.wsOpenTimeoutMs, kanbanRelayMaxMs: deps.kanbanRelayMaxMs }));
 
   x.route('/', priv);
   app.route('/x', x);
