@@ -174,7 +174,7 @@ export function AgentsPage() {
           <AgentDetail key={shown} inst={inst} name={shown} instance={current} available={a.available}
             has={a.has} back={Boolean(name)} />
         ) : (
-          <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? t('Aucun agent') : t('Agents indisponibles')}>
+          <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? t('Aucun agent') : a.onlyPending ? t('Vérification de cette instance en cours') : t('Agents indisponibles')}>
             {a.available ? t('Les profils Hermes de l’instance apparaissent ici') : t('Voir la colonne de gauche')}
           </Empty>
         )}

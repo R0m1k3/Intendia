@@ -234,4 +234,13 @@ export default {
   "Pas de réponse d'Intendia après {s} s": 'No response from Intendia after {s} s',
   "Pas de réponse d'Intendia après {s} s : l'action a peut-être abouti, vérifiez avant de recommencer": 'No response from Intendia after {s} s: the action may have gone through, check before trying again',
   'Réponse inattendue du serveur Intendia (HTTP {status})': 'Unexpected answer from the Intendia server (HTTP {status})',
+  // status bars, crash screens
+  'Hors ligne : les changements partiront au retour de la connexion': 'Offline: changes will be sent when the connection is back',
+  'Serveur Intendia injoignable, nouvel essai toutes les 5 s': 'Intendia server unreachable, retrying every 5 s',
+  'Hermes ({instance}) injoignable depuis {time}': 'Hermes ({instance}) unreachable since {time}',
+  "Dashboard d'Hermes ({instance}) injoignable depuis {time} : fichiers, crons, skills et configuration en pause": 'Hermes dashboard ({instance}) unreachable since {time}: files, crons, skills and configuration on hold',
+  'Cette page a rencontré une erreur': 'This page ran into an error',
+  'Intendia a rencontré une erreur': 'Intendia ran into an error',
+  'Recharger la page': 'Reload the page',
+  'Aller aux sessions': 'Go to sessions',
 } satisfies Record<string, string>;

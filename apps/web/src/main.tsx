@@ -9,6 +9,7 @@ import { api, isTransient, SESSION_SOURCES, type SessionSource } from './api';
 import { initConnection } from './connection/connection';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
+import { Boundary, RouteError } from './components/ErrorScreen';
 import { pruneDrafts } from './chat/draft';
 import { UndoHost } from './sessions/UndoBar';
 import { syncSessions } from './sessions/sync';
@@ -293,6 +294,7 @@ const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/
 const router = createRouter({
   routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
+  defaultErrorComponent: RouteError,
 });
 
 initConnection({ queryClient, router });
@@ -307,9 +309,11 @@ pruneDrafts();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <DialogHost />
-      <UndoHost />
+      <Boundary>
+        <RouterProvider router={router} />
+        <DialogHost />
+        <UndoHost />
+      </Boundary>
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -25,11 +25,17 @@ export interface Availability {
  * Availability from the operations a page uses (possibly from several modules), not from the module
  * state: a missing optional write must warn, a missing required read must block. An op the report does not
  * know yet (`unchecked`) is pending until the next full check: a required one keeps the page closed (its data
- * queries start once it is checked), without counting as a failure.
+ * queries start once it is checked), without counting as a failure. Without a report: optimistic while /x/compat
+ * loads (`loaded` false), pending once it answered without one.
  */
-export function availability(report: CompatReport | undefined, module: ModuleId, required: OpRef[], optional: OptionalOp[], explainMissing = false): Availability {
+export function availability(report: CompatReport | undefined, module: ModuleId, required: OpRef[], optional: OptionalOp[], explainMissing = false, loaded = true): Availability {
   const has = (m: string, o: string) => (report ? Boolean(op(report, m, o)?.ok) : true);
-  if (!report) return { available: true, missing: [], reasons: [], link: undefined, has, pending: false, onlyPending: false, checkError: undefined };
+  if (!report) {
+    // `loaded`: /x/compat answered without this instance (first check running or failed): closed, as pending
+    return loaded
+      ? { available: false, missing: [], reasons: [], link: undefined, has, pending: true, onlyPending: true, checkError: undefined }
+      : { available: true, missing: [], reasons: [], link: undefined, has, pending: false, onlyPending: false, checkError: undefined };
+  }
   const unchecked = new Set(report.unchecked ?? []);
   const known = ([m, o]: OpRef | OptionalOp) => !unchecked.has(`${m}.${o}`);
   const blocked = required.filter(known).filter(([m, o]) => !op(report, m, o)?.ok);
@@ -46,8 +52,9 @@ export function availability(report: CompatReport | undefined, module: ModuleId,
   };
 }
 
-/** Polling of the compat query while the instance's report is not fully checked. */
-export function compatPoll(report: CompatReport | undefined): number | false {
-  if (!report?.unchecked?.length) return false;
+/** Polling of the compat query while the instance's report is not fully checked (or not there yet, once loaded). */
+export function compatPoll(report: CompatReport | undefined, loaded = false): number | false {
+  if (!report) return loaded ? 3000 : false;
+  if (!report.unchecked?.length) return false;
   return report.checking ? 3000 : 30_000;
 }

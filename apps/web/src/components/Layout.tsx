@@ -14,6 +14,7 @@ import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
 import { flushDrafts } from '../chat/draft';
 import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
+import { StatusBars } from './StatusBars';
 import { cx, Wordmark } from './ui';
 import { plural, t } from '../i18n';
 
@@ -242,6 +243,7 @@ function FullLayout() {
         </div>
       </main>
 
+      <StatusBars />
       {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
       <Approvals />
