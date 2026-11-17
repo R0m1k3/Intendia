@@ -3,6 +3,7 @@ import { RefreshCw, Save, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api, type ConfigField } from '../api';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
+import { ManagedNotice } from './Managed';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 import { changeList, display, editorKind, fromText, isMasked, reapply, toText, type EditorKind } from './fields';
 import { APPLIES_TEXT, parsePreset, type Preset, type PresetItem } from './guardrails';
@@ -54,7 +55,7 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
     if (needle) return p.toLowerCase().includes(needle) || (f.description ?? '').toLowerCase().includes(needle);
     return (f.category ?? 'general') === cat;
   }).sort();
-  const writable = can('put') && data.version !== null;
+  const writable = can('put') && data.version !== null && data.managed !== true;
 
   const started = () => { if (baseVersion === null) setBaseVersion(data.version); };
   const edit = (path: string, kind: EditorKind, text: string, original: unknown) => {
@@ -88,7 +89,8 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
         </div>
       )}
       {dropped.length > 0 && <p className="text-sm text-warn">{t('Changements abandonnés (réglages disparus) : {list}', { list: dropped.join(', ') })}</p>}
-      {!writable && (
+      <ManagedNotice managed={data.managed} />
+      {!writable && data.managed !== true && (
         <p className="text-sm text-ink-soft">
           {data.version === null ? t('Écriture impossible : Hermes ne donne pas le fichier de configuration.') : t('Enregistrement indisponible sur cette instance.')}
         </p>
@@ -144,7 +146,9 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
                 ))}
               </ul>
               <ErrorText error={save.error && errorCode(save.error) !== 'config_changed' ? save.error : null} />
-              {save.error && Array.isArray(errorData(save.error).paths) && <p className="text-xs text-bad">{t('À corriger : {list}', { list: (errorData(save.error).paths as string[]).join(', ') })}</p>}
+              {save.error && Array.isArray(errorData(save.error).paths) && <p className="text-xs text-bad">{errorCode(save.error) === 'not_applied'
+                ? t('Non appliqués : {list}', { list: (errorData(save.error).paths as string[]).join(', ') })
+                : t('À corriger : {list}', { list: (errorData(save.error).paths as string[]).join(', ') })}</p>}
               <div className="flex gap-2">
                 <Button variant="primary" disabled={save.isPending || Object.keys(bad).length > 0} onClick={() => save.mutate()}>
                   <Save className={ICON} strokeWidth={1.5} />{save.isPending ? t('Enregistrement…') : t('Confirmer')}

@@ -168,6 +168,22 @@ describe('mcp: put into Hermes by Intendia', () => {
     expect(await state(t)).toBe('other_url');
   });
 
+  it('does not put the other entry back over a change made in between: 502 partial_write', async () => {
+    const t = await testApp({ env: { INTENDIA_MCP_URL: 'http://refuse.example.test:3001' } });
+    addOther(t, 'https://elsewhere.example.test/mcp');
+    // the first read after the refused add is the one before the rollback
+    let done = false;
+    t.fake.config.onRawRead = () => {
+      if (done || !t.fake.requests.some((r) => r.method === 'POST' && r.path === '/api/mcp/servers')) return;
+      done = true;
+      t.fake.config.externalEdit((raw) => `${raw}x_tiers: 1\n`);
+    };
+    const res = await t.request('POST', '/x/instances/fake/mcp/connect', { replaceOther: true });
+    expect(res.status).toBe(502);
+    expect(res.json.code).toBe('partial_write');
+    expect(t.fake.requests.filter((r) => r.method === 'PUT' && r.path === '/api/config/raw')).toHaveLength(0);
+  });
+
   it('sends a new token to Hermes; a failure leaves the state stale until the next connect', async () => {
     const breaks: Record<string, { status: number }> = {};
     const t = await testApp({ breaks });

@@ -3,6 +3,7 @@ import { RefreshCw, Save } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { api } from '../api';
 import { Button, ErrorText, Panel } from '../components/ui';
+import { ManagedNotice } from './Managed';
 import { configKey, errorCode, errorData, ICON, useInvalidateConfig, type TabProps } from './common';
 import { DiffView } from './DiffView';
 import { t } from '../i18n';
@@ -40,7 +41,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
   if (raw.isError || !shown) return <ErrorText error={raw.error} />;
 
   const dirty = draft !== null && draft !== against!.yaml;
-  const writable = can('putRaw');
+  const writable = can('putRaw') && raw.data?.managed !== true;
   const reload = async () => {
     const fresh = await raw.refetch();
     if (fresh.data) setBase(fresh.data);
@@ -58,6 +59,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
           <Button onClick={() => void reload()}><RefreshCw className={ICON} strokeWidth={1.5} />{t('Recharger en gardant mes changements')}</Button>
         </div>
       )}
+      <ManagedNotice managed={raw.data?.managed} />
       {saved && !dirty && <p className="text-sm text-ok">{t('Enregistré. Le texte affiché est celui qu’Hermes a réécrit.')}</p>}
       <Panel
         title={t('Fichier de configuration')}

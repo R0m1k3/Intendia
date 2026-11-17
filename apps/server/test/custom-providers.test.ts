@@ -147,6 +147,16 @@ describe('custom endpoints: HTTP', () => {
     expect(putConfig(t)).toHaveLength(1);
   });
 
+  it('refuses to remove when the file changed between the read and the raw write: 409 config_changed', async () => {
+    const t = await testApp();
+    await t.request('POST', `${BASE}/custom-providers`, { name: 'Ollama maison', baseUrl: 'http://127.0.0.1:11434/v1', model: 'm' });
+    t.fake.config.onRawRead = (n) => { if (n === 2) t.fake.config.externalEdit((raw) => `${raw}x_tiers: 1\n`); };
+    const r = await t.request('DELETE', `${BASE}/custom-providers/ollama-maison`);
+    expect(r.status).toBe(409);
+    expect(r.json.code).toBe('config_changed');
+    expect(providersOf(t)['ollama-maison']).toBeDefined();
+  });
+
   it('refuses to remove the provider of the main model', async () => {
     const t = await testApp();
     await t.request('POST', `${BASE}/custom-providers`, { name: 'Local', baseUrl: 'http://l.test/v1' });

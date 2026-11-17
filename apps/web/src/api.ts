@@ -503,7 +503,7 @@ export interface ActionStatus {
 // ---------------------------------------------------------------- Hermes configuration (phase 6)
 
 export interface ConfigField { type?: string; description?: string; category?: string; options?: unknown[]; clearable?: boolean; searchable?: boolean }
-export interface ConfigForm { values: Record<string, unknown>; schema: Record<string, ConfigField>; categories: string[]; version: string | null }
+export interface ConfigForm { values: Record<string, unknown>; schema: Record<string, ConfigField>; categories: string[]; version: string | null; managed: boolean | null }
 export interface ConfigVersion { id: number; createdAt: number; source: string; readable: boolean }
 export interface ModelProvider {
   slug: string; name: string; authenticated: boolean; keyEnv: string | null; models: string[]; warning: string | null;
@@ -1081,7 +1081,7 @@ export const api = {
   config: (inst: string, profile: string) => call<ConfigForm>('GET', instPath(inst, 'config', profile)),
   saveConfig: (inst: string, profile: string, changes: Record<string, unknown>, version: string) =>
     call<WriteResult>('PUT', instPath(inst, 'config', profile), { changes, version }),
-  configRaw: (inst: string, profile: string) => call<{ yaml: string; version: string }>('GET', instPath(inst, 'config/raw', profile)),
+  configRaw: (inst: string, profile: string) => call<{ yaml: string; version: string; managed: boolean | null }>('GET', instPath(inst, 'config/raw', profile)),
   saveConfigRaw: (inst: string, profile: string, yaml: string, version: string) =>
     call<WriteResult>('PUT', instPath(inst, 'config/raw', profile), { yaml, version }),
   configVersions: (inst: string, profile: string) => call<{ versions: ConfigVersion[] }>('GET', instPath(inst, 'config/versions', profile)),

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { z } from 'zod';
 import { and, desc, eq, notInArray } from 'drizzle-orm';
 import type { CompatService } from '../compat/service.js';
 import { GatewayService } from './gateway.js';
 import {
-  AuxiliarySchema, ConfigSchemaSchema, EnvListSchema, McpServersSchema, McpCatalogSchema, McpFlowSchema,
+  AuxiliarySchema, ConfigSchemaSchema, ManagedSchema, EnvListSchema, McpServersSchema, McpCatalogSchema, McpFlowSchema,
   McpTestSchema, ModelInfoSchema, ModelOptionsSchema, ModelSetSchema, PlatformsSchema, RawConfigSchema, RecommendedModelSchema, mcpTokenEnv,
   configModule,
 } from '../connectors/config/index.js';
@@ -35,6 +36,9 @@ export type McpCatalog = z.infer<typeof McpCatalogSchema>;
 export type McpFlow = z.infer<typeof McpFlowSchema>;
 export type WriteSource = 'form' | 'yaml' | 'restore' | 'model' | 'env' | 'mcp' | 'orchestration' | 'provider-models' | 'provider-login' | 'custom-providers';
 const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model']);
+/** Sources that write the config file (not `.env`): ignored by Hermes in a managed installation. */
+const FILE_SOURCES: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model', 'provider-models', 'custom-providers', 'mcp', 'orchestration']);
+const MANAGED_TTL_MS = 60_000;
 
 export class ConfigInputError extends Error {
   constructor(readonly code: string, message: string, readonly extra: Record<string, unknown> = {}) {
@@ -45,7 +49,7 @@ export class ConfigInputError extends Error {
 
 export class ConfigConflictError extends Error {
   constructor(
-    readonly code: 'config_changed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable'
+    readonly code: 'config_changed' | 'config_managed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable'
       | 'exists' | 'in_use' | 'raw_unavailable' | 'api_key_present',
     message: string,
   ) {
@@ -85,11 +89,22 @@ export class PartialWriteError extends Error {
   }
 }
 
+/** Hermes answered ok but the file did not change (managed installation, key fixed by an administrator, default value). */
+export class ConfigNotAppliedError extends Error {
+  readonly code = 'not_applied';
+  constructor(readonly paths?: string[]) {
+    super(msg('Hermes a répondu OK mais n’a pas appliqué ce changement. Causes possibles : Hermes installé par un gestionnaire de paquets (Nix), réglage fixé par un administrateur, ou valeur égale à la valeur par défaut (Hermes la retire du fichier).'));
+    this.name = 'ConfigNotAppliedError';
+  }
+}
+
 export interface PublicConfig {
   values: Record<string, unknown>;
   schema: Fields;
   categories: string[];
   version: string | null;
+  /** Managed installation (Hermes ignores config writes); null = unknown. */
+  managed: boolean | null;
 }
 export interface PublicVersion { id: number; createdAt: number; source: string; readable: boolean }
 export interface PublicModels {
@@ -127,15 +142,18 @@ export interface McpCreate { name: string; url?: string; token?: string; command
 
 type Ctx = { http: ReturnType<CompatService['http']>; report: ReturnType<CompatService['get']>; instanceId: string; profile: string };
 
-/** Hermes or Intendia said no before writing (a timeout or a 5xx may have written, so the copy stays). */
 /** Thrown inside `write()` when the change would not modify the file: nothing written, no history copy. */
 class NoChange extends Error {}
+
+/** `fn` of `write()`: 'deferred' when Hermes does the change later (background action), so an unchanged file is normal. */
+type WriteFn = (current: string | null) => Promise<void | 'deferred'>;
 
 /** Conflicts found by Intendia or Hermes before anything was written. */
 const REFUSALS: ReadonlySet<ConfigConflictError['code']> = new Set(['hermes_conflict', 'exists', 'in_use', 'raw_unavailable', 'config_unavailable', 'api_key_present']);
 
+/** Hermes or Intendia said no before writing (a timeout or a 5xx may have written, so the copy stays). */
 function refused(err: unknown): boolean {
-  return err instanceof NoChange || err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
+  return err instanceof ConfigInputError || err instanceof ConfirmRequiredError || err instanceof NotFoundError
     || (err instanceof ConfigConflictError && REFUSALS.has(err.code));
 }
 
@@ -163,6 +181,29 @@ function getPath(obj: unknown, path: string): unknown {
   return node;
 }
 
+/** Same value for Hermes: `null` stands for an absent value. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (b === null) return a === null || a === undefined;
+  return isDeepStrictEqual(a, b);
+}
+
+/** Two YAML texts with the same content (order, comments and style aside). */
+function sameDoc(a: string, b: string): boolean {
+  try {
+    return isDeepStrictEqual(parse(a).toJS(), parse(b).toJS());
+  } catch {
+    return false;
+  }
+}
+
+function oauthRedirect(raw: string, name: string): unknown {
+  const servers = (parse(raw).toJS() as { mcp_servers?: unknown } | null)?.mcp_servers;
+  const entry = isPlainObject(servers) ? servers[name] : undefined;
+  return getPath(entry, 'oauth.redirect_uri');
+}
+
+const changedError = () => new ConfigConflictError('config_changed', msg('La configuration a changé dans Hermes depuis l\'affichage'));
+
 /**
  * Intendia error for a failed Hermes call (returned, the caller throws it): an HTTP answer becomes a refusal (400,
  * 422), a conflict (409), a not found (404) or a Hermes error, its detail masked. `scrub` cleans the detail first
@@ -184,6 +225,7 @@ export class ConfigService {
   private readonly mask: Masker;
   private readonly locks = new KeyedLock();
   private readonly knownCache = new Map<string, { at: number; values: string[] }>();
+  private readonly managedCache = new Map<string, { at: number; value: boolean }>();
 
   constructor(
     private readonly compat: CompatService,
@@ -260,32 +302,88 @@ export class ConfigService {
     return this.locks.run(key, fn);
   }
 
-  /** The single path of every write that can change the config file. */
-  private write(ctx: Ctx, source: WriteSource, expected: string | null, fn: (current: string | null) => Promise<void>): Promise<{ version: string | null }> {
+  /**
+   * Managed installation of the profile (`GET /api/shared-metrics/consent?profile=`): null when the operation is
+   * not available or fails (not cached then), else cached 60 s per instance and profile.
+   */
+  private async managed(ctx: Ctx): Promise<boolean | null> {
+    if (!this.can(ctx, 'managed')) return null;
+    const key = `${ctx.instanceId}:${ctx.profile}`;
+    const hit = this.managedCache.get(key);
+    if (hit && Date.now() - hit.at < MANAGED_TTL_MS) return hit.value;
+    try {
+      const out = ManagedSchema.parse(await callOp<unknown>(ctx.http, ctx.report, 'config', 'managed', { profile: ctx.profile }));
+      const value = out.managed === true;
+      this.managedCache.set(key, { at: Date.now(), value });
+      return value;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Managed installation of a profile, for the pages (banner, disabled buttons). */
+  async isManaged(instanceId: string, profile: string): Promise<boolean | null> {
+    return this.managed(this.ctx(instanceId, profile));
+  }
+
+  /**
+   * The single path of every write that can change the config file: managed check, lock, reread, version check,
+   * history copy, Hermes call (`fn`, which throws `NoChange` when nothing would change), reread: a file left as it
+   * was after a real change gives `not_applied`.
+   */
+  private write(ctx: Ctx, source: WriteSource, expected: string | null, fn: WriteFn): Promise<{ version: string | null }> {
     return this.locked(`${ctx.instanceId}:${ctx.profile}`, async () => {
+      const file = FILE_SOURCES.has(source);
+      if (file && await this.managed(ctx) === true) {
+        throw new ConfigConflictError('config_managed', msg('Hermes est installé par un gestionnaire de paquets (Nix ou marqueur .managed) : il ignore les changements de configuration faits par son dashboard. Modifiez la configuration là où Hermes est déclaré.'));
+      }
       const current = await this.readRaw(ctx);
       if (current === null) {
         if (CHECKED.has(source)) {
           throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
         }
-        await fn(null);
+        try {
+          await fn(null);
+        } catch (err) {
+          if (!(err instanceof NoChange)) throw err;
+        }
         return { version: null };
       }
       if (CHECKED.has(source) && expected !== null && versionOf(current) !== expected) {
         throw new ConfigConflictError('config_changed', msg('La configuration a changé dans Hermes depuis l\'affichage'));
       }
       const copied = this.copy(ctx, source, current);
+      const drop = () => { if (copied !== null) this.db.delete(configVersions).where(eq(configVersions.id, copied)).run(); };
+      let outcome: void | 'deferred';
       try {
-        await fn(current);
+        outcome = await fn(current);
       } catch (err) {
+        if (err instanceof NoChange) {
+          drop();
+          return { version: versionOf(current) };
+        }
         // refused before anything was written: the copy would describe a write that never happened
-        if (copied !== null && refused(err)) this.db.delete(configVersions).where(eq(configVersions.id, copied)).run();
+        if (refused(err)) drop();
         throw err;
       }
-      this.trim(ctx);
       const after = await this.readRaw(ctx).catch(() => null);
+      if (file && outcome !== 'deferred' && after !== null && versionOf(after) === versionOf(current)) {
+        drop();
+        throw new ConfigNotAppliedError();
+      }
+      this.trim(ctx);
       return { version: after === null ? null : versionOf(after) };
     });
+  }
+
+  /**
+   * `putRaw` only over the text `base`: the file is reread first and `onChanged()` is thrown when it differs (no
+   * etag in Hermes 0.23: a write between this reread and the PUT stays possible).
+   */
+  private async putRawOver(ctx: Ctx, base: string, text: string, onChanged: () => Error): Promise<void> {
+    const now = await this.readRaw(ctx);
+    if (now === null || versionOf(now) !== versionOf(base)) throw onChanged();
+    await this.call(ctx, 'putRaw', { body: { yaml_text: text } });
   }
 
   // ---------------------------------------------------------------- history
@@ -378,8 +476,9 @@ export class ConfigService {
   async restore(instanceId: string, profile: string, id: number, version: string): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
     const text = this.versionText(ctx, id);
-    return this.write(ctx, 'restore', version, async () => {
-      await this.call(ctx, 'putRaw', { body: { yaml_text: text } });
+    return this.write(ctx, 'restore', version, async (current) => {
+      if (sameDoc(text, current ?? '')) throw new NoChange();
+      await this.putRawOver(ctx, current ?? '', text, changedError);
     });
   }
 
@@ -415,7 +514,8 @@ export class ConfigService {
     const order = schema.category_order ?? [];
     const all = new Set(Object.values(fields).map((f) => f.category ?? 'general'));
     const categories = [...order.filter((c) => all.has(c)), ...[...all].filter((c) => !order.includes(c)).sort()];
-    return { values: masked, schema: fields, categories, version: raw === null ? null : versionOf(raw) };
+    const managed = await this.managed(ctx);
+    return { values: masked, schema: fields, categories, version: raw === null ? null : versionOf(raw), managed };
   }
 
   async saveForm(instanceId: string, profile: string, changes: Record<string, unknown>, version: string): Promise<{ version: string | null }> {
@@ -434,18 +534,28 @@ export class ConfigService {
       const bad = checkValue(field, value, { allowNull: field.type === 'string' });
       if (bad) throw new ConfigInputError('invalid_field', msg('{what} : {detail}', { what: path, detail: bad }), { paths: [path] });
     }
-    return this.write(ctx, 'form', version, async () => {
+    const res = await this.write(ctx, 'form', version, async () => {
+      const effective = await this.call<Record<string, unknown>>(ctx, 'get');
+      if (Object.entries(changes).every(([path, value]) => sameValue(getPath(effective, path), value))) throw new NoChange();
       await this.call(ctx, 'put', { body: { config: unflatten(changes) } });
     });
+    // a key fixed by an administrator is removed by Hermes without error: compare with what Hermes now uses
+    const now = await this.call<Record<string, unknown>>(ctx, 'get').catch(() => null);
+    if (now !== null) {
+      const paths = Object.entries(changes)
+        .filter(([path, value]) => !containsEnvRef(value) && !sameValue(getPath(now, path), value)).map(([path]) => path);
+      if (paths.length) throw new ConfigNotAppliedError(paths);
+    }
+    return res;
   }
 
   // ---------------------------------------------------------------- YAML
 
-  async raw(instanceId: string, profile: string): Promise<{ yaml: string; version: string }> {
+  async raw(instanceId: string, profile: string): Promise<{ yaml: string; version: string; managed: boolean | null }> {
     const ctx = this.ctx(instanceId, profile);
     const text = await this.readRaw(ctx);
     if (text === null) throw new ConfigConflictError('config_unavailable', msg('Hermes ne donne pas le fichier de configuration'));
-    return { yaml: this.mask.yaml(text), version: versionOf(text) };
+    return { yaml: this.mask.yaml(text), version: versionOf(text), managed: await this.managed(ctx) };
   }
 
   async saveRaw(instanceId: string, profile: string, draft: string, version: string): Promise<{ version: string | null }> {
@@ -461,7 +571,8 @@ export class ConfigService {
       }
       const bad = validateDoc(parse(text).toJS(), fields);
       if (bad.length) throw new ConfigInputError('invalid_field', msg('Valeurs invalides : {paths}', { paths: bad.join(', ') }), { paths: bad });
-      await this.call(ctx, 'putRaw', { body: { yaml_text: text } });
+      if (sameDoc(text, current ?? '')) throw new NoChange();
+      await this.putRawOver(ctx, current ?? '', text, changedError);
     });
   }
 
@@ -520,8 +631,7 @@ export class ConfigService {
   async changeProviderModels(instanceId: string, profile: string, provider: string, change: { add: string } | { remove: string }): Promise<{ declared: string[] }> {
     const ctx = this.ctx(instanceId, profile);
     let next: string[] = [];
-    try {
-      await this.write(ctx, 'provider-models', null, async (current) => {
+    await this.write(ctx, 'provider-models', null, async (current) => {
         if (current === null) throw new ConfigConflictError('config_unreadable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
         const d = declaredModels(current).get(provider);
         if (d && (d.custom || !editableShape(d.shape))) {
@@ -536,17 +646,43 @@ export class ConfigService {
         }
         if (next.length === ids.length) throw new NoChange();
         await this.call(ctx, 'put', { body: { config: { providers: { [provider]: { models: next } } } } });
-      });
-    } catch (err) {
-      if (!(err instanceof NoChange)) throw err;
-    }
+    });
     return { declared: next };
+  }
+
+  /** The model of `change` is already the one Hermes uses (main or auxiliary task). */
+  private async hasModel(ctx: Ctx, change: ModelChange): Promise<boolean> {
+    return this.hasModelNow(ctx, change).catch(() => false);
+  }
+
+  private async hasModelNow(ctx: Ctx, change: ModelChange): Promise<boolean> {
+    if (change.scope === 'main') {
+      const info = ModelInfoSchema.parse(await this.call<unknown>(ctx, 'modelInfo'));
+      return info.provider === change.provider && info.model === change.model;
+    }
+    const aux = AuxiliarySchema.parse(await this.call<unknown>(ctx, 'auxiliary'));
+    return aux.tasks.some((t) => t.task === change.task && (t.provider ?? 'auto') === change.provider && (t.model ?? '') === change.model);
+  }
+
+  /**
+   * Puts `original` back, only over `base` (the text after the latest write of Intendia): a file changed by someone
+   * else in between, or a failed put, gives `PartialWriteError` without writing.
+   */
+  private async rollback(ctx: Ctx, base: string, original: string): Promise<void> {
+    const changed = () => new PartialWriteError(msg('Hermes a changé le fichier pendant l’opération : Intendia ne l’a pas remis en l’état ; vérifiez dans l’onglet Historique'));
+    try {
+      await this.putRawOver(ctx, base, original, changed);
+    } catch (err) {
+      if (err instanceof PartialWriteError) throw err;
+      throw new PartialWriteError();
+    }
   }
 
   async setModel(instanceId: string, profile: string, change: ModelChange): Promise<{ version: string | null; notice?: string }> {
     const ctx = this.ctx(instanceId, profile);
     let notice: string | undefined;
     const res = await this.write(ctx, 'model', change.version, async () => {
+      if (await this.hasModel(ctx, change)) throw new NoChange();
       // never api_key (Hermes writes it in clear) nor base_url (custom endpoints are not handled here)
       const body: Record<string, unknown> = { scope: change.scope, provider: change.provider, model: change.model };
       if (change.scope === 'auxiliary') body.task = change.task;
@@ -568,6 +704,12 @@ export class ConfigService {
     const ctx = this.ctx(instanceId, profile);
     const notices: string[] = [];
     const res = await this.write(ctx, 'model', input.version, async (original) => {
+      // a failed read only skips the check
+      const aux = await this.call<unknown>(ctx, 'auxiliary').then((v) => AuxiliarySchema.parse(v), () => ({ tasks: [] }));
+      const has = (c: AuxChange) => aux.tasks.some((t) => t.task === c.task && (t.provider ?? 'auto') === c.provider && (t.model ?? '') === c.model);
+      if (input.changes.every(has)) throw new NoChange();
+      // text after the latest write of Intendia: the rollback is done only over it
+      let lastOwn: string | null = original;
       for (const [k, change] of input.changes.entries()) {
         try {
           const body: Record<string, unknown> = { scope: 'auxiliary', task: change.task, provider: change.provider, model: change.model };
@@ -582,14 +724,11 @@ export class ConfigService {
           }
         } catch (err) {
           if (k === 0) throw err;
-          if (!refused(err) || original === null || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
-          try {
-            await this.call(ctx, 'putRaw', { body: { yaml_text: original } });
-          } catch {
-            throw new PartialWriteError();
-          }
+          if (!refused(err) || original === null || lastOwn === null || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
+          await this.rollback(ctx, lastOwn, original);
           throw err;
         }
+        lastOwn = await this.readRaw(ctx).catch(() => null);
       }
     });
     return notices.length ? { ...res, notice: notices.join(' ') } : res;
@@ -642,6 +781,7 @@ export class ConfigService {
     const profile = typeof current.active_profile === 'string' && current.active_profile ? current.active_profile : 'default';
     const ctx = this.ctx(instanceId, profile);
     const res = await this.write(ctx, 'orchestration', null, async () => {
+      if (Object.entries(body).every(([k, v]) => sameValue((current as Record<string, unknown>)[k], v))) throw new NoChange();
       await kanban('setOrchestration', { body });
     });
     return { ...res, profile };
@@ -717,17 +857,17 @@ export class ConfigService {
     const ctx = this.ctx(instanceId, profile);
     return this.write(ctx, 'mcp', null, async (original) => {
       if (original === null) throw new ConfigConflictError('config_unavailable', msg('Écriture impossible : Hermes ne donne pas le fichier de configuration'));
-      if (input.exists) await this.call(ctx, 'removeMcp', { params: { name: input.name } }, msg('Serveur MCP introuvable'));
+      let afterRemove: string | null = null;
+      if (input.exists) {
+        await this.call(ctx, 'removeMcp', { params: { name: input.name } }, msg('Serveur MCP introuvable'));
+        afterRemove = await this.readRaw(ctx).catch(() => null);
+      }
       try {
         await this.call(ctx, 'addMcp', { body: { name: input.name, url: input.url, auth: 'header', bearer_token: input.token } });
       } catch (err) {
         if (!input.exists) throw err;
-        if (!refused(err) || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
-        try {
-          await this.call(ctx, 'putRaw', { body: { yaml_text: original } });
-        } catch {
-          throw new PartialWriteError();
-        }
+        if (!refused(err) || afterRemove === null || !this.can(ctx, 'putRaw')) throw new PartialWriteError();
+        await this.rollback(ctx, afterRemove, original);
         throw err;
       }
     });
@@ -742,6 +882,8 @@ export class ConfigService {
   async enableMcp(instanceId: string, profile: string, name: string, enabled: boolean): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
     return this.write(ctx, 'mcp', null, async () => {
+      const servers = await this.call<unknown>(ctx, 'mcpServers').then((v) => McpServersSchema.parse(v).servers, () => []);
+      if (servers.find((s) => s.name === name && (s.enabled ?? true) === enabled)) throw new NoChange();
       await this.call(ctx, 'enableMcp', { params: { name }, body: { enabled } }, msg('Serveur MCP introuvable'));
     });
   }
@@ -781,6 +923,7 @@ export class ConfigService {
     let out: { background?: unknown; action?: unknown } = {};
     const res = await this.write(ctx, 'mcp', null, async () => {
       out = (await this.call<{ background?: unknown; action?: unknown }>(ctx, 'mcpInstall', { body: { name, env, enable: true } }, msg('Absent du catalogue'), scrub)) ?? {};
+      return out.background === true ? 'deferred' : undefined;
     });
     return { ...res, background: out.background === true, action: typeof out.action === 'string' ? out.action : null };
   }
@@ -804,7 +947,8 @@ export class ConfigService {
   /** Writes `mcp_servers.<name>.oauth.redirect_uri` (merged by Hermes into the existing entry). */
   async setMcpRedirect(instanceId: string, profile: string, name: string, uri: string): Promise<{ version: string | null }> {
     const ctx = this.ctx(instanceId, profile);
-    return this.write(ctx, 'mcp', null, async () => {
+    return this.write(ctx, 'mcp', null, async (current) => {
+      if (current !== null && oauthRedirect(current, name) === uri) throw new NoChange();
       await this.call(ctx, 'put', { body: { config: { mcp_servers: { [name]: { oauth: { redirect_uri: uri } } } } } });
     });
   }
@@ -923,6 +1067,10 @@ export class ConfigService {
       const providers = doc && typeof doc.providers === 'object' && doc.providers ? Object.keys(doc.providers) : [];
       for (const k of providers) taken.add(k.toLowerCase());
       for (const old of readCustomProviders(current).filter((x) => x.legacy)) taken.add(slugFor(old.name));
+      const same = (doc?.providers as Record<string, unknown> | undefined)?.[e.slug] as Record<string, unknown> | undefined;
+      if (!apiKey && same && same.name === e.name && same.api === e.baseUrl && (e.model ? same.default_model === e.model : same.default_model === undefined)) {
+        throw new NoChange();
+      }
       if (taken.has(e.slug)) throw new ConfigConflictError('exists', msg('Nom déjà pris ({slug}) : choisissez-en un autre', { slug: e.slug }));
       const keyEnv = apiKey ? keyEnvFor(e.slug) : null;
       if (keyEnv) {
@@ -971,7 +1119,7 @@ export class ConfigService {
         throw new ConfigConflictError('in_use', msg('Cet endpoint sert le modèle principal : changez de modèle (onglet Modèles) avant de le supprimer'));
       }
       if (!this.can(ctx, 'putRaw')) throw new ConfigConflictError('raw_unavailable', msg('Suppression impossible sur cette instance : retirez-le dans l’onglet YAML'));
-      await this.call(ctx, 'putRaw', { body: { yaml_text: withoutProvider(current, slug) } });
+      await this.putRawOver(ctx, current, withoutProvider(current, slug), changedError);
       const keyEnv = target.key?.kind === 'env' ? target.key.name : null;
       const shared = keyEnv && all.some((x) => x !== target && x.key?.kind === 'env' && x.key.name === keyEnv);
       if (keyEnv && keyEnv.startsWith('INTENDIA_') && !shared) {
