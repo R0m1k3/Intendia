@@ -29,6 +29,7 @@ import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
 import { confirmClose } from '../components/dirty';
+import { useActivePage, type ActivePage } from '../components/activePage';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useColumn, useOpenSession } from '../chat/column-context';
@@ -843,6 +844,25 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const report = col?.report;
   useEffect(() => { report?.({ running, waiting, title }); }, [report, running, waiting, title]);
 
+  // the same handlers as the header's menu and link button, for the palette too
+  const renameSession = async () => {
+    const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') });
+    if (next) rename.mutate(next);
+  };
+  const copyLink = () => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => {
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1500);
+  });
+  // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
+  const handlers = useRef({ renameSession, copyLink });
+  handlers.current = { renameSession, copyLink };
+  const page = useMemo<ActivePage | null>(() => (leading && !EMBEDDED ? {
+    title,
+    focusComposer: () => composer.current?.focus(),
+    actions: [],
+  } : null), [leading, title]);
+  useActivePage(page);
+
   // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
   // (during a run, the merged entries hide its stored messages behind the live ones)
   const written = useMemo(() => writtenPaths(historyEntries(messages)), [messages]);
@@ -922,7 +942,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button type="button" className={ICON_BTN} aria-label={t('Copier le lien de la session')} title={t('Copier le lien de la session')}
-              onClick={() => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
+              onClick={copyLink}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
             <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
@@ -936,7 +956,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               triggerClass={cx(ICON_BTN, 'aria-expanded:bg-raised')}
               items={[
                 { label: t('Renommer'), icon: <Pencil className="size-4" strokeWidth={1.5} />,
-                  onSelect: async () => { const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') }); if (next) rename.mutate(next); } },
+                  onSelect: () => void renameSession() },
                 sess.data?.session.pinned
                   ? { label: t('Désépingler'), icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
                   : { label: t('Épingler'), icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },

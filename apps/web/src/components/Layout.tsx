@@ -15,6 +15,7 @@ import { flushDrafts } from '../chat/draft';
 import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
 import { StatusBars } from './StatusBars';
+import { useTabStatus } from './tabStatus';
 import { DirtyBlocker } from './dirty';
 import { cx, Wordmark } from './ui';
 import { plural, t } from '../i18n';
@@ -120,6 +121,7 @@ function FullLayout() {
   const paletteNav = NAV.map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = activeKey(pathname);
+  useTabStatus(NAV.find((n) => n.key === current)?.label ?? null);
 
   // Ctrl/Cmd K anywhere (even in a field) toggles the palette; closing gives the focus back
   const [palette, setPalette] = useState<false | PaletteMode>(false);
