@@ -53,6 +53,7 @@ import { ask, askText } from '../components/Dialog';
 import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
 import { SubagentsBar } from '../chat/SubagentsBar';
 import { GoalDialog } from '../chat/GoalDialog';
+import { nextCursor, olderOffset } from '../chat/older-pages';
 import type { GoalSettings } from '../api';
 import { workspaceScope } from '../files/scope';
 
@@ -160,8 +161,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // each rewrite (a page read by offset may shift meanwhile)
   const [older, setOlder] = useState<ChatMessage[]>([]);
   const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
+  // raw rows read by the older pages (the server's `nextOffset`, hidden rows included): kept apart from the messages
+  // shown, so a page of hidden rows only still moves the cursor
+  const [olderCursor, setOlderCursor] = useState<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const forgetOlder = useCallback(() => { setOlder([]); setOlderHasMore(null); }, []);
+  const forgetOlder = useCallback(() => { setOlder([]); setOlderHasMore(null); setOlderCursor(null); }, []);
   useEffect(() => { forgetOlder(); }, [sessionId, forgetOlder]);
   const lastRunId = sess.data?.session.lastRunId ?? null;
   const lastRun = useQuery({
@@ -567,14 +571,17 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (!inst || !history.data || loadingOlder) return;
     setLoadingOlder(true);
     try {
-      // counted from rows already filtered by the server: the offset may fall a bit short (duplicates), never skip
-      const res = await api.messages(inst, sessionId, history.data.messages.length + older.length);
+      // raw rows already read, as Hermes counts them (a page of hidden rows still moves it); new messages meanwhile
+      // only make it fall short (duplicates, dropped by id), never skip
+      const offset = olderOffset(olderCursor, history.data, older.length);
+      const res = await api.messages(inst, sessionId, offset);
       setOlder((prev) => {
         const byId = new Map(prev.map((m) => [m.id, m]));
         for (const m of res.messages) byId.set(m.id, m);
         return [...byId.values()].sort((a, b) => a.id - b.id);
       });
       setOlderHasMore(res.hasMore);
+      setOlderCursor(nextCursor(offset, res));
     } catch (err) {
       setError(err);
     } finally {

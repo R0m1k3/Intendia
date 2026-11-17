@@ -887,10 +887,11 @@ export const api = {
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
   /**
-   * One page of 500 messages from the end (`offset`: messages already read). `hasMore`: an older page may follow.
+   * One page of 500 messages from the end (`offset`: raw rows already read, the `nextOffset` of the previous page;
+   * hidden rows count). `hasMore`: an older page may follow.
    * `runs`, `subagents` and `openUnits` only on the latest page (`offset` 0).
    */
-  messages: (inst: string, id: string, offset = 0) => call<{ messages: ChatMessage[]; hasMore: boolean; runs?: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>(
+  messages: (inst: string, id: string, offset = 0) => call<{ messages: ChatMessage[]; hasMore: boolean; nextOffset?: number; runs?: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>(
     'GET', `${sessionPath(inst, id)}/messages${offset > 0 ? `?offset=${offset}` : ''}`),
   /** The session's run rows and their cost, read without any message (cost follow-up after a run). */
   runStats: (inst: string, id: string) => call<{ runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/run-stats`),

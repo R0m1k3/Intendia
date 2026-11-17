@@ -42,6 +42,27 @@ describe('long sessions', () => {
     expect((await t.request('GET', `${base}/messages?offset=abc`)).status).toBe(400);
   });
 
+  it('a page of hidden rows only still moves the cursor: nextOffset counts raw rows, the older messages are reached', async () => {
+    const { t, s, base } = await session();
+    const bulk = (body: object) => t.fake.api.request(`/_fake/sessions/${s.id}/bulk`, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    await bulk({ count: 300 }); // older messages
+    await bulk({ count: 500, hidden: true });
+    await bulk({ count: 500 }); // 500 recent messages
+    const first = (await t.request('GET', `${base}/messages`)).json;
+    expect(first.messages).toHaveLength(500);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextOffset).toBe(500);
+    const second = (await t.request('GET', `${base}/messages?offset=${first.nextOffset}`)).json;
+    expect(second.messages).toHaveLength(0);
+    expect(second.hasMore).toBe(true);
+    expect(second.nextOffset).toBe(1000);
+    const third = (await t.request('GET', `${base}/messages?offset=${second.nextOffset}`)).json;
+    expect(third.messages).toHaveLength(300);
+    expect(third.messages[0].content).toBe('message 1');
+    expect(third.hasMore).toBe(false);
+    expect(third.nextOffset).toBe(1301); // the session_meta row counts too
+  });
+
   it('the markdown export has every message, oldest first', async () => {
     const { t, base } = await long();
     const md = await (await t.raw('GET', `${base}/export?format=md`)).text();

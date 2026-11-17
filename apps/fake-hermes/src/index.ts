@@ -54,7 +54,7 @@
  * Test routes (no token): POST /_fake/runs/{id}/drop-stream (open streams closed, then GET /v1/runs/{id}/events
  *   = 404 like a stream swept after 300 s without a listener; the run goes on), POST /_fake/sessions/{id}/compress
  *   (the session ends with `end_reason: compression`, continued by `<id>-c1`), POST /_fake/sessions/{id}/bulk
- *   `{count}` (adds `message 1`…`message <count>`, user and assistant in turn); GET /_fake/runs/last also gives
+ *   `{count, hidden?}` (adds `message 1`…`message <count>`, user and assistant in turn); GET /_fake/runs/last also gives
  *   `idempotencyKey` (header of the last POST /v1/runs) and `postedKeys` (every one received).
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
@@ -307,14 +307,17 @@ class Simulator {
     return run;
   }
 
-  /** POST /_fake/sessions/{id}/bulk: `count` messages after the session's last one (ids from 2: 1 is session_meta). */
-  bulk(sessionId: string, count: number) {
+  /**
+   * POST /_fake/sessions/{id}/bulk: `count` messages after the session's last one (ids from 2: 1 is session_meta);
+   * `hidden: true` = muted notices (`display_kind: hidden`, rows a page counts but the thread never shows).
+   */
+  bulk(sessionId: string, count: number, hidden = false) {
     const list = this.messages.get(sessionId) ?? [];
     let id = Math.max(1, ...list.map((m) => m.id));
     const now = Date.now() / 1000;
     for (let n = 1; n <= count; n++) {
       id += 1;
-      list.push({ id, session_id: sessionId, role: n % 2 === 1 ? 'user' : 'assistant', content: `message ${n}`, tool_calls: null, tool_name: null, timestamp: now - count + n });
+      list.push({ id, session_id: sessionId, role: n % 2 === 1 ? 'user' : 'assistant', content: hidden ? `hidden ${n}` : `message ${n}`, tool_calls: null, tool_name: null, timestamp: now - count + n, ...(hidden ? { display_kind: 'hidden' } : {}) });
     }
     this.messages.set(sessionId, list);
     // later messages keep growing ids (Hermes: one autoincrement table)
@@ -861,7 +864,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
         return c.json({ ok: true, continuation: `${id}-c1` });
       }
       const count = Math.max(0, Math.min(50_000, Number((body as { count?: unknown } | undefined)?.count) || 0));
-      sim.bulk(id, count);
+      sim.bulk(id, count, (body as { hidden?: unknown } | undefined)?.hidden === true);
       return c.json({ ok: true, count });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });

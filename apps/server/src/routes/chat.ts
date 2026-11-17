@@ -147,8 +147,9 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
 
   // ---- Intendia sessions (profile read from the workspace)
 
-  // one page of HISTORY_PAGE messages, counted from the end (`offset`: rows already read); older pages carry only
-  // the messages (no settling, no sub-agents decision: those belong to the latest page)
+  // one page of HISTORY_PAGE messages, counted from the end (`offset`: raw rows already read); older pages carry only
+  // the messages (no settling, no sub-agents decision: those belong to the latest page). `nextOffset` = the raw rows
+  // read so far (hidden and session_meta rows included, as Hermes counts them): the offset of the next older page
   r.get('/sessions/:inst/:id/messages', async (c) => {
     const ctx = ctxOf(c);
     const rawOffset = c.req.query('offset') ?? '0';
@@ -156,14 +157,15 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const offset = Number(rawOffset);
     const h = await history(ctx.instance.id, ctx.session.id, ctx.profile, HISTORY_PAGE, { offset });
     const hasMore = h.returned >= HISTORY_PAGE;
-    if (offset > 0) return c.json({ messages: h.messages, hasMore });
+    const nextOffset = offset + h.returned;
+    if (offset > 0) return c.json({ messages: h.messages, hasMore, nextOffset });
     // the consumption rows are settled here: the page re-reads the messages when a run ends
     await settle(ctx, { known: h });
     // background sub-agents: the server's decision (chat/wake.ts), same window as its watcher
     const d = decide(ctx, h.messages);
     const subagents = summarize(d, d.key ? deps.services.wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, Date.now() / 1000);
     return c.json({
-      messages: h.messages, hasMore, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
+      messages: h.messages, hasMore, nextOffset, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
       openUnits: d.openUnits.map((u) => u.id),
     });
   });
