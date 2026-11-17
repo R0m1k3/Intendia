@@ -705,6 +705,48 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
   route a 409 without code before anything is written.
 
+## Web client: errors, connection and drafts
+
+- **Errors are translated where they are made.** The server sends its own texts through `msg()` (401
+  `unauthenticated` « Session expirée », 403 `csrf`, « Requête invalide », the 500 text); Hermes errors keep the codes
+  of the compat follow-up (`hermes_unreachable`, `hermes_busy`). `call()` (`apps/web/src/api.ts`) turns what never
+  reached a JSON answer into an `ApiError` with a `code`: `network` (the `TypeError` of `fetch`), `timeout`, or
+  « Réponse inattendue du serveur Intendia (HTTP n) » for an error without a JSON body. `ErrorText` shows
+  `err.message`; on a read, `onRetry` adds « Réessayer ».
+- **Time-outs.** `call()` gives up after 60 s on a `GET`, 150 s otherwise (above the longest synchronous server call,
+  the kanban auxiliary model at 120 s). A write that timed out says the action may have gone through, and every query
+  is invalidated.
+- **One rule for « passing ».** `isTransient(err)`: `code: 'network'`, or 502/503/504 without a JSON body (a proxy in
+  front of a stopped Intendia). Only those are retried by React Query (twice; mutations never), and only those raise the
+  « Intendia server unreachable » bar. Any JSON answer of Intendia (403, 404, 409, 422, 500…) is final.
+- **Connection state** (`connection/connection.ts`, the only module with global state, started by `initConnection()`
+  from `main.tsx`): `call()` reports through `setCallHooks` (`network(ok)`, `unauthenticated()`, `writeTimeout()`).
+  `serverDown` turns on at the first passing failure, a probe `GET /x/health` runs every 5 s, and the first good answer
+  turns it off and invalidates every query. Offline is TanStack Query's `onlineManager` (queries and mutations pause
+  and resume by themselves).
+- **Session expired.** A 401 with `code: 'unauthenticated'` opens one password dialog (`askText`, `password: true`)
+  over the page: the page and its forms stay; a wrong password shows the server's message again; « Annuler » saves the
+  chat drafts and lets `beforeLoad` send to `/connexion?retour=<path>`. The same `retour` is set on a cold load;
+  `auth/retour.ts` (`retourOf`) only accepts a same-origin path that is not `/connexion` or `/installation`. Inside the
+  side chat's iframe nothing of this is installed: the page around sees the same states.
+- **Bars** (`components/StatusBars.tsx`, portalled, `z-[65]`: above sheets, below dialogs): one at a time, offline,
+  then Intendia unreachable, then `outage.api`, then `outage.dash` of the current instance (from the compat report,
+  never while the report is stale). A crash in a route shows `RouteError` (`defaultErrorComponent`, « Réessayer »); one
+  outside the routes (dialogs, undo bar) the root `Boundary` (« Recharger la page »).
+- **Drafts** (`components/dirty.ts`). A screen holding unsaved text calls `useDirtyGuard(dirty)`. Closing a sheet or a
+  preview goes through `confirmClose(close)`; navigating (search changes included) and reloading go through the single
+  `DirtyBlocker` (`useBlocker`, mounted by `Layout`). One question, « Abandonner les modifications ? », whatever the
+  number of modified screens; confirming clears the registry, and a save that closes or navigates calls `release()`
+  first. `kanban/Sheet.tsx`: the backdrop closes on a mouse down on itself, Escape closes the top sheet only (an Escape
+  already `defaultPrevented`, by a menu or a dialog, is ignored); the backdrop carries `data-overlay`.
+- **Compat not known yet.** Once `/x/compat` is loaded, an instance without a report is « Vérification de cette
+  instance en cours » (`availability()` → `onlyPending`, polled every 3 s), not « available ».
+- **Sign-in sessions** (`apps/server/src/auth/auth.ts`). A session lasts 30 days without use; an accepted request
+  pushes it back (at most once a day, cookie rewritten) up to 90 days after sign-in. `POST /x/auth/revoke-all`
+  (Settings → Sécurité) deletes every row of `auth_sessions` and gives the caller a new cookie. At start-up and after
+  `setInitialPassword`, `syncPasswordEpoch()` compares an HMAC of the password hash with `settings.password_epoch`:
+  a different hash purges every session (the hash itself is never copied).
+
 ## Interface language
 
 - Two languages, French and English. The web picks one when the page loads: the setting saved in the browser

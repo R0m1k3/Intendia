@@ -97,7 +97,7 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
         )}
       />
       {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">{t('Retirez les pièces jointes pour changer de workspace')}</p>}
-      {!chat.available && <p className="text-xs text-ink-faint">{t('Le chat n’est pas disponible sur l’instance de ce workspace')}</p>}
+      {!chat.available && !chat.onlyPending && <p className="text-xs text-ink-faint">{t('Le chat n’est pas disponible sur l’instance de ce workspace')}</p>}
       <ErrorText error={error} />
     </div>
   );

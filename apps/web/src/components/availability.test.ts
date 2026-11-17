@@ -46,3 +46,20 @@ describe('availability', () => {
     expect(compatPoll(report({ unchecked: ['config.x'] }))).toBe(30_000);
   });
 });
+
+describe('availability without a report', () => {
+  it('stays optimistic while /x/compat loads', () => {
+    const a = availability(undefined, 'config', [['config', 'read']], [], false, false);
+    expect(a.available).toBe(true);
+    expect(a.pending).toBe(false);
+    expect(compatPoll(undefined, false)).toBe(false);
+  });
+  it('is pending (closed, not a failure) once /x/compat answered without this instance', () => {
+    const a = availability(undefined, 'config', [['config', 'read']], []);
+    expect(a.available).toBe(false);
+    expect(a.onlyPending).toBe(true);
+    expect(a.pending).toBe(true);
+    expect(a.has('config', 'read')).toBe(true);
+    expect(compatPoll(undefined, true)).toBe(3000);
+  });
+});

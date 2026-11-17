@@ -9,7 +9,11 @@ import { t } from '../i18n';
  */
 interface Common { title: string; message?: ReactNode; confirmLabel?: string; cancelLabel?: string }
 export interface AskOptions extends Common { danger?: boolean }
-export interface AskTextOptions extends Common { label?: string; value?: string; maxLength?: number; placeholder?: string }
+export interface AskTextOptions extends Common {
+  label?: string; value?: string; maxLength?: number; placeholder?: string;
+  /** Password field (masked, kept as typed: not trimmed). */
+  password?: boolean;
+}
 export interface AskChoiceOptions extends Common { label?: string; options: { value: string; label: string }[] }
 
 type Request =
@@ -25,7 +29,7 @@ export function ask(opts: AskOptions): Promise<boolean> {
   return new Promise((resolve) => (show ? show({ kind: 'ask', opts, resolve }) : resolve(false)));
 }
 
-/** One-line text; resolves the trimmed text, or null when cancelled or empty. */
+/** One-line text; resolves the trimmed text (a password: as typed), or null when cancelled or empty. */
 export function askText(opts: AskTextOptions): Promise<string | null> {
   return new Promise((resolve) => (show ? show({ kind: 'text', opts, resolve }) : resolve(null)));
 }
@@ -60,7 +64,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
 
   const finish = (confirmed: boolean) => {
     if (req.kind === 'ask') req.resolve(confirmed);
-    else if (req.kind === 'text') req.resolve(confirmed && text.trim() ? text.trim() : null);
+    else if (req.kind === 'text') req.resolve(confirmed && text.trim() ? (req.opts.password ? text : text.trim()) : null);
     else if (req.kind === 'choice') req.resolve(confirmed && text ? text : null);
     else req.resolve();
     done();
@@ -114,6 +118,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
             {req.kind === 'text' && req.opts.label && <span className="mb-2 block text-sm font-medium">{req.opts.label}</span>}
             <Input
               ref={input} value={text} readOnly={req.kind === 'copy'} onChange={(e) => setText(e.target.value)}
+              {...(req.kind === 'text' && req.opts.password ? { type: 'password', autoComplete: 'current-password' } : {})}
               maxLength={req.kind === 'text' ? req.opts.maxLength : undefined}
               placeholder={req.kind === 'text' ? req.opts.placeholder : undefined}
               aria-label={req.kind === 'text' ? req.opts.label ?? title : title}

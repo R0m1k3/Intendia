@@ -93,7 +93,7 @@ export function createApp(deps: AppDeps) {
 
   app.onError((err, c) => {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
-    if (err instanceof z.ZodError) return c.json({ error: 'invalid request', issues: err.issues }, 400);
+    if (err instanceof z.ZodError) return c.json({ error: msg('Requête invalide'), issues: err.issues }, 400);
     if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
     if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
     if (err instanceof ActionBusyError) return c.json({ error: err.message, code: err.code, action: err.action }, 409);
@@ -128,7 +128,7 @@ export function createApp(deps: AppDeps) {
       return c.json(r.body, r.status);
     }
     console.error(err);
-    return c.json({ error: 'internal error' }, 500);
+    return c.json({ error: msg('Erreur interne du serveur Intendia (voir ses journaux)') }, 500);
   });
 
   const x = new Hono();
@@ -172,6 +172,10 @@ export function createApp(deps: AppDeps) {
   const priv = new Hono();
   priv.use('*', requireAuth(auth));
 
+  priv.post('/auth/revoke-all', (c) => {
+    auth.revokeAll(c);
+    return c.json({ ok: true });
+  });
   priv.get('/instances', (c) => c.json({
     declarative: store.declarative,
     instances: store.list().map((i) => InstanceStore.toPublic(i, store.declarative ? 'env' : 'db', compat.get(i.id)?.files ?? null)),

@@ -235,7 +235,7 @@ export function CronsPage() {
         </label>
       ) : undefined}
     >
-      <ErrorText error={crons.error} />
+      <ErrorText error={crons.error} onRetry={() => void crons.refetch()} />
       {a.available && crons.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
       {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron sur cette instance')}</p>}
       {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron ne correspond')}</p>}

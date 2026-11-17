@@ -37,7 +37,7 @@ export function WorkspacesPage() {
         </Button>
       )}
     >
-      <ErrorText error={workspaces.error} />
+      <ErrorText error={workspaces.error} onRetry={() => void workspaces.refetch()} />
       {creating && (
         <button type="button" className={listItemClass(true)} onClick={() => setAdding(true)}>
           <ListItemBody title={t('Nouveau workspace')} sub={t('Un dossier partagé avec l’agent')} />

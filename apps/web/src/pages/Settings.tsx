@@ -182,6 +182,36 @@ function applyTheme(th: Theme) {
   localStorage.setItem('intendia-theme', th);
 }
 
+/** Sign-in sessions: sign out every browser but this one (POST /x/auth/revoke-all). */
+function SecurityCard({ head }: { head: string }) {
+  const revoke = useMutation({ mutationFn: api.revokeAllSessions });
+  const start = async () => {
+    if (await ask({
+      title: t('Déconnecter toutes les sessions ?'),
+      message: t('Tous les navigateurs connectés à Intendia devront saisir le mot de passe à nouveau. Celui-ci reste connecté.'),
+      confirmLabel: t('Déconnecter'), danger: true,
+    })) revoke.mutate();
+  };
+  return (
+    <section className="card overflow-hidden" aria-labelledby="rg-sec">
+      <div className={head}>
+        <div className="min-w-0">
+          <h2 id="rg-sec" className="text-[15px] font-semibold">{t('Sécurité')}</h2>
+          <p className="mt-0.5 text-[13px] text-ink-faint">{t('Sessions de connexion à Intendia')}</p>
+        </div>
+      </div>
+      <div className="border-t border-line/70 px-4 py-3" data-setting="sessions">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="min-w-0 flex-1 text-sm">{t('Une session dure 30 jours sans usage, 90 jours au plus.')}</span>
+          <SmallBtn disabled={revoke.isPending} onClick={() => void start()}>{t('Déconnecter toutes les sessions')}</SmallBtn>
+        </div>
+        {revoke.isSuccess && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-ok" role="status"><Check className="size-3.5" strokeWidth={1.5} />{t('Toutes les autres sessions sont déconnectées.')}</p>}
+        {revoke.error && <div className="mt-2"><ErrorText error={revoke.error} /></div>}
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const qc = useQueryClient();
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
@@ -283,6 +313,7 @@ export function SettingsPage() {
             ))}
           </section>
         )}
+        <SecurityCard head={BOX_HEAD} />
         <section className="card overflow-hidden" aria-labelledby="rg-t">
           <div className={BOX_HEAD}>
             <div className="min-w-0">

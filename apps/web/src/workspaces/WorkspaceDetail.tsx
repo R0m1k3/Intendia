@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, type FileEntry, type PublicInstance } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
+import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader } from '../components/Panes';
 import { Button, ErrorText } from '../components/ui';
 import { FileRows, isDirEntry } from '../files/FileRows';
@@ -28,6 +29,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   const scope = workspaceScope(slug);
   const tree = useQuery({ queryKey: ['tree', slug, ''], queryFn: () => api.tree(slug, '') });
   const [text, setText] = useState<string | null>(null);
+  useDirtyGuard(text !== null && agents.isSuccess && text !== agents.data.text);
   const w = ws.data?.workspace;
 
   useEffect(() => { setText(null); setArchived(false); }, [slug]);
