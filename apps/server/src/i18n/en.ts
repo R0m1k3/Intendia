@@ -221,7 +221,7 @@ export default {
   'nom invalide': 'invalid name',
   'Plus de {max} fichiers dans l\'archive': 'More than {max} files in the archive',
   'Archive trop grosse une fois décompressée': 'Archive too big once unpacked',
-  'Un fichier de l’archive dépasse la taille permise': 'A file in the archive exceeds the allowed size',
+  'plus de {n} Mo, non décompressé': 'over {n} MB, not unpacked',
   'Archive zip illisible': 'Unreadable zip archive',
   'compression non prise en charge': 'unsupported compression',
   'Archive tar illisible': 'Unreadable tar archive',

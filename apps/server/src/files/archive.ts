@@ -1,6 +1,7 @@
 // Archives joined in the chat (.zip, .tar, .tar.gz, .tgz), unpacked by Intendia so the agent can read the files
 // without a tool of its own. Entries come out one by one and are written between two pushes of the archive, so only
-// a few files are in memory at once. Paths leaving the folder, links and special files are skipped, never written.
+// a few files are in memory at once. Paths leaving the folder, links and special files are skipped, never written;
+// so is a file bigger than `maxFile` (listed in `skipped`), while the entry count and the total stop the extraction.
 import { Gunzip, Unzip, UnzipInflate, unzipSync, type UnzipFileInfo } from 'fflate';
 import { checkName } from './paths.js';
 import { msg } from '../i18n/index.js';
@@ -21,8 +22,12 @@ export interface ArchiveLimits {
   maxEntries: number;
   /** all files together, decompressed */
   maxTotal: number;
+  /** one file, decompressed: a bigger one is skipped (it would be held whole in memory) */
   maxFile: number;
 }
+
+/** Largest file unpacked from an archive (less when the upload limit is lower). */
+export const EXTRACT_FILE_MAX = 32 * 1024 * 1024;
 
 export interface Skipped {
   path: string;
@@ -58,8 +63,9 @@ export function safePath(raw: string): { path: string } | { reason: string } {
   return { path: parts.join('/') };
 }
 
-const CHUNK = 64 * 1024;
+const CHUNK = 16 * 1024;
 const tooBig = (what: string) => new ArchiveError('too_big', what);
+const tooLarge = (limits: ArchiveLimits) => msg('plus de {n} Mo, non décompressé', { n: Math.floor(limits.maxFile / 1048576) });
 
 function concat(chunks: Uint8Array[], size: number): Uint8Array {
   if (chunks.length === 1) return chunks[0]!;
@@ -78,9 +84,10 @@ interface Ready {
 }
 
 /**
- * Writes every file of the archive through `write` (awaited, one at a time). Limits announced by the archive are
- * checked before the first write when it gives them (zip, tar); a real size beyond a limit stops the extraction:
- * `partial` when files were written already, `too_big` otherwise. `stop()` true → stop at the next file, `partial`.
+ * Writes every file of the archive through `write` (awaited, one at a time). A file bigger than `maxFile` (announced
+ * or real) is skipped and listed. The entry count and the total are checked before the first write when the archive
+ * gives them (zip, tar); a real total beyond the limit stops the extraction: `partial` when files were written
+ * already, `too_big` otherwise. `stop()` true → stop at the next file, `partial`.
  */
 export async function extractArchive(
   bytes: Uint8Array,
@@ -90,14 +97,15 @@ export async function extractArchive(
   stop: () => boolean = () => false,
 ): Promise<{ count: number; skipped: Skipped[]; partial: boolean }> {
   const skipped: Skipped[] = [];
-  precheckArchive(bytes, kind, limits);
+  const big = kind === 'zip' ? precheckZip(bytes, limits) : new Set<string>();
+  if (kind === 'tar') precheckTar(bytes, limits);
 
   let count = 0;
   let total = 0;
   let entries = 0;
   let partial = false;
   const queue: Ready[] = [];
-  const reader = kind === 'zip' ? zipReader(queue, skipped, limits) : tarReader(kind, queue, skipped, limits);
+  const reader = kind === 'zip' ? zipReader(queue, skipped, limits, big) : tarReader(kind, queue, skipped, limits);
 
   const drain = async () => {
     while (queue.length) {
@@ -137,7 +145,7 @@ export async function extractArchive(
 
 class StopSignal extends Error {}
 
-/** Sizes announced by the archive (zip: central directory, tar: headers; nothing for tgz), before any write. */
+/** Entry count and total announced by the archive (zip: central directory, tar: headers; nothing for tgz), before any write. */
 export function precheckArchive(bytes: Uint8Array, kind: ArchiveKind, limits: ArchiveLimits): void {
   if (kind === 'zip') precheckZip(bytes, limits);
   if (kind === 'tar') precheckTar(bytes, limits);
@@ -151,8 +159,11 @@ interface Reader {
 
 // --- zip ---------------------------------------------------------------------------------------------------------
 
-/** The central directory gives every size before anything is unpacked. */
-function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): void {
+/**
+ * The central directory gives every size before anything is unpacked. Returns the names of the files announced bigger
+ * than `maxFile`: never started, so neither unpacked nor counted in the total.
+ */
+function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): Set<string> {
   const infos: UnzipFileInfo[] = [];
   try {
     unzipSync(bytes, { filter: (f) => { infos.push(f); return false; } });
@@ -161,12 +172,17 @@ function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): void {
   }
   const files = infos.filter((f) => !f.name.endsWith('/'));
   if (files.length > limits.maxEntries) throw tooBig(msg("Plus de {max} fichiers dans l'archive", { max: limits.maxEntries }));
-  if (files.some((f) => f.originalSize > limits.maxFile)) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
-  if (files.reduce((n, f) => n + f.originalSize, 0) > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
+  const big = new Set(files.filter((f) => f.originalSize > limits.maxFile).map((f) => f.name));
+  const total = files.reduce((n, f) => (big.has(f.name) ? n : n + f.originalSize), 0);
+  if (total > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
+  return big;
 }
 
-function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits): Reader {
+function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits, big: Set<string>): Reader {
   let failure: ArchiveError | null = null;
+  // every byte unpacked, kept or not: a file dropped past maxFile is still inflated to its end (fflate's
+  // UnzipInflate has no real terminate), so it must not make the extraction run without end
+  let seen = 0;
   const unzip = new Unzip((file) => {
     if (file.name.endsWith('/')) return;
     const safe = safePath(file.name);
@@ -175,14 +191,27 @@ function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits): R
       skipped.push({ path: safe.path, reason: msg('compression non prise en charge') });
       return;
     }
-    const chunks: Uint8Array[] = [];
+    // announced too big (central directory or local header): never started, its data is passed over
+    if (big.has(file.name) || (file.originalSize ?? 0) > limits.maxFile) {
+      skipped.push({ path: safe.path, reason: tooLarge(limits) });
+      return;
+    }
+    let chunks: Uint8Array[] | null = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
       if (failure) return;
       if (err) { failure = new ArchiveError('invalid', msg('Archive zip illisible')); return; }
+      seen += chunk.length;
+      if (seen > limits.maxTotal) { failure = tooBig(msg('Archive trop grosse une fois décompressée')); file.terminate(); return; }
+      if (!chunks) return;
       size += chunk.length;
-      // the central directory may lie: the real size counts
-      if (size > limits.maxFile) { failure = tooBig(msg('Un fichier de l’archive dépasse la taille permise')); file.terminate(); return; }
+      // the sizes announced may lie: past maxFile the file is dropped, the next ones go on
+      if (size > limits.maxFile) {
+        chunks = null;
+        skipped.push({ path: safe.path, reason: tooLarge(limits) });
+        file.terminate();
+        return;
+      }
       if (chunk.length) chunks.push(chunk);
       if (final) queue.push({ path: safe.path, data: concat(chunks, size) });
     };
@@ -261,8 +290,8 @@ function precheckTar(bytes: Uint8Array, limits: ArchiveLimits): void {
     if (!h) break;
     if (isFile(h.type)) {
       files += 1;
+      // a file past maxFile is skipped, but still read through: it counts in the total
       total += h.size;
-      if (h.size > limits.maxFile) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
     }
     off += BLOCK + h.size + padOf(h.size);
   }
@@ -315,9 +344,9 @@ function tarReader(kind: 'tar' | 'tgz', queue: Ready[], skipped: Skipped[], limi
       pax = null;
       longName = null;
       if (isFile(h.type)) {
-        if (h.size > limits.maxFile) throw tooBig(msg('Un fichier de l’archive dépasse la taille permise'));
         const safe = safePath(name);
         if ('reason' in safe) reason = safe.reason;
+        else if (h.size > limits.maxFile) reason = tooLarge(limits);
         else { path = safe.path; keep = 'file'; }
       } else if (h.type !== '5' && h.type !== 'g' && h.type !== 'K') {
         reason = KIND_REASON[h.type] ?? msg('type d’entrée non pris en charge');

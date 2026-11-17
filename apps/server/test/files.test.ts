@@ -178,9 +178,12 @@ describe('files', () => {
     expect(await ex('inbox/faux.zip')).toMatchObject({ status: 400, json: { code: 'invalid_archive' } });
     expect((await ex('inbox/doc.pdf')).status).toBe(400);
     expect((await ex('inbox/absent.zip')).status).toBe(404);
-    writeFileSync(join(t.ws, 'inbox', 'gros.zip'), zipSync({ 'big.bin': new Uint8Array(1024 * 1024 + 1) }));
-    expect(await ex('inbox/gros.zip')).toMatchObject({ status: 413, json: { code: 'too_big' } });
-    expect(existsSync(join(t.ws, 'inbox', 'gros'))).toBe(false);
+    // a file over the upload limit (1 MiB here, below EXTRACT_FILE_MAX) is skipped and listed, the others unpacked
+    writeFileSync(join(t.ws, 'inbox', 'gros.zip'), zipSync({ 'big.bin': new Uint8Array(1024 * 1024 + 1), 'petit.txt': enc.encode('p') }));
+    const gros = await ex('inbox/gros.zip');
+    expect(gros).toMatchObject({ status: 201, json: { folder: 'inbox/gros', count: 1, partial: false, skipped: [{ path: 'big.bin', reason: 'plus de 1 Mo, non décompressé' }] } });
+    expect(readFileSync(join(t.ws, 'inbox', 'gros', 'petit.txt'), 'utf8')).toBe('p');
+    expect(existsSync(join(t.ws, 'inbox', 'gros', 'big.bin'))).toBe(false);
   });
 
   it('INTENDIA_UPLOAD_MAX_MB is capped at 100 (Hermes refuses more)', async () => {

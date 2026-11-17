@@ -3,18 +3,19 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { archiveKind, archiveStem, ArchiveError, extractArchive, safePath, type ArchiveKind } from '../src/files/archive.js';
+import { archiveKind, archiveStem, ArchiveError, EXTRACT_FILE_MAX, extractArchive, safePath, type ArchiveKind } from '../src/files/archive.js';
 import { tempDir } from './helpers.js';
+import { toLang } from '../src/i18n/index.js';
 
 const enc = new TextEncoder();
 const LIMITS = { maxEntries: 100, maxTotal: 10_000, maxFile: 5_000 };
 
 /** A ustar archive by hand: entries [name, data | null (folder), type]. */
-function tar(entries: [string, string | null, string?][]): Uint8Array {
+function tar(entries: [string, string | Uint8Array | null, string?][]): Uint8Array {
   const blocks: Uint8Array[] = [];
   for (const [name, data, type] of entries) {
     const h = new Uint8Array(512);
-    const body = data === null ? new Uint8Array(0) : enc.encode(data);
+    const body = data === null ? new Uint8Array(0) : typeof data === 'string' ? enc.encode(data) : data;
     const put = (off: number, s: string) => h.set(enc.encode(s), off);
     put(0, name);
     put(100, '0000644\0');
@@ -83,9 +84,13 @@ describe('extractArchive', () => {
     expect(r.files).toEqual({ 'src/x.md': '# X\n'.repeat(200), 'src/sub/y.txt': 'y' });
   });
 
-  it('zip: sizes from the central directory refused before any write', async () => {
+  it('zip: a file announced too big is skipped; count and total refused before any write', async () => {
     const big = zipSync({ 'a.txt': enc.encode('a'), 'b.bin': new Uint8Array(6000) });
-    await expect(run(big, 'zip')).rejects.toMatchObject({ code: 'too_big' });
+    expect(await run(big, 'zip')).toMatchObject({ files: { 'a.txt': 'a' }, count: 1, partial: false, skipped: [{ path: 'b.bin', reason: 'plus de 0 Mo, non décompressé' }] });
+    const total = zipSync({ a: new Uint8Array(4000), b: new Uint8Array(4000), c: new Uint8Array(4000) });
+    const written: string[] = [];
+    await expect(extractArchive(total, 'zip', LIMITS, async (p) => { written.push(p); return 'written'; })).rejects.toMatchObject({ code: 'too_big' });
+    expect(written).toEqual([]);
     const many = zipSync(Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`f${i}`, enc.encode('x')])));
     await expect(run(many, 'zip', { ...LIMITS, maxEntries: 4 })).rejects.toMatchObject({ code: 'too_big' });
     await expect(run(enc.encode('pas une archive'), 'zip')).rejects.toBeInstanceOf(ArchiveError);
@@ -112,17 +117,14 @@ describe('extractArchive', () => {
     }
   });
 
-  it('tar: sizes in the headers refused before any write; tgz stopped while writing → partial', async () => {
-    const t = tar([['a.txt', 'a'], ['b.txt', 'b'.repeat(6000)]]);
-    const written: string[] = [];
-    await expect(extractArchive(t, 'tar', LIMITS, async (p) => { written.push(p); return 'written'; })).rejects.toMatchObject({ code: 'too_big' });
-    expect(written).toEqual([]);
-    const r = await run(gzipSync(t), 'tgz');
-    expect(r.files).toEqual({ 'a.txt': 'a' });
-    expect(r.partial).toBe(true);
+  it('tar: a file bigger than maxFile is skipped (tar and tgz); tgz past the total while writing → partial', async () => {
+    const t = tar([['a.txt', 'a'], ['b.txt', 'b'.repeat(6000)], ['c.txt', 'c']]);
+    const skipped = [{ path: 'b.txt', reason: 'plus de 0 Mo, non décompressé' }];
+    expect(await run(t, 'tar')).toMatchObject({ files: { 'a.txt': 'a', 'c.txt': 'c' }, skipped, partial: false });
+    expect(await run(gzipSync(t), 'tgz')).toMatchObject({ files: { 'a.txt': 'a', 'c.txt': 'c' }, skipped, partial: false });
     const total = tar([['a', 'a'.repeat(4000)], ['b', 'b'.repeat(4000)], ['c', 'c'.repeat(4000)]]);
     expect((await run(gzipSync(total), 'tgz')).partial).toBe(true);
-    await expect(run(gzipSync(tar([['a', 'a'.repeat(6000)]])), 'tgz')).rejects.toMatchObject({ code: 'too_big' });
+    expect(await run(gzipSync(tar([['a', 'a'.repeat(6000)]])), 'tgz')).toMatchObject({ count: 0, skipped: [{ path: 'a' }] });
   });
 
   it('tar: totals checked before any write; skipped or metadata entries bounded', async () => {
@@ -135,6 +137,50 @@ describe('extractArchive', () => {
     await expect(run(gzipSync(tar([['fifo', 'x'.repeat(12_000), '6']])), 'tgz')).rejects.toMatchObject({ code: 'too_big' });
     expect((await run(gzipSync(tar([['fifo', 'x'.repeat(3000), '6'], ['a', 'a']])), 'tgz')).files).toEqual({ a: 'a' });
     await expect(run(gzipSync(tar([['././@LongLink', 'n'.repeat(70 * 1024), 'L'], ['a', 'a']])), 'tgz', { ...LIMITS, maxTotal: 1e6 })).rejects.toMatchObject({ code: 'invalid' });
+  });
+
+  describe('real sizes (EXTRACT_FILE_MAX)', () => {
+    const MiB = 1024 * 1024;
+    const REAL = { maxEntries: 100, maxTotal: 100 * MiB, maxFile: EXTRACT_FILE_MAX };
+    const reason = 'plus de 32 Mo, non décompressé';
+    // one buffer of zeros for every big entry: fast to deflate, 40 MiB in memory once
+    const zeros = new Uint8Array(40 * MiB);
+    /** Sets the uncompressed size announced for `name` in its local header and in the central directory. */
+    function announce(zip: Uint8Array, name: string, size: number): void {
+      const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+      const needle = enc.encode(name);
+      let patched = 0;
+      for (let i = 0; i + needle.length <= zip.length; i++) {
+        if (zip[i] !== needle[0] || !needle.every((b, k) => zip[i + k] === b)) continue;
+        if (i >= 30 && view.getUint32(i - 30, true) === 0x04034b50) { view.setUint32(i - 30 + 22, size, true); patched++; }
+        if (i >= 46 && view.getUint32(i - 46, true) === 0x02014b50) { view.setUint32(i - 46 + 24, size, true); patched++; }
+      }
+      expect(patched).toBe(2);
+    }
+
+    it('zip: announced 40 MiB and announced 1 KiB but 40 MiB real are skipped, the small ones written', async () => {
+      const zip = zipSync({ 'a.txt': enc.encode('A'), 'gros.bin': zeros, 'menteur.bin': zeros, 'b.txt': enc.encode('B') });
+      announce(zip, 'menteur.bin', 1024);
+      const r = await run(zip, 'zip', REAL);
+      expect(r.files).toEqual({ 'a.txt': 'A', 'b.txt': 'B' });
+      expect(r).toMatchObject({ count: 2, partial: false });
+      expect(r.skipped).toEqual([{ path: 'gros.bin', reason }, { path: 'menteur.bin', reason }]);
+      expect(toLang(reason, 'en')).toBe('over 32 MB, not unpacked');
+      // the total still stops: the 40 MiB really unpacked count, kept or not
+      const t = await run(zip, 'zip', { ...REAL, maxTotal: 35 * MiB });
+      expect(t).toMatchObject({ files: { 'a.txt': 'A' }, partial: true });
+    });
+
+    it('tar and tgz: a 40 MiB entry is skipped, the others written', async () => {
+      const t = tar([['a.txt', 'A'], ['gros.bin', zeros], ['b.txt', 'B']]);
+      for (const [bytes, kind] of [[t, 'tar'], [gzipSync(t, { level: 1 }), 'tgz']] as const) {
+        const r = await run(bytes, kind, REAL);
+        expect(r.files).toEqual({ 'a.txt': 'A', 'b.txt': 'B' });
+        expect(r.skipped).toEqual([{ path: 'gros.bin', reason }]);
+      }
+      // the total still stops (a skipped entry is read through and counts)
+      await expect(run(t, 'tar', { ...REAL, maxTotal: 35 * MiB })).rejects.toMatchObject({ code: 'too_big' });
+    });
   });
 
   it('cut or broken archives are invalid; a stop asked stops at the next file', async () => {
