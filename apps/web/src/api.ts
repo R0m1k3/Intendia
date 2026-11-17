@@ -818,7 +818,7 @@ export interface PublicSystemStats {
 }
 
 /** Persistent goal of a session (option 7): relaunched by Intendia's server after each run (chat/goal.ts). */
-export type GoalReason = 'user' | 'button' | 'click' | 'blocked' | 'failed' | 'stopped' | 'lost' | 'limit' | 'budget' | 'start_failed' | 'gone' | 'cost_unknown';
+export type GoalReason = 'user' | 'button' | 'click' | 'blocked' | 'failed' | 'stopped' | 'lost' | 'limit' | 'budget' | 'start_failed' | 'gone' | 'cost_unknown' | 'key_conflict';
 export interface SessionGoal {
   text: string;
   status: 'active' | 'paused' | 'done';
@@ -886,12 +886,22 @@ export const api = {
     call<{ session: Session }>('POST', `/i/${enc(inst)}/external/${enc(id)}/continue`, { profile, workspace, key }),
   cleanupInfo: (inst: string) => call<{ unused: number }>('GET', `/i/${enc(inst)}/sessions/cleanup`),
   cleanup: (inst: string) => call<{ ids: string[]; undoUntil: number }>('POST', `/i/${enc(inst)}/sessions/cleanup`),
-  messages: (inst: string, id: string) => call<{ messages: ChatMessage[]; runs: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>('GET', `${sessionPath(inst, id)}/messages`),
+  /**
+   * One page of 500 messages from the end (`offset`: messages already read). `hasMore`: an older page may follow.
+   * `runs`, `subagents` and `openUnits` only on the latest page (`offset` 0).
+   */
+  messages: (inst: string, id: string, offset = 0) => call<{ messages: ChatMessage[]; hasMore: boolean; runs?: RunStat[]; subagents?: SubagentsSummary | null; openUnits?: string[] }>(
+    'GET', `${sessionPath(inst, id)}/messages${offset > 0 ? `?offset=${offset}` : ''}`),
+  /** The session's run rows and their cost, read without any message (cost follow-up after a run). */
+  runStats: (inst: string, id: string) => call<{ runs: RunStat[] }>('GET', `${sessionPath(inst, id)}/run-stats`),
   /** « Ne plus attendre »: the units the page showed open are given up (409 run_active while a run goes on) */
   stopWaitingSubagents: (inst: string, id: string, units: string[]) => call<{ lost: number }>('POST', `${sessionPath(inst, id)}/subagents/stop-waiting`, { units }),
   sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
-  send: (inst: string, id: string, input: string, skills?: string[]) =>
-    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, { input, ...(skills?.length ? { skills } : {}) }),
+  /** `clientKey`: drawn once per composed message, kept until the send succeeded (one run at Hermes per message). */
+  send: (inst: string, id: string, input: string, skills?: string[], clientKey?: string) =>
+    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, {
+      input, ...(skills?.length ? { skills } : {}), ...(clientKey ? { clientKey } : {}),
+    }),
   personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),
   modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
   setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
@@ -900,7 +910,8 @@ export const api = {
   toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),
   sessionUsage: (inst: string, id: string) => call<SessionUsage>('GET', `${sessionPath(inst, id)}/usage`),
   goal: (inst: string, id: string) => call<{ goal: SessionGoal | null }>('GET', `${sessionPath(inst, id)}/goal`),
-  createGoal: (inst: string, id: string, g: GoalSettings) => call<{ runId: string; goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal`, g),
+  createGoal: (inst: string, id: string, g: GoalSettings, clientKey?: string) =>
+    call<{ runId: string; goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal`, { ...g, ...(clientKey ? { clientKey } : {}) }),
   editGoal: (inst: string, id: string, g: Partial<GoalSettings>) => call<{ goal: SessionGoal }>('PATCH', `${sessionPath(inst, id)}/goal`, g),
   pauseGoal: (inst: string, id: string, reason: 'user' | 'button') => call<{ goal: SessionGoal | null }>('POST', `${sessionPath(inst, id)}/goal/pause`, { reason }),
   resumeGoal: (inst: string, id: string) => call<{ goal: SessionGoal }>('POST', `${sessionPath(inst, id)}/goal/resume`, {}),
@@ -1163,4 +1174,6 @@ export const instanceRawUrl = (inst: string, path: string, download = false) =>
   `/x/i/${enc(inst)}/files/raw?path=${enc(path)}${download ? '&download=1' : ''}`;
 
 /** URL of a run's SSE stream (EventSource). */
-export const runEventsUrl = (inst: string, id: string, runId: string) => `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events`;
+/** `lastSeq`: a new EventSource resumes after that event (the server passes it as Last-Event-ID). */
+export const runEventsUrl = (inst: string, id: string, runId: string, lastSeq?: number) =>
+  `/x${sessionPath(inst, id)}/runs/${enc(runId)}/events${lastSeq !== undefined ? `?lastSeq=${lastSeq}` : ''}`;

@@ -5,7 +5,7 @@ import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions
 import { useRemoveSession } from '../sessions/remove';
 import { download, newKey, useCopyOps } from '../sessions/copies';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, ApiError, rawUrl, type ApprovalChoice, type Effort, type RunStat, type RunStatus } from '../api';
+import { api, ApiError, rawUrl, type ApprovalChoice, type ChatMessage, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
 import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
 import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
@@ -18,7 +18,10 @@ import { estimateTokens } from '../chat/estimate';
 import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
 import { applyDeliveries, attachChildren, delegationState, pollDelay } from '../chat/deliveries';
 import { measure, startFollow, type FollowState } from '../chat/follow';
-import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
+import {
+  clearPendingKey, EMPTY_QUEUE, dropItem, enqueue, firstTime, loadPendingKey, loadQueue, newSendKey, pauseQueue, pushHead, resumeQueue,
+  saveQueue, savePendingKey, takeHead, type Queue,
+} from '../chat/queue';
 import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
@@ -95,8 +98,18 @@ interface ActiveRun {
   id: string;
   /** seconds; null until the status is known */
   createdAt: number | null;
+  /**
+   * Largest message id the page knew when it started the run (Hermes' ids grow): the history read during the run is
+   * cut there. null = not known (the history was not loaded, or the page was reopened during the run).
+   */
+  afterId: number | null;
   seed: Entry[];
 }
+
+/** A send refused because a run goes on: the session is re-read every 3 s, 30 times at most, for its new run. */
+const BUSY_READS = 30;
+const BUSY_EVERY_MS = 3_000;
+const codeOf = (err: unknown): string | undefined => (err instanceof ApiError ? (err.data as { code?: string } | null)?.code : undefined);
 
 const OUTCOME: Record<string, string> = {
   failed: t('Le run a échoué'),
@@ -133,15 +146,23 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const history = useQuery({
     queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
     enabled: Boolean(inst), refetchOnWindowFocus: false,
-    // Hermes writes costs late: the last reply's cost is re-read until the server freezes it
-    refetchInterval: (q) => {
-      if (active) return false;
-      if (costSettling(q.state.data?.runs)) return COST_POLL_MS;
-      // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at
-      // most), then every 3 s until the server's wake starts
-      return pollDelay(q.state.data?.subagents, Date.now() / 1000);
-    },
+    // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at
+    // most), then every 3 s until the server's wake starts (the cost is followed by `run-stats`, without messages)
+    refetchInterval: (q) => (active ? false : pollDelay(q.state.data?.subagents, Date.now() / 1000)),
   });
+  // Hermes writes costs late: the last reply's cost is re-read until the server freezes it, without any message
+  const runStatsQ = useQuery({
+    queryKey: ['run-stats', inst, sessionId], queryFn: () => api.runStats(inst!, sessionId),
+    enabled: Boolean(inst) && !active && costSettling(history.data?.runs), refetchOnWindowFocus: false,
+    refetchInterval: (q) => (costSettling(q.state.data?.runs ?? history.data?.runs) ? COST_POLL_MS : false),
+  });
+  // older pages of the thread (500 messages each, from the end), loaded on demand; forgotten at each run's end and
+  // each rewrite (a page read by offset may shift meanwhile)
+  const [older, setOlder] = useState<ChatMessage[]>([]);
+  const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const forgetOlder = useCallback(() => { setOlder([]); setOlderHasMore(null); }, []);
+  useEffect(() => { forgetOlder(); }, [sessionId, forgetOlder]);
   const lastRunId = sess.data?.session.lastRunId ?? null;
   const lastRun = useQuery({
     queryKey: ['run', inst, sessionId, lastRunId], queryFn: () => api.runStatus(inst!, sessionId, lastRunId!),
@@ -196,7 +217,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (active || !s || !lastRunId || !inst) return;
     const h = takeHandoff(inst, sessionId, lastRunId);
     const seed: Entry[] = h ? [{ kind: 'user', key: `u-${lastRunId}`, text: h.text, ts: h.ts }] : [];
-    if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, seed });
+    if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, afterId: null, seed });
     else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
     // ended while the page was closed with a reorientation Hermes did not deliver: back in front of the queue, once
     if (isTerminal(s.status) && s.pendingSteer && queueLoaded && firstTime(inst, lastRunId)) {
@@ -227,6 +248,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (tree && !state.truncated) setTrees((prev) => [...prev, tree]);
     const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
     setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
+    // the run's terminal status in its query: a re-read that fails (Hermes unreachable) never follows it again
+    qc.setQueryData(['run', inst, sessionId, endingRun.current], (old: RunStatus | undefined) => old && { ...old, status: state.status, error: state.error });
+    forgetOlder();
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }),
       qc.invalidateQueries({ queryKey: ['run', inst, sessionId] }),
@@ -239,10 +263,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     setRunCount((n) => n + 1);
     void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
     void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
-  }, [qc, inst, sessionId]);
+  }, [qc, inst, sessionId, forgetOlder]);
 
   const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
-  const [live, localEvent, deferred] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  const [live, localEvent, link] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
+  const deferred = link.mode === 'polling';
   // followed without a live stream (streams.ts): what waits for an answer comes from the approvals feed, which the
   // global bar hides for the session on screen
   const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: deferred, refetchInterval: deferred ? 5_000 : false });
@@ -253,23 +278,65 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     ?? (pendingFeed?.kind === 'clarify' ? { requestId: pendingFeed.requestId, question: pendingFeed.question ?? '', choices: pendingFeed.choices, multiSelect: pendingFeed.multiSelect } : null);
 
   const send = async (text: string, skills?: string[]): Promise<boolean> => (await launch(text, skills)) === null;
-  /** Starts a run; the error, or null once started. */
-  const launch = async (text: string, skills?: string[]): Promise<unknown> => {
+  /** Largest message id known (null while the history is not loaded: never 0, an unloaded history is not empty). */
+  const knownId = (): number | null => (history.isSuccess ? allMessages.reduce((m, x) => Math.max(m, x.id), 0) : null);
+  /**
+   * A send refused with `run_busy` (the first send of this message may still wait for Hermes behind a proxy that
+   * answered 502): the session is re-read until its last run changes, then that run is followed.
+   */
+  const awaitNewRun = async (previous: string | null): Promise<boolean> => {
+    for (let i = 0; i < BUSY_READS; i++) {
+      await new Promise((r) => setTimeout(r, BUSY_EVERY_MS));
+      const s = await api.session(inst!, sessionId).catch(() => null);
+      if (s && s.session.lastRunId !== previous) {
+        qc.setQueryData(['session', inst, sessionId], s);
+        return true;
+      }
+    }
+    return false;
+  };
+  /**
+   * Starts a run; the error, or null once started. The message's key (`key`: a queued item's, else the one kept for
+   * the same text, else a new one) is kept in the tab until the send succeeded: sending the same text again after a
+   * 502, a network cut or a reload never starts a second run.
+   */
+  const launch = async (text: string, skills?: string[], key?: string): Promise<unknown> => {
     if (!inst) return new Error(t('Instance inconnue'));
     setError(null);
     setOutcome(null);
     setSending(true);
+    const kept = loadPendingKey(inst, sessionId);
+    const clientKey = key ?? (kept && kept.text === text ? kept.key : newSendKey());
+    savePendingKey(inst, sessionId, { text, key: clientKey });
+    const previous = sess.data?.session.lastRunId ?? null;
     try {
-      const res = await api.send(inst, sessionId, text, skills);
+      const afterId = knownId();
+      const res = await api.send(inst, sessionId, text, skills, clientKey);
+      clearPendingKey(inst, sessionId);
       setNotice(res.notice ?? null);
       // the server paused an active goal (the user writes)
       void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
       const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      setActive({ id: res.runId, createdAt: status?.createdAt ?? null, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
+      setActive({ id: res.runId, createdAt: status?.createdAt ?? null, afterId, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
       void invalidateSessionLists(qc);
       return null;
     } catch (err) {
+      const code = codeOf(err);
+      if (code === 'idempotency_conflict' || code === 'already_sent') clearPendingKey(inst, sessionId);
+      if (code === 'already_sent') {
+        // Hermes already has this message: its answer comes in the conversation, nothing to send again
+        void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
+        void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
+      }
+      if (code === 'run_busy') {
+        setSending(false);
+        // the run of this very send may be on its way: follow it as soon as the session names it
+        if (await awaitNewRun(previous)) {
+          clearPendingKey(inst, sessionId);
+          return null;
+        }
+      }
       setError(err);
       return err;
     } finally {
@@ -285,10 +352,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const [head, rest] = takeHead(queue);
     if (!head) return;
     setQueue(rest);
-    void launch(head.text, head.skills).then((err) => {
+    void launch(head.text, head.skills, head.key).then((err) => {
       if (err === null) return;
+      // already received by Hermes: its answer comes in the conversation, never sent again
+      if (codeOf(err) === 'already_sent') return;
       const reason = err instanceof ApiError && err.status === 409 ? t('un autre onglet a lancé un travail') : t('l’envoi a échoué');
-      setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills), reason));
+      setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills, head.key), reason));
     });
   }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -431,6 +500,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     }),
     onSuccess: async ({ a, res }) => {
       const copy = res.session;
+      forgetOlder();
       // the banner first: starting the new run may take longer than the undo window
       let undone = false;
       if (a.action !== 'branch' && res.undoUntil) {
@@ -479,7 +549,35 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (d.error) setError(new Error(d.error));
   }, [inst, sessionId]);
 
-  const messages = history.data?.messages ?? [];
+  // the latest page and the older pages loaded on demand, by id (an offset may overlap: duplicates dropped)
+  const latest = history.data?.messages;
+  const allMessages = useMemo(() => {
+    if (!older.length) return latest ?? [];
+    const byId = new Map<number, ChatMessage>();
+    for (const m of older) byId.set(m.id, m);
+    for (const m of latest ?? []) byId.set(m.id, m);
+    return [...byId.values()].sort((a, b) => a.id - b.id);
+  }, [older, latest]);
+  const messages = allMessages;
+  const hasOlder = olderHasMore ?? Boolean(history.data?.hasMore);
+  const loadOlder = async () => {
+    if (!inst || !history.data || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      // counted from rows already filtered by the server: the offset may fall a bit short (duplicates), never skip
+      const res = await api.messages(inst, sessionId, history.data.messages.length + older.length);
+      setOlder((prev) => {
+        const byId = new Map(prev.map((m) => [m.id, m]));
+        for (const m of res.messages) byId.set(m.id, m);
+        return [...byId.values()].sort((a, b) => a.id - b.id);
+      });
+      setOlderHasMore(res.hasMore);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
   const todos = useMemo(() => lastTodos(messages), [messages]);
   // todo_list, write_file or patch finished during the run: Hermes stored the call first, the history is read again
   // (task list, « Modifiés par l'agent »; last of a burst, 1 s later)
@@ -536,7 +634,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     refetchInterval: () => pollDelay(subagents, Date.now() / 1000),
   });
   const entries: Entry[] = attachChildren(applyDeliveries(
-    withTrees(active && live ? mergeHistory(messages, active.createdAt, live.entries) : historyEntries(messages), trees),
+    withTrees(active && live ? mergeHistory(messages, { createdAt: active.createdAt, afterId: active.afterId }, live.entries) : historyEntries(messages), trees),
     delegations, Boolean(active),
   ), delegations.open.size > 0 ? children.data?.children ?? [] : []);
   const lastStatus = lastRun.data;
@@ -619,7 +717,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const lostInput = endNote && endNote.input && !messages.some((m) => m.role === 'user' && m.content === endNote.input) ? endNote.input : null;
   if (lostInput) entries.push({ kind: 'user', key: 'lost-input', text: lostInput, ts: null });
   // run lines go under the history entries; the run of a message Hermes did not keep goes under it
-  const runs = history.data?.runs ?? [];
+  // the fresher of the two readings (a run that ended since the last cost read is in the history's)
+  const runs = (runStatsQ.data && runStatsQ.dataUpdatedAt >= history.dataUpdatedAt ? runStatsQ.data.runs : history.data?.runs) ?? [];
   const footers = useMemo(() => {
     const m = placeRunStats(historyEntries(messages), runs);
     if (lostInput && runs.length) {
@@ -668,14 +767,27 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // persistent goal (option 7): relaunched by the server; the bar above the composer, the dialog of /goal
   const goalQ = useGoal(inst, sessionId);
   const [goalDialog, setGoalDialog] = useState<{ editing: boolean; initial: Partial<GoalSettings> } | null>(null);
+  // key of the goal's creation: drawn when its dialog opens, kept until the creation succeeded (a resend after an
+  // error never starts a second first turn)
+  const goalClientKey = useRef<string | null>(null);
+  useEffect(() => { if (goalDialog && !goalDialog.editing) goalClientKey.current ??= newSendKey(); }, [goalDialog]);
   const saveGoal = async (g: GoalSettings) => {
     if (!inst) return;
     if (goalDialog?.editing) await api.editGoal(inst, sessionId, g);
     else {
-      const res = await api.createGoal(inst, sessionId, g);
+      const afterId = knownId();
+      let res: Awaited<ReturnType<typeof api.createGoal>>;
+      try {
+        res = await api.createGoal(inst, sessionId, g, goalClientKey.current ?? undefined);
+      } catch (err) {
+        const code = codeOf(err);
+        if (code === 'idempotency_conflict' || code === 'already_sent') goalClientKey.current = null;
+        throw err;
+      }
+      goalClientKey.current = null;
       // the first turn leaves with the goal's text: follow it like a sent message
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: { ...old.session, lastRunId: res.runId } });
-      setActive({ id: res.runId, createdAt: null, seed: [{ kind: 'user', key: `u-${res.runId}`, text: g.text, ts: Date.now() / 1000 }] });
+      setActive({ id: res.runId, createdAt: null, afterId, seed: [{ kind: 'user', key: `u-${res.runId}`, text: g.text, ts: Date.now() / 1000 }] });
       void invalidateSessionLists(qc);
     }
     await qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
@@ -994,14 +1106,22 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             <p className="mt-1.5 text-sm text-ink-faint">{t('L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session')}</p>
           </div>
         )}
-        {messages.length >= 500 && <p className="mb-4 text-center text-xs text-ink-faint">{t('Messages plus anciens non affichés')}</p>}
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined} />
+        <Thread
+          entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
+          vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined}
+          hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={() => void loadOlder()}
+        />
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
-        {running && deferred && (
-          <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>{t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')}</p>
+        {running && link.mode === 'polling' && (
+          <p data-deferred={link.cause} className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>
+            {link.cause === 'cap' ? t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')
+              : link.cause === 'lost' ? t('Suivi en direct interrompu : la réponse s’affichera à la fin.')
+              : link.cause === 'offline' ? t('Connexion perdue avec Intendia : nouvel essai en cours…')
+              : <>{t('Connexion à Intendia expirée : reconnectez-vous pour suivre ce travail.')} <Link to="/connexion" className="underline">{t('Se connecter')}</Link></>}
+          </p>
         )}
         {approval && (
           <div className="mt-5"><ApprovalCard approval={approval} onChoose={approve} busy={busy} /></div>

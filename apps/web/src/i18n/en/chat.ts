@@ -349,4 +349,9 @@ export default {
   '{files} dans {folder}/': '{files} in {folder}/',
   'Non décompressée : {error}': 'Not unpacked: {error}',
   '/{name} : {reason}': '/{name}: {reason}',
+  'Charger les messages précédents': 'Load earlier messages',
+  'Suivi en direct interrompu : la réponse s’affichera à la fin.': 'Live follow-up interrupted: the answer will show at the end.',
+  'Connexion perdue avec Intendia : nouvel essai en cours…': 'Connection to Intendia lost: trying again…',
+  'Connexion à Intendia expirée : reconnectez-vous pour suivre ce travail.': 'Your Intendia sign-in expired: sign in again to follow this work.',
+  'Relance déjà reçue par Hermes avec un autre contenu : vérifiez la conversation, puis reprenez': 'Relaunch already received by Hermes with other content: check the conversation, then resume',
 } satisfies Record<string, string>;
