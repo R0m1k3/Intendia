@@ -29,6 +29,52 @@ export function Button({ variant = 'secondary', className, ...p }: ComponentProp
   );
 }
 
+/** Bar widths of `SkeletonLines`, in turn. */
+const SKELETON_WIDTHS = ['92%', '76%', '84%', '60%'];
+const BAR = 'skeleton block rounded bg-raised';
+
+/** Placeholder of a text, a detail or a panel while it loads: bars of varied widths. */
+export function SkeletonLines({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-label={t('Chargement…')} className={cx('flex flex-col gap-2.5 py-1', className)}>
+      {Array.from({ length: rows }, (_, i) => <span key={i} className={cx(BAR, 'h-3')} style={{ width: SKELETON_WIDTHS[i % SKELETON_WIDTHS.length] }} />)}
+    </div>
+  );
+}
+
+/** Placeholder of a list while it loads: rows with the height and padding of `ListItemBody` (title, sub-line). */
+export function SkeletonList({ rows = 6, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-label={t('Chargement…')} className={cx('flex flex-col gap-0.5', className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-3.5 py-3">
+          <span className={cx(BAR, 'h-3.5')} style={{ width: SKELETON_WIDTHS[i % SKELETON_WIDTHS.length] }} />
+          <span className={cx(BAR, 'h-3 w-10')} />
+          <span className={cx(BAR, 'col-span-2 h-3')} style={{ width: `${48 + ((i * 17) % 30)}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Placeholder of a session's thread while its history loads: a user bubble, then two paragraphs of the agent. */
+export function SkeletonThread() {
+  return (
+    <div role="status" aria-label={t('Chargement…')} data-skeleton-thread className="flex flex-col gap-7">
+      <div className="flex justify-end">
+        <span className="skeleton block h-11 w-[min(60%,340px)] rounded-2xl rounded-br-md bg-accent-soft" />
+      </div>
+      <div className="flex gap-3">
+        <span className={cx(BAR, 'size-7 shrink-0 rounded-full')} />
+        <div className="min-w-0 flex-1 space-y-5">
+          <SkeletonLines rows={4} className="!py-0.5" />
+          <SkeletonLines rows={3} className="!py-0" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Input({ className, ...p }: ComponentProps<'input'>) {
   return (
     <input

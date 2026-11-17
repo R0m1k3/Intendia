@@ -69,7 +69,7 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
       </button>
       {open && pos && createPortal(
         <div
-          ref={panel} role="menu" aria-label={title} style={pos}
+          ref={panel} role="menu" aria-label={title} style={pos} data-overlay
           className="fixed z-50 overflow-y-auto rounded-xl border border-line bg-sheet p-1 shadow-[var(--shadow-card)]"
         >
           {children(close)}
@@ -118,13 +118,15 @@ export type PickerItem = PickerChoice | PickerAction | PickerHeading;
 const PICKER_BTN = 'flex h-7 max-w-[14rem] min-w-0 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50 aria-expanded:bg-raised';
 
 /** A text button opening a list of choices (one checked). */
-export function Picker({ label, title, items, value, disabled, onPick, placement = 'above', triggerClass }: {
+export function Picker({ label, title, items, value, disabled, onPick, placement = 'above', triggerClass, open, onOpenChange }: {
   label: ReactNode; title: string; items: PickerItem[]; value: string | null; disabled?: boolean; onPick: (v: string | null) => void;
   placement?: 'above' | 'below'; triggerClass?: string;
+  /** controlled from elsewhere (the palette's « Changer de modèle ») */
+  open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
   return (
     <Popover
-      title={title} disabled={disabled} placement={placement} triggerClass={triggerClass ?? PICKER_BTN}
+      title={title} disabled={disabled} open={open} onOpenChange={onOpenChange} placement={placement} triggerClass={triggerClass ?? PICKER_BTN}
       trigger={<><span className="truncate">{label}</span><ChevronDown className="size-3 shrink-0" strokeWidth={1.75} /></>}
     >
       {(close) => <PickerList items={items} value={value} close={close} onPick={onPick} />}

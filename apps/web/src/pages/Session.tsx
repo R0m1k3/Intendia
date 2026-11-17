@@ -22,7 +22,7 @@ import {
   clearPendingKey, EMPTY_QUEUE, dropItem, enqueue, firstTime, loadPendingKey, loadQueue, newSendKey, pauseQueue, pushHead, resumeQueue,
   saveQueue, savePendingKey, takeHead, type Queue,
 } from '../chat/queue';
-import { RunOptions } from '../chat/RunOptions';
+import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
@@ -32,6 +32,8 @@ import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
 import { confirmClose } from '../components/dirty';
+import { useActivePage, type ActivePage } from '../components/activePage';
+import type { PaletteItem } from '../components/palette';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useColumn, useOpenSession } from '../chat/column-context';
@@ -49,7 +51,7 @@ import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/hist
 import { COMMANDS, type Command, type CommandName } from '../chat/commands';
 import { formatTokens } from '../chat/format';
 import { Menu, Picker } from '../components/Menu';
-import { Button, copyText, cx, ErrorText } from '../components/ui';
+import { Button, copyText, cx, ErrorText, SkeletonThread } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
 import { SubagentsBar } from '../chat/SubagentsBar';
@@ -965,6 +967,40 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const report = col?.report;
   useEffect(() => { report?.({ running, waiting, title }); }, [report, running, waiting, title]);
 
+  // the same handlers as the header's menu and link button, for the palette too
+  const renameSession = async () => {
+    const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') });
+    if (next) rename.mutate(next);
+  };
+  const copyLink = () => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => {
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1500);
+  });
+  // the palette's « Changer de modèle »: the same menu as the composer's, under the same conditions
+  const [modelOpen, setModelOpen] = useState(false);
+  const models = useQuery({ ...chatModelsQuery(inst ?? '', agentProfile), enabled: Boolean(inst && sess.data) });
+  const modelOk = Boolean(inst && sess.data) && !modelPickerDisabled({ disabled: running || setOptions.isPending || !chat.available, loading: models.isLoading });
+  // « /goal » can be typed when the message field can
+  const goalOk = Boolean(inst) && chat.available && !switching;
+  const openFiles = () => void confirmClose(() => { setPanel(true); setPreviewPath(null); });
+  // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
+  const handlers = useRef({ stop, onCommand, renameSession, copyLink, openFiles });
+  handlers.current = { stop, onCommand, renameSession, copyLink, openFiles };
+  const page = useMemo<ActivePage | null>(() => {
+    if (!leading || EMBEDDED) return null;
+    const actions: PaletteItem[] = [
+      ...(running ? [{ id: 'o:stop', label: t('Arrêter le travail'), run: () => void handlers.current.stop() }] : []),
+      ...(goalOk ? [{ id: 'o:goal', label: t('Fixer un objectif'), run: () => void handlers.current.onCommand('goal', '') }] : []),
+      ...(modelOk ? [{ id: 'o:model', label: t('Changer de modèle'), run: () => setModelOpen(true) }] : []),
+      { id: 'o:files', label: t('Fichiers de la session'), run: () => handlers.current.openFiles() },
+      { id: 'o:usage', label: t('Contexte et forfait utilisés'), run: () => void handlers.current.onCommand('usage', '') },
+      { id: 'o:title', label: t('Renommer la session'), run: () => void handlers.current.renameSession() },
+      { id: 'o:link', label: t('Copier le lien de la session'), run: () => handlers.current.copyLink() },
+    ];
+    return { title, focusComposer: () => composer.current?.focus(), actions };
+  }, [leading, title, running, goalOk, modelOk]);
+  useActivePage(page);
+
   // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
   // (during a run, the merged entries hide its stored messages behind the live ones)
   const written = useMemo(() => writtenPaths(historyEntries(messages)), [messages]);
@@ -1044,7 +1080,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button type="button" className={ICON_BTN} aria-label={t('Copier le lien de la session')} title={t('Copier le lien de la session')}
-              onClick={() => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); })}>
+              onClick={copyLink}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
             <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
@@ -1058,7 +1094,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               triggerClass={cx(ICON_BTN, 'aria-expanded:bg-raised')}
               items={[
                 { label: t('Renommer'), icon: <Pencil className="size-4" strokeWidth={1.5} />,
-                  onSelect: async () => { const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') }); if (next) rename.mutate(next); } },
+                  onSelect: () => void renameSession() },
                 sess.data?.session.pinned
                   ? { label: t('Désépingler'), icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
                   : { label: t('Épingler'), icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },
@@ -1120,11 +1156,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
-        <Thread
-          entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
-          vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined}
-          hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={() => void loadOlder()}
-        />
+        {history.isPending && entries.length === 0 ? <SkeletonThread /> : (
+          <Thread
+            entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
+            vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined}
+            hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={() => void loadOlder()}
+          />
+        )}
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && link.mode === 'polling' && (
           <p data-deferred={link.cause} className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>
@@ -1209,6 +1247,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
                 personality={sess.data.session.personality ?? null} onProfile={(p) => void changeProfile(p)}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
+                modelOpen={modelOpen} onModelOpenChange={setModelOpen}
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}

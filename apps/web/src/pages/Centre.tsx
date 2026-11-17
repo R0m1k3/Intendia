@@ -8,7 +8,7 @@ import { FinishedList } from '../centre/FinishedList';
 import { RunRow, SubagentsRow, WorkerRow } from '../centre/RunRow';
 import { PageHeader } from '../components/Layout';
 import { PendingItem } from '../components/PendingItem';
-import { ErrorText, Mark, Panel } from '../components/ui';
+import { ErrorText, Mark, Panel, SkeletonLines } from '../components/ui';
 import { useCurrentInstance } from '../instance/current';
 import { t } from '../i18n';
 
@@ -23,7 +23,7 @@ function useAllInstances(): [boolean, (v: boolean) => void] {
 
 const count = (n: number | undefined) => <span className="font-mono text-xs text-ink-faint">{n ?? ''}</span>;
 const empty = (loaded: boolean, text: string) => (
-  <p className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{loaded ? text : t('Chargement…')}</p>
+  <div className="border-t border-line/70 px-4 py-5 text-sm text-ink-faint">{loaded ? text : <SkeletonLines rows={2} />}</div>
 );
 
 export function CentrePage() {

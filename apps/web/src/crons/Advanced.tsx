@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api, type Cron } from '../api';
-import { cx, Field, Input } from '../components/ui';
+import { cx, Field, Input, SkeletonLines } from '../components/ui';
 import { advancedCount, type AdvancedForm } from './advanced';
 import { plural, t } from '../i18n';
 
@@ -95,7 +95,7 @@ export function Advanced({ instanceId, profile, cron, form, onChange, error }: {
             ) : toolsets.isError ? (
               <Input value={form.toolsets.join(', ')} className="font-mono" placeholder="web, terminal" spellCheck={false} aria-label={t('Outils permis')}
                 onChange={(e) => set({ toolsets: e.target.value.split(/[\s,]+/).filter(Boolean) })} />
-            ) : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+            ) : toolsets.isPending ? <SkeletonLines rows={2} /> : null}
             <span className="mt-1 block text-xs text-ink-faint">{t('Aucun coché : tous les outils de l’agent {profile}', { profile })}</span>
           </div>
 
@@ -120,7 +120,7 @@ export function Advanced({ instanceId, profile, cron, form, onChange, error }: {
                   </li>
                 ))}
               </ul>
-            ) : <p className="text-sm text-ink-faint">{crons.isPending ? t('Chargement…') : t('Aucun autre cron de l’agent {profile}', { profile })}</p>}
+            ) : crons.isPending ? <SkeletonLines rows={2} /> : <p className="text-sm text-ink-faint">{t('Aucun autre cron de l’agent {profile}', { profile })}</p>}
             <span className="mt-1 block text-xs text-ink-faint">{t('Le dernier résultat des crons cochés est donné à l’agent avant la consigne')}</span>
           </div>
 

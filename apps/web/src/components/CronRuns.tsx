@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, type Cron, type CronRun } from '../api';
 import { FOLLOW_INTERVAL_MS, followState, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { whenFr } from '../crons/schedule';
-import { Button, cx, ErrorText } from './ui';
+import { Button, cx, ErrorText, SkeletonList } from './ui';
 import { locale, plural, t } from '../i18n';
 import { T } from '../i18n/T';
 
@@ -143,7 +143,7 @@ export function CronRuns({ cron, follow, result, canRuns, canCancel }: {
       {!canRuns ? (
         <p className={`${note} text-ink-soft`}>{t('Historique indisponible sur cette instance (dashboard requis)')}</p>
       ) : runs.isLoading ? (
-        <p className={`${note} text-ink-faint`}>{t('Chargement…')}</p>
+        <SkeletonList rows={4} />
       ) : history.length === 0 && !following ? (
         <p className={`${note} text-ink-soft`}>{t('Aucune exécution pour l’instant : « Lancer maintenant » en déclenche une tout de suite.')}</p>
       ) : (

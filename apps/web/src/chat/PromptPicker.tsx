@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type Prompt } from '../api';
 import { ask, askText } from '../components/Dialog';
 import { Popover } from '../components/Menu';
-import { Button, cx, ErrorText } from '../components/ui';
+import { Button, cx, ErrorText, SkeletonList } from '../components/ui';
 import { useDirtyGuard } from '../components/dirty';
 import { Sheet, TEXTAREA } from '../kanban/Sheet';
 import { t } from '../i18n';
@@ -111,7 +111,7 @@ function ManagePrompts({ onClose }: { onClose: () => void }) {
   const list = useQuery({ queryKey: KEY, queryFn: () => api.prompts('prompt') });
   return (
     <Sheet title={t('Prompts enregistrés')} onClose={onClose}>
-      {list.isPending && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {list.isPending && <SkeletonList rows={4} className="-mx-3.5" />}
       <ErrorText error={list.error} />
       {list.data?.prompts.length === 0 && (
         <p className="text-sm text-ink-soft">{t('Aucun prompt. Écrivez un texte dans la saisie, puis « Prompts » › « Enregistrer la saisie comme prompt ».')}</p>

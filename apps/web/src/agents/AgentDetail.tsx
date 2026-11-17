@@ -5,7 +5,7 @@ import { lazy, Suspense, useState } from 'react';
 import { api, ApiError, type AgentDetail as AgentData, type PublicInstance } from '../api';
 import { ask, askText } from '../components/Dialog';
 import { DetailBody, DetailHeader, Facts } from '../components/Panes';
-import { Button, cx, ErrorText, Mark, timeAgo } from '../components/ui';
+import { Button, cx, ErrorText, Mark, timeAgo, SkeletonLines } from '../components/ui';
 import { AgentModelPicker } from './AgentModel';
 import { Gateway } from './Gateway';
 import { keyHint } from './keyHint';
@@ -115,12 +115,12 @@ function Soul({ inst, name, x, editable }: { inst: string; name: string; x: Agen
       {open && (
         <div className="border-t border-line/70">
           {draft !== null ? (
-            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">{t('Chargement…')}</p>}>
+            <Suspense fallback={<SkeletonLines rows={8} className="px-4 py-3" />}>
               {/* starting text only: CodeView is rebuilt on every value */}
               <CodeView key="edit" name="SOUL.md" value={x.soul} editable onChange={setDraft} />
             </Suspense>
           ) : x.soul ? (
-            <Suspense fallback={<p className="px-4 py-3 text-sm text-ink-faint">{t('Chargement…')}</p>}>
+            <Suspense fallback={<SkeletonLines rows={8} className="px-4 py-3" />}>
               {/* another key: Annuler shows the saved text again, not the edited editor */}
               <CodeView key="view" name="SOUL.md" value={x.soul} editable={false} />
             </Suspense>
@@ -222,7 +222,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
       <DetailBody>
         <ErrorText error={agent.error} />
         {removed && <p role="status" className="rounded-[10px] bg-ok-soft px-4 py-3 text-[13.5px]">{removed}</p>}
-        {!x && !agent.error && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+        {!x && !agent.error && <SkeletonLines rows={4} />}
         {x && !removed && (
           <>
             {!x.hasKey && instance && (

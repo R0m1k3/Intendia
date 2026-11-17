@@ -250,4 +250,18 @@ export default {
   'Abandonner les modifications ?': 'Discard your changes?',
   'Ce que vous avez saisi sera perdu.': 'What you typed will be lost.',
   'Abandonner': 'Discard',
+  // keyboard shortcuts (ShortcutsSheet)
+  'Raccourcis clavier': 'Keyboard shortcuts',
+  'Raccourcis': 'Shortcuts',
+  'Partout': 'Everywhere',
+  'Dans une session': 'In a session',
+  'Ouvrir cette aide': 'Open this help',
+  'Aller au champ de message': 'Go to the message field',
+  'Fermer la fenêtre ou la feuille': 'Close the window or the sheet',
+  'Envoyer / aller à la ligne': 'Send / new line',
+  'Question précédente ou suivante': 'Previous or next question',
+  'Entrée|touche': 'Enter',
+  'Maj|touche': 'Shift',
+  // palette: the open session's actions
+  'Session ouverte': 'Open session',
 } satisfies Record<string, string>;

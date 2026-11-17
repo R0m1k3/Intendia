@@ -9,7 +9,7 @@ import { compatPoll } from '../components/availability';
 import { ask } from '../components/Dialog';
 import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLabel, ListLink, ListPane, SplitView } from '../components/Panes';
 import { ProfileSelect } from '../components/ProfileSelect';
-import { Button, ErrorText, host, Tag } from '../components/ui';
+import { Button, ErrorText, host, Tag, SkeletonList } from '../components/ui';
 import { locale, plural, t } from '../i18n';
 
 export const ACCESS_KINDS = ['login', 'payment', 'address'] as const;
@@ -82,7 +82,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
         </p>
       ) : undefined}
     >
-      {available === true && q.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {available === true && q.isPending && <SkeletonList rows={6} />}
       {q.error && (
         <div className="mx-1 mt-3" data-list-error>
           <ErrorText error={q.error} onRetry={() => void q.refetch()} />

@@ -7,6 +7,16 @@ import { t } from '../i18n';
 import { EFFORTS, effortLabel, shortModel } from './format';
 import { currentValue, decodeChoice, isPinned, modeOf, modelItems as pickerModels } from './model-items';
 
+/** The model menu cannot open: options locked, or the agent's models not read yet (it would only offer Auto). */
+export function modelPickerDisabled({ disabled, loading }: { disabled?: boolean; loading: boolean }): boolean {
+  return Boolean(disabled) || loading;
+}
+
+/** The agent's models by provider (shared with the session page, which needs to know whether the menu can open). */
+export const chatModelsQuery = (inst: string, profile: string) => ({
+  queryKey: ['chat-models', inst, profile], queryFn: () => api.chatModels(inst, profile), enabled: Boolean(inst), retry: false, staleTime: 60_000,
+});
+
 export interface RunPatch { model?: string | null; provider?: string | null; effort?: Effort | null; personality?: string | null }
 
 /**
@@ -15,17 +25,20 @@ export interface RunPatch { model?: string | null; provider?: string | null; eff
  * Changing the model of a session that already ran asks first: the new model reads the whole conversation again
  * without cache, once.
  */
-export function RunOptions({ inst, profile, model, provider, effort, personality, hasRuns, disabled, onChange, onProfile }: {
+export function RunOptions({ inst, profile, model, provider, effort, personality, hasRuns, disabled, onChange, onProfile, modelOpen, onModelOpenChange }: {
   inst: string; profile: string; model: string | null; provider: string | null; effort: Effort | null; personality?: string | null;
   hasRuns: boolean; disabled?: boolean;
   onChange: (patch: RunPatch) => void;
   /** another agent of the instance: the page changes it, or copies the session there */
   onProfile?: (profile: string) => void;
+  /** the model menu opened from elsewhere (the palette) */
+  modelOpen?: boolean;
+  onModelOpenChange?: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   // the agent's models by provider: declared in Hermes, else the catalogue (Configuration › Modèles › Modèles du chat)
-  const list = useQuery({ queryKey: ['chat-models', inst, profile], queryFn: () => api.chatModels(inst, profile), enabled: Boolean(inst), retry: false, staleTime: 60_000 });
+  const list = useQuery(chatModelsQuery(inst, profile));
   const pins = useQuery({ queryKey: ['model-pins', inst, profile], queryFn: () => api.modelPins(inst, profile).then((r) => r.pins), enabled: Boolean(inst), staleTime: 60_000 });
   const modes = useQuery({ queryKey: ['modes', inst, profile], queryFn: () => api.modes(inst, profile).then((r) => r.modes), enabled: Boolean(inst), staleTime: 60_000 });
   const personas = useQuery({ queryKey: ['personalities', inst, profile], queryFn: () => api.personalities(inst, profile), enabled: Boolean(inst), staleTime: 60_000 });
@@ -111,7 +124,8 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
       )}
       <Picker
         // not before the agent's models are read: the menu would only offer Auto
-        title={t('Modèle des prochains messages')} items={modelItems} value={value} disabled={disabled || list.isLoading} onPick={pickModel}
+        title={t('Modèle des prochains messages')} items={modelItems} value={value} disabled={modelPickerDisabled({ disabled, loading: list.isLoading })} onPick={pickModel}
+        open={modelOpen} onOpenChange={onModelOpenChange}
         label={model ? <span className="font-mono">{shortModel(model)}</span> : (modelItems.find((i) => 'value' in i && i.value === null) as { label: string }).label}
       />
       <Picker

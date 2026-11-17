@@ -349,6 +349,8 @@ export default {
   '{files} dans {folder}/': '{files} in {folder}/',
   'Non décompressée : {error}': 'Not unpacked: {error}',
   '/{name} : {reason}': '/{name}: {reason}',
+  // palette: the open session's actions
+  'Arrêter le travail': 'Stop the work',
   'Charger les messages précédents': 'Load earlier messages',
   'Suivi en direct interrompu : la réponse s’affichera à la fin.': 'Live follow-up interrupted: the answer will show at the end.',
   'Connexion perdue avec Intendia : nouvel essai en cours…': 'Connection to Intendia lost: trying again…',

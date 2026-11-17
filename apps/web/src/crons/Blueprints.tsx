@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, LayoutTemplate, Puzzle, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, ApiError, type Blueprint, type Cron } from '../api';
-import { Button, cx, ErrorText, Field, Input, Tag } from '../components/ui';
+import { Button, cx, ErrorText, Field, Input, Tag, SkeletonList } from '../components/ui';
 import { blueprintDefaults, blueprintValues, controlOf, missingFields, optionLabel } from './blueprint-form';
 import { describe } from './schedule';
 import { t } from '../i18n';
@@ -116,7 +116,7 @@ export function Blueprints({ instanceId, onClose, onCreated }: {
       ) : (
         <div className="max-w-[720px] space-y-3 px-4 py-6 md:px-6">
           <ErrorText error={list.error} />
-          {list.isPending && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+          {list.isPending && <SkeletonList rows={4} className="-mx-3.5" />}
           {list.isSuccess && list.data.length === 0 && <p className="text-sm text-ink-faint">{t('Hermes ne propose aucun modèle pour cet agent')}</p>}
           <ul className="grid gap-2 sm:grid-cols-2" aria-label={t('Modèles|cron')}>
             {list.data?.map((b) => (

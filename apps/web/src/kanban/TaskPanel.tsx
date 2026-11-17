@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { askReload, isStale } from '../components/staleReload';
 import { api, kanbanPath, type KanbanMissionRow, type KanbanTask, type KanbanTaskDetail, type KanbanTaskPatch, type KanbanWorkflow } from '../api';
 import { MISSION_STATE } from './mission';
-import { Button, cx, ErrorText, Field, Input, Mark, timeAgo } from '../components/ui';
+import { Button, cx, ErrorText, Field, Input, Mark, timeAgo, SkeletonLines } from '../components/ui';
 import { moveTargets, statusLabel } from './moves';
 import { useDirtyGuard } from '../components/dirty';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
@@ -118,7 +118,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
       {warning && <p role="alert" className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn" data-partial>{warning}</p>}
       <ErrorText error={detail.error ?? error} />
       {notice && <p role="status" className="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ink">{notice}</p>}
-      {!tk ? <p className="text-sm text-ink-faint">{t('Chargement…')}</p> : (
+      {!tk ? <SkeletonLines rows={4} /> : (
         <>
           <TextEditor task={tk} save={(p) => update.mutateAsync(p)} busy={update.isPending} />
 
@@ -271,7 +271,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
                   {log.data.truncated ? `${t('… (200 dernières lignes)')}\n` : ''}{log.data.content}
                 </pre>
               ) : <p className="text-sm text-ink-faint">{t('Pas encore de journal')}</p>
-            ) : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>)}
+            ) : <SkeletonLines rows={4} />)}
           </Section>
         </>
       )}

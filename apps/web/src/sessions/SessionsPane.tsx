@@ -1,11 +1,11 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Brush, Search } from 'lucide-react';
+import { Brush, MessageSquareText, PenLine, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type RecentSession, type SessionSource } from '../api';
 import { ask } from '../components/Dialog';
-import { ListLabel, ListPane } from '../components/Panes';
-import { Button, Chips, ErrorText } from '../components/ui';
+import { Empty, ListLabel, ListPane } from '../components/Panes';
+import { Button, Chips, ErrorText, SkeletonList } from '../components/ui';
 import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
 import { groupByDay } from './days';
@@ -145,13 +145,16 @@ export function SessionsPane({ openId, onBeside }: {
           </ul>
         </div>
       ))}
-      {active.isSuccess && rows.length === 0 && (
+      {active.isSuccess && rows.length === 0 && (!searching && source === 'all' ? (
+        <Empty icon={<MessageSquareText strokeWidth={1.5} />} title={t('Aucune session pour l’instant')}
+          actions={<Button variant="primary" onClick={() => void navigate({ to: '/chat/nouvelle' })}><PenLine className="size-4" strokeWidth={1.5} />{t('Nouvelle session')}</Button>} />
+      ) : (
         <p className="px-3.5 py-6 text-sm text-ink-faint">
-          {searching ? t('Aucune session ne contient « {q} »', { q }) : source === 'all' ? t('Aucune session pour l’instant') : t('Aucune session de cette source')}
+          {searching ? t('Aucune session ne contient « {q} »', { q }) : t('Aucune session de cette source')}
         </p>
-      )}
+      ))}
       {(active.isPending || (searching && found.isFetching)) && rows.length === 0 && inst !== null && (
-        <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>
+        <SkeletonList rows={6} />
       )}
       {searching && found.isSuccess && rows.length >= 30 && (
         <p className={`${note} text-ink-faint`}>{t('Les 30 premiers résultats : précisez la recherche pour en voir d’autres')}</p>

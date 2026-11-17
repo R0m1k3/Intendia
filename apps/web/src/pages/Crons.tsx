@@ -9,7 +9,7 @@ import { ask } from '../components/Dialog';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLink, ListPane, SplitView } from '../components/Panes';
 import { cronKey, pickSelected } from '../components/selection';
-import { Button, cx, ErrorText, Tag } from '../components/ui';
+import { Button, cx, ErrorText, Tag, SkeletonList } from '../components/ui';
 import { Blueprints } from '../crons/Blueprints';
 import { snapshot, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { describe, hermesDayDiff, hermesParts, offsetOf, whenFr } from '../crons/schedule';
@@ -236,7 +236,7 @@ export function CronsPage() {
       ) : undefined}
     >
       <ErrorText error={crons.error} onRetry={() => void crons.refetch()} />
-      {a.available && crons.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {a.available && crons.isPending && <SkeletonList rows={6} />}
       {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron sur cette instance')}</p>}
       {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron ne correspond')}</p>}
       <ul className="flex flex-col gap-0.5" aria-label={t('Tâches planifiées')}>

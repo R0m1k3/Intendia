@@ -8,7 +8,7 @@ import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
 import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader } from '../components/Panes';
-import { Button, ErrorText } from '../components/ui';
+import { Button, ErrorText, SkeletonList } from '../components/ui';
 import { FileRows, isDirEntry } from '../files/FileRows';
 import { workspaceScope } from '../files/scope';
 import { newKey, useCopyOps } from '../sessions/copies';
@@ -155,8 +155,10 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
           <div className="border-t border-line/70">
             {files.length > 0 ? (
               <FileRows scope={scope} entries={files.slice(0, ROWS)} onOpen={openFile} />
+            ) : tree.isPending ? (
+              <SkeletonList rows={4} className="py-1" />
             ) : (
-              <p className="px-4 py-3 text-sm text-ink-faint">{tree.isSuccess ? t('Aucun fichier pour l’instant') : tree.isError ? t('Dossier injoignable') : t('Chargement…')}</p>
+              <p className="px-4 py-3 text-sm text-ink-faint">{tree.isSuccess ? t('Aucun fichier pour l’instant') : t('Dossier injoignable')}</p>
             )}
             {files.length > ROWS && (
               <Link to="/w/$slug/fichiers" params={{ slug }} className="block border-t border-line/70 px-4 py-2.5 text-[13px] text-ink-soft hover:bg-paper hover:text-ink">

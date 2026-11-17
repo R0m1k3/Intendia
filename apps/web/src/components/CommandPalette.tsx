@@ -5,6 +5,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { useCurrentInstance } from '../instance/current';
+import { getActivePage } from './activePage';
 import { fileItems, flatItems, moveIndex, paletteGroups, SEARCH_MIN, type PaletteGroup, type PaletteItem, type PaletteMode, type PaletteSources } from './palette';
 import { cx } from './ui';
 import { t } from '../i18n';
@@ -16,7 +17,12 @@ export const shortcutLabel = (): string => (typeof navigator !== 'undefined' && 
  * Search box over every page: actions, pages, workspaces, crons, sessions (the server searches the history). In the
  * « files » mode (Ctrl/⌘ P), file names over the current instance's whole file root.
  */
-export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { nav: PaletteSources['nav']; onClose: () => void; mode?: PaletteMode }) {
+export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
+  nav: PaletteSources['nav'];
+  /** `restoreFocus: false`: an action takes the focus (a dialog, a menu), the palette must not give it back */
+  onClose: (o?: { restoreFocus?: boolean }) => void;
+  mode?: PaletteMode;
+}) {
   const [mode, setMode] = useState<PaletteMode>(initialMode);
   useEffect(() => setMode(initialMode), [initialMode]);
   const navigate = useNavigate();
@@ -43,6 +49,8 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
   const fileQuery = mode === 'files' && q.length >= SEARCH_MIN && inst !== null;
   // the query key holds the text: an answer for an older text is never shown
   const files = useQuery({ queryKey: ['instance-file-search', inst, q], queryFn: () => api.instanceSearchFiles(inst!, q), enabled: fileQuery });
+  // read on opening: the palette is mounted for one use
+  const [page] = useState(() => getActivePage()?.actions ?? []);
   const mine = useMemo(() => (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst), [workspaces.data, inst]);
   const allGroups = useMemo(() => paletteGroups(text, {
     nav,
@@ -50,7 +58,8 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
     crons: (crons.data?.crons ?? []).filter((c) => c.instanceId === inst),
     recent: recent.data?.sessions ?? [],
     found: searching ? found.data?.sessions ?? null : null,
-  }), [text, nav, inst, workspaces.data, crons.data, recent.data, searching, found.data]);
+    page,
+  }), [text, nav, inst, workspaces.data, crons.data, recent.data, searching, found.data, page]);
   const fileGroups = useMemo<PaletteGroup[]>(() => {
     if (!fileQuery || text.trim() !== q || !files.data) return [];
     const items = fileItems(inst!, files.data.results, mine);
@@ -75,6 +84,11 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
       input.current?.focus();
       return;
     }
+    if (item.run) {
+      onClose({ restoreFocus: false });
+      item.run();
+      return;
+    }
     onClose();
     void navigate(item.target as never);
   };
@@ -93,7 +107,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
 
   const partial = searching ? found.data?.partial ?? [] : [];
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
+    <div data-overlay className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={() => onClose()}>
       <div
         role="dialog" aria-modal="true" aria-label={mode === 'files' ? t('Ouvrir un fichier') : t('Rechercher')} onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
