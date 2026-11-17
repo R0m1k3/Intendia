@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, type PublicSystemStats } from '../api';
-import { ErrorText, Panel } from '../components/ui';
+import { ErrorText, Panel, SkeletonLines } from '../components/ui';
 import { formatBytes, formatPercent, formatUptime } from './format';
 import { plural, t } from '../i18n';
 
@@ -58,7 +58,7 @@ export function System({ inst }: { inst: string }) {
   return (
     <div className="space-y-4">
       <ErrorText error={q.error} />
-      {q.isPending && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {q.isPending && <SkeletonLines rows={4} />}
       {q.data && <Body s={q.data} />}
     </div>
   );

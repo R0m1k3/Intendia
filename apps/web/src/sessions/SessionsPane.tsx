@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, type RecentSession, type SessionSource } from '../api';
 import { ask } from '../components/Dialog';
 import { ListLabel, ListPane } from '../components/Panes';
-import { Button, Chips, ErrorText } from '../components/ui';
+import { Button, Chips, ErrorText, SkeletonList } from '../components/ui';
 import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
 import { groupByDay } from './days';
@@ -151,7 +151,7 @@ export function SessionsPane({ openId, onBeside }: {
         </p>
       )}
       {(active.isPending || (searching && found.isFetching)) && rows.length === 0 && inst !== null && (
-        <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>
+        <SkeletonList rows={6} />
       )}
       {searching && found.isSuccess && rows.length >= 30 && (
         <p className={`${note} text-ink-faint`}>{t('Les 30 premiers résultats : précisez la recherche pour en voir d’autres')}</p>

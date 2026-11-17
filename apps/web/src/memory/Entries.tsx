@@ -5,7 +5,7 @@ import { api, ApiError, type MemoryEntry, type MemoryOverview, type MemorySource
 import { ask } from '../components/Dialog';
 import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader, Facts, ListItemBody, ListLink } from '../components/Panes';
-import { Button, cx, ErrorText, Tag } from '../components/ui';
+import { Button, cx, ErrorText, Tag, SkeletonLines } from '../components/ui';
 import { usageLabel, usagePercent } from './usage';
 import { locale, t } from '../i18n';
 
@@ -152,7 +152,7 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
           </section>
         ) : content.data ? (
           <pre className="whitespace-pre-wrap break-words rounded-[10px] bg-paper px-4 py-3.5 font-mono text-[13px] leading-[1.7]">{content.data.content}</pre>
-        ) : content.isPending ? <p className="text-sm text-ink-faint">{t('Chargement…')}</p> : null}
+        ) : content.isPending ? <SkeletonLines rows={4} /> : null}
         <Facts items={[
           ...(dateFr(entry.timestamp) ? [{ label: t('Fichier modifié'), value: dateFr(entry.timestamp)! }] : []),
           ...(entry.skills.length ? [{

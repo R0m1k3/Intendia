@@ -111,6 +111,11 @@
 .enter { animation: enter 240ms var(--ease-out) both; }
 @media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
 
+/* Loading placeholders (SkeletonLines, SkeletonList, SkeletonThread): a slow fade, none when motion is reduced. */
+@keyframes skeleton { 50% { opacity: 0.55; } }
+.skeleton { animation: skeleton 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
 /* The agent is working: three dots rising in turn, the label shimmering. */
 .thinking-dots { display: inline-flex; gap: 4px; align-items: center; height: 1em; }
 .thinking-dots > span { width: 6px; height: 6px; border-radius: 9999px; background: var(--color-accent); animation: thinking-dot 1.2s ease-in-out infinite; }

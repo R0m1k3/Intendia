@@ -5,7 +5,7 @@ import { api } from '../api';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Empty, ListPane, SplitView } from '../components/Panes';
 import { ProfileSelect } from '../components/ProfileSelect';
-import { Chips, ErrorText } from '../components/ui';
+import { Chips, ErrorText, SkeletonList } from '../components/ui';
 import { EntryDetail, EntryList } from '../memory/Entries';
 import { LearnedDetail, LearnedList } from '../memory/Learned';
 import { t } from '../i18n';
@@ -63,7 +63,7 @@ function MemoryView({ inst, profile, search }: { inst: string; profile: string; 
       ) : undefined}
     >
       <ErrorText error={q.error} onRetry={() => void q.refetch()} />
-      {a.available && q.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {a.available && q.isPending && <SkeletonList rows={6} />}
       {data?.active && (
         <p className="mx-1 mt-3 rounded-[10px] bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft" data-provider>
           <T k="Mémoire externe active : {name}. Ses souvenirs restent chez ce fournisseur ; seuls les fichiers intégrés sont listés ici." vars={{ name: <span className="font-mono">{data.active}</span> }} />

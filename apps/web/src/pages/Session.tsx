@@ -46,7 +46,7 @@ import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/hist
 import { COMMANDS, type Command, type CommandName } from '../chat/commands';
 import { formatTokens } from '../chat/format';
 import { Menu, Picker } from '../components/Menu';
-import { Button, copyText, cx, ErrorText } from '../components/ui';
+import { Button, copyText, cx, ErrorText, SkeletonThread } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
 import { SubagentsBar } from '../chat/SubagentsBar';
@@ -999,7 +999,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
-        <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined} />
+        {history.isPending && entries.length === 0 ? <SkeletonThread /> : <Thread entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents} vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined} />}
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
         {running && deferred && (
           <p data-deferred className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>{t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')}</p>

@@ -7,7 +7,7 @@ import { useCurrentInstance } from '../instance/current';
 import { NewWorkspace } from '../components/NewWorkspace';
 import { DetailBody, DetailHeader, ListItemBody, ListLink, ListPane, SplitView, listItemClass } from '../components/Panes';
 import { pickSelected } from '../components/selection';
-import { Button, ErrorText, Tag } from '../components/ui';
+import { Button, ErrorText, Tag, SkeletonList } from '../components/ui';
 import { WorkspaceDetail } from '../workspaces/WorkspaceDetail';
 import { t } from '../i18n';
 
@@ -60,7 +60,7 @@ export function WorkspacesPage() {
           );
         })}
       </ul>
-      {workspaces.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {workspaces.isPending && <SkeletonList rows={6} />}
     </ListPane>
   );
 

@@ -11,7 +11,7 @@ import { pickSelected } from '../components/selection';
 import { Sheet } from '../kanban/Sheet';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, cx, ErrorText, Field, Input, Tag } from '../components/ui';
+import { Button, cx, ErrorText, Field, Input, Tag, SkeletonList } from '../components/ui';
 import { plural, t } from '../i18n';
 import { T } from '../i18n/T';
 
@@ -136,9 +136,9 @@ export function AgentsPage() {
         </div>
       )}
       <ErrorText error={agents.error} onRetry={() => void agents.refetch()} />
-      {a.available && items.length === 0 && (
-        <p className="px-3.5 py-6 text-sm text-ink-faint">{agents.isSuccess ? t('Aucun profil') : t('Chargement…')}</p>
-      )}
+      {a.available && items.length === 0 && (agents.isSuccess
+        ? <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun profil')}</p>
+        : agents.isPending && <SkeletonList rows={6} />)}
       <ul className="flex flex-col gap-0.5" aria-label={t('Profils')}>
         {items.map((x) => (
           <li key={x.name} data-agent={x.name}>

@@ -6,7 +6,7 @@ import { api, ApiError, type ActionStatus, type HubResult, type Scan, type Skill
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLabel, ListLink, ListPane, listItemClass, SplitView } from '../components/Panes';
 import { pickSelected } from '../components/selection';
-import { Button, Chips, cx, ErrorText, Mark, Tag } from '../components/ui';
+import { Button, Chips, cx, ErrorText, Mark, Tag, SkeletonLines, SkeletonList } from '../components/ui';
 import {
   ACTION_POLL_MS, actionState, failureLine, loadActions, saveActions, STATE_TEXT, type ActionState, type PendingAction,
 } from '../skills/action';
@@ -285,7 +285,7 @@ function Toolsets({ inst, profile, onClose }: { inst: string; profile: string; o
               </li>
             ))}
           </ul>
-        ) : q.error ? <ErrorText error={q.error} onRetry={() => void q.refetch()} /> : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+        ) : q.error ? <ErrorText error={q.error} onRetry={() => void q.refetch()} /> : <SkeletonLines rows={4} />}
       </DetailBody>
     </section>
   );
@@ -446,7 +446,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
         <>
           <div className="empty:hidden"><ErrorText error={skills.error} onRetry={() => void skills.refetch()} /></div>
           <div className="empty:hidden"><ErrorText error={update.error} /></div>
-          {skills.isPending && a.available && <p className={note}>{t('Chargement…')}</p>}
+          {skills.isPending && a.available && <SkeletonList rows={6} />}
           {skills.isSuccess && all.length === 0 && <p className={note}>{t('Aucun skill pour cet agent')}</p>}
           {skills.isSuccess && all.length > 0 && count === 0 && <p className={note}>{t('Aucun skill ne correspond au filtre')}</p>}
           {shown.map((g) => (
@@ -478,7 +478,7 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
           {!q && can('hubOfficial') && <ListLabel>{t('Catalogue officiel')}</ListLabel>}
           <ErrorText error={hub.error} />
           {hub.data?.timedOut.length ? <p className="px-3.5 py-2 text-[13px] text-warn">{t('Sources sans réponse : {list}', { list: hub.data.timedOut.join(', ') })}</p> : null}
-          {hub.isFetching && !hub.data && <p className={note}>{q ? t('Recherche dans le hub… (environ 10 secondes)') : t('Chargement…')}</p>}
+          {hub.isFetching && !hub.data && (q ? <p className={note}>{t('Recherche dans le hub… (environ 10 secondes)')}</p> : <SkeletonList rows={4} />)}
           {hub.isSuccess && results.length === 0 && <p className={note}>{t('Aucun résultat')}</p>}
           <ul className="flex flex-col gap-0.5" aria-label={t('Hub')}>
             {results.map((r) => {

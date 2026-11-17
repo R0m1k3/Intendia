@@ -4,7 +4,7 @@ import { lazy, Suspense, useState } from 'react';
 import { api, type Skill } from '../api';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { Sheet } from '../kanban/Sheet';
-import { Button, cx, ErrorText, Field, Input } from '../components/ui';
+import { Button, cx, ErrorText, Field, Input, SkeletonLines } from '../components/ui';
 import { t } from '../i18n';
 
 const CodeView = lazy(() => import('../files/CodeView'));
@@ -90,7 +90,7 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
       {data ? (
         draft !== null ? (
           <>
-            <Suspense fallback={<p className="p-4 text-sm text-ink-faint">{t('Chargement…')}</p>}>
+            <Suspense fallback={<SkeletonLines rows={8} className="p-4" />}>
               {/* starting text only: CodeView is rebuilt on every value */}
               <CodeView key="edit" name="SKILL.md" value={data.content} editable onChange={setDraft} />
             </Suspense>
@@ -109,7 +109,7 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
             {data.truncated && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('Contenu tronqué à 200 000 caractères.')}</p>}
           </>
         )
-      ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <p className="p-4 text-sm text-ink-faint">{t('Chargement…')}</p>}
+      ) : content.error ? <div className="p-4"><ErrorText error={content.error} /></div> : <SkeletonLines rows={4} className="p-4" />}
     </section>
   );
 }

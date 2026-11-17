@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, type PublicUsage } from '../api';
-import { Chips, ErrorText, Panel } from '../components/ui';
+import { Chips, ErrorText, Panel, SkeletonLines } from '../components/ui';
 import { DailyBars } from './DailyBars';
 import { formatTokens, formatUsd } from './format';
 import { plural, t } from '../i18n';
@@ -106,7 +106,7 @@ export function Usage({ inst, profile, days, onDays }: { inst: string; profile: 
       <Chips label={t('Période')} value={String(days) as `${Period}`} onChange={(d) => onDays(Number(d) as Period)}
         items={PERIODS.map((p) => ({ key: String(p) as `${Period}`, label: t('{n} jours', { n: p }) }))} />
       <ErrorText error={q.error} />
-      {q.isPending && <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+      {q.isPending && <SkeletonLines rows={4} />}
       {q.data && <UsageBody u={q.data} />}
     </div>
   );

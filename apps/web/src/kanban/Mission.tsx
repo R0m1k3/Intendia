@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, type KanbanMission, type KanbanMissionChild } from '../api';
 import { ask } from '../components/Dialog';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
-import { Button, cx, ErrorText, Field, Input } from '../components/ui';
+import { Button, cx, ErrorText, Field, Input, SkeletonLines } from '../components/ui';
 import { childNotes, MISSION_STATE, orderChildren } from './mission';
 import { statusLabel } from './moves';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
@@ -165,7 +165,7 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
     <Sheet title={m ? <span className="flex min-w-0 items-center gap-2"><span className="truncate">{m.goal}</span><span className="shrink-0 text-xs font-normal text-ink-faint">{MISSION_STATE[m.state]}</span></span> : t('Mission')}
       onClose={onClose} width="md:w-[600px]" footer={footer}>
       <ErrorText error={mission.error ?? launch.error ?? cancel.error} />
-      {!m ? <p className="text-sm text-ink-faint">{t('Chargement…')}</p> : m.state === 'decomposing' ? (
+      {!m ? <SkeletonLines rows={4} /> : m.state === 'decomposing' ? (
         <div className="space-y-2" role="status">
           <p className="text-sm">{t('Hermes découpe la mission…')}</p>
           <p className="text-xs text-ink-faint">{t('Jusqu’à 3 min. Vous pouvez fermer : le découpage continue et la mission reste dans la liste du tableau.')}</p>
