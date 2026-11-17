@@ -51,17 +51,18 @@ export function stageMcpToken(): string {
 }
 
 /**
- * Makes `next` the current token, in one transaction. `keepPrevious` (Hermes received `next`): the old token stays
- * valid until `now + MCP_GRACE_MS` and `mcp_synced` is set; else it is cleared. Returns the end of the grace, or null.
+ * Makes `next` the current token, in one transaction. `keepPrevious` (Hermes may hold `next`): the old token stays
+ * valid until `now + MCP_GRACE_MS`. `mcp_synced` is set when `synced` (default: `keepPrevious`), else cleared.
+ * Returns the end of the grace, or null.
  */
-export function commitMcpToken(db: Db, instanceId: string, next: string, keepPrevious: boolean, now: number): number | null {
+export function commitMcpToken(db: Db, instanceId: string, next: string, keepPrevious: boolean, now: number, synced = keepPrevious): number | null {
   return db.transaction((tx) => {
     const old = tx.select().from(settings).where(eq(settings.key, key(instanceId))).get()?.value;
     const until = keepPrevious && old ? now + MCP_GRACE_MS : null;
     tx.delete(settings).where(eq(settings.key, prevKey(instanceId))).run();
     if (until !== null) tx.insert(settings).values({ key: prevKey(instanceId), value: JSON.stringify({ token: old, until }) }).run();
     tx.insert(settings).values({ key: key(instanceId), value: next }).onConflictDoUpdate({ target: settings.key, set: { value: next } }).run();
-    if (keepPrevious) {
+    if (synced) {
       tx.insert(settings).values({ key: syncedKey(instanceId), value: '1' }).onConflictDoUpdate({ target: settings.key, set: { value: '1' } }).run();
     } else {
       tx.delete(settings).where(eq(settings.key, syncedKey(instanceId))).run();

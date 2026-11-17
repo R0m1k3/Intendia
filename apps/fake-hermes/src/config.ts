@@ -102,8 +102,8 @@ export class ConfigStore {
   failRaw: number | null = null;
   /** Set by tests: PUT /api/config/raw answers this status without writing. */
   failPutRaw: number | null = null;
-  /** Set by tests: PUT /api/env answers 500 without writing. */
-  failPutEnv = false;
+  /** Set by tests: PUT /api/env answers this status, after writing when `afterWrite` (answer lost by a proxy). */
+  failPutEnv: { status: number; afterWrite?: boolean } | null = null;
   /**
    * Installation managed by a package manager (Hermes `is_managed()`): `flag` = GET /api/shared-metrics/consent says
    * `managed: true` and every config write answers ok without writing (Hermes `save_config`); `silent` = the same
@@ -324,13 +324,14 @@ export class ConfigStore {
     }
     if (path === '/api/env' && method === 'GET') return json(this.envList());
     if (path === '/api/env' && method === 'PUT') {
-      if (this.failPutEnv) return json({ detail: 'env write failed' }, 500);
       const key = String(b.key ?? '');
       const value = String(b.value ?? '');
+      if (this.failPutEnv && !this.failPutEnv.afterWrite) return json({ detail: 'env write failed' }, this.failPutEnv.status);
       if (['PATH', 'LD_PRELOAD', 'HERMES_HOME'].includes(key)) return json({ detail: `Refusing to set ${key}` }, 400);
       if (value.startsWith('«redacted')) return json({ detail: 'Refusing to save a redacted credential preview' }, 400);
       this.envValues.set(key, value);
       this.deletedEnv.delete(key);
+      if (this.failPutEnv) return json({ detail: 'bad gateway' }, this.failPutEnv.status);
       return json({ ok: true, key, config_updates: [] });
     }
     if (path === '/api/env' && method === 'DELETE') {

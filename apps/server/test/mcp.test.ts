@@ -184,19 +184,44 @@ describe('mcp: put into Hermes by Intendia', () => {
     expect(t.fake.requests.filter((r) => r.method === 'PUT' && r.path === '/api/config/raw')).toHaveLength(0);
   });
 
-  it('sends a new token to Hermes; a failure changes nothing (lot C)', async () => {
+  it('sends a new token to Hermes; a refusal changes nothing (lot C)', async () => {
     const t = await testApp();
     await t.request('POST', '/x/instances/fake/mcp/connect', {});
     const rotated = await t.request('POST', '/x/instances/fake/mcp/rotate');
     expect(rotated.json).toMatchObject({ state: 'connected', test: { ok: true }, restartNeeded: true });
     expect(t.fake.config.envValues.get(KEY)).toBe(rotated.json.token);
-    t.fake.config.failPutEnv = true;
+    t.fake.config.failPutEnv = { status: 400 };
     const failed = await t.request('POST', '/x/instances/fake/mcp/rotate');
     expect(failed.json.state).toBe('connected');
     expect(failed.json.error).toBeTruthy();
     expect(failed.json.restartNeeded).toBeUndefined();
     expect(failed.json.token).toBe(rotated.json.token);
     expect(t.fake.config.envValues.get(KEY)).toBe(rotated.json.token);
+  });
+
+  it('an uncertain rotation keeps both tokens and asks to send the token again (review #128)', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/instances/fake/mcp/connect', {});
+    const old = mcpToken(t.db, 'fake');
+    const ping = (token: string) => Promise.resolve(t.mcp.request('/mcp/fake', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+    })).then((r) => r.status);
+    // Hermes writes the new token, the proxy answers 502
+    t.fake.config.failPutEnv = { status: 502, afterWrite: true };
+    const res = (await t.request('POST', '/x/instances/fake/mcp/rotate')).json;
+    expect(res.state).toBe('stale');
+    expect(res.error).toBeTruthy();
+    expect(res.restartNeeded).toBeUndefined();
+    const next = mcpToken(t.db, 'fake');
+    expect(next).not.toBe(old);
+    expect(t.fake.config.envValues.get(KEY)).toBe(next);
+    expect(await ping(next)).toBe(200);
+    expect(await ping(old)).toBe(200);
+    // sending the token again reconciles
+    t.fake.config.failPutEnv = null;
+    expect((await t.request('POST', '/x/instances/fake/mcp/connect', {})).json.state).toBe('connected');
+    expect(t.fake.config.envValues.get(KEY)).toBe(next);
   });
 
   it('after a rotation the old token works 24 h, even after a call with the new one; revoke ends it at once', async () => {

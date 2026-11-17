@@ -8,6 +8,7 @@ import { mcpTokenEnv } from '../connectors/config/index.js';
 import type { Db } from '../db/index.js';
 import { ConfigConflictError, type ConfigService } from '../hermes-config/service.js';
 import { commitMcpToken, isMcpSynced, markMcpSynced, mcpToken, mcpUrl, stageMcpToken } from './server.js';
+import { uncertain } from '../connectors/runtime.js';
 import { msg } from '../i18n/index.js';
 import { KeyedLock } from '../keyed-lock.js';
 
@@ -72,7 +73,9 @@ export class McpLink {
 
   /**
    * New token. Managed entry: written into Hermes first, then stored, the old one accepted 24 h more (the running
-   * gateway keeps it until it restarts); a Hermes error changes nothing. Otherwise only stored (no grace).
+   * gateway keeps it until it restarts); a refusal changes nothing. An uncertain write (lost answer, 5xx) may have
+   * reached Hermes: `next` is stored, the old one accepted 24 h more, and the state is `stale` so the token is sent
+   * again. Otherwise only stored (no grace).
    */
   async rotate(id: string, now = Date.now()): Promise<{ state: McpState; test?: McpTest; error?: string; restartNeeded?: true; previousUntil?: number | null }> {
     let sent = false;
@@ -88,7 +91,14 @@ export class McpLink {
       try {
         await this.configService.setEnv(id, PROFILE, mcpTokenEnv(MCP_NAME), next);
       } catch (err) {
-        error = err instanceof Error ? err.message : String(err);
+        const detail = err instanceof Error ? err.message : String(err);
+        if (!uncertain(err)) {
+          error = detail;
+          return;
+        }
+        // Hermes may hold either token: both accepted, `stale` until the current one is sent again
+        commitMcpToken(this.db, id, next, true, now, false);
+        error = msg('Réponse d’Hermes incertaine ({detail}) : l’ancien et le nouveau jeton restent acceptés 24 h ; renvoyez le jeton à Hermes', { detail });
         return;
       }
       previousUntil = commitMcpToken(this.db, id, next, true, now);

@@ -136,6 +136,7 @@ export default {
   'version invalide': 'invalid version',
   'Le serveur MCP « intendia » vient d’un plugin d’Hermes : il ne peut pas être remplacé': 'The MCP server “intendia” comes from a Hermes plugin: it cannot be replaced',
   'Hermes ne répond pas, ou ne permet pas d’ajouter un serveur MCP': 'Hermes does not answer, or does not allow adding an MCP server',
+  'Réponse d’Hermes incertaine ({detail}) : l’ancien et le nouveau jeton restent acceptés 24 h ; renvoyez le jeton à Hermes': 'Uncertain answer from Hermes ({detail}): the old and the new token stay accepted 24 h; send the token to Hermes again',
   'Un autre serveur MCP nommé « intendia » existe dans Hermes': 'Another MCP server named “intendia” exists in Hermes',
   'Hermes joint le serveur mais ne voit pas l’outil share_file': 'Hermes reaches the server but does not see the share_file tool',
   'Nom de plugin invalide': 'Invalid plugin name',
