@@ -19,6 +19,7 @@ import { declaredModels, editableShape, type Declared } from './declared.js';
 import { KNOWN_MIN, Masker, PLACEHOLDER_START, parse, SecretError } from './mask.js';
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
 import { msg } from '../i18n/index.js';
+import { KeyedLock } from '../keyed-lock.js';
 
 /**
  * Settings of a Hermes instance (phase 6): config form and YAML editor, history, models, env, MCP servers,
@@ -181,7 +182,7 @@ const KNOWN_TTL_MS = 60_000;
 
 export class ConfigService {
   private readonly mask: Masker;
-  private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly locks = new KeyedLock();
   private readonly knownCache = new Map<string, { at: number; values: string[] }>();
 
   constructor(
@@ -255,15 +256,8 @@ export class ConfigService {
     return values;
   }
 
-  private async locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.locks.get(key) ?? Promise.resolve();
-    const run = prev.catch(() => undefined).then(fn);
-    this.locks.set(key, run);
-    try {
-      return await run;
-    } finally {
-      if (this.locks.get(key) === run) this.locks.delete(key);
-    }
+  private locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    return this.locks.run(key, fn);
   }
 
   /** The single path of every write that can change the config file. */

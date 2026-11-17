@@ -4,7 +4,7 @@ import { msg } from '../i18n/index.js';
 import { HermesError, type HermesHttp, type RequestOptions, type Via } from '../hermes/http.js';
 
 // Routes and services outside src/{hermes,connectors,compat,cli} import these from here (boundaries.test.ts).
-export { HermesError } from '../hermes/http.js';
+export { HermesError, lostReply, uncertain } from '../hermes/http.js';
 export type { HermesHttp } from '../hermes/http.js';
 
 export class ModuleUnavailableError extends Error {

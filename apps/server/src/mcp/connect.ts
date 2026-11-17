@@ -9,6 +9,7 @@ import type { Db } from '../db/index.js';
 import { ConfigConflictError, type ConfigService } from '../hermes-config/service.js';
 import { isMcpSynced, markMcpSynced, mcpToken, mcpUrl, rotateMcpToken } from './server.js';
 import { msg } from '../i18n/index.js';
+import { KeyedLock } from '../keyed-lock.js';
 
 export const MCP_NAME = 'intendia';
 const PROFILE = 'default';
@@ -27,7 +28,7 @@ export interface McpTest { ok: boolean; tools: string[]; error?: string }
 
 export class McpLink {
   /** One connect / rotate at a time per instance: state read → write → synced flag. */
-  private readonly chains = new Map<string, Promise<unknown>>();
+  private readonly chains = new KeyedLock();
 
   constructor(
     private readonly configService: ConfigService,
@@ -36,13 +37,7 @@ export class McpLink {
   ) {}
 
   private queued<T>(id: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.chains.get(id) ?? Promise.resolve();
-    const run = prev.catch(() => undefined).then(fn);
-    this.chains.set(id, run);
-    void run.catch(() => undefined).finally(() => {
-      if (this.chains.get(id) === run) this.chains.delete(id);
-    });
-    return run;
+    return this.chains.run(id, fn);
   }
 
   async state(id: string): Promise<McpState> {

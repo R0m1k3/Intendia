@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { kanbanMissions } from '../db/schema.js';
-import { HermesError } from '../connectors/runtime.js';
+import { lostReply } from '../connectors/runtime.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { KanbanError, LIMITS, type KanbanService, type TaskDetail } from './service.js';
 import { msg } from '../i18n/index.js';
@@ -136,7 +136,7 @@ export class MissionService {
         this.set(m.id, { state: 'failed', error: err.message });
         return;
       }
-      if (err instanceof HermesError && (err.kind === 'network' || err.kind === 'timeout')) {
+      if (lostReply(err)) {
         // the answer was lost (time-out, network): Hermes may still finish the split
         await this.settle(row);
         return;
