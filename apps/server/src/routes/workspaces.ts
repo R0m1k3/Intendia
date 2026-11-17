@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { REVISION_RE } from '../revision.js';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
 import { EFFORTS } from '../chat/run-stats.js';
@@ -24,7 +25,7 @@ const CreateWorkspace = z.object({
 });
 // the model is chosen per session, in the chat (a `model` sent here is ignored)
 const PatchWorkspace = z.object({ name: z.string().trim().min(1).max(80).optional() });
-const AgentsMd = z.object({ text: z.string() });
+const AgentsMd = z.object({ text: z.string(), base: z.string().regex(REVISION_RE) });
 const PatchSession = z.object({
   title: z.string().max(200).nullish(),
   archived: z.boolean().optional(),
@@ -104,11 +105,11 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     return c.json({ workspace: workspaces.updateWorkspace(c.req.param('slug'), body) });
   });
 
-  r.get('/workspaces/:slug/agents-md', async (c) => c.json({ text: await workspaces.readAgentsMd(c.req.param('slug')) }));
+  r.get('/workspaces/:slug/agents-md', async (c) => c.json(await workspaces.agentsMdFile(c.req.param('slug'))));
 
   r.put('/workspaces/:slug/agents-md', async (c) => {
-    const { text } = AgentsMd.parse(await c.req.json());
-    await workspaces.writeAgentsMd(c.req.param('slug'), text);
+    const { text, base } = AgentsMd.parse(await c.req.json());
+    await workspaces.writeAgentsMd(c.req.param('slug'), text, base);
     return c.json({ ok: true });
   });
 

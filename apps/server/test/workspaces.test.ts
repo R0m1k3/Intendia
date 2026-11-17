@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { framingAgentsMd } from '../src/workspaces/fs.js';
@@ -112,9 +112,28 @@ describe('workspaces', () => {
   it('edits AGENTS.md up to 64 KiB', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'w', name: 'W', instanceId: 'fake' });
-    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'Réponds en français.' })).status).toBe(200);
+    const base = (await t.request('GET', '/x/workspaces/w/agents-md')).json.revision;
+    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'Réponds en français.', base })).status).toBe(200);
     expect(readFileSync(join(t.root, 'w', 'AGENTS.md'), 'utf8')).toBe('Réponds en français.');
-    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'é'.repeat(40_000) })).status).toBe(413);
+    const next = (await t.request('GET', '/x/workspaces/w/agents-md')).json.revision;
+    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'é'.repeat(40_000), base: next })).status).toBe(413);
+    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'sans base' })).status).toBe(400);
+  });
+
+  it('AGENTS.md changed between the read and the write: 409 stale; an absent file can be created', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/workspaces', { slug: 'w', name: 'W', instanceId: 'fake' });
+    const base = (await t.request('GET', '/x/workspaces/w/agents-md')).json.revision;
+    writeFileSync(join(t.root, 'w', 'AGENTS.md'), 'Écrit par l’agent.');
+    const stale = await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'Mon texte.', base });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('stale');
+    expect(readFileSync(join(t.root, 'w', 'AGENTS.md'), 'utf8')).toBe('Écrit par l’agent.');
+    rmSync(join(t.root, 'w', 'AGENTS.md'));
+    const empty = (await t.request('GET', '/x/workspaces/w/agents-md')).json;
+    expect(empty.text).toBe('');
+    expect((await t.request('PUT', '/x/workspaces/w/agents-md', { text: 'Créé.', base: empty.revision })).status).toBe(200);
+    expect(readFileSync(join(t.root, 'w', 'AGENTS.md'), 'utf8')).toBe('Créé.');
   });
 
   it('updates the name; the model is no longer a workspace setting', async () => {

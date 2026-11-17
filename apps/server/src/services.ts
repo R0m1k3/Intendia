@@ -1,4 +1,5 @@
 import { ActivityService } from './agents/activity.js';
+import { revisions } from './revision.js';
 import { AgentService } from './agents/service.js';
 import type { CompatService } from './compat/service.js';
 import type { AppConfig } from './config.js';
@@ -74,13 +75,14 @@ export function createServices(deps: {
   createRunTimeoutMs?: number;
 }): Services {
   const roots = new FileRoots(deps.compat, { uploadTimeoutMs: deps.uploadTimeoutMs });
-  const workspaces = new WorkspaceService(deps.db, deps.store, roots);
+  const revisionOf = revisions(deps.config.secret);
+  const workspaces = new WorkspaceService(deps.db, deps.store, roots, revisionOf);
   const links = new LinkService(deps.db, deps.store, deps.config, roots);
   const files = new FileService(workspaces, links, roots, deps.config.uploadMaxBytes, deps.fileOpts);
   const instanceFiles = new InstanceFileService(deps.store, roots, workspaces);
-  const crons = new CronService(deps.compat, workspaces, deps.store, roots);
-  const skills = new SkillService(deps.compat, deps.store, deps.config.secret);
-  const kanban = new KanbanService(deps.compat, deps.store, workspaces, deps.config.secret);
+  const crons = new CronService(deps.compat, workspaces, deps.store, roots, revisionOf);
+  const skills = new SkillService(deps.compat, deps.store, deps.config.secret, revisionOf);
+  const kanban = new KanbanService(deps.compat, deps.store, workspaces, deps.config.secret, revisionOf);
   const agents = new AgentService(deps.compat, deps.store, deps.config.secret, kanban, workspaces, deps.db);
   const recent = new RecentService(deps.compat, deps.store, workspaces);
   const config = new ConfigService(deps.compat, deps.store, deps.db, deps.config.secret);

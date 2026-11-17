@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { REVISION_RE } from '../revision.js';
 import { z } from 'zod';
 import type { CronService } from '../crons/service.js';
 import { SLUG_RE } from '../workspaces/fs.js';
@@ -29,7 +30,7 @@ const InstantiateBody = z.object({
 });
 const BLUEPRINT_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const CreateBody = z.object({ ...Fields, schedule: z.string().trim().min(1).max(200), paused: z.boolean().default(false) });
-const UpdateBody = z.object({ ...Fields, schedule: z.string().trim().min(1).max(200).optional() });
+const UpdateBody = z.object({ ...Fields, schedule: z.string().trim().min(1).max(200).optional(), base: z.string().regex(REVISION_RE) });
 
 function ids(c: Context): { inst: string; id: string; profile: string } {
   const id = c.req.param('id') ?? '';

@@ -111,6 +111,8 @@ export interface Break {
 
 export interface FakeOptions {
   fixturesDir: string;
+  /** Installation managed by a package manager: see ConfigStore.managed (FAKE_MANAGED). */
+  managed?: 'off' | 'flag' | 'silent';
   /** "fond" scenarios: delay (ms) between the end of the run and the delivery of the sub-agents (6000; "fond-suivi" 40000). */
   bgDelayMs?: number;
   bgSuiviMs?: number;
@@ -807,7 +809,10 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
 // ---------------------------------------------------------------- apps
 
-interface Stores { vault: FakeVault; crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
+/** A creation whose answer is lost: done, then 502 (cron, kanban) or no answer at all (vault). */
+export type LoseOp = 'cronCreate' | 'cronInstantiate' | 'kanbanCreate' | 'vaultAdd';
+
+interface Stores { lose: { next: LoseOp | null }; vault: FakeVault; crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
 
 /** Dashboard token the fake accepts, mutable at run time (`fake.auth`, `POST /_fake/dash-token`). */
 export interface FakeAuth { dashToken: string }
@@ -885,6 +890,31 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // tests: the credential vault of a profile, secrets in clear (dashboard port, no token)
     if (via === 'dash' && method === 'GET' && path === '/_fake/vault') return c.json({ items: stores.vault.list(c.req.query('profile') ?? 'default') });
     if (via === 'dash' && method === 'DELETE' && path === '/_fake/vault') { stores.vault.clear(); return c.json({ ok: true }); }
+    // tests: changes made outside Intendia (agent, CLI), lost answers, a failed step of a kanban creation
+    if (method === 'POST' && path === '/_fake/skills/touch') return c.json({ ok: skills.touch(String((body as { name?: unknown } | undefined)?.name ?? '')) });
+    if (method === 'POST' && path === '/_fake/crons/touch') return c.json({ ok: crons.touch(String((body as { id?: unknown } | undefined)?.id ?? '')) });
+    if (method === 'POST' && path === '/_fake/kanban/touch') {
+      const b = (body ?? {}) as { board?: unknown; id?: unknown };
+      return c.json({ ok: kanban.touch(String(b.board ?? 'default'), String(b.id ?? '')) });
+    }
+    if (method === 'POST' && path === '/_fake/kanban/fail-patch') {
+      const step = (body as { step?: unknown } | undefined)?.step;
+      kanban.failPatch = step === 'scheduled' || step === 'assignee' ? step : null;
+      return c.json({ ok: true, step: kanban.failPatch });
+    }
+    if (method === 'POST' && path === '/_fake/lose-next') {
+      const op = (body as { op?: unknown } | undefined)?.op;
+      stores.lose.next = op === 'cronCreate' || op === 'cronInstantiate' || op === 'kanbanCreate' || op === 'vaultAdd' ? op : null;
+      return c.json({ ok: true, op: stores.lose.next });
+    }
+    // tests: a change of the config file made outside Intendia; the managed mode switched at run time
+    if (method === 'POST' && path === '/_fake/config/touch') return c.json({ n: config.touch() });
+    if (method === 'POST' && path === '/_fake/config/managed') {
+      const mode = (body as { mode?: unknown } | undefined)?.mode;
+      if (mode !== 'off' && mode !== 'flag' && mode !== 'silent') return c.json({ detail: 'mode: off | flag | silent' }, 400);
+      config.managed = mode;
+      return c.json({ ok: true, mode });
+    }
     // tests: the dashboard token changes (Hermes restarted without HERMES_DASHBOARD_SESSION_TOKEN)
     if (via === 'dash' && method === 'POST' && path === '/_fake/dash-token') {
       const token = (body as { token?: unknown } | undefined)?.token;
@@ -983,10 +1013,17 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     }
     const prof = profiles.handle(via, method, path, body, c.req.query());
     if (prof) return prof;
+    // a creation done whose answer is lost (tests of the recovery): once
+    const lost = async (res: Response, op: LoseOp): Promise<Response> => {
+      if (stores.lose.next !== op || res.status >= 300) return res;
+      stores.lose.next = null;
+      return c.json({ detail: 'Bad Gateway' }, 502);
+    };
     const kb = kanban.handle(via, method, path, c.req.query(), body);
-    if (kb) return kb;
+    if (kb) return method === 'POST' && path === '/api/plugins/kanban/tasks' ? lost(await kb, 'kanbanCreate') : kb;
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
-    if (cron) return cron;
+    if (cron && method === 'POST' && path === '/api/cron/blueprints/instantiate') return lost(await cron, 'cronInstantiate');
+    if (cron) return method === 'POST' && (path === '/api/cron/jobs' || path === '/api/jobs') ? lost(await cron, 'cronCreate') : cron;
     // before skills: SkillStore answers every /api/actions/{name}/status (404 for unknown actions)
     const conf = config.handle(via, method, path, c.req.query(), body, profile);
     if (conf) return conf;
@@ -1337,6 +1374,8 @@ export function createFakeHermes(opts: FakeOptions) {
   if (opts.noModel) config.clearModel();
   const profiles = new ProfileStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
+  if (opts.managed) config.managed = opts.managed;
+  kanban.onOrchestration = (patch) => config.writeKanban(patch);
   const git = new GitStore(opts.git);
   const monitor = new MonitorStore(opts.monitor);
   // learned skills of the graph: the first four of the list (used) and every skill written by the agent
@@ -1346,12 +1385,16 @@ export function createFakeHermes(opts: FakeOptions) {
   ]);
   const plugins = new PluginStore(opts.pluginInstallMs);
   const vault = new FakeVault(opts.vault ?? 'on', (name) => profiles.has(name));
-  const stores: Stores = { vault, crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
+  const lose: { next: LoseOp | null } = { next: null };
+  const stores: Stores = { lose, vault, crons, skills, config, profiles, kanban, files, git, monitor, memory, plugins };
   const requests: LoggedRequest[] = [];
   const auth: FakeAuth = { dashToken: FAKE_DASH_TOKEN };
   return {
     api: makeApp('api', opts, sim, stores, requests, auth), dash: makeApp('dash', opts, sim, stores, requests, auth),
     requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory, vault,
+    /** The next creation of this kind is done and its answer lost (502, or no answer for the vault): see LoseOp. */
+    get loseNext(): LoseOp | null { return lose.next; },
+    set loseNext(op: LoseOp | null) { lose.next = op; },
     /** Dashboard token accepted, can be changed at run time (tests: a token rotated by Hermes). */
     auth,
     /** Sides of Hermes that are down for `fakeFetch` and `fakeWebSocketFactory` (network error), switched by tests. */
@@ -1419,6 +1462,11 @@ export function connectGatewaySocket(fake: Fake, io: { send: (text: string) => v
     }
     if (msg.method === 'commands.catalog') return reply({ result: { commands: [] } });
     if (typeof msg.method === 'string' && msg.method.startsWith('vault.')) {
+      if (msg.method === 'vault.add' && fake.loseNext === 'vaultAdd') {
+        fake.loseNext = null;
+        try { fake.vault.call(msg.method, (msg.params ?? {}) as Record<string, unknown>); } catch { /* lost anyway */ }
+        return;
+      }
       try {
         return reply({ result: fake.vault.call(msg.method, (msg.params ?? {}) as Record<string, unknown>) });
       } catch (err) {

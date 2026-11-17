@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, ApiError, type MemoryEntry, type MemoryOverview, type MemorySource } from '../api';
 import { ask } from '../components/Dialog';
+import { askReload } from '../components/staleReload';
 import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader, Facts, ListItemBody, ListLink } from '../components/Panes';
 import { Button, cx, ErrorText, Tag } from '../components/ui';
@@ -80,6 +81,8 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
   };
   const onError = async (e: unknown) => {
     if (codeOf(e) !== 'stale') return;
+    // the draft stays shown when the user does not want to reload
+    if (draft !== null && !(await askReload(draft))) return;
     setDraft(null);
     setNotice(t('L’entrée a changé depuis la lecture de la liste (l’agent l’a peut-être modifiée) : la liste est rechargée.'));
     await reload();

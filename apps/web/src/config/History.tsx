@@ -5,6 +5,7 @@ import { api } from '../api';
 import { Button, cx, ErrorText, Panel, timeAgo } from '../components/ui';
 import { configKey, errorCode, ICON, useInvalidateConfig, type TabProps } from './common';
 import { DiffView } from './DiffView';
+import { ManagedNotice } from './Managed';
 import { ask } from '../components/Dialog';
 import { locale, t } from '../i18n';
 
@@ -50,13 +51,14 @@ export function ConfigHistory({ inst, profile, can, onSaved }: TabProps) {
         ))}
       </Panel>
       <div className="space-y-3">
+        <ManagedNotice managed={current.data?.managed} />
         {selected === null && <p className="text-sm text-ink-soft">{t('Choisissez une copie pour voir ce que sa restauration changerait.')}</p>}
         {selected !== null && (copy.isPending || current.isPending) && <p className="text-sm text-ink-soft">{t('Lecture…')}</p>}
         {selected !== null && copy.data && current.data && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-soft">{t('Lignes retirées (−) et remises (+) par la restauration :')}</p>
-              <Button variant="primary" disabled={!can('putRaw') || restore.isPending}
+              <Button variant="primary" disabled={!can('putRaw') || current.data.managed === true || restore.isPending}
                 onClick={async () => { if (await ask({ title: t('Restaurer cette copie ?'), message: t('Le fichier actuel sera copié dans l’historique avant.'), confirmLabel: t('Restaurer') })) restore.mutate(); }}>
                 <RotateCcw className={ICON} strokeWidth={1.5} />{restore.isPending ? t('Restauration…') : t('Restaurer')}
               </Button>

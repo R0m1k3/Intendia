@@ -21,6 +21,8 @@ export const FAKE_MCP_CATALOG = [
 interface Flow { id: string; name: string; status: 'starting' | 'authorization_required' | 'approved' | 'error'; state: string; redirect: string; error: string | null }
 
 export class McpCatalogFake {
+  /** Set by tests: the install answers `background: true` and writes nothing (yet). */
+  installBackground = false;
   private readonly flows = new Map<string, Flow>();
   /** Callbacks received (tests): server, code, state. */
   readonly callbacks: { server: string; code: string | null; state: string | null }[] = [];
@@ -63,6 +65,8 @@ export class McpCatalogFake {
       if (e.auth_type === 'oauth') entry.auth = 'oauth';
       const clientId = e.env.find((d) => !d.secret);
       if (clientId && env[clientId.name]) entry.oauth = { client_id: env[clientId.name] };
+      // like an entry that needs an install (npm, pip): Hermes answers at once and writes the file later
+      if (this.installBackground) return json({ ok: true, name, background: true, action: `mcp-install-${name}` });
       const file = this.file();
       this.write({ ...file, mcp_servers: { ...this.servers(), [name]: entry } });
       return json({ ok: true, name, background: false });

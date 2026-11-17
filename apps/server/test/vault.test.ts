@@ -183,6 +183,19 @@ describe('vault: errors of Hermes', () => {
   });
 });
 
+describe('vault: lost answer (lot C)', () => {
+  it('an add whose answer never comes returns the id of the item created, without a duplicate', async () => {
+    spy();
+    const t = await testApp();
+    const svc = new VaultService(t.compat, t.store, { timeoutMs: 200 });
+    t.fake.loseNext = 'vaultAdd';
+    const { id } = await svc.add('fake', 'default', login() as never);
+    const stored = t.fake.vault.list('default');
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.id).toBe(id);
+  });
+});
+
 describe('vault: replace', () => {
   it('adds the new item, then removes the old one', async () => {
     spy();

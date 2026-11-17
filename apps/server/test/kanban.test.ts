@@ -119,7 +119,7 @@ describe('kanban tasks', () => {
     const d = (await t.request('GET', `${K}/tasks/${a.id}?board=default`)).json;
     expect(d.task.body).toBe('Fais le point.');
     // a new body keeps the block
-    await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { body: 'Autre consigne.' });
+    await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { body: 'Autre consigne.', base: d.task.revision });
     const patched = last(t, 'PATCH', `/api/plugins/kanban/tasks/${a.id}`)!.body as Record<string, string>;
     expect(patched.body!.startsWith('[Intendia] Workspace : Dev (dev)')).toBe(true);
     expect(patched.body!.endsWith('\n\nAutre consigne.')).toBe(true);
@@ -255,5 +255,42 @@ describe('framing', () => {
     const a = await task(t, { title: 'Dossier', workspace: 'dev', assignee: 'default', start: 'ready' });
     await t.request('POST', `${K}/dispatch?board=default`);
     expect(existsSync(join(t.root, 'dev', a.workspace.folder))).toBe(true);
+  });
+});
+
+describe('kanban: safe writes (lot C)', () => {
+  it('the text changed in Hermes gives 409 stale; status without base is fine; title without base is 400', async () => {
+    const t = await testApp();
+    const a = await task(t, { title: 'Écrire', body: 'Premier jet.', start: 'triage' });
+    expect(a.revision).toMatch(/^[0-9a-f]{16}$/);
+    t.fake.kanban.touch('default', a.id);
+    const stale = await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { body: 'Mon texte.', base: a.revision });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('stale');
+    expect((await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { priority: 4 })).status).toBe(200);
+    expect((await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { title: 'Autre' })).status).toBe(400);
+    const fresh = (await t.request('GET', `${K}/tasks/${a.id}?board=default`)).json.task;
+    expect((await t.request('PATCH', `${K}/tasks/${a.id}?board=default`, { title: 'Autre', base: fresh.revision })).status).toBe(200);
+  });
+
+  it('a failed step after the creation gives 409 partial_create with the task id', async () => {
+    const t = await testApp();
+    t.fake.kanban.failPatch = 'assignee';
+    const res = await t.request('POST', `${K}/tasks?board=default`, { title: 'À faire', assignee: 'default' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('partial_create');
+    expect(t.fake.kanban.boards.get('default')!.tasks.some((x) => x.id === res.json.taskId)).toBe(true);
+  });
+
+  it('a creation whose answer is lost is sent again with the same key: one task', async () => {
+    const t = await testApp();
+    const before = t.fake.kanban.boards.get('default')!.tasks.length;
+    t.fake.loseNext = 'kanbanCreate';
+    const res = await t.request('POST', `${K}/tasks?board=default`, { title: 'Une seule', start: 'triage' });
+    expect(res.status).toBe(201);
+    expect(t.fake.kanban.boards.get('default')!.tasks.length).toBe(before + 1);
+    const posts = t.fake.requests.filter((r) => r.method === 'POST' && r.path === '/api/plugins/kanban/tasks');
+    expect(posts).toHaveLength(2);
+    expect((posts[0]!.body as { idempotency_key: string }).idempotency_key).toBe((posts[1]!.body as { idempotency_key: string }).idempotency_key);
   });
 });

@@ -55,8 +55,28 @@ export function migrate(sqlite: Database.Database, dataDir: string, migrationsDi
   const row = sqlite.prepare('SELECT COALESCE(MAX(id), 0) AS v FROM _migrations').get() as { v: number };
   // every migration not applied yet, not only those above the highest: branches merged in any order (0005 before
   // 0004) still get all of theirs
-  const done = new Set((sqlite.prepare('SELECT id FROM _migrations').all() as { id: number }[]).map((r) => r.id));
-  const pending = listMigrations(migrationsDir).filter((m) => !done.has(m.id));
+  // followed by file name: two files of the same number (two branches), a file renamed, or a row the code does not
+  // know (database migrated by a newer Intendia) stop the start instead of skipping or replaying a migration
+  const files = listMigrations(migrationsDir);
+  const byId = new Map<number, string>();
+  for (const f of files) {
+    const other = byId.get(f.id);
+    if (other) throw new Error(`Migrations ${other} and ${f.name} share the number ${f.name.slice(0, 4)}: rename one`);
+    byId.set(f.id, f.name);
+  }
+  const rows = sqlite.prepare('SELECT id, name FROM _migrations').all() as { id: number; name: string }[];
+  const backups = join(dataDir, 'backups');
+  for (const r of rows) {
+    const file = byId.get(r.id);
+    if (file === undefined) {
+      throw new Error(`Database migrated by a newer Intendia (${r.name} unknown): use that version or restore a backup from ${backups}`);
+    }
+    if (file !== r.name) {
+      throw new Error(`Migration ${String(r.id).padStart(4, '0')} applied as ${r.name}, but the code has ${file}: restore a backup from ${backups} or use the matching version`);
+    }
+  }
+  const done = new Set(rows.map((r) => r.name));
+  const pending = files.filter((m) => !done.has(m.name));
   if (pending.length === 0) return { applied: [] as string[], backup: null as string | null };
   const backup = backupBeforeMigration(sqlite, dataDir, row.v);
   const applied: string[] = [];

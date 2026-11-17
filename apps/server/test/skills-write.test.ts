@@ -49,20 +49,22 @@ describe('skills: write (lot 8 C)', () => {
   it('edits a user skill keeping a masked secret; refuses a bundled one', async () => {
     const t = await testApp();
     await create(t, { body: 'Appelle l’API avec Authorization: Bearer sk-skill-secret-0123456789abcdef' });
-    const shown = (await t.request('GET', `${BASE}/content?name=rapport-hebdo`)).json.content as string;
+    const opened = (await t.request('GET', `${BASE}/content?name=rapport-hebdo`)).json;
+    const shown = opened.content as string;
+    const base = opened.revision as string;
     expect(shown).not.toContain('sk-skill-secret');
     expect(shown).toContain('«secret:');
-    const put = await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: `${shown}\nAjout.\n` });
+    const put = await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: `${shown}\nAjout.\n`, base });
     expect(put.status).toBe(200);
     expect(put.json.content).not.toContain('sk-skill-secret');
     const written = dashCalls(t, 'PUT', '/api/skills/content').at(-1)!.body as { content: string };
     expect(written.content).toContain('Bearer sk-skill-secret-0123456789abcdef');
     expect(written.content).toContain('Ajout.');
     const bundled = t.fake.skills.skills.find((s) => s.provenance === 'bundled')!.name;
-    const refused = await t.request('PUT', `${BASE}/content`, { name: bundled, content: '---\nname: x\n---\nx' });
+    const refused = await t.request('PUT', `${BASE}/content`, { name: bundled, content: '---\nname: x\n---\nx', base });
     expect(refused.status).toBe(409);
     expect(refused.json.code).toBe('protected');
-    expect((await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: 'sans en-tête' })).status).toBe(400);
+    expect((await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: 'sans en-tête', base: put.json.revision })).status).toBe(400);
   });
 
   it('locks and unlocks', async () => {
@@ -88,5 +90,32 @@ describe('skills: write (lot 8 C)', () => {
     const pinned = await t.request('DELETE', `${BASE}/epingle`);
     expect(pinned.status).toBe(400);
     expect(pinned.json.error).toContain('pinned');
+  });
+});
+
+describe('skills: freshness of SKILL.md (lot C)', () => {
+  it('a good base gives a new revision; a change in Hermes in between gives 409 stale; no base gives 400', async () => {
+    const t = await testApp();
+    await create(t);
+    const opened = (await t.request('GET', `${BASE}/content?name=rapport-hebdo`)).json;
+    expect(opened.revision).toMatch(/^[0-9a-f]{16}$/);
+    const ok = await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: `${opened.content}\nUn.\n`, base: opened.revision });
+    expect(ok.status).toBe(200);
+    expect(ok.json.revision).not.toBe(opened.revision);
+    expect((await t.request('GET', `${BASE}/content?name=rapport-hebdo`)).json.revision).toBe(ok.json.revision);
+    t.fake.skills.touch('rapport-hebdo');
+    const stale = await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: `${opened.content}\nDeux.\n`, base: ok.json.revision });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('stale');
+    expect((await t.request('PUT', `${BASE}/content`, { name: 'rapport-hebdo', content: opened.content })).status).toBe(400);
+  });
+
+  it('the revision depends on INTENDIA_SECRET', async () => {
+    const a = await testApp();
+    const b = await testApp({ env: { INTENDIA_SECRET: 'un-autre-secret-de-test-0123456789abcdef' } });
+    for (const t of [a, b]) await create(t);
+    const ra = (await a.request('GET', `${BASE}/content?name=rapport-hebdo`)).json.revision;
+    const rb = (await b.request('GET', `${BASE}/content?name=rapport-hebdo`)).json.revision;
+    expect(ra).not.toBe(rb);
   });
 });

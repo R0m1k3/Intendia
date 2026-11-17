@@ -64,7 +64,7 @@ describe('monitor: logs', () => {
     const before = await t.services.config.knownSecrets('fake', 'default');
     expect(before).toContain(FAKE_SECRETS.plain);
     const raw = (await t.request('GET', '/x/i/fake/config/raw')).json;
-    const yaml = `${raw.yaml as string}\n# relu\n`;
+    const yaml = `${raw.yaml as string}\nx_relu: 1\n`;
     const saved = await t.request('PUT', '/x/i/fake/config/raw', { yaml, version: raw.version });
     expect(saved.status).toBe(200);
     // the cache was dropped: the next read goes back to Hermes

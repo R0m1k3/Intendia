@@ -2,7 +2,9 @@ import type { CompatService } from '../compat/service.js';
 import {
   BlueprintListSchema, JobGetSchema, JobListSchema, normaliseJobs, RunListSchema, TargetListSchema, updateBody, type HermesJob,
 } from '../connectors/crons/index.js';
-import { callOp, HermesError, hermesDetail } from '../connectors/runtime.js';
+import { callOp, HermesError, hermesDetail, uncertain } from '../connectors/runtime.js';
+import { AdminError } from '../admin-error.js';
+import type { RevisionOf } from '../revision.js';
 import type { FileRoots } from '../files/hermes-fs.js';
 import type { InstanceStore } from '../instances/store.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
@@ -53,6 +55,8 @@ export interface PublicCron {
   catchUp: boolean | null;
   graceMinutes: number | null;
   contextFrom: string[];
+  /** Freshness of the editor fields (sent back as `base` on update). */
+  revision: string;
 }
 
 export interface PublicBlueprintField {
@@ -127,6 +131,20 @@ export interface CronInput {
   catchUp?: boolean | null;
   graceMinutes?: number | null;
   contextFrom?: string[] | null;
+  /** Update only: `revision` of the cron the editor opened (409 `stale` when it changed since). */
+  base?: string;
+}
+
+/**
+ * Text the freshness check of a cron covers: the fields of the editor. Not the run state (`state`, `next_run_at`,
+ * `last_*`, `failure_streak`, `repeat.completed`), which every run changes, nor the pause, which has its own button.
+ */
+export function cronRevisionText(job: HermesJob): string {
+  return JSON.stringify([
+    job.profile ?? 'default', job.name ?? '', job.prompt ?? '', job.schedule ?? null, job.deliver ?? null, job.skills ?? [], job.model ?? null,
+    job.workdir ?? null, job.timezone ?? null, job.repeat?.times ?? null, job.enabled_toolsets ?? null, job.catch_up ?? null,
+    job.grace_minutes ?? null, job.context_from ?? [],
+  ]);
 }
 
 // framing block: workspaces/framing.ts (shared with the kanban)
@@ -143,10 +161,11 @@ function schedule(raw: HermesJob['schedule'], display: string | null | undefined
 }
 
 /** Hermes job → what the browser sees (no hermes_home, script, monitor_*, origin, workdir). */
-export function toPublic(instanceId: string, job: HermesJob, findWorkspace: (slug: string) => Workspace | undefined): PublicCron {
+export function toPublic(instanceId: string, job: HermesJob, findWorkspace: (slug: string) => Workspace | undefined, revisionOf: RevisionOf): PublicCron {
   const u = unframe(job.prompt ?? '');
   const ws = u.slug ? findWorkspace(u.slug) : undefined;
   return {
+    revision: revisionOf(cronRevisionText(job)),
     id: job.id,
     instanceId,
     profile: job.profile ?? 'default',
@@ -231,6 +250,7 @@ export class CronService {
     private readonly workspaces: WorkspaceService,
     private readonly store: InstanceStore,
     private readonly roots: FileRoots,
+    private readonly revisionOf: RevisionOf,
   ) {}
 
   private ctx(instanceId: string) {
@@ -244,7 +264,7 @@ export class CronService {
   }
 
   private pub(instanceId: string, job: HermesJob): PublicCron {
-    return toPublic(instanceId, job, this.finder());
+    return toPublic(instanceId, job, this.finder(), this.revisionOf);
   }
 
   private async rawList(instanceId: string, timeoutMs?: number): Promise<HermesJob[]> {
@@ -269,9 +289,12 @@ export class CronService {
     return blockLines(ws, 'crons', folder, this.workspaces.framingLines(ws, `crons/${folder}`), this.workspaces.agentPath(ws));
   }
 
-  /** Keys already used by the instance's crons, and folders already on disk under the workspace's crons/. */
-  private async takenKeys(instanceId: string, ws: Workspace, exceptJobId?: string): Promise<string[]> {
-    const keys = (await this.rawList(instanceId)).filter((j) => j.id !== exceptJobId)
+  /**
+   * Keys already used by the instance's crons, and folders already on disk under the workspace's crons/. `jobs`: the
+   * list already read by the caller.
+   */
+  private async takenKeys(instanceId: string, ws: Workspace, exceptJobId?: string, jobs?: HermesJob[]): Promise<string[]> {
+    const keys = (jobs ?? await this.rawList(instanceId)).filter((j) => j.id !== exceptJobId)
       .map((j) => unframe(j.prompt ?? '').folder).filter((k): k is string => Boolean(k));
     try {
       const { entries } = await this.roots.fs(ws.instanceId).list(`${ws.slug}/crons`);
@@ -284,7 +307,7 @@ export class CronService {
 
   async list(instanceId: string): Promise<PublicCron[]> {
     const find = this.finder();
-    return (await this.rawList(instanceId)).map((j) => toPublic(instanceId, j, find));
+    return (await this.rawList(instanceId)).map((j) => toPublic(instanceId, j, find, this.revisionOf));
   }
 
   async get(instanceId: string, id: string, profile: string): Promise<PublicCron> {
@@ -299,15 +322,35 @@ export class CronService {
       skills: input.skills, model: input.model, paused: input.paused ?? false, ...advancedFields(input, false),
     };
     let profile: string | undefined;
+    // ids before the creation: after a lost answer, the new cron is found among the others (null = no recovery)
+    const before = await this.rawList(instanceId).catch(() => null);
     if (ws) {
-      const folder = folderKey(input.name, await this.takenKeys(instanceId, ws));
+      const folder = folderKey(input.name, await this.takenKeys(instanceId, ws, undefined, before ?? undefined));
       body.prompt = frame(input.prompt, this.blockLines(ws, folder));
       body.workdir = this.workspaces.agentPath(ws);
       profile = ws.profile ?? 'default';
     }
     if (input.contextFrom?.length) await this.checkContext(instanceId, profile ?? 'default', input.contextFrom);
-    const raw = await translate(() => callOp(http, report, 'crons', 'create', { body, profile }));
-    return this.pub(instanceId, asJob(raw));
+    try {
+      const raw = await translate(() => callOp(http, report, 'crons', 'create', { body, profile }));
+      return this.pub(instanceId, asJob(raw));
+    } catch (err) {
+      const found = await this.recover(instanceId, err, before, (j) => j.name === input.name && j.prompt === body.prompt);
+      if (found) return this.pub(instanceId, found);
+      throw err;
+    }
+  }
+
+  /**
+   * After an uncertain answer to a creation (lost, timeout, 5xx), the single new job (`match`) of the instance;
+   * null when the list before is unknown, the list fails, or none or several new jobs match.
+   */
+  private async recover(instanceId: string, err: unknown, before: HermesJob[] | null, match: (j: HermesJob) => boolean): Promise<HermesJob | null> {
+    if (!uncertain(err) || before === null) return null;
+    const known = new Set(before.map((j) => j.id));
+    const after = await this.rawList(instanceId).catch(() => null);
+    const added = (after ?? []).filter((j) => !known.has(j.id) && match(j));
+    return added.length === 1 ? added[0]! : null;
   }
 
   /** `context_from` ids must be crons of the same profile (Hermes refuses the others with a host-path-free 400). */
@@ -320,6 +363,9 @@ export class CronService {
   async update(instanceId: string, id: string, profile: string, input: CronInput): Promise<PublicCron> {
     const { http, report } = this.ctx(instanceId);
     const job = await this.rawGet(instanceId, id, profile);
+    if (this.revisionOf(cronRevisionText(job)) !== input.base) {
+      throw new AdminError('stale', msg('Ce cron a changé dans Hermes depuis l’ouverture : rechargez'));
+    }
     const current = unframe(job.prompt ?? '');
     const fields: Record<string, unknown> = {
       name: input.name, prompt: input.prompt, deliver: input.deliver, skills: input.skills, model: input.model,
@@ -389,6 +435,8 @@ export class CronService {
     if (extra.length) throw new ValidationError(msg('Champ inconnu pour ce modèle : {fields}', { fields: extra.join(', ') }));
     const ws = workspace ? this.workspaceFor(instanceId, workspace) : null;
     if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, pas {profile}', { wsProfile: ws.profile ?? 'default', profile }));
+    // no recovery after an uncertain answer: name and prompt come from the template, so nothing ties a new job
+    // to this request (another client may have created it), and attaching it would move someone else's cron
     const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
     if (!ws) return { cron: this.pub(instanceId, job), attached: false };
     try {

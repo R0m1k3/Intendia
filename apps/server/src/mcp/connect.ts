@@ -7,8 +7,10 @@ import type { AppConfig } from '../config.js';
 import { mcpTokenEnv } from '../connectors/config/index.js';
 import type { Db } from '../db/index.js';
 import { ConfigConflictError, type ConfigService } from '../hermes-config/service.js';
-import { isMcpSynced, markMcpSynced, mcpToken, mcpUrl, rotateMcpToken } from './server.js';
+import { commitMcpToken, isMcpSynced, markMcpSynced, mcpToken, mcpUrl, stageMcpToken } from './server.js';
+import { uncertain } from '../connectors/runtime.js';
 import { msg } from '../i18n/index.js';
+import { KeyedLock } from '../keyed-lock.js';
 
 export const MCP_NAME = 'intendia';
 const PROFILE = 'default';
@@ -27,7 +29,7 @@ export interface McpTest { ok: boolean; tools: string[]; error?: string }
 
 export class McpLink {
   /** One connect / rotate at a time per instance: state read → write → synced flag. */
-  private readonly chains = new Map<string, Promise<unknown>>();
+  private readonly chains = new KeyedLock();
 
   constructor(
     private readonly configService: ConfigService,
@@ -36,13 +38,7 @@ export class McpLink {
   ) {}
 
   private queued<T>(id: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.chains.get(id) ?? Promise.resolve();
-    const run = prev.catch(() => undefined).then(fn);
-    this.chains.set(id, run);
-    void run.catch(() => undefined).finally(() => {
-      if (this.chains.get(id) === run) this.chains.delete(id);
-    });
-    return run;
+    return this.chains.run(id, fn);
   }
 
   async state(id: string): Promise<McpState> {
@@ -75,23 +71,44 @@ export class McpLink {
     return { state: await this.state(id), ...(test ? { test } : {}) };
   }
 
-  /** New token; Hermes gets it when the entry is managed. A Hermes error does not undo the rotation. */
-  async rotate(id: string): Promise<{ state: McpState; test?: McpTest; error?: string }> {
+  /**
+   * New token. Managed entry: written into Hermes first, then stored, the old one accepted 24 h more (the running
+   * gateway keeps it until it restarts); a refusal changes nothing. An uncertain write (lost answer, 5xx) may have
+   * reached Hermes: `next` is stored, the old one accepted 24 h more, and the state is `stale` so the token is sent
+   * again. Otherwise only stored (no grace).
+   */
+  async rotate(id: string, now = Date.now()): Promise<{ state: McpState; test?: McpTest; error?: string; restartNeeded?: true; previousUntil?: number | null }> {
     let sent = false;
     let error: string | undefined;
+    let previousUntil: number | null = null;
     await this.queued(id, async () => {
       const before = await this.state(id);
-      rotateMcpToken(this.db, id);
-      if (before !== 'connected' && before !== 'stale') return;
-      try {
-        await this.write(id, before);
-        sent = true;
-      } catch (err) {
-        error = err instanceof Error ? err.message : String(err);
+      const next = stageMcpToken();
+      if (before !== 'connected' && before !== 'stale') {
+        commitMcpToken(this.db, id, next, false, now);
+        return;
       }
+      try {
+        await this.configService.setEnv(id, PROFILE, mcpTokenEnv(MCP_NAME), next);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        if (!uncertain(err)) {
+          error = detail;
+          return;
+        }
+        // Hermes may hold either token: both accepted, `stale` until the current one is sent again
+        commitMcpToken(this.db, id, next, true, now, false);
+        error = msg('Réponse d’Hermes incertaine ({detail}) : l’ancien et le nouveau jeton restent acceptés 24 h ; renvoyez le jeton à Hermes', { detail });
+        return;
+      }
+      previousUntil = commitMcpToken(this.db, id, next, true, now);
+      sent = true;
     });
     const test = sent ? await this.test(id) : undefined;
-    return { state: await this.state(id), ...(test ? { test } : {}), ...(error ? { error } : {}) };
+    return {
+      state: await this.state(id), ...(test ? { test } : {}), ...(error ? { error } : {}),
+      ...(sent ? { restartNeeded: true as const, previousUntil } : {}),
+    };
   }
 
   private async write(id: string, state: McpState): Promise<void> {

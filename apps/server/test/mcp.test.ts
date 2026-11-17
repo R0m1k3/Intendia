@@ -168,21 +168,88 @@ describe('mcp: put into Hermes by Intendia', () => {
     expect(await state(t)).toBe('other_url');
   });
 
-  it('sends a new token to Hermes; a failure leaves the state stale until the next connect', async () => {
-    const breaks: Record<string, { status: number }> = {};
-    const t = await testApp({ breaks });
+  it('does not put the other entry back over a change made in between: 502 partial_write', async () => {
+    const t = await testApp({ env: { INTENDIA_MCP_URL: 'http://refuse.example.test:3001' } });
+    addOther(t, 'https://elsewhere.example.test/mcp');
+    // the first read after the refused add is the one before the rollback
+    let done = false;
+    t.fake.config.onRawRead = () => {
+      if (done || !t.fake.requests.some((r) => r.method === 'POST' && r.path === '/api/mcp/servers')) return;
+      done = true;
+      t.fake.config.externalEdit((raw) => `${raw}x_tiers: 1\n`);
+    };
+    const res = await t.request('POST', '/x/instances/fake/mcp/connect', { replaceOther: true });
+    expect(res.status).toBe(502);
+    expect(res.json.code).toBe('partial_write');
+    expect(t.fake.requests.filter((r) => r.method === 'PUT' && r.path === '/api/config/raw')).toHaveLength(0);
+  });
+
+  it('sends a new token to Hermes; a refusal changes nothing (lot C)', async () => {
+    const t = await testApp();
     await t.request('POST', '/x/instances/fake/mcp/connect', {});
     const rotated = await t.request('POST', '/x/instances/fake/mcp/rotate');
-    expect(rotated.json).toMatchObject({ state: 'connected', test: { ok: true } });
+    expect(rotated.json).toMatchObject({ state: 'connected', test: { ok: true }, restartNeeded: true });
     expect(t.fake.config.envValues.get(KEY)).toBe(rotated.json.token);
-    breaks['dash PUT /api/env'] = { status: 500 };
+    t.fake.config.failPutEnv = { status: 400 };
     const failed = await t.request('POST', '/x/instances/fake/mcp/rotate');
-    expect(failed.json.state).toBe('stale');
+    expect(failed.json.state).toBe('connected');
     expect(failed.json.error).toBeTruthy();
-    expect(failed.json.token).not.toBe(rotated.json.token);
-    delete breaks['dash PUT /api/env'];
+    expect(failed.json.restartNeeded).toBeUndefined();
+    expect(failed.json.token).toBe(rotated.json.token);
+    expect(t.fake.config.envValues.get(KEY)).toBe(rotated.json.token);
+  });
+
+  it('an uncertain rotation keeps both tokens and asks to send the token again (review #128)', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/instances/fake/mcp/connect', {});
+    const old = mcpToken(t.db, 'fake');
+    const ping = (token: string) => Promise.resolve(t.mcp.request('/mcp/fake', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+    })).then((r) => r.status);
+    // Hermes writes the new token, the proxy answers 502
+    t.fake.config.failPutEnv = { status: 502, afterWrite: true };
+    const res = (await t.request('POST', '/x/instances/fake/mcp/rotate')).json;
+    expect(res.state).toBe('stale');
+    expect(res.error).toBeTruthy();
+    expect(res.restartNeeded).toBeUndefined();
+    const next = mcpToken(t.db, 'fake');
+    expect(next).not.toBe(old);
+    expect(t.fake.config.envValues.get(KEY)).toBe(next);
+    expect(await ping(next)).toBe(200);
+    expect(await ping(old)).toBe(200);
+    // sending the token again reconciles
+    t.fake.config.failPutEnv = null;
     expect((await t.request('POST', '/x/instances/fake/mcp/connect', {})).json.state).toBe('connected');
-    expect(t.fake.config.envValues.get(KEY)).toBe(failed.json.token);
+    expect(t.fake.config.envValues.get(KEY)).toBe(next);
+  });
+
+  it('after a rotation the old token works 24 h, even after a call with the new one; revoke ends it at once', async () => {
+    let at = Date.now();
+    const t = await testApp({ mcpNow: () => at });
+    await t.request('POST', '/x/instances/fake/mcp/connect', {});
+    const old = mcpToken(t.db, 'fake');
+    const ping = (token: string) => Promise.resolve(t.mcp.request('/mcp/fake', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+    })).then((r) => r.status);
+    const before = Date.now();
+    const rotated = (await t.request('POST', '/x/instances/fake/mcp/rotate')).json;
+    expect(rotated.previousUntil).toBeGreaterThanOrEqual(before + 24 * 3600_000);
+    expect(rotated.previousUntil).toBeLessThanOrEqual(Date.now() + 24 * 3600_000);
+    // the new token first (as Hermes' connection test), then the old one
+    expect(await ping(rotated.token)).toBe(200);
+    expect(await ping(old)).toBe(200);
+    at = rotated.previousUntil + 1;
+    expect(await ping(old)).toBe(401);
+    expect(await ping(rotated.token)).toBe(200);
+
+    at = Date.now();
+    const again = (await t.request('POST', '/x/instances/fake/mcp/rotate')).json;
+    expect(await ping(rotated.token)).toBe(200);
+    expect((await t.request('POST', '/x/instances/fake/mcp/revoke-previous')).json).toEqual({ ok: true });
+    expect(await ping(rotated.token)).toBe(401);
+    expect(await ping(again.token)).toBe(200);
   });
 
   it('a rotation does not reach Hermes when the entry is not managed', async () => {
