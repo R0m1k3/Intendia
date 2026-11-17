@@ -419,4 +419,7 @@ export default {
   'Il a été supprimé ou remplacé depuis : choisissez-le de nouveau dans la liste.': 'It was deleted or replaced since: pick it again in the list.',
   'Les accès de l’agent': 'The agent’s site access',
   'Identifiants, cartes et adresses que l’agent peut remplir sur les sites, sans jamais voir les mots de passe ni les numéros. Ils sont chiffrés dans le coffre d’Hermes.': 'Logins, cards and addresses the agent can fill in on sites, without ever seeing the passwords or numbers. They are encrypted in Hermes’ vault.',
+  // kanban: empty board
+  'Ce tableau est vide': 'This board is empty',
+  'Une tâche confiée à un agent avance seule d’une colonne à l’autre.': 'A task given to an agent moves from column to column on its own.',
 } satisfies Record<string, string>;

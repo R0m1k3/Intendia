@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { AlertTriangle, FolderOpen, GitBranch, MessageSquare, Play, Plus, Settings2, Split } from 'lucide-react';
+import { AlertTriangle, FolderOpen, GitBranch, KanbanSquare, MessageSquare, Play, Plus, Settings2, Split } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type KanbanTask, type KanbanWorkflow } from '../api';
 import { PageHeader } from '../components/Layout';
+import { Empty } from '../components/Panes';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, chipClass, cx, ErrorText, Field, Input, Mark, Tag } from '../components/ui';
@@ -383,6 +384,14 @@ export function KanbanPage() {
           <ErrorText error={moveError} />
         </div>
 
+        {a.available && view.data && allTasks.length === 0 && can('createTask') && (
+          <div className="mx-4 rounded-xl border border-dashed border-line md:mx-8" data-kanban-empty>
+            <Empty icon={<KanbanSquare strokeWidth={1.5} />} title={t('Ce tableau est vide')}
+              actions={<Button variant="primary" onClick={() => setDialog('task')}><Plus className={ICON} strokeWidth={1.5} />{t('Nouvelle tâche')}</Button>}>
+              {t('Une tâche confiée à un agent avance seule d’une colonne à l’autre.')}
+            </Empty>
+          </div>
+        )}
         {a.available && wf && view.data && (
           <>
             {!wide ? (
