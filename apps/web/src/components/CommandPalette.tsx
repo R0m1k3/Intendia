@@ -93,7 +93,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: { na
 
   const partial = searching ? found.data?.partial ?? [] : [];
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
+    <div data-overlay className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
       <div
         role="dialog" aria-modal="true" aria-label={mode === 'files' ? t('Ouvrir un fichier') : t('Rechercher')} onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"

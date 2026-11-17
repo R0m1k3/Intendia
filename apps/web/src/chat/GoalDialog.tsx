@@ -54,7 +54,7 @@ export function GoalDialog({ initial, editing, autoApprove, onSubmit, onClose }:
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
+    <div data-overlay className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
       <form
         role="dialog" aria-modal="true" aria-label={editing ? t('Modifier l’objectif') : t('Fixer un objectif')} data-goal-dialog
         onMouseDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void submit(); }}

@@ -91,7 +91,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
   const danger = req.kind === 'ask' && req.opts.danger;
   const confirmLabel = req.opts.confirmLabel ?? (req.kind === 'copy' ? t('Fermer') : t('Confirmer'));
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[18vh]" onMouseDown={() => finish(false)}>
+    <div data-overlay className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[18vh]" onMouseDown={() => finish(false)}>
       <form
         role={req.kind === 'ask' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}

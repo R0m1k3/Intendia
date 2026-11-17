@@ -69,7 +69,7 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
       </button>
       {open && pos && createPortal(
         <div
-          ref={panel} role="menu" aria-label={title} style={pos}
+          ref={panel} role="menu" aria-label={title} style={pos} data-overlay
           className="fixed z-50 overflow-y-auto rounded-xl border border-line bg-sheet p-1 shadow-[var(--shadow-card)]"
         >
           {children(close)}

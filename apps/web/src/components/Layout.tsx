@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -16,6 +16,9 @@ import { useChat } from '../chat/columns';
 import { SideChat } from './SideChat';
 import { StatusBars } from './StatusBars';
 import { useTabStatus } from './tabStatus';
+import { isEditable, overlayOpen, shortcutOf } from './shortcuts';
+import { ShortcutsSheet } from './ShortcutsSheet';
+import { getActivePage } from './activePage';
 import { DirtyBlocker } from './dirty';
 import { cx, Wordmark } from './ui';
 import { plural, t } from '../i18n';
@@ -152,6 +155,8 @@ function FullLayout() {
     if (el?.isConnected) requestAnimationFrame(() => el.focus());
   }, []);
   useEffect(() => { if (onSession) setSide(false); }, [onSession]);
+  // « ? »: the keyboard shortcuts
+  const [help, setHelp] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
@@ -167,11 +172,23 @@ function FullLayout() {
         e.preventDefault();
         if (side) closeSide();
         else if (!onSession && inst) openSide();
+      } else {
+        // one-key shortcuts: outside fields, no window, sheet or menu open
+        const id = shortcutOf(e, { editable: isEditable(e.target), overlay: overlayOpen() });
+        if (!id) return;
+        e.preventDefault();
+        if (id === 'help') setHelp(true);
+        else if (id === 'new') void navigate({ to: '/chat/nouvelle' });
+        else {
+          const focus = getActivePage()?.focusComposer;
+          if (focus) focus();
+          else openPalette();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [palette, openPalette, closePalette, side, onSession, inst, openSide, closeSide]);
+  }, [palette, openPalette, closePalette, side, onSession, inst, openSide, closeSide, navigate]);
 
   const logout = async () => {
     await api.logout();
@@ -235,6 +252,10 @@ function FullLayout() {
               <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
               <span className="truncate">{t('Se déconnecter')}</span>
             </button>
+            <button type="button" onClick={() => setHelp(true)} aria-haspopup="dialog" aria-label={t('Raccourcis')} title={t('Raccourcis clavier')}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink">
+              <Keyboard className="size-3.5" strokeWidth={1.5} />
+            </button>
             {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title={t('Version d’Intendia')}>v{version}</span>}
           </div>
         </div>
@@ -249,6 +270,7 @@ function FullLayout() {
       <StatusBars />
       {side && inst && <SideChat key={inst} inst={inst} workspaces={mine} onClose={closeSide} />}
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
+      {help && <ShortcutsSheet onClose={() => setHelp(false)} />}
       <Approvals />
       <MobileNav version={version} inst={inst} onSearch={() => openPalette()} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
@@ -274,7 +296,7 @@ function MobileNav({ current, onSearch, onChat, version, inst }: { current: stri
   return (
     <>
       {more && createPortal(
-        <div className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
+        <div data-overlay className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
           <nav aria-label={t('Plus')} onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
             <InstanceSwitcher className="col-span-3" onPicked={() => setMore(false)} />
