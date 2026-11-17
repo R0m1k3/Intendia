@@ -8,6 +8,7 @@ import {
 import { Advanced } from '../crons/Advanced';
 import { advancedError, advancedInput, advancedOf, type AdvancedForm } from '../crons/advanced';
 import { Button, cx, ErrorText, Field, Input } from './ui';
+import { askReload, isStale } from './staleReload';
 import { t } from '../i18n';
 import { T } from '../i18n/T';
 
@@ -100,6 +101,8 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
   const [paused, setPaused] = useState(false);
   const [initialAdvanced] = useState(() => advancedOf(cron));
   const [advanced, setAdvanced] = useState<AdvancedForm>(initialAdvanced);
+  /** Revision the edit started from: a cron changed in Hermes since gives 409 `stale`. */
+  const [base] = useState(cron?.revision);
 
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === instanceId);
   const ws = mine.find((w) => w.slug === workspace);
@@ -119,7 +122,13 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
       if (!cron) return api.createCron(instanceId, { ...input, schedule, paused });
       // unchanged schedule: not sent, so Hermes keeps its next run
       const changed = !(initialForm.kind === 'cron' && !initialForm.expr) && schedule !== toSchedule(initialForm);
-      return api.updateCron(instanceId, cron.id, cron.profile, changed ? { ...input, schedule } : input);
+      return api.updateCron(instanceId, cron.id, cron.profile, { ...(changed ? { ...input, schedule } : input), base });
+    },
+    onError: async (e) => {
+      // the prompt is the draft worth keeping
+      if (!isStale(e) || !(await askReload(prompt))) return;
+      onClose();
+      await qc.invalidateQueries({ queryKey: ['crons', instanceId] });
     },
     onSuccess: async (r) => {
       await qc.invalidateQueries({ queryKey: ['crons', instanceId] });

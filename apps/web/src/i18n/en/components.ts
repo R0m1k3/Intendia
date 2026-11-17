@@ -229,4 +229,8 @@ export default {
   'Fichiers pas encore vérifiés sur cette instance : cliquez « Revérifier » dans Réglages.': 'Files not checked yet on this instance: click “Check again” in Settings.',
   'Création…': 'Creating…',
   'Créer le workspace': 'Create the workspace',
+  'Modifié ailleurs': 'Changed elsewhere',
+  'Ce texte a changé dans Hermes depuis que vous l’avez ouvert. Recharger la version actuelle ? Votre brouillon sera copié dans le presse-papiers, ou affiché pour que vous le copiiez.': 'This text changed in Hermes since you opened it. Reload the current version? Your draft will be copied to the clipboard, or shown so you can copy it.',
+  'Recharger': 'Reload',
+  'Votre brouillon': 'Your draft',
 } satisfies Record<string, string>;

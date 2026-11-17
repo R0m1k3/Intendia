@@ -306,6 +306,8 @@ export interface CronSchedule {
 }
 
 export interface Cron {
+  /** Freshness of the editor fields: sent back as `base` on update (409 `stale` when the cron changed since). */
+  revision: string;
   id: string;
   instanceId: string;
   profile: string;
@@ -350,6 +352,8 @@ export interface CronRun {
 }
 
 export interface CronInput {
+  /** Update only: `revision` of the cron the editor opened. */
+  base?: string;
   name: string;
   prompt: string;
   schedule?: string;
@@ -653,6 +657,8 @@ export interface FinishedRun {
 }
 export interface KanbanBoard { slug: string; name: string; total: number }
 export interface KanbanTask {
+  /** Freshness of the title and text: sent back as `base` to change them. */
+  revision: string;
   id: string;
   title: string;
   status: string;
@@ -695,10 +701,12 @@ export interface KanbanOrchestration {
 }
 export type KanbanStart = 'scheduled' | 'ready' | 'triage';
 export interface KanbanTaskInput { title: string; body?: string; assignee?: string | null; priority?: number | null; start?: KanbanStart; workspace?: string | null }
-export interface KanbanTaskPatch { status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string }
+export interface KanbanTaskPatch { status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string; base?: string }
 export type KanbanMissionState = 'decomposing' | 'held' | 'launched' | 'failed' | 'cancelled';
 export interface KanbanMissionChild {
   id: string; title: string; body: string; status: string; assignee: string | null;
+  /** freshness of the title and text, sent back as `base` */
+  revision: string;
   /** other children it waits for */
   after: string[];
   held: boolean;
@@ -853,8 +861,8 @@ export const api = {
   createWorkspace: (w: { slug: string; name: string; instanceId: string; profile?: string | null }) =>
     call<{ workspace: Workspace }>('POST', '/workspaces', w),
   updateWorkspace: (slug: string, patch: { name?: string }) => call<{ workspace: Workspace }>('PATCH', `/workspaces/${enc(slug)}`, patch),
-  agentsMd: (slug: string) => call<{ text: string }>('GET', `/workspaces/${enc(slug)}/agents-md`),
-  saveAgentsMd: (slug: string, text: string) => call<{ ok: true }>('PUT', `/workspaces/${enc(slug)}/agents-md`, { text }),
+  agentsMd: (slug: string) => call<{ text: string; revision: string }>('GET', `/workspaces/${enc(slug)}/agents-md`),
+  saveAgentsMd: (slug: string, text: string, base: string) => call<{ ok: true }>('PUT', `/workspaces/${enc(slug)}/agents-md`, { text, base }),
   sessions: (slug: string, archived = false) => call<{ sessions: Session[] }>('GET', `/workspaces/${enc(slug)}/sessions${archived ? '?archived=1' : ''}`),
   createSession: (slug: string) => call<{ session: Session }>('POST', `/workspaces/${enc(slug)}/sessions`),
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
@@ -1040,13 +1048,13 @@ export const api = {
     call<{ taskId: string; status: string }>('POST', kanbanPath(inst, `workers/${runId}/stop`, board), {}),
   skills: (inst: string, profile: string) => call<{ skills: Skill[] }>('GET', instPath(inst, 'skills', profile)),
   skillContent: (inst: string, profile: string, name: string) =>
-    call<{ name: string; content: string; truncated: boolean }>('GET', instPath(inst, 'skills/content', profile, { name })),
+    call<{ name: string; content: string; truncated: boolean; revision: string }>('GET', instPath(inst, 'skills/content', profile, { name })),
   setSkillEnabled: (inst: string, profile: string, name: string, enabled: boolean) =>
     call<{ skill: Skill }>('PUT', instPath(inst, 'skills/enabled', profile), { name, enabled }),
   createSkill: (inst: string, profile: string, input: { name: string; category?: string; description: string; body: string }) =>
     call<{ skill: Skill }>('POST', instPath(inst, 'skills', profile), input),
-  putSkillContent: (inst: string, profile: string, name: string, content: string) =>
-    call<{ content: string }>('PUT', instPath(inst, 'skills/content', profile), { name, content }),
+  putSkillContent: (inst: string, profile: string, name: string, content: string, base: string) =>
+    call<{ content: string; revision: string }>('PUT', instPath(inst, 'skills/content', profile), { name, content, base }),
   lockSkill: (inst: string, profile: string, name: string, locked: boolean) =>
     call<{ skill: Skill }>('PUT', instPath(inst, 'skills/lock', profile), { name, locked }),
   archiveSkill: (inst: string, profile: string, name: string) => call<{ ok: true }>('DELETE', instPath(inst, `skills/${enc(name)}`, profile)),

@@ -33,6 +33,8 @@ export interface MissionRow {
 
 export interface MissionChild {
   id: string; title: string; body: string; status: string; assignee: string | null;
+  /** freshness of the title and text (see PublicTask.revision) */
+  revision: string;
   /** ids of the other children it waits for */
   after: string[];
   held: boolean;
@@ -251,7 +253,7 @@ export class MissionService {
       ...m,
       rootStatus: root.task.status,
       children: kids.map((k) => ({
-        id: k.task.id, title: k.task.title, body: k.task.body, status: k.task.status, assignee: k.task.assignee,
+        id: k.task.id, title: k.task.title, body: k.task.body, status: k.task.status, assignee: k.task.assignee, revision: k.task.revision,
         after: k.parents.map((p) => p.id).filter((p) => ids.has(p)),
         held: held(k),
         lostTracking: held(k) && busy.has(k.task.id),
