@@ -258,4 +258,6 @@ export default {
   'Question précédente ou suivante': 'Previous or next question',
   'Entrée|touche': 'Enter',
   'Maj|touche': 'Shift',
+  // palette: the open session's actions
+  'Session ouverte': 'Open session',
 } satisfies Record<string, string>;

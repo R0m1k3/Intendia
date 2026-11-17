@@ -349,4 +349,6 @@ export default {
   '{files} dans {folder}/': '{files} in {folder}/',
   'Non décompressée : {error}': 'Not unpacked: {error}',
   '/{name} : {reason}': '/{name}: {reason}',
+  // palette: the open session's actions
+  'Arrêter le travail': 'Stop the work',
 } satisfies Record<string, string>;

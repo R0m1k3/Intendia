@@ -4,10 +4,13 @@ import { t } from '../i18n';
 
 /** Where an item leads: options for the router's `navigate`. */
 export interface Target { to: string; params?: Record<string, string>; search?: Record<string, unknown> }
-export type PaletteGroupId = 'actions' | 'pages' | 'workspaces' | 'crons' | 'sessions' | 'files';
+export type PaletteGroupId = 'page' | 'actions' | 'pages' | 'workspaces' | 'crons' | 'sessions' | 'files';
 export type PaletteMode = 'all' | 'files';
-/** `target`: where it leads; an item with `mode` switches the palette instead (« Ouvrir un fichier… »). */
-export interface PaletteItem { id: string; label: string; hint?: string; target?: Target; mode?: PaletteMode }
+/**
+ * `target`: where it leads; an item with `mode` switches the palette instead (« Ouvrir un fichier… »); an item with
+ * `run` (the open session's actions) closes the palette and runs it.
+ */
+export interface PaletteItem { id: string; label: string; hint?: string; target?: Target; mode?: PaletteMode; run?: () => void }
 export interface PaletteGroup { id: PaletteGroupId; label: string; items: PaletteItem[] }
 
 export const PER_GROUP = 5;
@@ -15,7 +18,7 @@ export const PER_GROUP = 5;
 export const SEARCH_MIN = 2;
 
 const GROUP_LABEL: Record<PaletteGroupId, string> = {
-  actions: t('Actions'), pages: t('Pages'), workspaces: t('Workspaces'), crons: t('Crons'), sessions: t('Sessions'), files: t('Fichiers'),
+  page: t('Session ouverte'), actions: t('Actions'), pages: t('Pages'), workspaces: t('Workspaces'), crons: t('Crons'), sessions: t('Sessions'), files: t('Fichiers'),
 };
 
 export const ACTIONS: PaletteItem[] = [
@@ -66,9 +69,14 @@ export interface PaletteSources {
   recent: readonly RecentSession[];
   /** The server's search for the current text (SEARCH_MIN characters or more), when it has answered. */
   found: readonly RecentSession[] | null;
+  /** The open session's actions (ids `o:…`), first and never cut to PER_GROUP. */
+  page?: readonly PaletteItem[];
 }
 
-/** Groups shown for a text: without text, actions, pages and the latest sessions; else every match, 5 per group. */
+/**
+ * Groups shown for a text: without text, the open session's actions, actions, pages and the latest sessions; else every
+ * match, 5 per group (the open session's actions all).
+ */
 export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
   const words = wordsOf(q);
   const keep = (items: PaletteItem[]) => (words.length ? items.filter((i) => matchesAll(words, `${i.label} ${i.hint ?? ''}`)) : items);
@@ -87,8 +95,8 @@ export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
         ['sessions', sessions],
       ]
     : [['actions', ACTIONS], ['pages', pages], ['sessions', sessions]];
-  return groups
-    .map(([id, items]) => ({ id, label: GROUP_LABEL[id], items: items.slice(0, PER_GROUP) }))
+  const page: PaletteGroup = { id: 'page', label: GROUP_LABEL.page, items: keep([...(src.page ?? [])]) };
+  return [page, ...groups.map(([id, items]) => ({ id, label: GROUP_LABEL[id], items: items.slice(0, PER_GROUP) }))]
     .filter((g) => g.items.length > 0);
 }
 

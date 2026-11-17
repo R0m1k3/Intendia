@@ -77,3 +77,33 @@ describe('fileTarget', () => {
     expect(items[0]).toMatchObject({ label: '0.md', hint: 'crons' });
   });
 });
+
+describe('open session group', () => {
+  const run = () => {};
+  const page = ['Arrêter le travail', 'Fixer un objectif', 'Changer de modèle', 'Fichiers de la session', 'Contexte et forfait utilisés', 'Renommer la session', 'Copier le lien de la session']
+    .map((label, i) => ({ id: `o:${i}`, label, run }));
+  it('comes first and keeps its 7 actions without text (no PER_GROUP cut)', () => {
+    const groups = paletteGroups('', src({ page }));
+    expect(groups[0]!.id).toBe('page');
+    expect(groups[0]!.label).toBe('Session ouverte');
+    expect(groups[0]!.items).toHaveLength(7);
+    expect(groups[1]!.id).toBe('actions');
+  });
+  it('is filtered by the text like the actions', () => {
+    const groups = paletteGroups('renommer', src({ page }));
+    expect(groups[0]!.id).toBe('page');
+    expect(groups[0]!.items.map((i) => i.label)).toEqual(['Renommer la session']);
+    expect(paletteGroups('zzz', src({ page })).some((g) => g.id === 'page')).toBe(false);
+  });
+  it('absent without an open session; an item with run needs no target', () => {
+    expect(paletteGroups('', src()).some((g) => g.id === 'page')).toBe(false);
+    const item = paletteGroups('', src({ page }))[0]!.items[0]!;
+    expect(item.target).toBeUndefined();
+    expect(typeof item.run).toBe('function');
+  });
+  it('o: ids never meet the pages (p:)', () => {
+    const ids = flatItems(paletteGroups('', src({ page: [{ id: 'o:files', label: 'Fichiers de la session', run }] }))).map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id.startsWith('o:'))).toEqual(['o:files']);
+  });
+});

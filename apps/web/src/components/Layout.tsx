@@ -133,11 +133,12 @@ function FullLayout() {
     if (!before.current) before.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPalette(mode);
   }, []);
-  const closePalette = useCallback(() => {
+  const closePalette = useCallback((o?: { restoreFocus?: boolean }) => {
     setPalette(false);
     const el = before.current;
     before.current = null;
-    if (el?.isConnected) requestAnimationFrame(() => el.focus());
+    // an action of the palette opened a dialog or a menu: the focus stays there
+    if (o?.restoreFocus !== false && el?.isConnected) requestAnimationFrame(() => el.focus());
   }, []);
   // Ctrl/Cmd J: the side chat, except on a session's own page (one draft written at a time)
   const onSession = SESSION_PAGE.test(pathname);

@@ -19,7 +19,7 @@ import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from
 import { applyDeliveries, attachChildren, delegationState, pollDelay } from '../chat/deliveries';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import { EMPTY_QUEUE, dropItem, enqueue, firstTime, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue, takeHead, type Queue } from '../chat/queue';
-import { RunOptions } from '../chat/RunOptions';
+import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
@@ -30,6 +30,7 @@ import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
 import { confirmClose } from '../components/dirty';
 import { useActivePage, type ActivePage } from '../components/activePage';
+import type { PaletteItem } from '../components/palette';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useColumn, useOpenSession } from '../chat/column-context';
@@ -853,14 +854,29 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 1500);
   });
+  // the palette's « Changer de modèle »: the same menu as the composer's, under the same conditions
+  const [modelOpen, setModelOpen] = useState(false);
+  const models = useQuery({ ...chatModelsQuery(inst ?? '', agentProfile), enabled: Boolean(inst && sess.data) });
+  const modelOk = Boolean(inst && sess.data) && !modelPickerDisabled({ disabled: running || setOptions.isPending || !chat.available, loading: models.isLoading });
+  // « /goal » can be typed when the message field can
+  const goalOk = Boolean(inst) && chat.available && !switching;
+  const openFiles = () => void confirmClose(() => { setPanel(true); setPreviewPath(null); });
   // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
-  const handlers = useRef({ renameSession, copyLink });
-  handlers.current = { renameSession, copyLink };
-  const page = useMemo<ActivePage | null>(() => (leading && !EMBEDDED ? {
-    title,
-    focusComposer: () => composer.current?.focus(),
-    actions: [],
-  } : null), [leading, title]);
+  const handlers = useRef({ stop, onCommand, renameSession, copyLink, openFiles });
+  handlers.current = { stop, onCommand, renameSession, copyLink, openFiles };
+  const page = useMemo<ActivePage | null>(() => {
+    if (!leading || EMBEDDED) return null;
+    const actions: PaletteItem[] = [
+      ...(running ? [{ id: 'o:stop', label: t('Arrêter le travail'), run: () => void handlers.current.stop() }] : []),
+      ...(goalOk ? [{ id: 'o:goal', label: t('Fixer un objectif'), run: () => void handlers.current.onCommand('goal', '') }] : []),
+      ...(modelOk ? [{ id: 'o:model', label: t('Changer de modèle'), run: () => setModelOpen(true) }] : []),
+      { id: 'o:files', label: t('Fichiers de la session'), run: () => handlers.current.openFiles() },
+      { id: 'o:usage', label: t('Contexte et forfait utilisés'), run: () => void handlers.current.onCommand('usage', '') },
+      { id: 'o:title', label: t('Renommer la session'), run: () => void handlers.current.renameSession() },
+      { id: 'o:link', label: t('Copier le lien de la session'), run: () => handlers.current.copyLink() },
+    ];
+    return { title, focusComposer: () => composer.current?.focus(), actions };
+  }, [leading, title, running, goalOk, modelOk]);
   useActivePage(page);
 
   // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
@@ -1099,6 +1115,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
                 personality={sess.data.session.personality ?? null} onProfile={(p) => void changeProfile(p)}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
+                modelOpen={modelOpen} onModelOpenChange={setModelOpen}
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
