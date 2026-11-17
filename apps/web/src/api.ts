@@ -962,7 +962,8 @@ export const api = {
   setLinkPublic: (token: string, publicUntil: number | null) => call<{ link: ShareLink }>('PATCH', `/links/${enc(token)}`, { publicUntil }),
   revokeLink: (token: string) => call<{ ok: true }>('DELETE', `/links/${enc(token)}`),
   mcp: (inst: string) => call<McpInfo>('GET', `/instances/${enc(inst)}/mcp`),
-  rotateMcp: (inst: string) => call<McpInfo & { test?: McpTest; error?: string }>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
+  rotateMcp: (inst: string) => call<McpInfo & { test?: McpTest; error?: string; restartNeeded?: true; previousUntil?: number | null }>('POST', `/instances/${enc(inst)}/mcp/rotate`, {}),
+  revokePreviousMcp: (inst: string) => call<{ ok: true }>('POST', `/instances/${enc(inst)}/mcp/revoke-previous`, {}),
   connectMcp: (inst: string, replaceOther = false) =>
     call<{ state: McpState; test?: McpTest }>('POST', `/instances/${enc(inst)}/mcp/connect`, { replaceOther }),
 

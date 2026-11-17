@@ -7,7 +7,7 @@ import type { AppConfig } from '../config.js';
 import { mcpTokenEnv } from '../connectors/config/index.js';
 import type { Db } from '../db/index.js';
 import { ConfigConflictError, type ConfigService } from '../hermes-config/service.js';
-import { isMcpSynced, markMcpSynced, mcpToken, mcpUrl, rotateMcpToken } from './server.js';
+import { commitMcpToken, isMcpSynced, markMcpSynced, mcpToken, mcpUrl, stageMcpToken } from './server.js';
 import { msg } from '../i18n/index.js';
 import { KeyedLock } from '../keyed-lock.js';
 
@@ -70,23 +70,35 @@ export class McpLink {
     return { state: await this.state(id), ...(test ? { test } : {}) };
   }
 
-  /** New token; Hermes gets it when the entry is managed. A Hermes error does not undo the rotation. */
-  async rotate(id: string): Promise<{ state: McpState; test?: McpTest; error?: string }> {
+  /**
+   * New token. Managed entry: written into Hermes first, then stored, the old one accepted 24 h more (the running
+   * gateway keeps it until it restarts); a Hermes error changes nothing. Otherwise only stored (no grace).
+   */
+  async rotate(id: string, now = Date.now()): Promise<{ state: McpState; test?: McpTest; error?: string; restartNeeded?: true; previousUntil?: number | null }> {
     let sent = false;
     let error: string | undefined;
+    let previousUntil: number | null = null;
     await this.queued(id, async () => {
       const before = await this.state(id);
-      rotateMcpToken(this.db, id);
-      if (before !== 'connected' && before !== 'stale') return;
+      const next = stageMcpToken();
+      if (before !== 'connected' && before !== 'stale') {
+        commitMcpToken(this.db, id, next, false, now);
+        return;
+      }
       try {
-        await this.write(id, before);
-        sent = true;
+        await this.configService.setEnv(id, PROFILE, mcpTokenEnv(MCP_NAME), next);
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
+        return;
       }
+      previousUntil = commitMcpToken(this.db, id, next, true, now);
+      sent = true;
     });
     const test = sent ? await this.test(id) : undefined;
-    return { state: await this.state(id), ...(test ? { test } : {}), ...(error ? { error } : {}) };
+    return {
+      state: await this.state(id), ...(test ? { test } : {}), ...(error ? { error } : {}),
+      ...(sent ? { restartNeeded: true as const, previousUntil } : {}),
+    };
   }
 
   private async write(id: string, state: McpState): Promise<void> {

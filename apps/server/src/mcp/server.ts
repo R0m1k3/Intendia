@@ -31,16 +31,66 @@ export function mcpToken(db: Db, instanceId: string): string {
 }
 
 const syncedKey = (id: string) => `mcp_synced:${id}`;
+const prevKey = (id: string) => `mcp_token_prev:${id}`;
 
-/** New token; Hermes has not received it yet (`mcp_synced` cleared). */
+/**
+ * After a rotation sent to Hermes, the previous token stays valid this long: the running gateway keeps it until it
+ * restarts (Hermes resolves `${VAR}` when it loads the MCP config), while Hermes' connection test already uses the new one.
+ */
+export const MCP_GRACE_MS = 24 * 3600_000;
+
+/** New token; Hermes has not received it yet (`mcp_synced` cleared), no grace for the old one. */
 export function rotateMcpToken(db: Db, instanceId: string): string {
   forgetMcpToken(db, instanceId);
   return mcpToken(db, instanceId);
 }
 
+/** A new token, not stored yet: written into Hermes first, then `commitMcpToken`. */
+export function stageMcpToken(): string {
+  return randomToken(32);
+}
+
+/**
+ * Makes `next` the current token, in one transaction. `keepPrevious` (Hermes received `next`): the old token stays
+ * valid until `now + MCP_GRACE_MS` and `mcp_synced` is set; else it is cleared. Returns the end of the grace, or null.
+ */
+export function commitMcpToken(db: Db, instanceId: string, next: string, keepPrevious: boolean, now: number): number | null {
+  return db.transaction((tx) => {
+    const old = tx.select().from(settings).where(eq(settings.key, key(instanceId))).get()?.value;
+    const until = keepPrevious && old ? now + MCP_GRACE_MS : null;
+    tx.delete(settings).where(eq(settings.key, prevKey(instanceId))).run();
+    if (until !== null) tx.insert(settings).values({ key: prevKey(instanceId), value: JSON.stringify({ token: old, until }) }).run();
+    tx.insert(settings).values({ key: key(instanceId), value: next }).onConflictDoUpdate({ target: settings.key, set: { value: next } }).run();
+    if (keepPrevious) {
+      tx.insert(settings).values({ key: syncedKey(instanceId), value: '1' }).onConflictDoUpdate({ target: settings.key, set: { value: '1' } }).run();
+    } else {
+      tx.delete(settings).where(eq(settings.key, syncedKey(instanceId))).run();
+    }
+    return until;
+  });
+}
+
+/** The previous token while its grace lasts (an expired one is removed). */
+export function previousMcpToken(db: Db, instanceId: string, now: number): { token: string; until: number } | null {
+  const row = db.select().from(settings).where(eq(settings.key, prevKey(instanceId))).get();
+  if (!row) return null;
+  try {
+    const v = JSON.parse(row.value) as { token?: unknown; until?: unknown };
+    if (typeof v.token === 'string' && typeof v.until === 'number' && now < v.until) return { token: v.token, until: v.until };
+  } catch { /* unreadable: removed */ }
+  forgetPreviousMcpToken(db, instanceId);
+  return null;
+}
+
+/** Ends the grace of the previous token at once (a leaked token). */
+export function forgetPreviousMcpToken(db: Db, instanceId: string): void {
+  db.delete(settings).where(eq(settings.key, prevKey(instanceId))).run();
+}
+
 export function forgetMcpToken(db: Db, instanceId: string): void {
   db.delete(settings).where(eq(settings.key, key(instanceId))).run();
   db.delete(settings).where(eq(settings.key, syncedKey(instanceId))).run();
+  forgetPreviousMcpToken(db, instanceId);
 }
 
 /** The current token was written into Hermes (cleared by every rotation). */
@@ -80,10 +130,19 @@ export interface McpDeps {
   roots: FileRoots;
   config: Pick<AppConfig, 'publicUrl' | 'mcpPort'>;
   version: string;
+  /** Clock of the grace of the previous token (tests). */
+  now?: () => number;
 }
 
 export function createMcpApp(deps: McpDeps): Hono {
   const { db, store, links, roots, config } = deps;
+  const now = deps.now ?? Date.now;
+  /** The current token, or the previous one during its grace; a request with the new token never ends the grace. */
+  const accepted = (instanceId: string, given: string): boolean => {
+    if (safeEqual(given, mcpToken(db, instanceId))) return true;
+    const prev = previousMcpToken(db, instanceId, now());
+    return prev !== null && safeEqual(given, prev.token);
+  };
   const app = new Hono();
 
   const shareFile = async (instanceId: string, args: unknown) => {
@@ -148,7 +207,7 @@ export function createMcpApp(deps: McpDeps): Hono {
     if (!store.get(instanceId)) return c.json({ error: 'unknown instance' }, 404);
     const auth = c.req.header('authorization') ?? '';
     const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-    if (!given || !safeEqual(given, mcpToken(db, instanceId))) return c.json({ error: 'unauthorized' }, 401);
+    if (!given || !accepted(instanceId, given)) return c.json({ error: 'unauthorized' }, 401);
     const len = Number(c.req.header('content-length') ?? 0);
     if (len > BODY_MAX_BYTES) return c.json(fail(null, -32600, 'Request too large'), 413);
     const text = await c.req.text();

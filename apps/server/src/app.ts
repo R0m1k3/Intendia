@@ -14,7 +14,7 @@ import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
 import { DeclarativeError, InstanceStore } from './instances/store.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
-import { forgetMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
+import { forgetMcpToken, forgetPreviousMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
@@ -235,6 +235,13 @@ export function createApp(deps: AppDeps) {
     if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
     const res = await deps.services.mcpLink.rotate(id);
     return c.json({ ...mcpInfo(id), ...res });
+  });
+  /** Ends the 24 h grace of the token before the last rotation (a leaked token). */
+  priv.post('/instances/:id/mcp/revoke-previous', (c) => {
+    const id = c.req.param('id');
+    if (!store.get(id)) return c.json({ error: msg('instance inconnue') }, 404);
+    forgetPreviousMcpToken(deps.db, id);
+    return c.json({ ok: true });
   });
 
   const { workspaces, files, links } = deps.services;
