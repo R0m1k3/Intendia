@@ -415,26 +415,25 @@ describe('wake keys (Idempotency-Key)', () => {
     expect((await posted(t)).at(-1)).toBe(`${s.id}:wake-${hashKey(['fake', s.id, dk])}`);
   });
 
-  it('a start cut by a restart: retried with the same key on a durable instance, abandoned otherwise', async () => {
-    for (const durable of [true, false]) {
-      const { t, s, base } = await setup(300, { features: { runs_idempotency: { supported: true, durable } } });
-      expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
-      const dk = await deliveryKey(t, base);
-      t.services.wakes.reserve('fake', s.id, dk, 1, Date.now());
-      const before = t.fake.sim.runsPosted;
-      const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: () => {} });
-      watcher.start();
-      watcher.stop();
-      if (durable) {
-        expect(t.services.wakes.get('fake', s.id, dk)).toBeNull();
-        expect((await watcher.pass(Date.now() + 20_000)).get(`fake/${s.id}`)).toBe('wake');
-        expect(t.fake.sim.runsPosted).toBe(before + 1);
-        expect((await posted(t)).at(-1)).toBe(`${s.id}:wake-${hashKey(['fake', s.id, dk])}`);
-      } else {
-        expect(t.services.wakes.get('fake', s.id, dk)?.state).toBe('abandoned');
-        await watcher.pass(Date.now() + 20_000);
-        expect(t.fake.sim.runsPosted).toBe(before);
-      }
+  // one case per instance kind: two fake runs in one case come close to the 5 s test timeout under a full run
+  it.each([true, false])('a start cut by a restart (durable %s): retried with the same key on a durable instance, abandoned otherwise', async (durable) => {
+    const { t, s, base } = await setup(300, { features: { runs_idempotency: { supported: true, durable } } });
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
+    const dk = await deliveryKey(t, base);
+    t.services.wakes.reserve('fake', s.id, dk, 1, Date.now());
+    const before = t.fake.sim.runsPosted;
+    const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: () => {} });
+    watcher.start();
+    watcher.stop();
+    if (durable) {
+      expect(t.services.wakes.get('fake', s.id, dk)).toBeNull();
+      expect((await watcher.pass(Date.now() + 20_000)).get(`fake/${s.id}`)).toBe('wake');
+      expect(t.fake.sim.runsPosted).toBe(before + 1);
+      expect((await posted(t)).at(-1)).toBe(`${s.id}:wake-${hashKey(['fake', s.id, dk])}`);
+    } else {
+      expect(t.services.wakes.get('fake', s.id, dk)?.state).toBe('abandoned');
+      await watcher.pass(Date.now() + 20_000);
+      expect(t.fake.sim.runsPosted).toBe(before);
     }
   });
 
