@@ -914,6 +914,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       if (mode !== 'off' && mode !== 'flag' && mode !== 'silent') return c.json({ detail: 'mode: off | flag | silent' }, 400);
       config.managed = mode;
       return c.json({ ok: true, mode });
+    }
     // tests: the dashboard token changes (Hermes restarted without HERMES_DASHBOARD_SESSION_TOKEN)
     if (via === 'dash' && method === 'POST' && path === '/_fake/dash-token') {
       const token = (body as { token?: unknown } | undefined)?.token;
