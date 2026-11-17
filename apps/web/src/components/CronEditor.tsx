@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { confirmClose, useDirtyGuard } from './dirty';
 import { api, ApiError, type Cron, type CronInput } from '../api';
 import {
   DAYS, defaultForm, describeForm, FORM_KINDS, fromSchedule, toSchedule, validate, type ScheduleForm,
@@ -103,6 +104,10 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
   const [advanced, setAdvanced] = useState<AdvancedForm>(initialAdvanced);
   /** Revision the edit started from: a cron changed in Hermes since gives 409 `stale`. */
   const [base] = useState(cron?.revision);
+  const snapOf = () => JSON.stringify({ name, prompt, deliver, model, workspace, skills, form, advanced, paused });
+  const [initialSnap] = useState(snapOf);
+  const guard = useDirtyGuard(snapOf() !== initialSnap);
+  const close = () => void confirmClose(onClose);
 
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === instanceId);
   const ws = mine.find((w) => w.slug === workspace);
@@ -127,10 +132,12 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
     onError: async (e) => {
       // the prompt is the draft worth keeping
       if (!isStale(e) || !(await askReload(prompt))) return;
+      guard.release();
       onClose();
       await qc.invalidateQueries({ queryKey: ['crons', instanceId] });
     },
     onSuccess: async (r) => {
+      guard.release();
       await qc.invalidateQueries({ queryKey: ['crons', instanceId] });
       await qc.invalidateQueries({ queryKey: ['crons-overview'] });
       onSaved?.(r.cron ?? null);
@@ -151,7 +158,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
             <h2 className="truncate text-lg font-semibold">{cron ? t('Modifier le cron') : t('Nouveau cron')}</h2>
             {cron && <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{cron.name}</p>}
           </div>
-          <Button type="button" variant="ghost" className="w-[34px] px-0" onClick={onClose} aria-label={t('Fermer')}>
+          <Button type="button" variant="ghost" className="w-[34px] px-0" onClick={close} aria-label={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </Button>
         </header>
@@ -229,7 +236,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
         </div>
 
         <footer className="flex max-w-[720px] justify-end gap-2 px-4 pb-8 md:px-6">
-          <Button type="button" onClick={onClose}>{t('Annuler')}</Button>
+          <Button type="button" onClick={close}>{t('Annuler')}</Button>
           <Button type="submit" variant="primary" disabled={save.isPending || Boolean(scheduleError) || Boolean(optionsError) || !name.trim() || !prompt.trim()}>
             {save.isPending ? t('Enregistrement…') : cron ? t('Enregistrer') : t('Créer le cron')}
           </Button>

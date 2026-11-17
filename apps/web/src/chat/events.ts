@@ -112,7 +112,10 @@ function updateTool(entries: Entry[], ev: RunEvent, patch: (tool: Extract<Entry,
   return entries;
 }
 
-/** Applies one Hermes run event (or Intendia's own intendia.error) to the run state. */
+/**
+ * Applies one Hermes run event to the run state. Intendia's own `intendia.error` (the stream could not be served)
+ * never comes here: followRun (useRun.ts) takes it as a lost stream, never as the end of the run.
+ */
 export function reduceEvent(state: RunState, ev: RunEvent): RunState {
   const ts = typeof ev.timestamp === 'number' ? ev.timestamp : null;
   const s = { ...state };
@@ -216,8 +219,6 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
     }
     case 'replay.truncated':
       return { ...s, truncated: true };
-    case 'intendia.error':
-      return { ...s, status: 'error', approval: null, clarify: null, error: str(ev.message) || t('Flux interrompu'), entries: closeStreaming(s.entries) };
     default:
       return { ...s, entries: [...s.entries, { kind: 'note', key: key('n', ev.seq), text: ev.event, tone: 'muted', ts }] };
   }
@@ -423,15 +424,21 @@ export function dispatchedNodes(argsJson: string, ticket: TicketInfo | undefined
 }
 
 /**
- * Thread during a run: history before the run started, the run's own user message (unless the live
- * entries already have it, after a send from this page), then the live entries. Hermes may already have
- * written messages of the running run; those come from the events only, so nothing shows twice.
+ * Thread during a run: history before the run, the run's own user message (unless the live entries already have it,
+ * after a send from this page), then the live entries. Hermes may already have written messages of the running run;
+ * those come from the events only, so nothing shows twice.
+ *
+ * Where the run starts in the history: `afterId` (the largest message id the page knew when it sent: Hermes' ids
+ * grow, compression included), else the run's `createdAt` (a run found running when the page opened), else nowhere
+ * (both unknown: history then live, a message of the run may show twice until its end).
  */
-export function mergeHistory(history: ChatMessage[], runCreatedAt: number | null, live: Entry[]): Entry[] {
-  if (runCreatedAt === null) return [...historyEntries(history), ...live];
-  const before = history.filter((m) => (m.timestamp ?? 0) < runCreatedAt);
+export function mergeHistory(history: ChatMessage[], cut: { createdAt: number | null; afterId: number | null }, live: Entry[]): Entry[] {
+  const inRun: ((m: ChatMessage) => boolean) | null = cut.afterId !== null ? ((m) => m.id > cut.afterId!)
+    : cut.createdAt !== null ? ((m) => (m.timestamp ?? 0) >= cut.createdAt!) : null;
+  if (!inRun) return [...historyEntries(history), ...live];
+  const before = history.filter((m) => !inRun(m));
   // the run's own prompt, never a reorientation (live or written by Hermes during the run)
   const runUser = live.some((e) => e.kind === 'user' && !e.steer) ? undefined
-    : history.find((m) => m.role === 'user' && !m.steer && (m.timestamp ?? 0) >= runCreatedAt);
+    : history.find((m) => m.role === 'user' && !m.steer && inRun(m));
   return [...historyEntries(runUser ? [...before, runUser] : before), ...live];
 }

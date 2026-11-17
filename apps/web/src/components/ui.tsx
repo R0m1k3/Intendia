@@ -1,5 +1,5 @@
 import { useId, type ComponentProps, type ReactNode } from 'react';
-import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, RotateCw, ScrollText, SlidersHorizontal } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
 import { showCopy } from './Dialog';
 import { locale, t } from '../i18n';
@@ -128,9 +128,19 @@ export function moduleLabel(m: { id: string; label: string }): string {
   return (MODULE_META as Record<string, { label: string } | undefined>)[m.id]?.label ?? m.label;
 }
 
-export function ErrorText({ error }: { error: unknown }) {
+/** An error message; `onRetry` (reads only) adds a « Réessayer » button on its right. */
+export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   if (!error) return null;
-  return <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{(error as Error).message}</p>;
+  const text = (error as Error).message;
+  if (!onRetry) return <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{text}</p>;
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-bad-soft py-1 pl-3 pr-1 text-sm text-bad" data-error-text>
+      <p className="min-w-0 flex-1 py-1">{text}</p>
+      <Button type="button" variant="ghost" className="h-7 shrink-0 px-2 text-bad" onClick={onRetry}>
+        <RotateCw className="size-3.5" strokeWidth={1.5} />{t('Réessayer')}
+      </Button>
+    </div>
+  );
 }
 
 /**

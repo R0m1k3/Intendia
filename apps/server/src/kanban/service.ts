@@ -166,7 +166,7 @@ export class KanbanService {
     this.check(instanceId);
     const mod = this.compat.get(instanceId)?.modules.find((m) => m.id === 'kanban');
     for (const op of ops) {
-      if (!this.can(instanceId, op)) throw new ModuleUnavailableError('kanban', op, mod?.ops[op]?.notes ?? [msg('pas encore vérifié')]);
+      if (!this.can(instanceId, op)) throw new ModuleUnavailableError('kanban', op, mod?.ops[op]?.notes ?? [msg('pas encore vérifié')], false, mod?.ops[op]?.code);
     }
   }
 

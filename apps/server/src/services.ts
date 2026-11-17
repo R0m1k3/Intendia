@@ -71,6 +71,8 @@ export function createServices(deps: {
   config: AppConfig; db: Db; store: InstanceStore; compat: CompatService; uploadTimeoutMs?: number;
   /** Tests only. */
   fileOpts?: FileServiceOpts;
+  /** Tests (and test benches) only: timeout of one `POST /v1/runs`. */
+  createRunTimeoutMs?: number;
 }): Services {
   const roots = new FileRoots(deps.compat, { uploadTimeoutMs: deps.uploadTimeoutMs });
   const revisionOf = revisions(deps.config.secret);
@@ -87,7 +89,7 @@ export function createServices(deps: {
   const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
   const goals = new GoalStore(deps.db);
-  const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, config, prompts: new PromptService(deps.db), goals };
+  const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, config, prompts: new PromptService(deps.db), goals, createRunTimeoutMs: deps.createRunTimeoutMs };
   const wakes = new WakeStore(deps.db);
   const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));

@@ -11,10 +11,11 @@ export type { OpRef, OptionalOp } from './availability';
 export function useModuleAvailability(instanceId: string | undefined, module: ModuleId, required: OpRef[], optional: OptionalOp[], explainMissing = false) {
   const compat = useQuery({
     queryKey: ['compat'], queryFn: api.compat,
-    refetchInterval: (q) => compatPoll(q.state.data?.reports.find((r) => r.instanceId === instanceId)),
+    refetchInterval: (q) => compatPoll(q.state.data?.reports.find((r) => r.instanceId === instanceId), q.state.status === 'success' && Boolean(instanceId)),
   });
   const report = compat.data?.reports.find((r) => r.instanceId === instanceId);
-  return availability(report, module, required, optional, explainMissing);
+  // no instance yet (its page still loading): stays optimistic, as before
+  return availability(report, module, required, optional, explainMissing, compat.isSuccess && Boolean(instanceId));
 }
 
 /** Top-of-page notice: read-only (some actions missing) or unavailable, with the reason and the dashboard link. */

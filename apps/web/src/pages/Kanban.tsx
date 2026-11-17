@@ -4,6 +4,7 @@ import { AlertTriangle, FolderOpen, GitBranch, MessageSquare, Play, Plus, Settin
 import { useEffect, useMemo, useState } from 'react';
 import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type KanbanTask, type KanbanWorkflow } from '../api';
 import { PageHeader } from '../components/Layout';
+import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
 import { Button, chipClass, cx, ErrorText, Field, Input, Mark, Tag } from '../components/ui';
 import { plural, t } from '../i18n';
@@ -122,12 +123,13 @@ function NewBoard({ inst, onClose, onCreated }: { inst: string; onClose: () => v
   const [name, setName] = useState('');
   const create = useMutation({
     mutationFn: () => api.createKanbanBoard(inst, slug, name.trim() || undefined),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['kanban-boards', inst] }); onCreated(slug); },
+    onSuccess: async () => { guard.release(); await qc.invalidateQueries({ queryKey: ['kanban-boards', inst] }); onCreated(slug); },
   });
+  const guard = useDirtyGuard(Boolean(name || slug));
   const ok = BOARD_RE.test(slug);
   return (
     <Sheet title={t('Nouveau tableau')} onClose={onClose} onSubmit={() => ok && create.mutate()}
-      footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!ok || create.isPending}>{t('Créer le tableau')}</Button></>}>
+      footer={<><Button type="button" onClick={() => void confirmClose(onClose)}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!ok || create.isPending}>{t('Créer le tableau')}</Button></>}>
       <Field label={t('Nom')}><Input value={name} maxLength={100} onChange={(e) => { setName(e.target.value); if (!slug || slug === slugify(name)) setSlug(slugify(e.target.value)); }} placeholder={t('Ventes')} autoFocus /></Field>
       <Field label={t('Identifiant')} hint={t('Minuscules, chiffres, - et _ ; ne change plus ensuite')}>
         <Input value={slug} maxLength={64} onChange={(e) => setSlug(e.target.value)} placeholder={t('ventes')} aria-invalid={slug !== '' && !ok} />
@@ -172,17 +174,20 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
     mutationFn: () => api.createKanbanTask(inst, board, {
       title: f.title.trim(), body: f.body || undefined, assignee: f.assignee || null, priority: f.priority || null, start: f.start, workspace: f.workspace || null,
     }),
-    onSuccess: async (r) => { await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] }); onCreated(r.task.id); },
+    onSuccess: async (r) => { guard.release(); await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] }); onCreated(r.task.id); },
     onError: async (err) => {
       const id = partialTaskId(err);
       if (!id) return;
+      // created in Hermes: nothing left to lose
+      guard.release();
       await qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] });
       onCreated(id, (err as Error).message);
     },
   });
+  const guard = useDirtyGuard(Boolean(f.title || f.body));
   return (
     <Sheet title={t('Nouvelle tâche')} onClose={onClose} onSubmit={() => f.title.trim() && create.mutate()}
-      footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!f.title.trim() || create.isPending}>{t('Créer la tâche')}</Button></>}>
+      footer={<><Button type="button" onClick={() => void confirmClose(onClose)}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!f.title.trim() || create.isPending}>{t('Créer la tâche')}</Button></>}>
       <Field label={t('Titre')}><Input value={f.title} maxLength={200} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={t('Comparer les ventes de mars')} autoFocus required /></Field>
       <Field label={t('Description')} hint={t('Ce que l’agent doit faire et rendre')}>
         <textarea value={f.body} maxLength={20_000} rows={5} onChange={(e) => setF({ ...f, body: e.target.value })} className={TEXTAREA} />
@@ -387,7 +392,8 @@ export function KanbanPage() {
               ))}
             </div>
           )}
-          <ErrorText error={boards.error ?? view.error ?? workflow.error ?? moveError} />
+          <ErrorText error={boards.error ?? view.error ?? workflow.error} onRetry={() => { for (const q of [boards, view, workflow]) if (q.isError) void q.refetch(); }} />
+          <ErrorText error={moveError} />
         </div>
 
         {a.available && wf && view.data && (

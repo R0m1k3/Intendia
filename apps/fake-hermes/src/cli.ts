@@ -46,7 +46,7 @@ const dash = serve({ fetch: fake.dash.fetch, port: dashPort, hostname: '127.0.0.
 // kanban live events on the dashboard port, like Hermes
 const wss = new WebSocketServer({ noServer: true });
 dash.on('upgrade', (req, socket, head) => {
-  if (!kanbanWsTokenOk(req.url ?? '/')) return; // like Hermes: the handshake gets no answer
+  if (!kanbanWsTokenOk(req.url ?? '/', fake.auth.dashToken)) return; // like Hermes: the handshake gets no answer
   wss.handleUpgrade(req, socket, head, (ws) => {
     if (new URL(req.url ?? '/', 'ws://fake-dash').pathname === '/api/ws') {
       const onText = connectGatewaySocket(fake, { send: (t) => ws.send(t) });

@@ -6,6 +6,7 @@ import { askReload, isStale } from '../components/staleReload';
 import { api, type FileEntry, type PublicInstance } from '../api';
 import { ChatNotice } from '../components/ChatNotice';
 import { askText } from '../components/Dialog';
+import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader } from '../components/Panes';
 import { Button, ErrorText } from '../components/ui';
 import { FileRows, isDirEntry } from '../files/FileRows';
@@ -31,6 +32,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   const [text, setText] = useState<string | null>(null);
   /** Revision of AGENTS.md when the edit started: a file changed since gives 409 `stale`. */
   const [agentsBase, setAgentsBase] = useState('');
+  useDirtyGuard(text !== null && agents.isSuccess && text !== agents.data.text);
   const w = ws.data?.workspace;
 
   useEffect(() => { setText(null); setArchived(false); }, [slug]);

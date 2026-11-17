@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, type MemoryEntry, type MemoryOverview, type MemorySource } from '../api';
 import { ask } from '../components/Dialog';
 import { askReload } from '../components/staleReload';
+import { useDirtyGuard } from '../components/dirty';
 import { DetailBody, DetailHeader, Facts, ListItemBody, ListLink } from '../components/Panes';
 import { Button, cx, ErrorText, Tag } from '../components/ui';
 import { usageLabel, usagePercent } from './usage';
@@ -72,6 +73,7 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
   const qc = useQueryClient();
   const content = useQuery({ queryKey: ['memory-entry', inst, profile, entry.id], queryFn: () => api.memoryEntry(inst, profile, entry.id), retry: false });
   const [draft, setDraft] = useState<string | null>(null);
+  useDirtyGuard(draft !== null && draft !== content.data?.content);
   const [notice, setNotice] = useState<string | null>(null);
   const reload = async () => {
     const fresh = await qc.fetchQuery({ queryKey: ['memory', inst, profile], queryFn: () => api.memory(inst, profile), staleTime: 0 });

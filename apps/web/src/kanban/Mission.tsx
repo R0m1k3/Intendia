@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, type KanbanMission, type KanbanMissionChild } from '../api';
 import { ask } from '../components/Dialog';
 import { askReload, isStale } from '../components/staleReload';
+import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { Button, cx, ErrorText, Field, Input } from '../components/ui';
 import { childNotes, MISSION_STATE, orderChildren } from './mission';
 import { statusLabel } from './moves';
@@ -39,6 +40,7 @@ function ChildRow({ inst, board, child, all, editable, assignees, onSaved, onRem
     },
   });
   const dirty = draft !== null && (f.title !== child.title || f.body !== child.body || f.assignee !== (child.assignee ?? ''));
+  useDirtyGuard(dirty);
   const notes = childNotes(child, all, !editable);
   return (
     <li className={cx('space-y-2 rounded-xl border px-3.5 py-3', child.held ? 'border-line bg-sheet' : 'border-line/60 bg-paper')} data-mission-child={child.id}>
@@ -119,7 +121,7 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
   };
   const create = useMutation({
     mutationFn: () => api.createKanbanMission(inst, board, { goal: goal.trim(), body: body.trim() || undefined }),
-    onSuccess: async (r) => { await after(); onCreated(r.mission.id); },
+    onSuccess: async (r) => { guard.release(); await after(); onCreated(r.mission.id); },
   });
   const launch = useMutation({
     mutationFn: () => api.launchKanbanMission(inst, missionId!),
@@ -130,6 +132,7 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
     mutationFn: () => api.cancelKanbanMission(inst, missionId!),
     onSuccess: async () => { await after(); onClose(); },
   });
+  const guard = useDirtyGuard(!missionId && Boolean(goal || body));
   const m = mission.data?.mission;
   // the list of the page and the board follow the state seen here (split over, children parked)
   const seen = m?.state;
@@ -141,7 +144,7 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
   if (!missionId) {
     return (
       <Sheet title={t('Nouvelle mission')} onClose={onClose} onSubmit={() => goal.trim() && create.mutate()} width="md:w-[600px]"
-        footer={<><Button type="button" onClick={onClose}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!goal.trim() || create.isPending}>{t('Découper')}</Button></>}>
+        footer={<><Button type="button" onClick={() => void confirmClose(onClose)}>{t('Annuler')}</Button><Button type="submit" variant="primary" disabled={!goal.trim() || create.isPending}>{t('Découper')}</Button></>}>
         <p className="text-sm text-ink-soft">
           {t('Hermes découpe le but en 2 à 6 tâches avec son modèle auxiliaire. Intendia les retient toutes : vous les relisez avant que quoi que ce soit parte.')}
         </p>

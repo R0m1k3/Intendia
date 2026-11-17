@@ -12,6 +12,11 @@ of the diff are empty lists (no session, no cron in that container).
 
 ## API server (8642)
 
+- `GET /health` is public (`{"status":"ok","platform":"hermes-agent","version"}`); `/health/detailed` and
+  `/v1/capabilities` need the key (401 without it, checked on 0.23.0, 2026-11-17). An unknown route answers aiohttp's
+  `404: Not Found`. Past `gateway.api_server.max_concurrent_runs`, `POST /v1/runs` answers 429 `rate_limit_exceeded`
+  with `Retry-After: 1`; a draining gateway 503 `gateway_draining` with `Retry-After: 1`.
+
 - `GET /v1/capabilities` returns `features` (flags) and `endpoints` (name → method + path) for runs, sessions,
   skills, toolsets, model options and health. Intendia resolves API server routes from this map.
 - Auth: `Authorization: Bearer $API_SERVER_KEY`. With multi-profile routing, `/p/<profile>/...` uses that profile's key.
@@ -74,8 +79,22 @@ of the diff are empty lists (no session, no cron in that container).
   FTS5 refuses → 500 « Search failed ».
 - `GET /api/sessions` is paged (`limit`, `offset`, `has_more`). `GET /api/sessions/{id}` wraps the session in
   `{session}`. `GET /api/sessions/{id}/messages` → `{data: [{id, role, content, tool_calls, tool_name, timestamp}]}`,
-  newest first, roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
+  roles `session_meta|user|assistant|tool`. Unknown session → 404 `session_not_found`, on `DELETE` too.
 - A run that fails before starting (no provider key) leaves no user message in the session.
+- Event buffer of a run (read in the 0.23.0 source, `gateway/platforms/api_server_runs.py`, 2026-11-17): a run created
+  more than 300 s ago (`_RUN_STREAM_TTL`) loses its buffered events as soon as nobody listens
+  (`_sweep_orphaned_runs_once`); `GET /v1/runs/{id}/events` then answers 404 while `GET /v1/runs/{id}` still answers.
+- `POST /v1/runs` takes `Idempotency-Key` (stripped; empty = none; more than 255 characters or outside visible ASCII →
+  400 `invalid_idempotency_key`). Same key and same body (fingerprint of the whole body, `_run_idempotency_identity`)
+  → the same run, `replayed: true` and `Idempotency-Replayed: true`; same key with another body → 409
+  `idempotency_key_conflict`. Kept 24 h in SQLite (`RunIdempotencyStore`). Announced in `/v1/capabilities`
+  `features.runs_idempotency {supported, durable, retention_seconds}` (0.23.0: true, true, 86400).
+- `GET /api/sessions/{id}/messages`: 500 rows by default and at most (`limit`), `offset`, `order=latest` (the last
+  rows, served oldest first) or `oldest`; `pagination.returned`. Checked on 0.23.0 (2026-11-17): no parameter =
+  `latest`, but `limit` alone answers `oldest`: Intendia always sends `order`. `after_id` is refused with `latest` and with
+  `include_ancestors` (forced on this route), so a cursor cannot page backwards; on a compressed lineage Hermes reads
+  the whole lineage for each page (`hermes_state_messages.py`).
+- `GET /api/sessions/{id}` of a session ended by a compression: `ended_at` set, `end_reason: "compression"`.
 - Session titles are unique (`idx_sessions_title_unique`, checked 2026-11-12): a rename to a title in use → 400
   `invalid_title` « already in use by session … »; an import with one fails the whole write as 503
   `storage_unavailable` (gateway log: `UNIQUE constraint failed: sessions.title`). Hermes numbers its own « title #2 ».
@@ -120,6 +139,19 @@ of the diff are empty lists (no session, no cron in that container).
   `hermes mcp add <name> --url <http-url>`.
 - Kanban: `/api/plugins/kanban/*` (board, boards, tasks, links, dispatch, orchestration, profiles...).
 - Files: `/api/files` (list, read, download, upload, mkdir, delete) — a possible path for instances on another host.
+- Token (read in the 0.23.0 source, checked on 0.23.0, 2026-11-17): without `HERMES_DASHBOARD_SESSION_TOKEN` a new
+  token is drawn at every start (`web_server_session_token.py`); the Webapp mode (`hermes webapp`) replaces it with the
+  token kept in its home (`gateway/run_api.py`) even when the variable is set, and `hermes webapp --sign-out` rotates it
+  and closes the sockets. A wrong token gets 401 `{"detail":"Unauthorized"}` (403 answers are about the request: path
+  outside the files root, `profile_mismatch`...).
+- Public paths (no token, `dashboard_auth/public_paths.py`): `/api/health`, `/api/status`, `/api/config/defaults`,
+  `/api/config/schema`, `/api/model/info`, `/api/dashboard/themes`, `/api/dashboard/plugins`,
+  `/api/mcp/oauth/callback/*`, `/api/cron/fire`. `GET /api/health` = light process liveness
+  (`{ok, version, displayVersion, commit, auth_required}`, `web_routers/status.py`); `/api/status` reads the gateway,
+  the profiles, the active sessions and the state database: too heavy for a probe every 30 s. Checking the token takes
+  an authenticated read (Intendia: `GET /api/profiles`).
+- Missing route: an unknown `GET /api/*` answers 404 `{"detail":"No such API endpoint: /api/…"}`
+  (`web_server_dashboard.py`), other methods FastAPI's `{"detail":"Not Found"}`.
 
 ## Crons (checked on 0.23.0, phase 4, 2026-11-09)
 

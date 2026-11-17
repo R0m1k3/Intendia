@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkInstance } from '../src/compat/engine.js';
+import { uncheckedOps } from '../src/compat/service.js';
 import type { CompatReport, ModuleId } from '../src/connectors/types.js';
 import { fakeHttp, fakeInstance, RECORDINGS } from './helpers.js';
 
@@ -11,6 +12,9 @@ describe.each(RECORDINGS)('compatibility engine on the Hermes $version recording
     const { report } = await checkInstance(fakeHttp({ fixturesDir: dir }).http);
     expect(report.hermesVersion).toBe(version);
     expect(report.dash.openapi).toBe(true);
+    expect(report.api.auth).toBe('ok');
+    expect(report.dash.auth).toBe('ok');
+    expect(report.outage).toBeUndefined();
     expect(states(report)).toEqual({
       health: 'full', chat: 'full', sessions: 'full', crons: 'full',
       skills: 'full', config: 'full', agents: 'full', kanban: 'full', files: 'full', git: 'full', monitor: 'full', memory: 'full', plugins: 'full',
@@ -105,5 +109,41 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
     expect(report.api.reachable).toBe(false);
     expect(state(report, 'chat').state).toBe('unavailable');
     expect(state(report, 'kanban').state).toBe('full');
+    // a network error: an outage of the API server, its ops refused at once
+    expect(report.outage).toMatchObject({ api: true, dash: false });
+    expect(state(report, 'chat').ops.createRun!.code).toBe('hermes_unreachable');
+  });
+
+  it('a wrong dashboard token: reachable, refused, dashboard routes refused with the action', async () => {
+    const { http } = fakeHttp({}, fakeInstance({ dashboardToken: 'mauvais-jeton-0000' }));
+    const { report } = await checkInstance(http);
+    expect(report.dash).toMatchObject({ reachable: true, auth: 'refused' });
+    expect(state(report, 'kanban').state).toBe('unavailable');
+    expect(state(report, 'kanban').ops.board!.code).toBe('dash_token_refused');
+    expect(state(report, 'chat').state).toBe('full');
   });
 });
+
+describe('idempotency of runs (features.runs_idempotency)', () => {
+  it('the 0.23.0 recording announces it supported and durable', async () => {
+    const { report } = await checkInstance(fakeHttp().http);
+    expect(report.runs).toEqual({ idempotency: true, durable: true });
+    expect(uncheckedOps(report)).toEqual([]);
+  });
+
+  it('absent or not durable: read as such', async () => {
+    expect((await checkInstance(fakeHttp({ features: { runs_idempotency: undefined } }).http)).report.runs).toEqual({ idempotency: false, durable: false });
+    expect((await checkInstance(fakeHttp({ features: { runs_idempotency: { supported: true, durable: false } } }).http)).report.runs)
+      .toEqual({ idempotency: true, durable: false });
+  });
+
+  it('a report saved without it counts chat.runsIdempotency as unchecked until the next check', async () => {
+    const { report } = await checkInstance(fakeHttp().http);
+    const old = { ...report };
+    delete old.runs;
+    expect(uncheckedOps(old)).toEqual(['chat.runsIdempotency']);
+    const { report: again } = await checkInstance(fakeHttp().http);
+    expect(uncheckedOps(again)).toEqual([]);
+  });
+});
+

@@ -7,6 +7,7 @@ import { api, kanbanPath, type KanbanMissionRow, type KanbanTask, type KanbanTas
 import { MISSION_STATE } from './mission';
 import { Button, cx, ErrorText, Field, Input, Mark, timeAgo } from '../components/ui';
 import { moveTargets, statusLabel } from './moves';
+import { useDirtyGuard } from '../components/dirty';
 import { Sheet, SELECT, TEXTAREA } from './Sheet';
 import { POLL_MS } from './useLive';
 import { t } from '../i18n';
@@ -30,6 +31,7 @@ function Section({ title, children, action }: { title: string; children: React.R
 function TextEditor({ task, save, busy }: { task: KanbanTask; save: (p: KanbanTaskPatch) => Promise<unknown>; busy: boolean }) {
   /** `base`: revision of the task when the edit started (409 `stale` when Hermes changed it since). */
   const [draft, setDraft] = useState<{ title: string; body: string; base: string } | null>(null);
+  useDirtyGuard(draft !== null && (draft.title !== task.title || draft.body !== task.body));
   if (!draft) {
     return (
       <div className="flex items-start gap-3">
@@ -80,6 +82,7 @@ export function TaskPanel({ inst, board, taskId, workflow, assignees, allTasks, 
   const key = ['kanban-task', inst, board, taskId];
   const detail = useQuery({ queryKey: key, queryFn: () => api.kanbanTask(inst, board, taskId), refetchInterval: polling ? POLL_MS : false });
   const [comment, setComment] = useState('');
+  useDirtyGuard(comment.trim() !== '');
   const [linkTo, setLinkTo] = useState('');
   const [showLog, setShowLog] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);

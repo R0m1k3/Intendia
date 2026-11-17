@@ -1,4 +1,4 @@
-import type { CompatReport, ModuleId, ResolvedOp } from './types.js';
+import type { CompatReport, ModuleId, OpCode, ResolvedOp } from './types.js';
 import { MODULES } from './index.js';
 import { msg } from '../i18n/index.js';
 import { HermesError, type HermesHttp, type RequestOptions, type Via } from '../hermes/http.js';
@@ -8,7 +8,11 @@ export { HermesError, lostReply, uncertain } from '../hermes/http.js';
 export type { HermesHttp } from '../hermes/http.js';
 
 export class ModuleUnavailableError extends Error {
-  constructor(readonly module: ModuleId, readonly op: string, readonly reasons: string[], pending = false) {
+  constructor(
+    readonly module: ModuleId, readonly op: string, readonly reasons: string[], pending = false,
+    /** Why the op is refused at once (side of Hermes down, key or token refused): see connectors/errors.ts. */
+    readonly code?: OpCode,
+  ) {
     super(pending ? msg('{module}.{op} pas encore vérifié sur cette instance', { module, op }) : msg('{module}.{op} indisponible sur cette instance', { module, op }));
     this.name = 'ModuleUnavailableError';
   }
@@ -44,15 +48,15 @@ function fill(path: string, params: Record<string, string> = {}): string {
 
 /** Error for an op without a usable route; an op the report does not know yet is « pas encore vérifié ». */
 function unavailable(report: CompatReport | undefined, module: ModuleId, op: string, resolved: ResolvedOp | undefined): ModuleUnavailableError {
-  if (resolved) return new ModuleUnavailableError(module, op, resolved.notes);
+  if (resolved) return new ModuleUnavailableError(module, op, resolved.notes, false, resolved.code);
   const pending = !report || Boolean(report.unchecked?.includes(`${module}.${op}`));
   return new ModuleUnavailableError(module, op, [report?.checkError ? msg('Vérification échouée : {error}', { error: report.checkError }) : msg('pas encore vérifié')], pending);
 }
 
 /**
  * Runs an operation through the route chosen by the last compatibility report.
- * Reads are validated against the op schema (tolerant: unknown fields are kept);
- * a schema mismatch raises a HermesError of kind "schema" so the caller can trigger a recheck.
+ * Reads are validated against the op schema (tolerant: unknown fields are kept); a mismatch raises a HermesError of
+ * kind "schema", first told to the observer of the client (CompatService rechecks the instance, at most every 3 min).
  */
 export async function callOp<T = unknown>(
   http: HermesHttp,
@@ -71,7 +75,9 @@ export async function callOp<T = unknown>(
   if (def.schema && def.kind === 'read') {
     const parsed = def.schema.safeParse(data);
     if (!parsed.success) {
-      throw new HermesError('schema', `${module}.${op}: unexpected response shape`, { via, method, path });
+      const err = new HermesError('schema', `${module}.${op}: unexpected response shape`, { via, method, path }, true);
+      http.notify(err);
+      throw err;
     }
     return parsed.data as T;
   }

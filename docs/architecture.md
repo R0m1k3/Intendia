@@ -31,8 +31,44 @@ The compatibility engine (`compat/engine.ts`), for every operation, walks its ro
 Module state: `unavailable` if a required read has no working route, `readonly` if a write has none, `full` otherwise.
 At runtime `connectors/runtime.ts` (`callOp`, `streamOp`) only uses the route chosen by the last report.
 
-Checks run at start-up, when `/health/detailed` announces a new version (polled every 5 minutes), every 24 h and on
-demand from the State screen. State changes go to the webhook.
+Checks (`src/compat/service.ts`, one at a time per instance; a request made during a check gets the next one, started
+when it ends and shared by every request made meanwhile):
+- at start-up and on demand from the State screen;
+- **outage**: a side whose answers fail with a passing error (`isTransient` in `hermes/http.ts`: network error that is
+  not an abort by the caller, timeout, HTTP 502/503/504) is `down` (API server: `/v1/capabilities` and
+  `/health/detailed` both failed, the last one that way; dashboard: `/api/status`). The report then carries
+  `outage: {since, api, dash}` (`since` kept across the checks of one outage), the routes of that side are refused with
+  the code `hermes_unreachable` (callOp answers 504 at once, without calling Hermes) and the routes of the other side
+  stay chosen (crons by `api GET /api/jobs`...). Nothing is taken from the previous report;
+- **refused key or token**: 401/403 on `/v1/capabilities` = `api.auth: "refused"` (the server is reachable); the
+  dashboard is checked by `GET /api/profiles` after `/api/status` (public in Hermes) = `dash.auth`. Routes of a refused
+  side carry `api_key_refused` / `dash_token_refused` and the action (Settings › Instances › Edit);
+- **follow-up** of an unhealthy report, one step every 30 s while it has a followed cause (`causes()`): three full
+  checks after a failed check, without a report, or after a probe that failed with a passing error (`transient`:
+  `op.transient`, `files.transient`); for a side down, its public probe without token (`GET /health`, `GET /api/health`,
+  5 s), a full check only when the probe moves from failing to answering. Refused credentials and a missing files root
+  need the user: left to the tick;
+- **tick** (every `INTENDIA_VERSION_CHECK_MINUTES`, 5 by default; instances in parallel, a tick is skipped while the
+  previous one runs), first matching rule: (1) no report, unchecked ops, failed check, no `files` or older than 24 h →
+  full check; (2) side down → its public probe, full check if it answers; (3) `transient` → full check; (4) refused side
+  → one authenticated read (`GET /v1/capabilities` / `GET /api/profiles`), full check if it passes; (5) API server
+  unreachable for another reason → full check; (6) no files root → full check if the report is older than 15 min;
+  (7) else `GET /health/detailed`, full check when the version changed or the call fails;
+- **runtime signals** (observer of the clients of `CompatService.http(id)`; checks and probes run without one): a 401
+  (30 s debounce), a missing route (404 `{"detail":"Not Found"}`, `{"detail":"No such API endpoint: …"}` or
+  `404: Not Found`) or an unexpected shape (schema error, 2xx that is not JSON; 3 min), a passing error (5 min) ask for a
+  check. Business 404s and 403s (missing session, path outside the files root), aborted calls and anonymous calls
+  never do.
+
+State changes go to the webhook (an outage changes module states, so it is reported, and so is the return).
+
+Hermes errors that reach `onError` unchanged (`connectors/errors.ts`) get a stable `code` and a French message (English
+through `translateResponses`), plus `hermesStatus` and `hermesDetail` (Hermes' `detail`, masked by `Masker.text()` and
+the exact secrets of the instances, 300 characters at most); never 401 (in the web, 401 = Intendia session expired):
+`hermes_unconfigured` 422, `hermes_unreachable` / `hermes_timeout` 504, `dash_token_refused` / `api_key_refused` 502
+(409 once the report knows it, from `ModuleUnavailableError.code`), `hermes_conflict` 409, `hermes_busy` 503 with
+`Retry-After` (Hermes' or 5 s), `hermes_error` 502, `hermes_schema` 502. A `HermesError` written by a service keeps its
+own message with that code and status.
 
 ## Workspaces, sessions and runs
 
@@ -100,10 +136,46 @@ demand from the State screen. State changes go to the webhook.
   of the agent (clarify) are never answered. Copies keep it only when they replace the session (edit, retry, undo).
 - Pinned models and modes (model + effort + personality, never the profile) per agent: `settings`
   `model_pins:<inst>:<profile>` (20) and `run_modes:<inst>:<profile>` (30), `GET|PUT /x/i/:inst/model-pins|modes`.
-- Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
-  The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
-  becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
-- One run at a time per session: sending while the last run is not terminal answers 409.
+- Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`
+  (the header, else `?lastSeq=` sent by a new `EventSource` of the page). The browser's `EventSource` reconnects by
+  itself and only gets what it missed. Anything else is one `intendia.error {status, code, message}` frame, always in
+  200 `text/event-stream`: `run_gone` (Hermes answers 404: it sweeps the events of a run older than 300 s as soon as
+  nobody listens; or the run is not the session's), `hermes_unreachable`, `hermes_http`, `bad_request`.
+  `replay.truncated` is a warning.
+- **A lost stream is never a lost run** (`web/src/chat/useRun.ts`, `followRun`): the page ends a run only on a terminal
+  status (a terminal event, or `GET …/runs/:runId`, or 404 `run_unknown`). States: `live`; `polling/cap` (3 live per tab
+  already); `polling/lost` (the stream closed for good or `intendia.error`: the status is read every 3 s, the stream
+  reopened after the last `seq` at the first good read when it had brought events, else 30 s later; never again after
+  `run_gone`); `polling/offline` (status reads fail: 3, 6, 12, 24, then 30 s); `polling/auth` (401: nothing more until a
+  reload). The page says which under the thread.
+- Older runs stay readable: status and stream of the last run, and of any run with a `run_stats` row of the session
+  (running ones included: a column may follow a run that a goal relaunch replaced). The status of an older run is read
+  at Hermes, never through `settle()`. Stop, approval, answer and reorientation stay on the last run.
+- One run at a time per session: sending while the last run is not terminal answers 409 `run_busy`.
+- **One run per intent** (`chat/start-run.ts`): every `POST /v1/runs` carries an `Idempotency-Key`
+  `<session id>:<suffix>`. The suffix comes from where the intent is born: the page (`u-<clientKey>`, drawn once per
+  composed message: queue items keep theirs, the message being sent is kept in `sessionStorage`
+  `intendia-pending-key:<inst>:<session>` until it succeeded), the goal's creation (`goal-new-<clientKey>`), a goal
+  relaunch (`goalKeySuffix`: hash of instance, session, decided run, rank and `session_goals.key_attempt`; the loop and
+  the resume route give the same key), a wake after sub-agents (`wake-<hash of the delivery>`); random otherwise.
+  Hermes fingerprints the whole body, so the server keeps the body sent per key (memory, 500, 24 h) and sends it again
+  as it was. `createRun` waits 60 s; on a timeout or a network error, when the instance announces
+  `features.runs_idempotency` `supported` and `durable` (`report.runs`), it is retried once with the same key, within
+  80 s for the whole call. The `run_stats` row and `lastRunId` are written in one transaction; a replayed run already
+  recorded writes nothing, one without a row gets one (cost unknown) and becomes `lastRunId` only if no newer row exists.
+  409 answers: `idempotency_conflict` (same key, other text or skills), `already_sent` (Hermes 409
+  `idempotency_key_conflict`: a run was admitted for this key with another body; the goal pauses `key_conflict` and
+  raises `key_attempt`, the wake is abandoned). A send answered `run_busy` re-reads the session every 3 s (90 s) and
+  follows the new run. At start, a wake row left `starting` is released (retried with the same key) on a durable
+  instance, abandoned otherwise.
+- History pages: `GET …/messages?offset=N` reads 500 messages from the end (`order=latest`, `hasMore`); only the
+  latest page settles runs and carries `runs`, `subagents`, `openUnits`. The page loads older pages on demand
+  (« Charger les messages précédents »), merged by id, forgotten at each run's end and each rewrite. During a run the
+  history is cut at the largest message id the page knew when it sent (`mergeHistory` `afterId`), else at the run's
+  `created_at`. Exports md / html read from the start (`order=oldest`, `sessions/export.ts`), 40 pages (20 000
+  messages) at most, said in their heading beyond. The cost after a run is followed by `GET …/run-stats` (run status
+  and `sessions.get` of the row's session only, never the messages; a session ended by a compression gives an
+  unknown cost).
 - Session title at Hermes: after the first run of a session settles, `settle()` copies the Intendia title to Hermes
   (`src/workspaces/title.ts`, `pushTitle`, 5 s), so Telegram and the dashboard show the same name.
 - Home page: "Demander quelque chose à Hermes…" (`apps/web/src/home/Ask.tsx`) creates the session in the chosen
@@ -632,6 +704,48 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   `todo` those whose parents are not finished) then dispatches once; « Annuler » archives the root first (else it
   would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
   route a 409 without code before anything is written.
+
+## Web client: errors, connection and drafts
+
+- **Errors are translated where they are made.** The server sends its own texts through `msg()` (401
+  `unauthenticated` « Session expirée », 403 `csrf`, « Requête invalide », the 500 text); Hermes errors keep the codes
+  of the compat follow-up (`hermes_unreachable`, `hermes_busy`). `call()` (`apps/web/src/api.ts`) turns what never
+  reached a JSON answer into an `ApiError` with a `code`: `network` (the `TypeError` of `fetch`), `timeout`, or
+  « Réponse inattendue du serveur Intendia (HTTP n) » for an error without a JSON body. `ErrorText` shows
+  `err.message`; on a read, `onRetry` adds « Réessayer ».
+- **Time-outs.** `call()` gives up after 60 s on a `GET`, 150 s otherwise (above the longest synchronous server call,
+  the kanban auxiliary model at 120 s). A write that timed out says the action may have gone through, and every query
+  is invalidated.
+- **One rule for « passing ».** `isTransient(err)`: `code: 'network'`, or 502/503/504 without a JSON body (a proxy in
+  front of a stopped Intendia). Only those are retried by React Query (twice; mutations never), and only those raise the
+  « Intendia server unreachable » bar. Any JSON answer of Intendia (403, 404, 409, 422, 500…) is final.
+- **Connection state** (`connection/connection.ts`, the only module with global state, started by `initConnection()`
+  from `main.tsx`): `call()` reports through `setCallHooks` (`network(ok)`, `unauthenticated()`, `writeTimeout()`).
+  `serverDown` turns on at the first passing failure, a probe `GET /x/health` runs every 5 s, and the first good answer
+  turns it off and invalidates every query. Offline is TanStack Query's `onlineManager` (queries and mutations pause
+  and resume by themselves).
+- **Session expired.** A 401 with `code: 'unauthenticated'` opens one password dialog (`askText`, `password: true`)
+  over the page: the page and its forms stay; a wrong password shows the server's message again; « Annuler » saves the
+  chat drafts and lets `beforeLoad` send to `/connexion?retour=<path>`. The same `retour` is set on a cold load;
+  `auth/retour.ts` (`retourOf`) only accepts a same-origin path that is not `/connexion` or `/installation`. Inside the
+  side chat's iframe nothing of this is installed: the page around sees the same states.
+- **Bars** (`components/StatusBars.tsx`, portalled, `z-[65]`: above sheets, below dialogs): one at a time, offline,
+  then Intendia unreachable, then `outage.api`, then `outage.dash` of the current instance (from the compat report,
+  never while the report is stale). A crash in a route shows `RouteError` (`defaultErrorComponent`, « Réessayer »); one
+  outside the routes (dialogs, undo bar) the root `Boundary` (« Recharger la page »).
+- **Drafts** (`components/dirty.ts`). A screen holding unsaved text calls `useDirtyGuard(dirty)`. Closing a sheet or a
+  preview goes through `confirmClose(close)`; navigating (search changes included) and reloading go through the single
+  `DirtyBlocker` (`useBlocker`, mounted by `Layout`). One question, « Abandonner les modifications ? », whatever the
+  number of modified screens; confirming clears the registry, and a save that closes or navigates calls `release()`
+  first. `kanban/Sheet.tsx`: the backdrop closes on a mouse down on itself, Escape closes the top sheet only (an Escape
+  already `defaultPrevented`, by a menu or a dialog, is ignored); the backdrop carries `data-overlay`.
+- **Compat not known yet.** Once `/x/compat` is loaded, an instance without a report is « Vérification de cette
+  instance en cours » (`availability()` → `onlyPending`, polled every 3 s), not « available ».
+- **Sign-in sessions** (`apps/server/src/auth/auth.ts`). A session lasts 30 days without use; an accepted request
+  pushes it back (at most once a day, cookie rewritten) up to 90 days after sign-in. `POST /x/auth/revoke-all`
+  (Settings → Sécurité) deletes every row of `auth_sessions` and gives the caller a new cookie. At start-up and after
+  `setInitialPassword`, `syncPasswordEpoch()` compares an HMAC of the password hash with `settings.password_epoch`:
+  a different hash purges every session (the hash itself is never copied).
 
 ## Interface language
 

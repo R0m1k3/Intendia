@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, X } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { askReload, isStale } from '../components/staleReload';
 import { api, type Skill } from '../api';
+import { confirmClose, useDirtyGuard } from '../components/dirty';
+import { Sheet } from '../kanban/Sheet';
 import { Button, cx, ErrorText, Field, Input } from '../components/ui';
 import { t } from '../i18n';
 
 const CodeView = lazy(() => import('../files/CodeView'));
-const ICON = 'size-4';
 /** Hermes' rules for a new skill (`POST /api/skills`), checked again by the server. */
 export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export const DESCRIPTION_MAX = 60;
@@ -27,21 +27,22 @@ export function NewSkill({ inst, profile, onClose, onCreated }: {
     mutationFn: () => api.createSkill(inst, profile, {
       name: name.trim(), ...(category.trim() ? { category: category.trim() } : {}), description: description.trim(), body,
     }),
-    onSuccess: async ({ skill }) => { await qc.invalidateQueries({ queryKey: ['skills', inst, profile] }); onCreated(skill); },
+    onSuccess: async ({ skill }) => { guard.release(); await qc.invalidateQueries({ queryKey: ['skills', inst, profile] }); onCreated(skill); },
   });
+  const guard = useDirtyGuard(Boolean(name || category || description || body));
   const nameOk = SKILL_NAME_RE.test(name.trim());
   const categoryOk = !category.trim() || SKILL_NAME_RE.test(category.trim());
   const left = DESCRIPTION_MAX - description.trim().length;
   const ok = nameOk && categoryOk && left >= 0 && description.trim().length > 0 && body.trim().length > 0;
-  return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) create.mutate(); }}
-        className="enter flex h-full w-full flex-col bg-sheet shadow-xl md:w-[560px] md:border-l md:border-line" aria-label={t('Nouveau skill')}>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-line px-5">
-          <h2 className="text-lg font-semibold">{t('Nouveau skill')} <span className="ml-1 font-mono text-sm font-normal text-ink-faint">{profile}</span></h2>
-          <Button type="button" variant="ghost" className="size-8 px-0" onClick={onClose} aria-label={t('Fermer')}><X className={ICON} strokeWidth={1.5} /></Button>
-        </header>
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+  return (
+    <Sheet
+      title={t('Nouveau skill')} width="md:w-[560px]" onClose={onClose} onSubmit={() => { if (ok) create.mutate(); }}
+      footer={<>
+        <Button type="button" onClick={() => void confirmClose(onClose)}>{t('Annuler')}</Button>
+        <Button type="submit" variant="primary" disabled={!ok || create.isPending}>{create.isPending ? t('Création…') : t('Créer le skill')}</Button>
+      </>}
+    >
+          <p className="text-xs text-ink-faint">{t('Profil')} <span className="ml-1 font-mono">{profile}</span></p>
           <Field label={t('Nom')} hint={name && !nameOk ? <span className="text-bad">{t('Minuscules, chiffres, . _ - ; 64 caractères au plus')}</span> : t('Minuscules, chiffres, . _ - ; c’est le dossier du skill')}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder={t('rapport-hebdo')} autoFocus className="font-mono" />
           </Field>
@@ -55,14 +56,7 @@ export function NewSkill({ inst, profile, onClose, onCreated }: {
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} required className={AREA} placeholder={t('# Rapport\n\n1. Relire les notes de la semaine\n2. …')} />
           </Field>
           <ErrorText error={create.error} />
-        </div>
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-3">
-          <Button type="button" onClick={onClose}>{t('Annuler')}</Button>
-          <Button type="submit" variant="primary" disabled={!ok || create.isPending}>{create.isPending ? t('Création…') : t('Créer le skill')}</Button>
-        </footer>
-      </form>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
@@ -91,6 +85,7 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
     },
   });
   const data = content.data;
+  useDirtyGuard(draft !== null && data !== undefined && draft !== data.content);
   // a cut text is never edited: saving it would lose the end
   const canEdit = editable && data && !data.truncated;
   return (

@@ -3,8 +3,10 @@ import { msg } from '../i18n/index.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { isRunActive } from '../chat/history.js';
-import { relaunchInput, type Goal } from '../chat/goal.js';
-import { GoalInactiveError, RunBusyError, RunExtrasError, startRun, type StartRunDeps } from '../chat/start-run.js';
+import { goalKeySuffix, relaunchInput, type Goal } from '../chat/goal.js';
+import {
+  AlreadySentError, CLIENT_KEY_RE, GoalInactiveError, IdempotencyConflictError, RunBusyError, RunExtrasError, startRun, type StartRunDeps,
+} from '../chat/start-run.js';
 import { sessionParams } from './workspaces.js';
 
 const Budget = z.number().min(0.01).max(100).nullable();
@@ -16,11 +18,20 @@ const Settings = {
 };
 const CreateBody = z.object({
   text: Settings.text, maxRelaunches: Settings.maxRelaunches.default(5), budgetUsd: Budget.default(1), mode: Settings.mode.default('auto'),
+  /** drawn by the page when its dialog opens, kept until the creation succeeds: a resend never starts a second run */
+  clientKey: z.string().regex(CLIENT_KEY_RE).optional(),
 });
 const EditBody = z.object({
   text: Settings.text.optional(), maxRelaunches: Settings.maxRelaunches.optional(), budgetUsd: Budget.optional(), mode: Settings.mode.optional(),
 });
 const PauseBody = z.object({ reason: z.enum(['user', 'button']).default('button') });
+
+/** A key refused (409): Hermes already admitted a run for it, or this process kept another body for it. */
+function keyError(err: unknown) {
+  if (err instanceof AlreadySentError) return { error: err.message, code: 'already_sent' } as const;
+  if (err instanceof IdempotencyConflictError) return { error: err.message, code: 'idempotency_conflict' } as const;
+  return null;
+}
 
 const BUDGET_REQUIRED = { error: msg('Avec « Sans confirmation », un budget est obligatoire'), code: 'budget_required' } as const;
 
@@ -59,13 +70,15 @@ export function goalRoutes(deps: StartRunDeps): Hono {
       // the last run (finished) is not decided on: only the goal's own runs are
       const made = goals.create({ instanceId: inst, sessionId: id, text: body.text, mode: body.mode, maxRelaunches: body.maxRelaunches, budgetUsd: body.budgetUsd, handledRunId: ctx.session.lastRunId });
       try {
-        const started = await startRun(deps, ctx, body.text);
+        const started = await startRun(deps, ctx, body.text, { ...(body.clientKey ? { keySuffix: 'goal-new-' + body.clientKey } : {}) });
         return c.json({ ...started, goal: view(goals.get(inst, id), started.runId) });
       } catch (err) {
         // only the goal this request wrote (not one written since)
         if (goals.get(inst, id)?.createdAt === made.createdAt) goals.remove(inst, id);
         if (err instanceof RunBusyError) return c.json({ error: msg('Attendez la fin du run ou arrêtez-le'), code: 'run_active' }, 409);
         if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
+        const refused = keyError(err);
+        if (refused) return c.json(refused, 409);
         throw err;
       }
     } finally {
@@ -108,9 +121,17 @@ export function goalRoutes(deps: StartRunDeps): Hono {
     if (!running) {
       const fresh = goals.get(inst, id)!;
       try {
-        await startRun(deps, ctx, relaunchInput(fresh.relaunches + 1, fresh.maxRelaunches), { forGoal: true });
+        // same key as the loop's for this (run, rank): a relaunch started by either is started once
+        await startRun(deps, ctx, relaunchInput(fresh.relaunches + 1, fresh.maxRelaunches), {
+          forGoal: true, keySuffix: goalKeySuffix(fresh, ctx.session.lastRunId ?? '', fresh.relaunches + 1),
+        });
         goals.countRelaunch(inst, id);
       } catch (err) {
+        const refused = keyError(err);
+        if (refused) {
+          goals.pauseForKeyConflict(inst, id, { detail: refused.error });
+          return c.json(refused, 409);
+        }
         // a send got there first: the goal stays active and the loop takes that run's end; paused again meanwhile: none
         if (!(err instanceof RunBusyError) && !(err instanceof GoalInactiveError)) {
           goals.pauseIfActive(inst, id, 'start_failed', { detail: (err as Error).message });

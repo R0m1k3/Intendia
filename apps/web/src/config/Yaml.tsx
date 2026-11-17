@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { RefreshCw, Save } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { api } from '../api';
+import { useDirtyGuard } from '../components/dirty';
 import { Button, ErrorText, Panel } from '../components/ui';
 import { ManagedNotice } from './Managed';
 import { configKey, errorCode, errorData, ICON, useInvalidateConfig, type TabProps } from './common';
@@ -37,6 +38,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
     onError: (err) => { if (errorCode(err) === 'config_changed') setConflict(true); },
   });
 
+  useDirtyGuard(draft !== null && draft !== against?.yaml);
   if (raw.isPending) return <p className="text-sm text-ink-soft">{t('Lecture du fichier…')}</p>;
   if (raw.isError || !shown) return <ErrorText error={raw.error} />;
 

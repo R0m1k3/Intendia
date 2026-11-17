@@ -61,7 +61,7 @@ describe('reduceEvent', () => {
   it('keeps the run prompt from the history when a reorientation is given after a reload', () => {
     const history = [msg(1, 'user', 'Avant', 5), msg(2, 'user', 'Tâche du run', 11), msg(3, 'user', 'Plutôt Houdemont', 12, { steer: true })];
     const live = run([{ event: 'run.started' }, { event: 'intendia.steer', text: 'Plutôt Houdemont', timestamp: 12 }]).entries;
-    const texts = mergeHistory(history, 10, live).flatMap((e) => (e.kind === 'user' ? [e.text] : []));
+    const texts = mergeHistory(history, { createdAt: 10, afterId: null }, live).flatMap((e) => (e.kind === 'user' ? [e.text] : []));
     expect(texts).toEqual(['Avant', 'Tâche du run', 'Plutôt Houdemont']);
   });
 
@@ -130,13 +130,36 @@ describe('history', () => {
       msg(3, 'user', 'Pendant', 200), msg(4, 'assistant', 'Partiel déjà écrit', 201),
     ];
     const live = run([{ event: 'message.delta', delta: 'Partiel déjà écrit' }]).entries;
-    const merged = mergeHistory(history, 199.5, live);
+    const merged = mergeHistory(history, { createdAt: 199.5, afterId: null }, live);
     expect(merged.map((e) => `${e.kind}:${'text' in e ? e.text : ''}`)).toEqual([
       'user:Avant', 'assistant:Réponse avant', 'user:Pendant', 'assistant:Partiel déjà écrit',
     ]);
     // sent from this page: the live entries already carry the user message
-    const own = mergeHistory(history, 199.5, [{ kind: 'user', key: 'u', text: 'Pendant', ts: null }, ...live]);
+    const own = mergeHistory(history, { createdAt: 199.5, afterId: null }, [{ kind: 'user', key: 'u', text: 'Pendant', ts: null }, ...live]);
     expect(own.filter((e) => e.kind === 'user')).toHaveLength(2);
+  });
+
+  it('cuts by message id: the history read again during the run shows each message of the run once', () => {
+    const history = [
+      msg(1, 'user', 'Avant', 100), msg(2, 'assistant', 'Réponse avant', 101),
+      // written by Hermes during the run (no created_at known: a goal's first turn)
+      msg(3, 'user', 'Pendant', 200),
+      msg(4, 'assistant', '', 201, { toolCalls: [{ name: 'terminal', arguments: '{}' }, { name: 'read_file', arguments: '{}' }] }),
+      msg(5, 'tool', 'ok', 202, { toolName: 'terminal' }), msg(6, 'tool', 'ok', 203, { toolName: 'read_file' }),
+    ];
+    const live = run([
+      { event: 'run.started' },
+      { event: 'tool.started', tool: 'terminal', call_id: 'c1' }, { event: 'tool.completed', tool: 'terminal', call_id: 'c1', preview: 'ok' },
+      { event: 'tool.started', tool: 'read_file', call_id: 'c2' }, { event: 'tool.completed', tool: 'read_file', call_id: 'c2', preview: 'ok' },
+    ]).entries;
+    const seeded: Entry[] = [{ kind: 'user', key: 'u', text: 'Pendant', ts: null }, ...live];
+    const merged = mergeHistory(history, { createdAt: null, afterId: 2 }, seeded);
+    expect(merged.filter((e) => e.kind === 'user').map((e) => (e as { text: string }).text)).toEqual(['Avant', 'Pendant']);
+    expect(merged.filter((e) => e.kind === 'tool')).toHaveLength(2);
+    expect(new Set(merged.map((e) => e.key)).size).toBe(merged.length);
+    // without the live user line (a reload): the run's prompt comes from the history, once
+    const reread = mergeHistory(history, { createdAt: null, afterId: 2 }, live);
+    expect(reread.filter((e) => e.kind === 'user').map((e) => (e as { text: string }).text)).toEqual(['Avant', 'Pendant']);
   });
 });
 

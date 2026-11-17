@@ -4,10 +4,10 @@
  * Hermes' home (or one of its ancestors), and an agent whose terminal runs in the Hermes container (`local`),
  * so that it sees the same paths as the dashboard.
  */
-import { callOp } from '../connectors/runtime.js';
+import { callOp, ModuleUnavailableError } from '../connectors/runtime.js';
 import type { CompatReport } from '../connectors/types.js';
 import type { HermesFilesList } from '../connectors/files/index.js';
-import type { HermesHttp } from '../hermes/http.js';
+import { isTransient, type HermesHttp } from '../hermes/http.js';
 import { msg } from '../i18n/index.js';
 
 export const FILES_ROOT_LINE = 'HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace';
@@ -19,7 +19,7 @@ function containsOrEquals(a: string, b: string): boolean {
   return a === '/' || b === a || b.startsWith(`${a}/`);
 }
 
-export async function readFilesRoot(http: HermesHttp, report: CompatReport): Promise<{ workspaceRoot: string | null; reason: string | null }> {
+export async function readFilesRoot(http: HermesHttp, report: CompatReport): Promise<NonNullable<CompatReport['files']>> {
   const no = (reason: string) => ({ workspaceRoot: null, reason });
   if (!http.hasDashboard()) return no(msg('Fichiers des workspaces indisponibles : dashboard non configuré pour cette instance.'));
   try {
@@ -40,7 +40,11 @@ export async function readFilesRoot(http: HermesHttp, report: CompatReport): Pro
     }
     return { workspaceRoot: root, reason: null };
   } catch (err) {
-    return no(msg('Racine des fichiers illisible : {error}', { error: (err as Error).message }));
+    const out = no(msg('Racine des fichiers illisible : {error}', { error: (err as Error).message }));
+    // a passing failure (or an op whose probe failed that way) is retried by CompatService, not taken as "no root"
+    const passing = isTransient(err)
+      || (err instanceof ModuleUnavailableError && Boolean(report.modules.find((m) => m.id === err.module)?.ops[err.op]?.transient));
+    return passing ? { ...out, transient: true } : out;
   }
 }
 

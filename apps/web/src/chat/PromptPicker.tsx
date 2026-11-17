@@ -5,6 +5,7 @@ import { api, type Prompt } from '../api';
 import { ask, askText } from '../components/Dialog';
 import { Popover } from '../components/Menu';
 import { Button, cx, ErrorText } from '../components/ui';
+import { useDirtyGuard } from '../components/dirty';
 import { Sheet, TEXTAREA } from '../kanban/Sheet';
 import { t } from '../i18n';
 
@@ -125,6 +126,7 @@ function PromptEditor({ prompt }: { prompt: Prompt }) {
   const [title, setTitle] = useState(prompt.title);
   const [body, setBody] = useState(prompt.body);
   const changed = title.trim() !== prompt.title || body !== prompt.body;
+  useDirtyGuard(changed);
   const save = useMutation({
     mutationFn: () => api.updatePrompt(prompt.id, { title, body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),

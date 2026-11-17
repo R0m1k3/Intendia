@@ -163,6 +163,8 @@ export const sessionGoals = sqliteTable(
     reasonDetail: text('reason_detail'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
+    /** rank of the relaunch keys, raised by a key conflict (0013) */
+    keyAttempt: integer('key_attempt').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId] })],
 );

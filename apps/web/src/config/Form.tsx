@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { RefreshCw, Save, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api, type ConfigField } from '../api';
+import { useDirtyGuard } from '../components/dirty';
 import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
 import { ManagedNotice } from './Managed';
 import { CHANGED_TEXT, configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
@@ -42,6 +43,7 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
     onError: (err) => { if (errorCode(err) === 'config_changed') setConflict(true); },
   });
 
+  useDirtyGuard(changes.length > 0 || Object.keys(bad).length > 0);
   if (form.isPending) return <p className="text-sm text-ink-soft">{t('Lecture de la configuration…')}</p>;
   if (form.isError || !data) return <ErrorText error={form.error} />;
 
