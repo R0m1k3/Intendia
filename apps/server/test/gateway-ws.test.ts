@@ -51,6 +51,14 @@ describe('dashboard JSON-RPC WebSocket', () => {
     expect((await probeSessionStats(fakeInstance(), { factory: silent, timeoutMs: 30 })).sessionStats).toBe(false);
   });
 
+  it('a dashboard token changed by Hermes is still a handshake never answered (timeout)', async () => {
+    const f = createFakeHermes({ fixturesDir: FIXTURES });
+    f.auth.dashToken = 'autre-jeton';
+    const err = await callGatewaySocket(fakeInstance(), 'session.stats', {}, { factory: fakeWebSocketFactory(f), timeoutMs: 50 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GatewaySocketError);
+    expect((err as GatewaySocketError).code).toBeNull();
+  });
+
   it('a refused connection rejects at once', async () => {
     const refused = (): WsLike => {
       const l: Record<string, (ev: object) => void> = {};

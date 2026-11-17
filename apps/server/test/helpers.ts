@@ -130,7 +130,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   await raw('POST', '/x/setup/password', { code: auth.setupCode, password: 'test-password-123' });
   /** Workspace root of the main instance (the fake's managed files root, real path). */
   const root = fake.files.root;
-  return { app, mcp, db, root, fake, fakes, inst, store, compat, config, services, links: services.links, request, raw, rawRequest };
+  return { app, mcp, db, root, fake, fakes, inst, store, compat, config, services, links: services.links, request, raw, rawRequest, /** session cookie (name=value) */ cookie: () => cookie };
 }
 
 /** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */

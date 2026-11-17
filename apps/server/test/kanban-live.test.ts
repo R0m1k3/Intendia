@@ -47,6 +47,18 @@ describe('kanban live events', () => {
     expect(listeners(t)).toBe(0);
   });
 
+  it('renews the relay after kanbanRelayMaxMs: closed with code recycle, the WebSocket to Hermes closed', async () => {
+    const t = await testApp({ kanbanRelayMaxMs: 200 });
+    const res = await t.raw('GET', `${K}/events?board=default`);
+    const { text, ended } = await read(res, (s) => s.includes('event: closed'), 2000);
+    expect(text).toContain('event: closed');
+    expect(text).toContain('"code":"recycle"');
+    expect(text).toContain('Flux du kanban renouvelé');
+    await sleep(20);
+    expect(ended || text.includes('event: closed')).toBe(true);
+    expect(listeners(t)).toBe(0);
+  });
+
   it('ignores the events of another board', async () => {
     const t = await testApp();
     await t.request('POST', `${K}/boards`, { slug: 'autre' });

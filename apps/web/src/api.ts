@@ -7,6 +7,10 @@ export interface ResolvedOp {
   ok: boolean;
   route?: { via: 'api' | 'dash'; method: string; path: string };
   notes: string[];
+  /** Failed op: its last probe failed with a passing error (outage, timeout). */
+  transient?: true;
+  /** Failed op: refused at once by the server (side down, key or token refused). */
+  code?: 'hermes_unreachable' | 'dash_token_refused' | 'api_key_refused';
 }
 export interface ModuleReport {
   id: ModuleId;
@@ -20,11 +24,14 @@ export interface CompatReport {
   instanceId: string;
   checkedAt: number;
   hermesVersion: string | null;
-  api: { reachable: boolean; error?: string };
-  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean };
+  /** `auth`: key (or token) checked by the last full check: `refused` = Hermes answered 401/403. */
+  api: { reachable: boolean; error?: string; auth?: 'ok' | 'refused' | 'unknown' };
+  dash: { configured: boolean; reachable: boolean; error?: string; openapi: boolean; auth?: 'ok' | 'refused' | 'unknown' };
+  /** A side of Hermes did not answer at the last check, since `since` (ms); rechecked by itself. */
+  outage?: { since: number; api: boolean; dash: boolean };
   modules: ModuleReport[];
   /** Root of the workspaces on this instance, or why the Files module cannot be used. */
-  files?: { workspaceRoot: string | null; reason: string | null };
+  files?: { workspaceRoot: string | null; reason: string | null; transient?: true };
   /** `session.stats` of the dashboard WebSocket (exact context, quotas); absent = not checked yet. */
   socket?: { sessionStats: boolean; oneshot?: boolean; /** credential vault (`vault.*`); absent = not checked yet */ vault?: boolean; note: string };
   /** Ops this Intendia knows that the report has not checked yet (`module.op`; report saved by an older version). */

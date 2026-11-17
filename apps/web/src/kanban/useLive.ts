@@ -9,7 +9,8 @@ export const POLL_MS = 5_000;
 /**
  * Live board: the server relays Hermes' kanban WebSocket as SSE `change {taskIds}`; the board (and an
  * open task it names) is reread 300 ms after the last change. When the stream closes, `polling` is true
- * (the page rereads every 5 s) and the stream is tried again after 60 s.
+ * (the page rereads every 5 s) and the stream is tried again after 60 s. The server renews each relay every 10 min
+ * (`closed` with `code: "recycle"`): the stream reopens at once and the board is reread, without polling.
  */
 export function useKanbanLive(inst: string, board: string | undefined, openTask: string | undefined): { polling: boolean } {
   const qc = useQueryClient();
@@ -25,6 +26,8 @@ export function useKanbanLive(inst: string, board: string | undefined, openTask:
     let debounce: ReturnType<typeof setTimeout> | undefined;
     let touched = new Set<string>();
     let stopped = false;
+    // reopened after a failure or a renewal: changes may have been missed meanwhile
+    let reread = false;
 
     const flush = () => {
       void qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] });
@@ -35,7 +38,13 @@ export function useKanbanLive(inst: string, board: string | undefined, openTask:
     const open = () => {
       if (stopped) return;
       es = new EventSource(`/x${kanbanPath(inst, 'events', board)}`, { withCredentials: true });
-      es.addEventListener('open', () => setPolling(false));
+      es.addEventListener('open', () => {
+        setPolling(false);
+        if (reread) {
+          reread = false;
+          flush();
+        }
+      });
       es.addEventListener('change', (ev) => {
         try {
           for (const id of (JSON.parse((ev as MessageEvent<string>).data) as { taskIds?: string[] }).taskIds ?? []) touched.add(id);
@@ -49,9 +58,19 @@ export function useKanbanLive(inst: string, board: string | undefined, openTask:
         es = null;
         setPolling(true);
         clearTimeout(retry);
+        reread = true;
         retry = setTimeout(open, RETRY_MS);
       };
-      es.addEventListener('closed', fail);
+      es.addEventListener('closed', (ev) => {
+        let code: unknown;
+        try { code = (JSON.parse((ev as MessageEvent<string>).data) as { code?: unknown }).code; } catch { /* ignore */ }
+        if (code !== 'recycle') return fail();
+        // renewed by the server: reopen now, reread the board once open
+        es?.close();
+        es = null;
+        reread = true;
+        open();
+      });
       es.addEventListener('error', fail);
     };
     open();
