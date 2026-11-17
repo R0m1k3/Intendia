@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 export const SessionSchema = z.looseObject({
@@ -14,7 +15,7 @@ export const SessionSchema = z.looseObject({
 });
 
 export const SessionListSchema = z.looseObject({
-  data: z.array(SessionSchema),
+  data: tolerantArray(SessionSchema, 'sessions.list'),
   has_more: z.boolean().optional(),
 });
 
@@ -34,11 +35,11 @@ export const MessageSchema = z.looseObject({
 });
 
 /** `session_id`: the live session (after a context compression, its continuation). */
-export const MessageListSchema = z.looseObject({ data: z.array(MessageSchema), session_id: z.string().nullish().catch(null) });
+export const MessageListSchema = z.looseObject({ data: tolerantArray(MessageSchema, 'sessions.messages'), session_id: z.string().nullish().catch(null) });
 
 /** Dashboard search (id, then FTS5 on messages); `snippet` marks the hit with `>>>` and `<<<`. */
 export const SessionSearchSchema = z.looseObject({
-  results: z.array(z.looseObject({
+  results: tolerantArray(z.looseObject({
     id: z.string().nullish(),
     session_id: z.string().nullish(),
     source: z.string().nullish(),
@@ -47,7 +48,7 @@ export const SessionSearchSchema = z.looseObject({
     last_active: z.number().nullish(),
     message_count: z.number().nullish(),
     profile: z.string().nullish(),
-  })),
+  }), 'sessions.search'),
 });
 
 /** GET /api/sessions/{id}/export (dashboard): the session row and every message row, with their flags. */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 /** One plugin of `GET /api/dashboard/plugins/hub` (bundled, user, git, pip…). `path` is a host path: never sent on. */
@@ -15,7 +16,7 @@ export const HubPluginSchema = z.looseObject({
   user_hidden: z.boolean().nullish(),
   removed_reason: z.string().nullish(),
 });
-export const HubSchema = z.looseObject({ plugins: z.array(HubPluginSchema) });
+export const HubSchema = z.looseObject({ plugins: tolerantArray(HubPluginSchema, 'plugins.installed') });
 
 /** One entry of the curated catalog shipped with Hermes (`plugin-catalog/`), pinned to a commit. */
 export const CatalogEntrySchema = z.looseObject({
@@ -45,7 +46,7 @@ export const CatalogEntrySchema = z.looseObject({
   runtime_status: z.string().nullish(),
 });
 export const CatalogSchema = z.looseObject({
-  entries: z.array(CatalogEntrySchema),
+  entries: tolerantArray(CatalogEntrySchema, 'plugins.catalog'),
   removed: z.array(z.looseObject({ name: z.string(), reason: z.string().nullish(), date: z.string().nullish() })).nullish(),
   generated_at: z.string().nullish(),
 });

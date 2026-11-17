@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 /** Kanban plugin of the dashboard. Shared by every profile: never sent with `?profile=`; always `?board=`. */
@@ -27,13 +28,13 @@ export const TaskSchema = z.looseObject({
 export type HermesTask = z.infer<typeof TaskSchema>;
 
 export const BoardSchema = z.looseObject({
-  columns: z.array(z.looseObject({ name: z.string(), tasks: z.array(TaskSchema) })),
+  columns: z.array(z.looseObject({ name: z.string(), tasks: tolerantArray(TaskSchema, 'kanban.tasks') })),
   latest_event_id: z.number().optional(),
 });
 export const BoardListSchema = z.looseObject({
-  boards: z.array(z.looseObject({
+  boards: tolerantArray(z.looseObject({
     slug: z.string(), name: z.string().nullish(), archived: z.boolean().optional(), total: z.number().optional(),
-  })),
+  }), 'kanban.boards'),
   current: z.string().optional(),
 });
 export const WorkflowSchema = z.looseObject({
@@ -45,7 +46,7 @@ export const AssigneesSchema = z.looseObject({
 });
 /** Fields from the SQL of `list_active_workers` (plugin_api.py). */
 export const WorkersSchema = z.looseObject({
-  workers: z.array(z.looseObject({
+  workers: tolerantArray(z.looseObject({
     run_id: z.number(),
     task_id: z.string(),
     task_title: z.string().nullish(),
@@ -53,7 +54,7 @@ export const WorkersSchema = z.looseObject({
     task_assignee: z.string().nullish(),
     profile: z.string().nullish(),
     started_at: z.number().nullish(),
-  })),
+  }), 'kanban.workers'),
 });
 export const OrchestrationSchema = z.looseObject({
   orchestrator_profile: z.string().nullish(),

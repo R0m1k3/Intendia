@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { Via } from '../../hermes/http.js';
 import type { ModuleDef } from '../types.js';
 
@@ -45,7 +46,7 @@ export const JobSchema = z.looseObject({
 export type HermesJob = z.infer<typeof JobSchema>;
 
 /** The dashboard answers a bare array, the API server `{ jobs: [...] }`: both are accepted. */
-export const JobListSchema = z.union([z.array(JobSchema), z.looseObject({ jobs: z.array(JobSchema) })]);
+export const JobListSchema = z.union([tolerantArray(JobSchema, 'crons.jobs'), z.looseObject({ jobs: tolerantArray(JobSchema, 'crons.jobs') })]);
 
 export function normaliseJobs(raw: z.infer<typeof JobListSchema>): HermesJob[] {
   return Array.isArray(raw) ? raw : raw.jobs;
@@ -65,7 +66,7 @@ export const RunSchema = z.looseObject({
   model: z.string().nullish(),
 });
 
-export const RunListSchema = z.looseObject({ runs: z.array(RunSchema) });
+export const RunListSchema = z.looseObject({ runs: tolerantArray(RunSchema, 'crons.runs') });
 
 /** Cron templates of the dashboard (`/api/cron/blueprints`): the prompt itself is not returned. */
 export const BlueprintFieldSchema = z.looseObject({
@@ -89,7 +90,7 @@ export const BlueprintSchema = z.looseObject({
   plugin: z.string().nullish(),
   scheduleHuman: z.string().nullish(),
 });
-export const BlueprintListSchema = z.looseObject({ blueprints: z.array(BlueprintSchema) });
+export const BlueprintListSchema = z.looseObject({ blueprints: tolerantArray(BlueprintSchema, 'crons.blueprints') });
 
 export const TargetListSchema = z.looseObject({
   targets: z.array(z.looseObject({ id: z.string(), name: z.string().nullish() })),

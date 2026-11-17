@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import { ActionStatusSchema } from '../actions.js';
 import type { ModuleDef } from '../types.js';
 
@@ -34,7 +35,7 @@ export const EnvListSchema = z.record(z.string(), z.looseObject({
 }));
 
 export const McpServersSchema = z.looseObject({
-  servers: z.array(z.looseObject({
+  servers: tolerantArray(z.looseObject({
     name: z.string(),
     transport: z.string().nullish(),
     url: z.string().nullish(),
@@ -46,7 +47,7 @@ export const McpServersSchema = z.looseObject({
     tools: z.unknown().optional(),
     source: z.string().nullish(),
     plugin: z.string().nullish(),
-  })),
+  }), 'config.mcpServers'),
 });
 
 export const ModelInfoSchema = z.looseObject({
@@ -56,7 +57,7 @@ export const ModelInfoSchema = z.looseObject({
 });
 
 export const ModelOptionsSchema = z.looseObject({
-  providers: z.array(z.looseObject({
+  providers: tolerantArray(z.looseObject({
     slug: z.string(),
     name: z.string(),
     authenticated: z.boolean().optional(),
@@ -64,16 +65,16 @@ export const ModelOptionsSchema = z.looseObject({
     key_env: z.string().nullish(),
     models: z.array(z.string()).optional(),
     warning: z.string().nullish(),
-  })),
+  }), 'config.modelOptions'),
 });
 
 export const AuxiliarySchema = z.looseObject({
-  tasks: z.array(z.looseObject({
+  tasks: tolerantArray(z.looseObject({
     task: z.string(),
     label: z.string().nullish(),
     provider: z.string().nullish(),
     model: z.string().nullish(),
-  })),
+  }), 'config.auxiliary'),
 });
 
 /** `GET /api/model/recommended-default?provider=`: `model` may be empty (Hermes has nothing to propose). */
@@ -91,7 +92,7 @@ export const ModelSetSchema = z.looseObject({
 });
 
 export const PlatformsSchema = z.looseObject({
-  platforms: z.array(z.looseObject({
+  platforms: tolerantArray(z.looseObject({
     id: z.string(),
     name: z.string(),
     enabled: z.boolean().optional(),
@@ -99,7 +100,7 @@ export const PlatformsSchema = z.looseObject({
     state: z.string().nullish(),
     error_message: z.string().nullish(),
     env_vars: z.array(z.looseObject({ key: z.string(), required: z.boolean().optional(), is_set: z.boolean().optional() })).optional(),
-  })),
+  }), 'config.platforms'),
 });
 
 export const McpTestSchema = z.looseObject({
@@ -118,7 +119,7 @@ export function mcpTokenEnv(name: string): string {
  * the server; `source` is read to tell how Anthropic is connected, not sent either.
  */
 export const OAuthProvidersSchema = z.looseObject({
-  providers: z.array(z.looseObject({
+  providers: tolerantArray(z.looseObject({
     id: z.string(),
     name: z.string().nullish(),
     flow: z.string().nullish(),
@@ -127,7 +128,7 @@ export const OAuthProvidersSchema = z.looseObject({
     disconnectable: z.boolean().nullish(),
     disconnect_hint: z.string().nullish(),
     status: z.looseObject({ logged_in: z.boolean().nullish(), expires_at: z.unknown().optional(), source: z.string().nullish() }).nullish(),
-  })),
+  }), 'config.oauthProviders'),
 });
 export const OAuthStartSchema = z.looseObject({
   session_id: z.string(),
@@ -143,17 +144,17 @@ export const OAuthPollSchema = z.looseObject({
 });
 /** GET /api/credentials/pool: API keys and OAuth logins, per provider. `index` is 1-based, as listed. */
 export const PoolSchema = z.looseObject({
-  providers: z.array(z.looseObject({
+  providers: tolerantArray(z.looseObject({
     provider: z.string(),
-    entries: z.array(z.looseObject({
+    entries: tolerantArray(z.looseObject({
       index: z.number(),
       id: z.string(),
       label: z.string().nullish(),
       auth_type: z.string().nullish(),
       source: z.string().nullish(),
       last_status: z.string().nullish(),
-    })),
-  })),
+    }), 'config.poolEntries'),
+  }), 'config.pool'),
 });
 /** POST /api/credentials/pool (`add_credential_pool_entry`). */
 export const PoolAddSchema = z.looseObject({ ok: z.boolean().optional(), provider: z.string().optional(), count: z.number().optional() });
@@ -165,7 +166,7 @@ export const GATEWAY_RESTART_ACTION = 'gateway-restart';
 
 /** `GET /api/mcp/catalog`: the approved MCP servers shipped with Hermes, with their state for the profile. */
 export const McpCatalogSchema = z.looseObject({
-  entries: z.array(z.looseObject({
+  entries: tolerantArray(z.looseObject({
     name: z.string(),
     description: z.string().nullish(),
     source: z.string().nullish(),
@@ -179,7 +180,7 @@ export const McpCatalogSchema = z.looseObject({
     post_install: z.string().nullish(),
     installed: z.boolean().nullish(),
     enabled: z.boolean().nullish(),
-  })),
+  }), 'config.mcpCatalog'),
   diagnostics: z.array(z.looseObject({ name: z.string().nullish(), kind: z.string().nullish(), message: z.string().nullish() })).nullish(),
 });
 /** A dashboard MCP OAuth flow (`POST …/auth`, `GET /api/mcp/oauth/flows/{flow_id}`), kept 15 min by Hermes. */

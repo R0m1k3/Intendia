@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tolerantArray } from '../list.js';
 import type { ModuleDef } from '../types.js';
 
 /** One entry of GET /api/files: `path` is resolved (symbolic links followed), except for a broken link. */
@@ -15,7 +16,7 @@ export type HermesFileEntry = z.infer<typeof FilesEntrySchema>;
 export const FilesListSchema = z.looseObject({
   path: z.string(),
   locked_root: z.string().nullable(),
-  entries: z.array(FilesEntrySchema),
+  entries: tolerantArray(FilesEntrySchema, 'files.entries'),
 });
 export type HermesFilesList = z.infer<typeof FilesListSchema>;
 
