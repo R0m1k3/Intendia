@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { testApp } from './helpers.js';
 
 const BASE = '/x/i/fake/crons';
+/** PUT of a cron with the `base` of its current revision (what the editor sends). */
+async function putCron(t: { request: (m: string, p: string, b?: unknown) => Promise<{ status: number; json: any }> }, id: string, body: Record<string, unknown>) {
+  const base = (await t.request('GET', `${BASE}/${id}?profile=default`)).json.cron.revision;
+  return t.request('PUT', `${BASE}/${id}?profile=default`, { ...body, base });
+}
 type T = Awaited<ReturnType<typeof testApp>>;
 const input = (over: Record<string, unknown> = {}) => ({
   name: 'Rapport', prompt: 'Fais le rapport.', schedule: '30 8 * * 1', deliver: 'local', skills: [], model: null, workspace: null, ...over,
@@ -30,9 +35,9 @@ describe('crons: advanced options (lot 8 C)', () => {
   it('update: emptied options go back to Hermes defaults (null, forever); absent ones are unchanged', async () => {
     const t = await testApp();
     const c = (await t.request('POST', BASE, input({ repeat: 3, timezone: 'Europe/Paris', enabledToolsets: ['web'], catchUp: true, graceMinutes: 5 }))).json.cron;
-    const kept = await t.request('PUT', `${BASE}/${c.id}?profile=default`, input({ name: 'Renommé' }));
+    const kept = await putCron(t, c.id, input({ name: 'Renommé' }));
     expect(kept.json.cron).toMatchObject({ repeat: 3, timezone: 'Europe/Paris', enabledToolsets: ['web'], catchUp: true, graceMinutes: 5 });
-    const reset = await t.request('PUT', `${BASE}/${c.id}?profile=default`, input({ repeat: 'forever', timezone: null, enabledToolsets: [], catchUp: null, graceMinutes: null, contextFrom: [] }));
+    const reset = await putCron(t, c.id, input({ repeat: 'forever', timezone: null, enabledToolsets: [], catchUp: null, graceMinutes: null, contextFrom: [] }));
     expect(reset.status).toBe(200);
     const updates = (dashCalls(t, 'PUT', '/api/cron/jobs/').at(-1)!.body as { updates: Record<string, unknown> }).updates;
     expect(updates).toMatchObject({ repeat: 'forever', timezone: null, enabled_toolsets: null, catch_up: null, grace_minutes: null, context_from: null });

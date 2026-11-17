@@ -9,6 +9,8 @@ import type { InstanceStore } from '../instances/store.js';
 import type { FileRoots } from '../files/hermes-fs.js';
 import { createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd, readAgentsMd, writeAgentsMd } from './fs.js';
 import { msg } from '../i18n/index.js';
+import { AdminError } from '../admin-error.js';
+import type { RevisionOf } from '../revision.js';
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
@@ -139,7 +141,7 @@ export class WorkspaceService {
   /** Slugs being created: a second request for the same slug gets "exists" instead of racing the first. */
   private readonly creating = new Set<string>();
 
-  constructor(private readonly db: Db, private readonly store: InstanceStore, private readonly roots: FileRoots) {}
+  constructor(private readonly db: Db, private readonly store: InstanceStore, private readonly roots: FileRoots, private readonly revisionOf: RevisionOf) {}
 
   private instance(id: string): InstanceConfig {
     const inst = this.store.get(id);
@@ -215,9 +217,18 @@ export class WorkspaceService {
     return text;
   }
 
-  async writeAgentsMd(slug: string, text: string): Promise<void> {
+  /** AGENTS.md for the editor: text ('' when absent) and its `revision`, sent back as `base` by `writeAgentsMd`. */
+  async agentsMdFile(slug: string): Promise<{ text: string; revision: string }> {
+    const text = await this.readAgentsMd(slug);
+    return { text, revision: this.revisionOf(text) };
+  }
+
+  /** Writes AGENTS.md only over the text the editor opened (`base`), else 409 `stale`; an absent file counts as ''. */
+  async writeAgentsMd(slug: string, text: string, base: string): Promise<void> {
     const ws = this.getWorkspace(slug);
-    await writeAgentsMd(this.roots.fs(ws.instanceId), slug, text);
+    const fs = this.roots.fs(ws.instanceId);
+    if (this.revisionOf(await readAgentsMd(fs, slug)) !== base) throw new AdminError('stale', msg('AGENTS.md a changé depuis l’ouverture : rechargez'));
+    await writeAgentsMd(fs, slug, text);
     this.agentsMd.set(slug, text);
   }
 

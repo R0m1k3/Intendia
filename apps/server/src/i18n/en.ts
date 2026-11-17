@@ -492,4 +492,12 @@ export default {
   'Hermes a répondu OK mais n’a pas appliqué ce changement. Causes possibles : Hermes installé par un gestionnaire de paquets (Nix), réglage fixé par un administrateur, ou valeur égale à la valeur par défaut (Hermes la retire du fichier).': 'Hermes answered OK but did not apply this change. Possible causes: Hermes installed by a package manager (Nix), a setting fixed by an administrator, or a value equal to the default (Hermes removes it from the file).',
   'Hermes est installé par un gestionnaire de paquets (Nix ou marqueur .managed) : il ignore les changements de configuration faits par son dashboard. Modifiez la configuration là où Hermes est déclaré.': 'Hermes is installed by a package manager (Nix or .managed marker): it ignores configuration changes made through its dashboard. Change the configuration where Hermes is declared.',
   'Hermes a changé le fichier pendant l’opération : Intendia ne l’a pas remis en l’état ; vérifiez dans l’onglet Historique': 'Hermes changed the file during the operation: Intendia did not put it back; check the History tab',
+  'Le SKILL.md a changé dans Hermes depuis l’ouverture : rechargez': 'The SKILL.md changed in Hermes since it was opened: reload',
+  'Ce cron a changé dans Hermes depuis l’ouverture : rechargez': 'This cron changed in Hermes since it was opened: reload',
+  'Cette tâche a changé dans Hermes depuis l’ouverture : rechargez': 'This task changed in Hermes since it was opened: reload',
+  'Révision manquante : rechargez la tâche': 'Missing revision: reload the task',
+  'AGENTS.md a changé depuis l’ouverture : rechargez': 'AGENTS.md changed since it was opened: reload',
+  'Tâche « {title} » créée, mais Hermes n’a pas pris {step} : ouvrez-la pour finir': 'Task “{title}” created, but Hermes did not take {step}: open it to finish',
+  'le statut « planifiée »': 'the “scheduled” status',
+  'l’agent': 'the agent',
 } satisfies Record<string, string>;

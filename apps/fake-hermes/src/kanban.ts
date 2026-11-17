@@ -48,6 +48,8 @@ export class KanbanStore {
   workers = new Map<number, Worker>();
   workflow: { columns: { key: string }[]; manual: Record<string, string[]> };
   orchestration: Record<string, unknown>;
+  /** Set by tests: the next PATCH of this step (status `scheduled`, or an assignee) answers 500 (once). */
+  failPatch: 'scheduled' | 'assignee' | null = null;
   /** Writes the knobs in the config file; false = the write was ignored (managed installation). */
   onOrchestration?: (patch: Record<string, unknown>) => boolean;
   private taskSeq = 0;
@@ -89,6 +91,14 @@ export class KanbanStore {
 
   eventsSince(board: string, cursor: number) {
     return this.boards.get(board)?.events.filter((e) => e.id > cursor) ?? [];
+  }
+
+  /** A change of a task's text made outside Intendia (agent, CLI): a line added to its body. False = unknown task. */
+  touch(board: string, id: string): boolean {
+    const t = this.boards.get(board)?.tasks.find((x) => x.id === id);
+    if (!t) return false;
+    t.body = `${t.body ?? ''}\n(modifié ailleurs)`;
+    return true;
   }
 
   latestEvent(board: string): number {
@@ -263,6 +273,10 @@ export class KanbanStore {
     if (method === 'POST' && p === '/tasks') {
       const title = String(b0.title ?? '').trim();
       if (!title) return json({ detail: 'title is required' }, 400);
+      // like Hermes (kanban_db.create_task): a task not archived with the same key is returned instead
+      const key = typeof b0.idempotency_key === 'string' && b0.idempotency_key ? b0.idempotency_key : null;
+      const same = key ? b.tasks.find((x) => x.idempotency_key === key && x.status !== 'archived') : undefined;
+      if (same) return json({ task: this.view(b, same) });
       this.taskSeq += 1;
       const t: Task = {
         id: `t_fake${String(this.taskSeq).padStart(4, '0')}`, title, body: typeof b0.body === 'string' ? b0.body : null,
@@ -272,6 +286,7 @@ export class KanbanStore {
         workspace_kind: typeof b0.workspace_kind === 'string' ? b0.workspace_kind : 'scratch',
         workspace_path: typeof b0.workspace_path === 'string' ? b0.workspace_path : null,
         result: null, last_failure_error: null, latest_summary: null,
+        ...(key ? { idempotency_key: key } : {}),
       };
       b.tasks.push(t);
       for (const parent of Array.isArray(b0.parents) ? b0.parents.map(String) : []) b.links.push({ parent, child: t.id });
@@ -354,6 +369,10 @@ export class KanbanStore {
       });
     }
     if (sub === '' && method === 'PATCH') {
+      if ((this.failPatch === 'scheduled' && b0.status === 'scheduled') || (this.failPatch === 'assignee' && b0.assignee !== undefined)) {
+        this.failPatch = null;
+        return json({ detail: 'database is locked' }, 500);
+      }
       if (typeof b0.status === 'string' && b0.status !== t.status) {
         const to = b0.status;
         if (to === 'running') return json({ detail: "Cannot set status to 'running' directly; use the dispatcher/claim path" }, 400);

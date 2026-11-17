@@ -69,6 +69,19 @@ export class SkillStore {
   readonly skills: Skill[];
   readonly hub: HubEntry[];
   readonly actions = new Map<string, Action>();
+  private defaultContent(s: { name: string; description: string }): string {
+    const requires = s.name === 'claude-code' ? '    requires_toolsets: [terminal]\n' : '';
+    return `---\nname: ${s.name}\ndescription: ${s.description}\nmetadata:\n  hermes:\n${requires}---\n\n# ${s.name}\n\n${s.description}\n\n<script>alert(1)</script> stays text.\n`;
+  }
+
+  /** A change of a SKILL.md made outside Intendia (agent, CLI): a line added. False = unknown skill. */
+  touch(name: string): boolean {
+    const s = this.skills.find((x) => x.name === name);
+    if (!s) return false;
+    this.contents.set(name, `${this.contents.get(name) ?? this.defaultContent(s)}\n(modifié ailleurs)\n`);
+    return true;
+  }
+
   /** SKILL.md written by POST /api/skills or PUT /api/skills/content */
   readonly contents = new Map<string, string>();
   /** archived skills (DELETE /api/learning/node) */
@@ -174,9 +187,7 @@ export class SkillStore {
       if (!s) return json({ detail: `Skill '${query.name}' not found.` }, 404);
       const written = this.contents.get(s.name);
       if (written !== undefined) return json({ name: s.name, content: written, path: `/opt/data/profiles/default/skills/${s.name}/SKILL.md` });
-      const requires = s.name === 'claude-code' ? '    requires_toolsets: [terminal]\n' : '';
-      const content = `---\nname: ${s.name}\ndescription: ${s.description}\nmetadata:\n  hermes:\n${requires}---\n\n# ${s.name}\n\n${s.description}\n\n<script>alert(1)</script> stays text.\n`;
-      return json({ name: s.name, content, path: `/opt/hermes/skills/${s.category}/${s.name}/SKILL.md` });
+      return json({ name: s.name, content: this.defaultContent(s), path: `/opt/hermes/skills/${s.category}/${s.name}/SKILL.md` });
     }
     if (method === 'GET' && path === '/api/tools/toolsets') return null; // fixture
     if (method === 'GET' && path === '/api/skills/hub/official') {

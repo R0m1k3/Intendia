@@ -74,7 +74,7 @@ describe('recorded Hermes 0.23.0 responses', () => {
     for (const f of ['dash/GET_api_cron_jobs.json', 'api/GET_api_jobs.json']) {
       const jobs = normaliseJobs(JobListSchema.parse(read(f)));
       expect(jobs.length).toBeGreaterThan(0);
-      const pub = toPublic('ref', jobs[0]!, () => undefined);
+      const pub = toPublic('ref', jobs[0]!, () => undefined, (t) => t.slice(0, 16));
       expect(pub).toMatchObject({ name: 'Rapport du lundi', schedule: { kind: 'cron', expr: '30 8 * * 1' }, enabled: true });
       expect(JSON.stringify(pub)).not.toContain('hermes_home');
     }
