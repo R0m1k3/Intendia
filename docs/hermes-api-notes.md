@@ -337,6 +337,11 @@ Kanban (`/api/plugins/kanban/...`):
     `recompute_ready` (60 s) promotes `todo` anyway, so only `scheduled` holds them. Between the split and Intendia's
     `PATCH scheduled` the dispatcher may take a child (short window, not measured): Intendia leaves a running child
     alone and shows it. `POST /tasks/{id}/specify|decompose` call an auxiliary model; without one: 200 `{ok: false, reason}`.
+    **`auto_promote` limit (known, not fixed)**: `decompose_triage_task` calls `recompute_ready` right after the split
+    when `auto_promote` is on (`hermes_cli/kanban_db_graph.py:164-165`, 0.23.0), so a child may already be `ready`, or
+    taken by the dispatcher, before the mission's `hold()` parks it: it then shows as already started (« déjà lancée »).
+    Intendia changes nothing there (no API to split without promoting); turning `auto_promote_children` (on by
+    default, `kanban_decompose.py:215`) off in the orchestration settings closes the window.
 11. `POST /dispatch?board=&dry_run=&max=` (default `max` 8); Hermes also dispatches by itself every 60 s.
 12. `GET/PUT /orchestration {orchestrator_profile, default_assignee, auto_decompose, auto_promote_children}`; the `GET`
     adds `active_profile`, whose `config.yaml` the `PUT` rewrites.
