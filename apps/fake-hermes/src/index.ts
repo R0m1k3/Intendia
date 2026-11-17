@@ -745,7 +745,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 // ---------------------------------------------------------------- apps
 
 /** A creation whose answer is lost: done, then 502 (cron, kanban) or no answer at all (vault). */
-export type LoseOp = 'cronCreate' | 'kanbanCreate' | 'vaultAdd';
+export type LoseOp = 'cronCreate' | 'cronInstantiate' | 'kanbanCreate' | 'vaultAdd';
 
 interface Stores { lose: { next: LoseOp | null }; vault: FakeVault; crons: CronStore; skills: SkillStore; config: ConfigStore; profiles: ProfileStore; kanban: KanbanStore; files: FilesStore; git: GitStore; monitor: MonitorStore; memory: MemoryStore; plugins: PluginStore }
 
@@ -812,7 +812,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     }
     if (method === 'POST' && path === '/_fake/lose-next') {
       const op = (body as { op?: unknown } | undefined)?.op;
-      stores.lose.next = op === 'cronCreate' || op === 'kanbanCreate' || op === 'vaultAdd' ? op : null;
+      stores.lose.next = op === 'cronCreate' || op === 'cronInstantiate' || op === 'kanbanCreate' || op === 'vaultAdd' ? op : null;
       return c.json({ ok: true, op: stores.lose.next });
     }
     // tests: a change of the config file made outside Intendia; the managed mode switched at run time
@@ -904,6 +904,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     const kb = kanban.handle(via, method, path, c.req.query(), body);
     if (kb) return method === 'POST' && path === '/api/plugins/kanban/tasks' ? lost(await kb, 'kanbanCreate') : kb;
     const cron = crons.handle(via, method, path, c.req.query(), body, profile);
+    if (cron && method === 'POST' && path === '/api/cron/blueprints/instantiate') return lost(await cron, 'cronInstantiate');
     if (cron) return method === 'POST' && (path === '/api/cron/jobs' || path === '/api/jobs') ? lost(await cron, 'cronCreate') : cron;
     // before skills: SkillStore answers every /api/actions/{name}/status (404 for unknown actions)
     const conf = config.handle(via, method, path, c.req.query(), body, profile);

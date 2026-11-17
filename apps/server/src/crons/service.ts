@@ -435,16 +435,9 @@ export class CronService {
     if (extra.length) throw new ValidationError(msg('Champ inconnu pour ce modèle : {fields}', { fields: extra.join(', ') }));
     const ws = workspace ? this.workspaceFor(instanceId, workspace) : null;
     if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, pas {profile}', { wsProfile: ws.profile ?? 'default', profile }));
-    const before = await this.rawList(instanceId).catch(() => null);
-    let job: HermesJob;
-    try {
-      job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
-    } catch (err) {
-      // a template's prompt is Hermes' own: the new job of that profile is the match
-      const found = await this.recover(instanceId, err, before, (j) => (j.profile ?? 'default') === profile);
-      if (!found) throw err;
-      job = found;
-    }
+    // no recovery after an uncertain answer: name and prompt come from the template, so nothing ties a new job
+    // to this request (another client may have created it), and attaching it would move someone else's cron
+    const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
     if (!ws) return { cron: this.pub(instanceId, job), attached: false };
     try {
       const folder = folderKey(job.name || bp.title, await this.takenKeys(instanceId, ws, job.id));

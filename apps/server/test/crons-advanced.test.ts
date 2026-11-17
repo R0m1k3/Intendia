@@ -86,6 +86,19 @@ describe('crons: blueprints (lot 8 C)', () => {
     expect(upd.workdir).toBeTruthy();
   });
 
+  it('an instantiation whose answer is lost adopts no job and frames nothing (review #128)', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/workspaces', { slug: 'ws', name: 'Ws', instanceId: 'fake' });
+    // the new job of the profile may as well be another client's: it must stay untouched
+    t.fake.loseNext = 'cronInstantiate';
+    const res = await t.request('POST', `${BASE}/blueprints/morning-brief?profile=default`, { values: {}, workspace: 'ws' });
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(dashCalls(t, 'PUT', '/api/cron/jobs/')).toHaveLength(0);
+    const crons = (await t.request('GET', BASE)).json.crons;
+    expect(crons).toHaveLength(1);
+    expect(crons[0].workspace).toBeNull();
+  });
+
   it('without workspace: one call; unknown field 400; a failed framing leaves the cron unattached', async () => {
     const t = await testApp({ breaks: { 'dash PUT /api/cron/jobs/a00000000002': { status: 500 } } });
     const plain = await t.request('POST', `${BASE}/blueprints/price-watch?profile=default`, { values: { url: 'https://example.com/p' } });

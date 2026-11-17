@@ -671,9 +671,10 @@ leave a half-done state or a duplicate silently.
   browser asks to reload (`components/staleReload.ts`, draft copied first).
 - **Creations**: a kanban task carries an `idempotency_key` and is sent again once after an uncertain answer
   (`uncertain()`: lost, timeout, 5xx); a failed later step gives 409 `partial_create` with `taskId` (the panel opens).
-  A cron or a vault item: ids listed first, the single new matching item returned after a lost answer.
+  A cron or a vault item: ids listed first, the single new matching item returned after a lost answer (a template
+  instantiation is never recovered: nothing ties the new job to the request).
 - **MCP token**: written into Hermes first, then stored; the previous one stays valid 24 h (`MCP_GRACE_MS`) or until
-  `POST /instances/:id/mcp/revoke-previous`.
+  `POST /instances/:id/mcp/revoke-previous`. After an uncertain write both are accepted and the state is `stale`.
 - **Migrations**: followed by file name; two files of one number, a renamed one or an unknown row stop the start.
 
 ## Rules (enforced by `apps/server/test/boundaries.test.ts`)
