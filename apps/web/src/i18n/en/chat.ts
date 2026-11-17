@@ -345,6 +345,8 @@ export default {
   '{n} fichier': '{n} file',
   '{n} fichiers': '{n} files',
   '{n} ignorés': '{n} skipped',
+  '{path} : {reason}': '{path}: {reason}',
+  '… et {n} autres': '… and {n} more',
   '{files} dans {folder}/ ({extra})': '{files} in {folder}/ ({extra})',
   '{files} dans {folder}/': '{files} in {folder}/',
   'Non décompressée : {error}': 'Not unpacked: {error}',

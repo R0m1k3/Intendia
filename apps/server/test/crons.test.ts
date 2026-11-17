@@ -93,6 +93,22 @@ describe('crons', () => {
     expect(again.workspace).toMatchObject({ slug: 'stock', folder: 'rapport-du-lundi-2' });
   });
 
+  it('two concurrent creations of the same name in one workspace get two folders', async () => {
+    const t = await testApp();
+    await t.request('POST', '/x/workspaces', { slug: 'ventes', name: 'Ventes', instanceId: 'fake' });
+    const res = await Promise.all([1, 2, 3].map(() => t.request('POST', BASE, input({ workspace: 'ventes' }))));
+    expect(res.map((r) => r.status)).toEqual([201, 201, 201]);
+    expect(res.map((r) => r.json.cron.workspace.folder).sort()).toEqual(['rapport-du-lundi', 'rapport-du-lundi-2', 'rapport-du-lundi-3']);
+    // a move into the workspace waits too: it gets the next free folder
+    const plain = (await t.request('POST', BASE, input())).json.cron;
+    const base = (await t.request('GET', `${BASE}/${plain.id}?profile=default`)).json.cron.revision;
+    const [moved, created] = await Promise.all([
+      t.request('PUT', `${BASE}/${plain.id}?profile=default`, { ...input({ workspace: 'ventes' }), base }),
+      t.request('POST', BASE, input({ workspace: 'ventes' })),
+    ]);
+    expect([moved.json.cron.workspace.folder, created.json.cron.workspace.folder].sort()).toEqual(['rapport-du-lundi-4', 'rapport-du-lundi-5']);
+  });
+
   it('shows a deleted workspace as missing', async () => {
     const t = await testApp();
     await t.request('POST', '/x/workspaces', { slug: 'ventes', name: 'Ventes', instanceId: 'fake' });

@@ -11,6 +11,7 @@ import { WorkspaceFsError } from '../workspaces/fs.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { KeyedLock } from '../keyed-lock.js';
 
 /** A Hermes 400 on a cron write: shown under the matching editor field. */
 export class CronInputError extends Error {
@@ -253,6 +254,9 @@ export class CronService {
     private readonly revisionOf: RevisionOf,
   ) {}
 
+  /** Folder allocation per workspace (`instanceId:slug`), see `underWorkspace`. */
+  private readonly wsLocks = new KeyedLock();
+
   private ctx(instanceId: string) {
     if (!this.store.get(instanceId)) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     return { http: this.compat.http(instanceId), report: this.compat.get(instanceId) };
@@ -315,8 +319,13 @@ export class CronService {
   }
 
   async create(instanceId: string, input: CronInput): Promise<PublicCron> {
-    const { http, report } = this.ctx(instanceId);
+    this.ctx(instanceId);
     const ws = input.workspace ? this.workspaceFor(instanceId, input.workspace) : null;
+    return ws ? this.underWorkspace(instanceId, ws, () => this.doCreate(instanceId, input, ws)) : this.doCreate(instanceId, input, null);
+  }
+
+  private async doCreate(instanceId: string, input: CronInput, ws: Workspace | null): Promise<PublicCron> {
+    const { http, report } = this.ctx(instanceId);
     const body: Record<string, unknown> = {
       name: input.name, prompt: input.prompt, schedule: input.schedule, deliver: input.deliver,
       skills: input.skills, model: input.model, paused: input.paused ?? false, ...advancedFields(input, false),
@@ -342,6 +351,14 @@ export class CronService {
   }
 
   /**
+   * One folder allocation at a time per workspace: `takenKeys` then the Hermes write that records the key, so two
+   * concurrent writes in the same workspace never get the same folder.
+   */
+  private underWorkspace<T>(instanceId: string, ws: Workspace, fn: () => Promise<T>): Promise<T> {
+    return this.wsLocks.run(`${instanceId}:${ws.slug}`, fn);
+  }
+
+  /**
    * After an uncertain answer to a creation (lost, timeout, 5xx), the single new job (`match`) of the instance;
    * null when the list before is unknown, the list fails, or none or several new jobs match.
    */
@@ -361,6 +378,15 @@ export class CronService {
   }
 
   async update(instanceId: string, id: string, profile: string, input: CronInput): Promise<PublicCron> {
+    this.ctx(instanceId);
+    // the lock is taken before reading the job: the revision check and the folder choice see the same state
+    const ws = input.workspace ? this.workspaceFor(instanceId, input.workspace) : null;
+    return ws
+      ? this.underWorkspace(instanceId, ws, () => this.doUpdate(instanceId, id, profile, input, ws))
+      : this.doUpdate(instanceId, id, profile, input, null);
+  }
+
+  private async doUpdate(instanceId: string, id: string, profile: string, input: CronInput, ws: Workspace | null): Promise<PublicCron> {
     const { http, report } = this.ctx(instanceId);
     const job = await this.rawGet(instanceId, id, profile);
     if (this.revisionOf(cronRevisionText(job)) !== input.base) {
@@ -373,8 +399,7 @@ export class CronService {
     };
     if (input.contextFrom?.length) await this.checkContext(instanceId, job.profile ?? profile, input.contextFrom, id);
     if (input.schedule !== undefined) fields.schedule = input.schedule;
-    if (input.workspace) {
-      const ws = this.workspaceFor(instanceId, input.workspace);
+    if (ws) {
       const wsProfile = ws.profile ?? 'default';
       const jobProfile = job.profile ?? profile;
       if (wsProfile !== jobProfile) {
@@ -439,8 +464,14 @@ export class CronService {
     // to this request (another client may have created it), and attaching it would move someone else's cron
     const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));
     if (!ws) return { cron: this.pub(instanceId, job), attached: false };
+    return this.underWorkspace(instanceId, ws, () => this.attach(instanceId, profile, job, bp.title, ws));
+  }
+
+  /** Frames a cron created from a template into a workspace; `attached: false` if that write fails. */
+  private async attach(instanceId: string, profile: string, job: HermesJob, title: string, ws: Workspace): Promise<{ cron: PublicCron; attached: boolean }> {
+    const { http, report } = this.ctx(instanceId);
     try {
-      const folder = folderKey(job.name || bp.title, await this.takenKeys(instanceId, ws, job.id));
+      const folder = folderKey(job.name || title, await this.takenKeys(instanceId, ws, job.id));
       const fields = { prompt: frame(job.prompt ?? '', this.blockLines(ws, folder)), workdir: this.workspaces.agentPath(ws) };
       const raw = await translate(() => callOp(http, report, 'crons', 'update', {
         params: { job_id: job.id }, profile, body: (via: 'api' | 'dash') => updateBody(via, fields),

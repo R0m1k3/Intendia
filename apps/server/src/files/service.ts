@@ -7,7 +7,7 @@ import { LinkService } from '../links/service.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import type { Workspace, WorkspaceService } from '../workspaces/service.js';
 import { mapLimit, type FileRoots, type FsEntry, type HermesFs } from './hermes-fs.js';
-import { ArchiveError, archiveKind, archiveStem, extractArchive, precheckArchive, type Skipped } from './archive.js';
+import { ArchiveError, archiveKind, archiveStem, EXTRACT_FILE_MAX, extractArchive, precheckArchive, type Skipped } from './archive.js';
 import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
 import { FILE_READ_MAX, idleGuard, MOVE_MAX_BYTES, MOVE_MAX_FILES, walk, type WalkResult } from './walk.js';
 import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
@@ -233,7 +233,7 @@ export class FileService {
     try {
       const started = Date.now();
       const bytes = await this.readBytes(c, rel);
-      const limits = { maxEntries: EXTRACT_MAX_ENTRIES, maxTotal: EXTRACT_MAX_TOTAL, maxFile: this.uploadMaxBytes };
+      const limits = { maxEntries: EXTRACT_MAX_ENTRIES, maxTotal: EXTRACT_MAX_TOTAL, maxFile: Math.min(this.uploadMaxBytes, EXTRACT_FILE_MAX) };
       precheckArchive(bytes, kind, limits);
       const dir = dirOf(rel);
       const taken = new Set((await this.listOrCreate(c, dir)).map((e) => e.name));

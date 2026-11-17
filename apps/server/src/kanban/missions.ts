@@ -165,6 +165,7 @@ export class MissionService {
    * re-read: still `todo`/`ready` (network error, 5xx) → tried again; after HOLD_TRIES the mission fails and what
    * could start is archived (root first), so that nothing runs without the review.
    */
+  // Hermes auto_promote may make a child ready before this runs: it then shows as already started (kanban_db_graph.py:164-165).
   private async hold(m: MissionRow): Promise<void> {
     const { kids } = await this.children(m);
     const stuck: string[] = [];

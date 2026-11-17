@@ -320,9 +320,11 @@ keeps the goal itself (`session_goals`, `apps/server/src/chat/goal.ts`, routes `
   back from Hermes (at most `INTENDIA_UPLOAD_MAX_MB`) and writes each file through the same `mkdir` / `upload-stream`
   calls into `<folder>/<name without extension>/` (` (2)`… when taken). `src/files/archive.ts`: zip by `fflate`
   (`Unzip`, file by file), tar read by hand (ustar, GNU long names, pax `path`), gzip by `fflate`. Paths with `..`,
-  absolute paths, links, special files and names hidden by Hermes are skipped and listed; 2 000 files, 500 MB in all,
-  `INTENDIA_UPLOAD_MAX_MB` per file. Sizes announced by zip and tar are checked before any write (413 `too_big`); a
-  `.tgz` beyond a limit stops while writing (`partial`, files already written stay). One extraction at a time on the
+  absolute paths, links, special files and names hidden by Hermes are skipped and listed; so is a file over 32 MB
+  (`EXTRACT_FILE_MAX`, or `INTENDIA_UPLOAD_MAX_MB` when lower: each file is held whole in memory), announced or real
+  (« plus de N Mo, non décompressé »; the chat tile lists the skipped files on hover). 2 000 files and 500 MB in all
+  stop the extraction: counts and totals announced by zip and tar are checked before any write (413 `too_big`); a
+  real total beyond the limit stops while writing (`partial`, files already written stay). One extraction at a time on the
   server (409 `busy`), 10 minutes at most, not tied to the browser request.
 - Zip of a folder: `GET …/files/zip?path=` (workspace) and `GET /x/i/:inst/files/zip?path=` (instance, names hidden by
   Hermes left out): walked first (`walk`, links skipped, 5 000 files / 1 GiB → 413 before any byte), then built

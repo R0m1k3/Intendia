@@ -41,6 +41,8 @@ interface Attachment {
   error?: string;
   /** under the name: « Décompression… », « 12 fichiers dans inbox/x/ », why the archive stayed packed */
   note?: string;
+  /** files left out of the archive with their reason, shown on hover */
+  detail?: string;
 }
 
 let nextId = 1;
@@ -516,7 +518,7 @@ function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
   const failed = a.state === 'failed';
   return (
     <li
-      data-attachment={a.state} title={failed ? t('Échec : {error}', { error: a.error ?? '' }) : a.name}
+      data-attachment={a.state} title={failed ? t('Échec : {error}', { error: a.error ?? '' }) : a.detail ? `${a.name}\n${a.detail}` : a.name}
       className={cx('group relative', a.image ? 'size-16' : 'flex h-16 max-w-[14rem] items-center')}
     >
       {a.image && a.preview ? (
@@ -552,10 +554,20 @@ async function unpack(done: { agentPath: string; path: string }, extract: Extrac
     const agentPath = done.agentPath.slice(0, done.agentPath.length - done.path.length) + r.folder;
     const n = plural(r.count, '{n} fichier', '{n} fichiers');
     const extra = [r.skipped.length ? t('{n} ignorés', { n: r.skipped.length }) : '', r.partial ? t('incomplet') : ''].filter(Boolean).join(', ');
-    return { state: 'done', agentPath, note: extra ? t('{files} dans {folder}/ ({extra})', { files: n, folder: r.folder, extra }) : t('{files} dans {folder}/', { files: n, folder: r.folder }) };
+    const detail = r.skipped.length ? skippedLines(r.skipped) : undefined;
+    return { state: 'done', agentPath, detail, note: extra ? t('{files} dans {folder}/ ({extra})', { files: n, folder: r.folder, extra }) : t('{files} dans {folder}/', { files: n, folder: r.folder }) };
   } catch (err) {
     return { state: 'done', agentPath: done.agentPath, note: t('Non décompressée : {error}', { error: err instanceof Error ? err.message : String(err) }) };
   }
+}
+
+const SKIPPED_SHOWN = 10;
+
+/** « big.bin : plus de 32 Mo, non décompressé », one line per file left out (reasons come translated by the server). */
+function skippedLines(skipped: { path: string; reason: string }[]): string {
+  const lines = skipped.slice(0, SKIPPED_SHOWN).map((s) => t('{path} : {reason}', { path: s.path, reason: s.reason }));
+  if (skipped.length > SKIPPED_SHOWN) lines.push(t('… et {n} autres', { n: skipped.length - SKIPPED_SHOWN }));
+  return lines.join('\n');
 }
 
 const stamp = () => {
