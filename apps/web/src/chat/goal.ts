@@ -16,6 +16,7 @@ export const REASON_LABELS: Record<GoalReason, string> = {
   start_failed: t('relance impossible'),
   gone: t('session supprimée'),
   cost_unknown: t('coût d’un tour inconnu : budget incomplet'),
+  key_conflict: t('Relance déjà reçue par Hermes avec un autre contenu : vérifiez la conversation, puis reprenez'),
 };
 
 /** The state line of the goal bar, e.g. « En pause : bloqué (il manque la clé) ». */
@@ -23,7 +24,8 @@ export function goalLine(g: Pick<SessionGoal, 'status' | 'reason' | 'reasonDetai
   if (g.status === 'done') return t('Objectif atteint');
   if (g.status === 'active') return t('En cours');
   const why = g.reason ? REASON_LABELS[g.reason] : t('en pause');
-  return g.reasonDetail ? t('En pause : {why} ({detail})', { why, detail: g.reasonDetail }) : t('En pause : {why}', { why });
+  // the label says it all (the detail is the server's message for the same refusal)
+  return g.reasonDetail && g.reason !== 'key_conflict' ? t('En pause : {why} ({detail})', { why, detail: g.reasonDetail }) : t('En pause : {why}', { why });
 }
 
 const usd = (n: number) => t('{n} $', { n: n.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: n < 0.1 ? 4 : 2 }) });

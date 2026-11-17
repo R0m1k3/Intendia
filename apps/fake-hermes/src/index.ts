@@ -44,6 +44,18 @@
  *   carrying it, "objectif-bloque" = OBJECTIF BLOQUÉ : il manque la clé (see goalEnding); "lent" in the goal = every
  *   run of the goal is slow
  *
+ * - "admission-lente" (in the input, or in Intendia's goal): the first POST /v1/runs of a key creates the run, then answers only after
+ *   `admitDelayMs` (FAKE_ADMIT_DELAY_MS, default 2000): a timeout at Intendia while Hermes admitted the run
+ * - Idempotency-Key on POST /v1/runs, like Hermes 0.23: same key and same body = the same run replayed (202,
+ *   `replayed: true`, header Idempotency-Replayed), same key with another body = 409 idempotency_key_conflict;
+ *   `features` (FakeOptions) changes /v1/capabilities `features` (e.g. without `runs_idempotency`)
+ * - messages of the simulated sessions: `limit` (500 at most, the default), `offset`, `order=latest|oldest`, served
+ *   in chronological order with `pagination.returned`
+ * Test routes (no token): POST /_fake/runs/{id}/drop-stream (open streams closed, then GET /v1/runs/{id}/events
+ *   = 404 like a stream swept after 300 s without a listener; the run goes on), POST /_fake/sessions/{id}/compress
+ *   (the session ends with `end_reason: compression`, continued by `<id>-c1`), POST /_fake/sessions/{id}/bulk
+ *   `{count, hidden?}` (adds `message 1`…`message <count>`, user and assistant in turn); GET /_fake/runs/last also gives
+ *   `idempotencyKey` (header of the last POST /v1/runs) and `postedKeys` (every one received).
  * - "fichier" (in the input): writes rapport.md in the session folder named by the framing block,
  *   when that path is under `filesRoot` (the dashboard's managed files root), then cites its path
  * Managed files (`/api/files*`): see files.ts, rooted at `filesRoot`.
@@ -147,6 +159,10 @@ export interface FakeOptions {
   vault?: FakeVaultMode;
   /** Kanban events WebSocket available (default true); false closes every connection with 1008. */
   kanbanWs?: boolean;
+  /** Merged into /v1/capabilities `features`; an `undefined` value removes the key (e.g. `runs_idempotency`). */
+  features?: Record<string, unknown>;
+  /** "admission-lente": delay of the first answer to POST /v1/runs, in ms (default FAKE_ADMIT_DELAY_MS or 2000). */
+  admitDelayMs?: number;
 }
 
 export interface LoggedRequest {
@@ -202,6 +218,12 @@ interface SimRun {
   answer?: string;
   /** "perdu": a reorientation not given to the agent, sent back as `pending_steer` at the end. */
   pendingSteer?: string;
+  /** Error of a failed run, in its status like Hermes. */
+  error?: string;
+  /** POST /_fake/runs/{id}/drop-stream: its event buffer is gone (GET …/events = 404), the run goes on. */
+  streamDropped?: boolean;
+  /** Closes the open streams of the run (drop-stream). */
+  drops: Set<() => void>;
 }
 
 interface SimMessage {
@@ -254,8 +276,15 @@ class Simulator {
     for (const e of this.extraSessions.values()) if (e.title === title && e.id !== except) return e.id;
     return undefined;
   }
-  /** POST /v1/runs received since start. */
+  /** POST /v1/runs that created a run since start (a replay by Idempotency-Key does not count). */
   runsPosted = 0;
+  /** Idempotency-Key → fingerprint of the body (JSON) and the run it created. */
+  idempotency = new Map<string, { fingerprint: string; runId: string }>();
+  /** Idempotency-Key of the last POST /v1/runs (replays included), and every key received. */
+  lastKey: string | null = null;
+  postedKeys: string[] = [];
+  /** POST /_fake/sessions/{id}/compress: session id → time it ended (`end_reason: compression`). */
+  compressed = new Map<string, number>();
   /** Approval format, see FakeOptions.controls. */
   controls: 'authority' | 'legacy' = 'authority';
   private counter = 0;
@@ -269,13 +298,30 @@ class Simulator {
     const run: SimRun = {
       id: `run_fake${String(this.counter).padStart(4, '0')}`,
       sessionId, input, instructions, createdAt: now, updatedAt: now, model, modelOptions, provider, status: 'queued', output: '', usage: null,
-      events: [], listeners: new Set(), approval: null, clarify: null,
+      events: [], listeners: new Set(), approval: null, clarify: null, drops: new Set(),
     };
     this.runs.set(run.id, run);
     this.lastRun = run;
     this.addMessage(sessionId, 'user', input);
     void this.play(run);
     return run;
+  }
+
+  /**
+   * POST /_fake/sessions/{id}/bulk: `count` messages after the session's last one (ids from 2: 1 is session_meta);
+   * `hidden: true` = muted notices (`display_kind: hidden`, rows a page counts but the thread never shows).
+   */
+  bulk(sessionId: string, count: number, hidden = false) {
+    const list = this.messages.get(sessionId) ?? [];
+    let id = Math.max(1, ...list.map((m) => m.id));
+    const now = Date.now() / 1000;
+    for (let n = 1; n <= count; n++) {
+      id += 1;
+      list.push({ id, session_id: sessionId, role: n % 2 === 1 ? 'user' : 'assistant', content: hidden ? `hidden ${n}` : `message ${n}`, tool_calls: null, tool_name: null, timestamp: now - count + n, ...(hidden ? { display_kind: 'hidden' } : {}) });
+    }
+    this.messages.set(sessionId, list);
+    // later messages keep growing ids (Hermes: one autoincrement table)
+    this.msgId = Math.max(this.msgId, id);
   }
 
   addMessage(sessionId: string, role: string, content: string, extra: Partial<SimMessage> = {}) {
@@ -294,7 +340,9 @@ class Simulator {
 
   private async play(run: SimRun) {
     // "lent" in the message, or in Intendia's goal (each relaunch of that goal is slow too)
-    const slow = /lent/i.test(run.input) || /\[Intendia\] Objectif de la session : .*lent/i.test(run.instructions);
+    // ("admission-lente" is about the admission only)
+    const plain = (x: string) => x.replace(/admission-lente/gi, '');
+    const slow = /lent/i.test(plain(run.input)) || /\[Intendia\] Objectif de la session : .*lent/i.test(plain(run.instructions));
     const step = slow ? 500 : this.stepMs;
     await sleep(step);
     // stopped before it started
@@ -691,6 +739,7 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
 
   private fail(run: SimRun, error: string) {
     run.status = 'failed';
+    run.error = error;
     this.push(run, { event: 'run.failed', error });
   }
 
@@ -731,7 +780,15 @@ fetch('/x/setup').then(() => { document.getElementById('net').textContent = 'ré
           write(`data: ${JSON.stringify({ event: 'replay.truncated', run_id: run.id, oldest_retained_seq: retainFrom, requested_seq: lastSeq })}\n\n`);
         }
         run.listeners.add(flush);
-        cleanup = () => { closed = true; run.listeners.delete(flush); };
+        // drop-stream: the stream ends without its terminal event (Hermes swept the buffer)
+        const drop = () => {
+          if (closed) return;
+          closed = true;
+          run.listeners.delete(flush);
+          controller.close();
+        };
+        run.drops.add(drop);
+        cleanup = () => { closed = true; run.listeners.delete(flush); run.drops.delete(drop); };
         flush();
       },
       cancel: () => cleanup(),
@@ -787,7 +844,28 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // test route (Playwright runs cannot read the in-memory log): options of the last created run
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/last') {
       const last = sim.lastRun;
-      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input, instructions: last.instructions } : { run_id: null });
+      const keys = { idempotencyKey: sim.lastKey, postedKeys: sim.postedKeys };
+      return c.json(last ? { run_id: last.id, model: last.model, model_options: last.modelOptions, provider: last.provider, input: last.input, instructions: last.instructions, ...keys } : { run_id: null, ...keys });
+    }
+    let fm = via === 'api' && method === 'POST' ? /^\/_fake\/runs\/([^/]+)\/drop-stream$/.exec(path) : null;
+    if (fm) {
+      const run = sim.runs.get(decodeURIComponent(fm[1]!));
+      if (!run) return c.json({ error: 'unknown run' }, 404);
+      run.streamDropped = true;
+      for (const d of [...run.drops]) d();
+      return c.json({ ok: true });
+    }
+    fm = via === 'api' && method === 'POST' ? /^\/_fake\/sessions\/([^/]+)\/(compress|bulk)$/.exec(path) : null;
+    if (fm) {
+      const id = decodeURIComponent(fm[1]!);
+      if (fm[2] === 'compress') {
+        sim.compressed.set(id, Date.now() / 1000);
+        sim.liveAlias.set(id, `${id}-c1`);
+        return c.json({ ok: true, continuation: `${id}-c1` });
+      }
+      const count = Math.max(0, Math.min(50_000, Number((body as { count?: unknown } | undefined)?.count) || 0));
+      sim.bulk(id, count, (body as { hidden?: unknown } | undefined)?.hidden === true);
+      return c.json({ ok: true, count });
     }
     if (via === 'api' && method === 'GET' && path === '/_fake/runs/count') return c.json({ count: sim.runsPosted });
     // tests: the credential vault of a profile, secrets in clear (dashboard port, no token)
@@ -876,7 +954,7 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     if (skill) return skill;
 
     if (via === 'api') {
-      const simulated = handleRuns(c.req.raw, method, path, body, sim, opts, deleted);
+      const simulated = await handleRuns(c.req.raw, method, path, body, sim, opts, deleted);
       if (simulated) return simulated;
     }
 
@@ -888,6 +966,15 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
         const caps = structuredClone(out) as { endpoints?: Record<string, unknown> };
         for (const k of opts.hide.capabilities) delete caps.endpoints?.[k];
         out = caps;
+      }
+      if (via === 'api' && path === '/v1/capabilities' && opts.features) {
+        const caps = structuredClone(out) as { features?: Record<string, unknown> };
+        const features = { ...(caps.features ?? {}) };
+        for (const [k, v] of Object.entries(opts.features)) {
+          if (v === undefined) delete features[k];
+          else features[k] = v;
+        }
+        out = { ...caps, features };
       }
       if (via === 'dash' && path === '/openapi.json' && opts.hide?.openapi?.length) {
         const spec = structuredClone(out) as { paths: Record<string, Record<string, unknown>> };
@@ -1005,9 +1092,28 @@ function sessionCopies(method: string, path: string, body: unknown, sim: Simulat
   return null;
 }
 
-function handleRuns(req: Request, method: string, path: string, body: unknown, sim: Simulator, opts: FakeOptions, deleted: Set<string>): Response | null {
+async function handleRuns(req: Request, method: string, path: string, body: unknown, sim: Simulator, opts: FakeOptions, deleted: Set<string>): Promise<Response | null> {
   const b = (body ?? {}) as Record<string, unknown>;
   if (method === 'POST' && path === '/v1/runs') {
+    // like Hermes 0.23 (api_server_runs.py): header stripped, empty = no key, at most 255 visible ASCII characters
+    const rawKey = req.headers.get('idempotency-key');
+    const key = rawKey === null ? null : rawKey.trim() || null;
+    if (key !== null && (key.length > 255 || !/^[\x21-\x7e]+$/.test(key))) {
+      return json({ error: { message: 'Invalid Idempotency-Key', code: 'invalid_idempotency_key' } }, 400);
+    }
+    sim.lastKey = key;
+    if (key !== null) sim.postedKeys.push(key);
+    const fingerprint = JSON.stringify(body ?? null);
+    const known = key !== null ? sim.idempotency.get(key) : undefined;
+    if (known) {
+      if (known.fingerprint !== fingerprint) {
+        return json({ error: { message: 'Idempotency-Key was already used with another request body', code: 'idempotency_key_conflict' } }, 409);
+      }
+      const run = sim.runs.get(known.runId);
+      return new Response(JSON.stringify({ run_id: known.runId, status: run?.status ?? 'started', replayed: true }), {
+        status: 202, headers: { 'Content-Type': 'application/json', 'Idempotency-Replayed': 'true' },
+      });
+    }
     sim.runsPosted += 1;
     const sessionId = typeof b.session_id === 'string' ? b.session_id : `fake_session_${sim.runs.size + 1}`;
     // like Hermes: only api_server (and bot_room) sessions take runs
@@ -1017,6 +1123,9 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     }
     const run = sim.create(sessionId, String(b.input ?? ''), String(b.instructions ?? ''),
       typeof b.model === 'string' ? b.model : null, b.model_options ?? null, typeof b.provider === 'string' ? b.provider : null);
+    if (key !== null) sim.idempotency.set(key, { fingerprint, runId: run.id });
+    // "admission-lente": admitted at once, answered late (the caller may time out meanwhile)
+    if (/admission-lente/i.test(run.input) || /\[Intendia\] Objectif de la session : .*admission-lente/i.test(run.instructions)) await sleep(opts.admitDelayMs ?? Number(process.env.FAKE_ADMIT_DELAY_MS ?? 2000));
     return json({ run_id: run.id, status: 'started', replayed: false });
   }
   let m = /^\/v1\/runs\/([^/]+)(\/[a-z]+)?$/.exec(path);
@@ -1028,7 +1137,7 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       // like Hermes: usage and runtime only on completed runs
       return json({
         object: 'hermes.run', run_id: run.id, status: run.status, session_id: run.sessionId, model: run.model ?? 'fake/model-default',
-        created_at: run.createdAt, updated_at: run.updatedAt, output: run.output,
+        created_at: run.createdAt, updated_at: run.updatedAt, output: run.output, error: run.error ?? null,
         ...(run.status === 'completed' ? { usage: run.usage, runtime: sim.runtime(run) } : {}),
         // with the gateway authority: the run's generation and the questions waiting for an answer
         ...(sim.controls === 'authority' ? { execution_generation: 1 } : {}),
@@ -1037,6 +1146,8 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       });
     }
     if (sub === '/events' && method === 'GET') {
+      // swept buffer (drop-stream): like Hermes after 300 s without a listener
+      if (run.streamDropped) return json({ error: { message: 'Run not found', code: 'run_not_found' } }, 404);
       const url = new URL(req.url);
       const raw = req.headers.get('last-event-id') ?? url.searchParams.get('last_seq');
       const last = raw === null ? -1 : Math.max(-1, Number.parseInt(raw, 10) || -1);
@@ -1124,10 +1235,17 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
     }
     if (m[2] && method === 'GET') {
       if (!simulated) return id === 'intendia-probe-1' ? null : NOT_FOUND_SESSION(id);
+      // like Hermes 0.23: 500 by default and at most, counted from the end (latest) or the start (oldest),
+      // always served oldest first
+      const url = new URL(req.url);
+      const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') ?? 500) || 500));
+      const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0) || 0);
+      const order = url.searchParams.get('order') === 'oldest' ? 'oldest' : 'latest';
+      const all = [{ id: 1, session_id: id, role: 'session_meta', content: null, tool_calls: null, tool_name: null, timestamp: simulated[0]!.timestamp }, ...simulated.map(({ display_metadata: _md, ...m }) => m)];
+      const data = order === 'oldest' ? all.slice(offset, offset + limit) : all.slice(Math.max(0, all.length - offset - limit), Math.max(0, all.length - offset));
       return json({
-        object: 'list', session_id: sim.liveAlias.get(id) ?? id,
-        data: [{ id: 1, session_id: id, role: 'session_meta', content: null, tool_calls: null, tool_name: null, timestamp: simulated[0]!.timestamp }, ...simulated.map(({ display_metadata: _md, ...m }) => m)].reverse(),
-        pagination: { limit: 500, offset: 0, order: 'latest', returned: simulated.length + 1 },
+        object: 'list', session_id: sim.liveAlias.get(id) ?? id, data,
+        pagination: { limit, offset, order, returned: data.length },
       });
     }
     if (!m[2] && (method === 'PATCH' || method === 'DELETE')) {
@@ -1146,9 +1264,19 @@ function handleRuns(req: Request, method: string, path: string, body: unknown, s
       return json({ object: 'hermes.session', session: { id, ...b } });
     }
     if (!m[2] && method === 'GET' && simulated) {
+      const ended = sim.compressed.get(id);
       return json({ object: 'hermes.session', session: {
         id, source: 'api_server', title: sim.titles.get(id) ?? null, started_at: simulated[0]!.timestamp, message_count: simulated.length,
         estimated_cost_usd: sim.costs.get(id) ?? null, actual_cost_usd: null,
+        ...(ended !== undefined ? { ended_at: ended, end_reason: 'compression' } : { ended_at: null, end_reason: null }),
+      } });
+    }
+    // the continuation of a compressed session (POST /_fake/sessions/{id}/compress): the cost goes on there
+    const source = !simulated && id.endsWith('-c1') ? id.slice(0, -3) : null;
+    if (!m[2] && method === 'GET' && source && sim.compressed.has(source)) {
+      return json({ object: 'hermes.session', session: {
+        id, source: 'api_server', title: null, started_at: sim.compressed.get(source)!, message_count: 0,
+        estimated_cost_usd: sim.costs.get(source) ?? null, actual_cost_usd: null, ended_at: null, end_reason: null,
       } });
     }
     return null;

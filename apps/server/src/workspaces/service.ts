@@ -565,11 +565,29 @@ export class WorkspaceService {
 
   /** After createRun: last run, activity time, and the title on the first message. */
   recordRun(instanceId: string, sessionId: string, runId: string, input: string): PublicSession {
-    const { session } = this.getSession(instanceId, sessionId);
-    this.db.update(sessionWorkspace)
-      .set({ lastRunId: runId, lastActiveAt: Date.now(), ...(session.title ? {} : { title: titleFrom(input) }) })
-      .where(and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId))).run();
+    this.setLastRun(this.db, instanceId, sessionId, runId, input);
     return this.getSession(instanceId, sessionId).session;
+  }
+
+  /**
+   * A run Hermes accepted: its run_stats row and the session's lastRunId in one transaction (a row exists only with
+   * lastRunId written). `setLast: false` (a replayed run older than the session's last one): the row only.
+   */
+  recordStartedRun(row: Parameters<WorkspaceService['insertRunStat']>[0], input: string, opts: { setLast?: boolean } = {}): PublicSession {
+    this.db.transaction((tx) => {
+      tx.insert(runStats).values({ ...row, costRuns: row.costRuns ?? 1, costFinal: false }).onConflictDoNothing().run();
+      if (opts.setLast !== false) this.setLastRun(tx, row.instanceId, row.sessionId, row.runId, input);
+    });
+    return this.getSession(row.instanceId, row.sessionId).session;
+  }
+
+  /** lastRunId of a session, and its title from the first input. */
+  protected setLastRun(db: Pick<Db, 'select' | 'update'>, instanceId: string, sessionId: string, runId: string, input: string): void {
+    const where = and(eq(sessionWorkspace.instanceId, instanceId), eq(sessionWorkspace.sessionId, sessionId));
+    const title = db.select({ title: sessionWorkspace.title }).from(sessionWorkspace).where(where).get()?.title;
+    db.update(sessionWorkspace)
+      .set({ lastRunId: runId, lastActiveAt: Date.now(), ...(title ? {} : { title: titleFrom(input) }) })
+      .where(where).run();
   }
 
   // ---- run consumption (run_stats)

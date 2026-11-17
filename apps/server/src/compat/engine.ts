@@ -117,8 +117,15 @@ export async function checkInstance(
         openapi: surface.dash.routes !== null,
       },
       modules: reports,
+      runs: runsIdempotency(surface),
     },
   };
+}
+
+/** `features.runs_idempotency` of /v1/capabilities; both false when the key is absent. */
+export function runsIdempotency(surface: Surface): { idempotency: boolean; durable: boolean } {
+  const f = surface.api.features.runs_idempotency as { supported?: unknown; durable?: unknown } | null | undefined;
+  return { idempotency: f?.supported === true, durable: f?.durable === true };
 }
 
 /** Modules whose state differs between two reports (for notifications). */
