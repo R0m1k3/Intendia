@@ -47,3 +47,60 @@ describe('HermesHttp timeouts', () => {
     expect(await res.text()).toBe('{"ok":true}');
   });
 });
+
+describe('HermesHttp errors', () => {
+  const answer = (status: number, body: string) => async () => new Response(body, { status });
+  const catchErr = (p: Promise<unknown>) => p.then(() => { throw new Error('no error'); }, (e: unknown) => e as HermesError);
+
+  it('a fetch that rejects is a network error', async () => {
+    const http = new HermesHttp(fakeInstance(), async () => { throw new Error('ECONNREFUSED'); });
+    const err = await catchErr(http.json('api', 'GET', '/x'));
+    expect(err).toBeInstanceOf(HermesError);
+    expect(err.kind).toBe('network');
+    expect(err.message).toBe('api GET /x: ECONNREFUSED');
+  });
+
+  it('a 404 is an http error with the status and the body cut at 500 characters', async () => {
+    const http = new HermesHttp(fakeInstance(), answer(404, 'x'.repeat(800)));
+    const err = await catchErr(http.json('dash', 'GET', '/api/nope'));
+    expect(err.kind).toBe('http');
+    expect(err.detail.status).toBe(404);
+    expect(err.detail.body).toHaveLength(500);
+  });
+
+  it('an empty 200 body is null', async () => {
+    const http = new HermesHttp(fakeInstance(), answer(200, ''));
+    expect(await http.json('api', 'GET', '/x')).toBeNull();
+  });
+
+  it('a 200 body that is not JSON is a schema error', async () => {
+    const http = new HermesHttp(fakeInstance(), answer(200, '<html>login</html>'));
+    expect((await catchErr(http.json('dash', 'GET', '/api/status'))).kind).toBe('schema');
+  });
+
+  it("an abort by the caller's signal is a network error, not a timeout", async () => {
+    const ctrl = new AbortController();
+    const http = new HermesHttp(fakeInstance(), (_url, init) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+    const p = catchErr(http.json('api', 'GET', '/x', { signal: ctrl.signal, timeoutMs: 5_000 }));
+    ctrl.abort();
+    expect((await p).kind).toBe('network');
+  });
+
+  it('sends the bearer of each side, none when anonymous, and ?profile= on the dashboard', async () => {
+    const seen: { url: string; auth: string | undefined }[] = [];
+    const inst = fakeInstance({ apiKey: 'api-key-1234567890', dashboardToken: 'dash-token-1234567890' });
+    const http = new HermesHttp(inst, async (url, init) => {
+      seen.push({ url, auth: (init.headers as Record<string, string>).Authorization });
+      return new Response('{}', { status: 200 });
+    });
+    await http.json('api', 'GET', '/v1/models');
+    await http.json('dash', 'GET', '/api/skills', { profile: 'work' });
+    await http.json('dash', 'GET', '/api/auth/public', { anonymous: true });
+    expect(seen[0]!.auth).toBe('Bearer api-key-1234567890');
+    expect(seen[1]!.auth).toBe('Bearer dash-token-1234567890');
+    expect(new URL(seen[1]!.url).searchParams.get('profile')).toBe('work');
+    expect(seen[2]!.auth).toBeUndefined();
+  });
+});

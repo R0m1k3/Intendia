@@ -8,3 +8,5 @@ dist/
 coverage/
 test-results/
 playwright-report/
+apps/e2e/.state.json
+apps/e2e/.tmp-path

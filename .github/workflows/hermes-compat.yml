@@ -1,6 +1,7 @@
-# Weekly early warning: starts the official Hermes image (latest), without any AI provider key,
-# records its read-only answers with `probe`, and opens an issue if a module would degrade or a
-# response shape changed compared with the newest recorded fixtures.
+# Weekly early warning: starts the official Hermes image (latest), without any AI provider key, records its
+# read-only answers with `probe`, compares them with the newest recorded fixtures (removals and status / type
+# changes only: additions are notes), and runs the smoke checks of the repo build against it. Opens an issue on
+# a degraded module, a change or a failed smoke; closes the open ones when everything is clean again.
 name: Hermes compatibility
 on:
   schedule:
@@ -9,9 +10,11 @@ on:
 permissions:
   contents: read
   issues: write
+concurrency: { group: hermes-compat, cancel-in-progress: false }
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       API_KEY: ci-api-key-0123456789abcdef
       DASH_TOKEN: ci-dashboard-token-0123456789
@@ -21,21 +24,7 @@ jobs:
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile
       - name: Start Hermes latest (gateway + dashboard)
-        run: |
-          docker volume create hermes-data
-          # keys in the .env of HERMES_HOME: the s6-supervised gateway of recent images does not see `docker run -e`
-          printf 'API_SERVER_ENABLED=true\nAPI_SERVER_HOST=0.0.0.0\nAPI_SERVER_KEY=%s\nHERMES_DASHBOARD_SESSION_TOKEN=%s\n' "$API_KEY" "$DASH_TOKEN" \
-            | docker run --rm -i -v hermes-data:/opt/data busybox sh -c 'cat > /opt/data/.env && chown 10000:10000 /opt/data/.env && chmod 600 /opt/data/.env'
-          docker run -d --name hermes-gw -v hermes-data:/opt/data -p 8642:8642 \
-            -e API_SERVER_ENABLED=true -e API_SERVER_HOST=0.0.0.0 -e API_SERVER_KEY=$API_KEY \
-            nousresearch/hermes-agent:latest gateway run
-          docker run -d --name hermes-dash -v hermes-data:/opt/data -p 9119:9119 \
-            -e HERMES_DASHBOARD_SESSION_TOKEN=$DASH_TOKEN -e HERMES_DASHBOARD_FILES_ROOT=/opt/data/workspace \
-            nousresearch/hermes-agent:latest dashboard --host 0.0.0.0 --no-open
-          for i in $(seq 1 60); do
-            curl -sf http://127.0.0.1:8642/health >/dev/null && curl -s -o /dev/null http://127.0.0.1:9119/ && break
-            sleep 5
-          done
+        run: .github/scripts/start-hermes.sh nousresearch/hermes-agent:latest
       - name: Record and compare
         id: probe
         run: |
@@ -45,27 +34,51 @@ jobs:
           PROBE_API=http://127.0.0.1:8642 PROBE_API_KEY=$API_KEY \
           PROBE_DASH=http://127.0.0.1:9119 PROBE_DASH_TOKEN=$DASH_TOKEN \
             pnpm probe record --out /tmp/latest --strict 2>&1 | tee /tmp/record.txt || code=$?
-          pnpm --silent probe diff "$previous" /tmp/latest 2>&1 | tee /tmp/diff.txt
+          # tsx directly: pnpm turns every non-zero exit code into 1, and 4 (= changes) must stay 4
+          dcode=0; apps/server/node_modules/.bin/tsx apps/server/src/cli/probe.ts diff "$previous" /tmp/latest > /tmp/diff.txt 2>&1 || dcode=$?; cat /tmp/diff.txt
           cp /tmp/diff.txt /tmp/latest/diff.txt
           version=$(node -e "console.log(require('/tmp/latest/surface.json').version)")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          lines=$(grep -cvE '^(Hermes .*)?$' /tmp/diff.txt || true)
-          if [ "$code" != 0 ] || [ "$lines" -gt 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          if [ "$dcode" != 0 ] && [ "$dcode" != 4 ]; then echo "probe diff failed ($dcode)"; exit "$dcode"; fi
+          if [ "$code" != 0 ] || [ "$dcode" = 4 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: hermes-latest-recording, path: /tmp/latest }
+      - name: Smoke against latest
+        id: smoke
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm build
+          .github/scripts/real-hermes-smoke.sh 2>&1 | tee /tmp/smoke.txt
       - name: Open an issue
-        if: steps.probe.outputs.changed == 'true'
+        if: steps.probe.outputs.changed == 'true' || steps.smoke.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
+          SMOKE: ${{ steps.smoke.outcome }}
         run: |
           title="Hermes ${{ steps.probe.outputs.version }}: API changes detected"
           if gh issue list --state open --search "$title in:title" --json number --jq 'length' | grep -q '^0$'; then
             { echo '`probe` against `nousresearch/hermes-agent:latest`. Recording attached to the workflow run.'; echo; \
               echo '### Modules'; echo '```'; tail -12 /tmp/record.txt; echo '```'; \
               echo '### Diff with the newest fixtures'; echo '```'; head -c 50000 /tmp/diff.txt; echo; echo '```'; \
-              [ "$(wc -c < /tmp/diff.txt)" -gt 50000 ] && echo "Diff cut at 50 kB: full text in the run's artifact (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."; } > /tmp/body.md
+              [ "$(wc -c < /tmp/diff.txt)" -gt 50000 ] && echo "Diff cut at 50 kB: full text in the run's artifact (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."; \
+              echo '### Smoke against latest'; \
+              if [ "$SMOKE" = success ]; then echo 'passed'; else echo '```'; tail -60 /tmp/smoke.txt 2>/dev/null; echo '```'; fi; } > /tmp/body.md
             gh issue create --title "$title" --body-file /tmp/body.md
           fi
+      - name: Close stale issues
+        if: steps.probe.outputs.changed != 'true' && steps.smoke.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue list --state open --search "API changes detected in:title" --json number --jq '.[].number' | while read -r n; do
+            gh issue comment "$n" --body "No change against the newest fixtures on $(date -u +%F) (run $URL)."
+            gh issue close "$n"
+          done
+      - name: Fail on a failed smoke
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
       - if: always()
-        run: docker logs hermes-gw 2>&1 | tail -40; docker logs hermes-dash 2>&1 | tail -20
+        run: docker logs hermes-gw 2>&1 | tail -40; docker logs hermes-dash 2>&1 | tail -20; tail -60 /tmp/intendia.log 2>/dev/null || true
