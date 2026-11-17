@@ -509,4 +509,8 @@ export default {
   'Session sans titre': 'Untitled session',
   'Nouvelle session': 'New session',
   '(sans nom)': '(no name)',
+  'Ce message a déjà été envoyé avec un autre contenu : renvoyez-le pour un nouvel envoi': 'This message was already sent with other content: send it again for a new send',
+  'Ce message a déjà été reçu par Hermes : sa réponse apparaîtra dans la conversation': 'Hermes already received this message: its answer will appear in the conversation',
+  'Export limité aux {n} premiers messages': 'Export limited to the first {n} messages',
+  'décalage invalide': 'invalid offset',
 } satisfies Record<string, string>;
