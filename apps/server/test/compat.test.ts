@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkInstance } from '../src/compat/engine.js';
+import { uncheckedOps } from '../src/compat/service.js';
 import type { CompatReport, ModuleId } from '../src/connectors/types.js';
 import { fakeHttp, fakeInstance, RECORDINGS } from './helpers.js';
 
@@ -122,3 +123,27 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
     expect(state(report, 'chat').state).toBe('full');
   });
 });
+
+describe('idempotency of runs (features.runs_idempotency)', () => {
+  it('the 0.23.0 recording announces it supported and durable', async () => {
+    const { report } = await checkInstance(fakeHttp().http);
+    expect(report.runs).toEqual({ idempotency: true, durable: true });
+    expect(uncheckedOps(report)).toEqual([]);
+  });
+
+  it('absent or not durable: read as such', async () => {
+    expect((await checkInstance(fakeHttp({ features: { runs_idempotency: undefined } }).http)).report.runs).toEqual({ idempotency: false, durable: false });
+    expect((await checkInstance(fakeHttp({ features: { runs_idempotency: { supported: true, durable: false } } }).http)).report.runs)
+      .toEqual({ idempotency: true, durable: false });
+  });
+
+  it('a report saved without it counts chat.runsIdempotency as unchecked until the next check', async () => {
+    const { report } = await checkInstance(fakeHttp().http);
+    const old = { ...report };
+    delete old.runs;
+    expect(uncheckedOps(old)).toEqual(['chat.runsIdempotency']);
+    const { report: again } = await checkInstance(fakeHttp().http);
+    expect(uncheckedOps(again)).toEqual([]);
+  });
+});
+

@@ -94,6 +94,12 @@ export interface CompatReport {
     /** credential vault (`vault.list|add|remove`); absent from reports saved by Intendia 0.1.0 and before */
     vault?: boolean };
   /**
+   * `features.runs_idempotency` of /v1/capabilities: Hermes deduplicates `POST /v1/runs` by `Idempotency-Key`
+   * (`idempotency`), and keeps the keys across restarts (`durable`). Absent from reports saved by Intendia 0.1.4
+   * and before (= not checked yet, counted as `chat.runsIdempotency` in `unchecked`).
+   */
+  runs?: { idempotency: boolean; durable: boolean };
+  /**
    * Operations known to this version of Intendia but absent from the report (`module.op`), set on a report saved by
    * an older version until the next full check. Never stored.
    */

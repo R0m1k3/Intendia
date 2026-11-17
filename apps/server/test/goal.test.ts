@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { runStats } from '../src/db/schema.js';
-import { goalBlock, readMarker, relaunchInput } from '../src/chat/goal.js';
+import { goalBlock, goalKeySuffix, readMarker, relaunchInput } from '../src/chat/goal.js';
 import { GoalRunner } from '../src/chat/goal-runner.js';
-import { GoalInactiveError, startRun } from '../src/chat/start-run.js';
+import { GoalInactiveError, resetSentBodies, startRun } from '../src/chat/start-run.js';
 import { testApp, waitRun } from './helpers.js';
 
 type T = Awaited<ReturnType<typeof testApp>>;
@@ -275,3 +275,90 @@ describe('goal loop', () => {
     expect(await goal(t, base)).toMatchObject({ status: 'paused', reason: 'lost' });
   });
 });
+
+describe('goal relaunch keys (Idempotency-Key)', () => {
+  const NOT_DURABLE = { runs_idempotency: { supported: true, durable: false } };
+  const keys = async (t: T) => ((await (await t.fake.api.request('/_fake/runs/last')).json()) as { postedKeys: string[] }).postedKeys;
+  const rows = (t: T, sid: string) => t.fake && t.services.workspaces.runStats('fake', sid, { running: true });
+  const stored = (t: T, sid: string) => t.services.goals.get('fake', sid)!;
+
+  it('a slow admission: one run per relaunch, the same key for the same relaunch', async () => {
+    resetSentBodies();
+    const { t, s, base, runner } = await setup({ createRunTimeoutMs: 300 });
+    const res = await t.request('POST', `${base}/goal`, { text: 'objectif-3 admission-lente', budgetUsd: null });
+    expect(res.status).toBe(200);
+    const first = res.json.runId as string;
+    expect(await drive(t, base, runner())).toMatchObject({ status: 'done', relaunches: 2 });
+    expect(t.fake.sim.runsPosted).toBe(3);
+    expect(rows(t, s.id)).toHaveLength(3);
+    const posted = await keys(t);
+    // each one sent twice (timeout, then the retry Hermes replays)
+    expect(posted).toHaveLength(6);
+    expect(new Set(posted).size).toBe(3);
+    expect(posted).toContain(`${s.id}:${goalKeySuffix(stored(t, s.id), first, 1)}`);
+    expect(goalKeySuffix(stored(t, s.id), first, 1)).toBe(goalKeySuffix(stored(t, s.id), first, 1));
+    expect(goalKeySuffix(stored(t, s.id), first, 1)).not.toBe(goalKeySuffix(stored(t, s.id), first, 2));
+  });
+
+  it('a relaunch lost by a timeout, then a restart: the next pass replays it, one run and one row', async () => {
+    resetSentBodies();
+    const { t, s, base, runner } = await setup({ features: NOT_DURABLE });
+    // the first turn waits for its slow admission; the relaunches time out
+    expect((await t.request('POST', `${base}/goal`, { text: 'objectif-9 admission-lente', budgetUsd: null })).status).toBe(200);
+    await finish(t, base);
+    t.services.runDeps.createRunTimeoutMs = 300;
+    const before = t.fake.sim.runsPosted;
+    await runner().pass(); // 504: the relaunch exists at Hermes, not at Intendia
+    expect(t.fake.sim.runsPosted).toBe(before + 1);
+    const nRows = rows(t, s.id).length;
+    resetSentBodies();
+    await runner().pass();
+    expect(t.fake.sim.runsPosted).toBe(before + 1);
+    expect(rows(t, s.id)).toHaveLength(nRows + 1);
+    expect((await goal(t, base)).relaunches).toBe(1);
+  });
+
+  it('Hermes refuses the relaunch key: paused key_conflict, key_attempt 1, the resume sends another key', async () => {
+    resetSentBodies();
+    const { t, s, base, runner } = await setup({ features: NOT_DURABLE });
+    await t.request('POST', `${base}/goal`, { text: 'objectif-9', budgetUsd: null });
+    await finish(t, base);
+    const first = await lastRunId(t, base);
+    // the relaunch admitted at Hermes, not recorded (Intendia stopped meanwhile); then the instructions change
+    const key = `${s.id}:${goalKeySuffix(stored(t, s.id), first, 1)}`;
+    await t.fake.api.request('/v1/runs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, Authorization: `Bearer ${t.inst.apiKey}` },
+      body: JSON.stringify({ input: 'autre corps', session_id: s.id }),
+    });
+    await runner().pass();
+    expect(await goal(t, base)).toMatchObject({ status: 'paused', reason: 'key_conflict' });
+    expect(stored(t, s.id).keyAttempt).toBe(1);
+    expect((await t.request('POST', `${base}/goal/resume`)).status).toBe(200);
+    const last = (await keys(t)).at(-1)!;
+    expect(last).not.toBe(key);
+    expect(last).toBe(`${s.id}:${goalKeySuffix(stored(t, s.id), first, 1)}`);
+  });
+
+  it('the resume route sends the key of the loop for the same (run, rank)', async () => {
+    resetSentBodies();
+    const { t, s, base, runner } = await setup();
+    await t.request('POST', `${base}/goal`, { text: 'objectif-9', mode: 'click' });
+    expect(await drive(t, base, runner())).toMatchObject({ status: 'paused', reason: 'click', relaunches: 0 });
+    const first = await lastRunId(t, base);
+    await t.request('POST', `${base}/goal/resume`);
+    expect((await keys(t)).at(-1)).toBe(`${s.id}:${goalKeySuffix(stored(t, s.id), first, 1)}`);
+  });
+
+  it('a creation sent again with the same clientKey after an error starts one run', async () => {
+    resetSentBodies();
+    const { t, s, base } = await setup({ createRunTimeoutMs: 300, features: NOT_DURABLE });
+    const body = { text: 'objectif-9 admission-lente', budgetUsd: null, clientKey: 'goalkey-0001' };
+    expect((await t.request('POST', `${base}/goal`, body)).status).toBe(504);
+    expect(await goal(t, base)).toBeNull();
+    const again = await t.request('POST', `${base}/goal`, body);
+    expect(again.status).toBe(200);
+    expect(t.fake.sim.runsPosted).toBe(1);
+    expect(new Set(await keys(t))).toEqual(new Set([`${s.id}:goal-new-goalkey-0001`]));
+  });
+});
+

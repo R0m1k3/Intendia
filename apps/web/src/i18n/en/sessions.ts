@@ -72,7 +72,6 @@ export default {
   "Workspace de cette session": "Workspace of this session",
   "Changer de workspace": "Change workspace",
   "L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session": "The agent works in the workspace folder and keeps its files in the session’s folder",
-  "Messages plus anciens non affichés": "Older messages not shown",
   "Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin": "The start of this run is no longer available live: it will appear at the end",
   "Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.": "Delayed follow-up: three live follow-ups are already open. The reply will show at the end.",
   "En attente de votre approbation": "Waiting for your approval",

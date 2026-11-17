@@ -428,8 +428,12 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
 }
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
-export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents, vault }: {
+export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents, vault, hasOlder, loadingOlder, onLoadOlder }: {
   entries: Entry[]; footers?: Map<string, RunStat[]>; agent?: string; actions?: ThreadActions;
+  /** older messages than those shown exist (pages of 500): a button at the top loads the previous page */
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
   /** instance and effective profile when the vault can be managed: a browser_vault call without login gets a link */
   vault?: { inst: string; profile: string };
   /** the server's summary (route of the messages); absent = a session Intendia does not wake */
@@ -447,6 +451,14 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
       <VaultLink.Provider value={vault ?? null}>
       <LiveDeliveries.Provider value={liveDeliveries}>
       <WakeInfo.Provider value={wake}>
+        {hasOlder && onLoadOlder && (
+          <div className="mb-6 flex justify-center">
+            <Button data-load-older variant="secondary" disabled={loadingOlder} onClick={onLoadOlder}>
+              {loadingOlder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {t('Charger les messages précédents')}
+            </Button>
+          </div>
+        )}
         <div className="space-y-7">
           {turns.map((turn) => <TurnView key={turn.key} turn={turn} agent={agent} actions={actions} />)}
         </div>

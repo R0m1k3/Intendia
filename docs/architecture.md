@@ -136,10 +136,46 @@ own message with that code and status.
   of the agent (clarify) are never answered. Copies keep it only when they replace the session (edit, retry, undo).
 - Pinned models and modes (model + effort + personality, never the profile) per agent: `settings`
   `model_pins:<inst>:<profile>` (20) and `run_modes:<inst>:<profile>` (30), `GET|PUT /x/i/:inst/model-pins|modes`.
-- Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`.
-  The browser's `EventSource` reconnects by itself and only gets what it missed. A non-stream answer from Hermes
-  becomes one `intendia.error` frame. The client closes the stream on a terminal event; `replay.truncated` is a warning.
-- One run at a time per session: sending while the last run is not terminal answers 409.
+- Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`
+  (the header, else `?lastSeq=` sent by a new `EventSource` of the page). The browser's `EventSource` reconnects by
+  itself and only gets what it missed. Anything else is one `intendia.error {status, code, message}` frame, always in
+  200 `text/event-stream`: `run_gone` (Hermes answers 404: it sweeps the events of a run older than 300 s as soon as
+  nobody listens; or the run is not the session's), `hermes_unreachable`, `hermes_http`, `bad_request`.
+  `replay.truncated` is a warning.
+- **A lost stream is never a lost run** (`web/src/chat/useRun.ts`, `followRun`): the page ends a run only on a terminal
+  status (a terminal event, or `GET …/runs/:runId`, or 404 `run_unknown`). States: `live`; `polling/cap` (3 live per tab
+  already); `polling/lost` (the stream closed for good or `intendia.error`: the status is read every 3 s, the stream
+  reopened after the last `seq` at the first good read when it had brought events, else 30 s later; never again after
+  `run_gone`); `polling/offline` (status reads fail: 3, 6, 12, 24, then 30 s); `polling/auth` (401: nothing more until a
+  reload). The page says which under the thread.
+- Older runs stay readable: status and stream of the last run, and of any run with a `run_stats` row of the session
+  (running ones included: a column may follow a run that a goal relaunch replaced). The status of an older run is read
+  at Hermes, never through `settle()`. Stop, approval, answer and reorientation stay on the last run.
+- One run at a time per session: sending while the last run is not terminal answers 409 `run_busy`.
+- **One run per intent** (`chat/start-run.ts`): every `POST /v1/runs` carries an `Idempotency-Key`
+  `<session id>:<suffix>`. The suffix comes from where the intent is born: the page (`u-<clientKey>`, drawn once per
+  composed message: queue items keep theirs, the message being sent is kept in `sessionStorage`
+  `intendia-pending-key:<inst>:<session>` until it succeeded), the goal's creation (`goal-new-<clientKey>`), a goal
+  relaunch (`goalKeySuffix`: hash of instance, session, decided run, rank and `session_goals.key_attempt`; the loop and
+  the resume route give the same key), a wake after sub-agents (`wake-<hash of the delivery>`); random otherwise.
+  Hermes fingerprints the whole body, so the server keeps the body sent per key (memory, 500, 24 h) and sends it again
+  as it was. `createRun` waits 60 s; on a timeout or a network error, when the instance announces
+  `features.runs_idempotency` `supported` and `durable` (`report.runs`), it is retried once with the same key, within
+  80 s for the whole call. The `run_stats` row and `lastRunId` are written in one transaction; a replayed run already
+  recorded writes nothing, one without a row gets one (cost unknown) and becomes `lastRunId` only if no newer row exists.
+  409 answers: `idempotency_conflict` (same key, other text or skills), `already_sent` (Hermes 409
+  `idempotency_key_conflict`: a run was admitted for this key with another body; the goal pauses `key_conflict` and
+  raises `key_attempt`, the wake is abandoned). A send answered `run_busy` re-reads the session every 3 s (90 s) and
+  follows the new run. At start, a wake row left `starting` is released (retried with the same key) on a durable
+  instance, abandoned otherwise.
+- History pages: `GET …/messages?offset=N` reads 500 messages from the end (`order=latest`, `hasMore`); only the
+  latest page settles runs and carries `runs`, `subagents`, `openUnits`. The page loads older pages on demand
+  (« Charger les messages précédents »), merged by id, forgotten at each run's end and each rewrite. During a run the
+  history is cut at the largest message id the page knew when it sent (`mergeHistory` `afterId`), else at the run's
+  `created_at`. Exports md / html read from the start (`order=oldest`, `sessions/export.ts`), 40 pages (20 000
+  messages) at most, said in their heading beyond. The cost after a run is followed by `GET …/run-stats` (run status
+  and `sessions.get` of the row's session only, never the messages; a session ended by a compression gives an
+  unknown cost).
 - Session title at Hermes: after the first run of a session settles, `settle()` copies the Intendia title to Hermes
   (`src/workspaces/title.ts`, `pushTitle`, 5 s), so Telegram and the dashboard show the same name.
 - Home page: "Demander quelque chose à Hermes…" (`apps/web/src/home/Ask.tsx`) creates the session in the chosen
