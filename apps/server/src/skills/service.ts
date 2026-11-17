@@ -1,4 +1,5 @@
 import { stringify } from 'yaml';
+import type { RevisionOf } from '../revision.js';
 import { AdminError } from '../admin-error.js';
 import type { CompatService } from '../compat/service.js';
 import { hostPaths, Masker } from '../hermes-config/mask.js';
@@ -151,7 +152,7 @@ export class SkillService {
 
   private readonly mask: Masker;
 
-  constructor(private readonly compat: CompatService, private readonly store: InstanceStore, secret: string) {
+  constructor(private readonly compat: CompatService, private readonly store: InstanceStore, secret: string, private readonly revisionOf: RevisionOf) {
     this.mask = new Masker(secret);
   }
 
@@ -201,17 +202,19 @@ export class SkillService {
   }
 
   /** Rewrites SKILL.md from a draft of the masked text (secrets put back from the current content, read again). */
-  async putContent(instanceId: string, profile: string, name: string, draft: string): Promise<{ content: string }> {
+  /** `base` = `revision` of the text the editor opened: a SKILL.md changed since (agent, CLI) gives 409 `stale`. */
+  async putContent(instanceId: string, profile: string, name: string, draft: string, base: string): Promise<{ content: string; revision: string }> {
     await this.own(instanceId, profile, name);
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), msg('Skill introuvable'));
     const current = ContentSchema.parse(raw).content;
+    if (this.revisionOf(current) !== base) throw new AdminError('stale', msg('Le SKILL.md a changé dans Hermes depuis l’ouverture : rechargez'));
     if (current.length > CONTENT_MAX) throw new AdminError('too_long', msg('SKILL.md trop long pour l’éditeur : modifiez-le dans Hermes'));
     const content = this.mask.restoreText(draft, current);
     if (content.length > SKILL_MAX) throw new ValidationError(msg('SKILL.md trop long ({max} caractères au plus)', { max: SKILL_MAX }));
     if (!content.startsWith('---')) throw new ValidationError(msg('Le SKILL.md doit commencer par son en-tête (---)'));
     await this.writeOp(instanceId, 'putContent', { profile, body: { name, content } });
-    return { content: this.mask.text(content) };
+    return { content: this.mask.text(content), revision: this.revisionOf(content) };
   }
 
   /** Locked: the agent and the curator may no longer change it (the user still can). */
@@ -252,12 +255,12 @@ export class SkillService {
     return skill;
   }
 
-  async content(instanceId: string, profile: string, name: string): Promise<{ name: string; content: string; truncated: boolean }> {
+  async content(instanceId: string, profile: string, name: string): Promise<{ name: string; content: string; truncated: boolean; revision: string }> {
     const { http, report } = this.ctx(instanceId);
     const raw = await translate(() => callOp<unknown>(http, report, 'skills', 'content', { profile, query: { name } }), msg('Skill introuvable'));
     const { content } = ContentSchema.parse(raw);
     // a skill written by the agent may hold a key: shown (and edited) masked
-    return { name, content: this.mask.text(content.slice(0, CONTENT_MAX)), truncated: content.length > CONTENT_MAX };
+    return { name, content: this.mask.text(content.slice(0, CONTENT_MAX)), truncated: content.length > CONTENT_MAX, revision: this.revisionOf(content) };
   }
 
   async toolsets(instanceId: string, profile: string): Promise<PublicToolset[]> {

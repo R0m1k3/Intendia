@@ -5,7 +5,10 @@ import {
   AssigneesSchema, BoardListSchema, BoardSchema, OrchestrationSchema, TaskDetailSchema, TaskLogSchema, TaskSchema, WorkersSchema, WorkflowSchema,
   type HermesTask,
 } from '../connectors/kanban/index.js';
-import { callOp, HermesError, hermesDetail, ModuleUnavailableError, streamOp, type CallOptions } from '../connectors/runtime.js';
+import { callOp, HermesError, hermesDetail, ModuleUnavailableError, streamOp, uncertain, type CallOptions } from '../connectors/runtime.js';
+import { AdminError } from '../admin-error.js';
+import { randomToken } from '../crypto.js';
+import type { RevisionOf } from '../revision.js';
 import { Masker } from '../hermes-config/mask.js';
 import type { InstanceStore } from '../instances/store.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
@@ -69,6 +72,8 @@ export interface PublicTask {
   createdAt: number | null;
   startedAt: number | null;
   completedAt: number | null;
+  /** Freshness of the title and the raw text (framing block included), sent back as `base` to change them. */
+  revision: string;
 }
 
 export interface PublicColumn { key: string; label: string; dragTarget: boolean; tasks: PublicTask[] }
@@ -134,6 +139,7 @@ export class KanbanService {
     private readonly store: InstanceStore,
     private readonly workspaces: WorkspaceService,
     secret: string,
+    private readonly revisionOf: RevisionOf,
   ) {
     this.mask = new Masker(secret);
   }
@@ -207,7 +213,12 @@ export class KanbanService {
       createdAt: t.created_at ?? null,
       startedAt: t.started_at ?? null,
       completedAt: t.completed_at ?? null,
+      revision: this.taskRevision(t),
     };
+  }
+
+  private taskRevision(t: { title?: string | null; body?: string | null }): string {
+    return this.revisionOf(JSON.stringify([t.title ?? '', t.body ?? '']));
   }
 
   // ---------------------------------------------------------------- reads
@@ -353,13 +364,32 @@ export class KanbanService {
       body.workspace_path = path;
     }
     if (text) body.body = text;
-    const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'createTask', { body }, 'board');
+    // Hermes returns the task already created with this key: the same body can be sent again after a lost answer
+    body.idempotency_key = randomToken(16);
+    const create = () => this.onBoard<{ task?: unknown }>(instanceId, board, 'createTask', { body }, 'board');
+    let res: { task?: unknown };
+    try {
+      res = await create();
+    } catch (err) {
+      if (!uncertain(err)) throw err;
+      try {
+        res = await create();
+      } catch {
+        throw err;
+      }
+    }
     let task = TaskSchema.parse(res.task);
     if (start === 'scheduled') {
-      const patch = async (b: Record<string, unknown>) => TaskSchema.parse((await this.onBoard<{ task?: unknown }>(
-        instanceId, board, 'updateTask', { params: { task_id: task.id }, body: b }, 'task')).task);
-      task = await patch({ status: 'scheduled' });
-      if (input.assignee) task = await patch({ assignee: input.assignee });
+      const patch = async (b: Record<string, unknown>, step: string) => {
+        try {
+          return TaskSchema.parse((await this.onBoard<{ task?: unknown }>(
+            instanceId, board, 'updateTask', { params: { task_id: task.id }, body: b }, 'task')).task);
+        } catch {
+          throw new AdminError('partial_create', msg('Tâche « {title} » créée, mais Hermes n’a pas pris {step} : ouvrez-la pour finir', { title, step }), { taskId: task.id });
+        }
+      };
+      task = await patch({ status: 'scheduled' }, msg('le statut « planifiée »'));
+      if (input.assignee) task = await patch({ assignee: input.assignee }, msg('l’agent'));
     }
     return this.toPublic(instanceId, task);
   }
@@ -367,6 +397,8 @@ export class KanbanService {
   /** Allowed fields only; a new body keeps the framing block of the current one. */
   async updateTask(instanceId: string, board: string, taskId: string, input: {
     status?: string; assignee?: string | null; priority?: number | null; title?: string; body?: string; blockReason?: string;
+    /** `revision` of the task the editor opened: required to change the title or the text. */
+    base?: string;
   }): Promise<PublicTask> {
     textLimit(input.title, LIMITS.title, msg('Titre'));
     textLimit(input.body, LIMITS.body, msg('Texte'));
@@ -380,10 +412,15 @@ export class KanbanService {
       patch.title = input.title.trim();
     }
     if (input.blockReason !== undefined) patch.block_reason = input.blockReason;
-    if (input.body !== undefined) {
-      const current = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'task')).task.body ?? '';
-      const kept = current.slice(0, current.length - unframe(current, 'kanban').prompt.length);
-      patch.body = `${kept}${input.body}`;
+    if (input.title !== undefined || input.body !== undefined) {
+      if (input.base === undefined) throw new ValidationError(msg('Révision manquante : rechargez la tâche'));
+      const now = TaskDetailSchema.parse(await this.onBoard(instanceId, board, 'task', { params: { task_id: taskId } }, 'task')).task;
+      if (this.taskRevision(now) !== input.base) throw new AdminError('stale', msg('Cette tâche a changé dans Hermes depuis l’ouverture : rechargez'));
+      if (input.body !== undefined) {
+        const current = now.body ?? '';
+        const kept = current.slice(0, current.length - unframe(current, 'kanban').prompt.length);
+        patch.body = `${kept}${input.body}`;
+      }
     }
     if (!Object.keys(patch).length) throw new ValidationError(msg('Rien à modifier'));
     const res = await this.onBoard<{ task?: unknown }>(instanceId, board, 'updateTask', { params: { task_id: taskId }, body: patch }, 'task');

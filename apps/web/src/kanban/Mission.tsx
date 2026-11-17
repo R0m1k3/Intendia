@@ -3,6 +3,7 @@ import { Play, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type KanbanMission, type KanbanMissionChild } from '../api';
 import { ask } from '../components/Dialog';
+import { askReload, isStale } from '../components/staleReload';
 import { confirmClose, useDirtyGuard } from '../components/dirty';
 import { Button, cx, ErrorText, Field, Input } from '../components/ui';
 import { childNotes, MISSION_STATE, orderChildren } from './mission';
@@ -17,15 +18,26 @@ function ChildRow({ inst, board, child, all, editable, assignees, onSaved, onRem
   inst: string; board: string; child: KanbanMissionChild; all: KanbanMissionChild[]; editable: boolean; assignees: string[];
   onSaved: () => Promise<unknown>; onRemove: () => void; removing: boolean;
 }) {
-  const [draft, setDraft] = useState<{ title: string; body: string; assignee: string } | null>(null);
-  const f = draft ?? { title: child.title, body: child.body, assignee: child.assignee ?? '' };
+  /** `base`: revision of the child when the edit started (409 `stale` when Hermes changed it since). */
+  const [draft, setDraft] = useState<{ title: string; body: string; assignee: string; base: string } | null>(null);
+  const f = draft ?? { title: child.title, body: child.body, assignee: child.assignee ?? '', base: child.revision };
   const save = useMutation({
-    mutationFn: () => api.updateKanbanTask(inst, board, child.id, {
-      ...(f.title !== child.title ? { title: f.title } : {}),
-      ...(f.body !== child.body ? { body: f.body } : {}),
-      ...(f.assignee !== (child.assignee ?? '') ? { assignee: f.assignee || null } : {}),
-    }),
+    mutationFn: () => {
+      const text = f.title !== child.title || f.body !== child.body;
+      return api.updateKanbanTask(inst, board, child.id, {
+        ...(f.title !== child.title ? { title: f.title } : {}),
+        ...(f.body !== child.body ? { body: f.body } : {}),
+        ...(f.assignee !== (child.assignee ?? '') ? { assignee: f.assignee || null } : {}),
+        ...(text ? { base: f.base } : {}),
+      });
+    },
     onSuccess: async () => { await onSaved(); setDraft(null); },
+    onError: async (err) => {
+      if (!isStale(err) || !(await askReload(f.body))) return;
+      setDraft(null);
+      save.reset();
+      await onSaved();
+    },
   });
   const dirty = draft !== null && (f.title !== child.title || f.body !== child.body || f.assignee !== (child.assignee ?? ''));
   useDirtyGuard(dirty);

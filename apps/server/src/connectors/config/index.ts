@@ -158,6 +158,9 @@ export const PoolSchema = z.looseObject({
 /** POST /api/credentials/pool (`add_credential_pool_entry`). */
 export const PoolAddSchema = z.looseObject({ ok: z.boolean().optional(), provider: z.string().optional(), count: z.number().optional() });
 
+/** `GET /api/shared-metrics/consent?profile=`: `managed` = Hermes installed by a package manager (`is_managed()`, per profile). */
+export const ManagedSchema = z.looseObject({ managed: z.boolean().optional() });
+
 export const GATEWAY_RESTART_ACTION = 'gateway-restart';
 
 /** `GET /api/mcp/catalog`: the approved MCP servers shipped with Hermes, with their state for the profile. */
@@ -213,6 +216,11 @@ export const configModule: ModuleDef = {
     raw: {
       kind: 'read', probe: true, schema: RawConfigSchema,
       routes: [{ via: 'dash', method: 'GET', path: '/api/config/raw' }],
+    },
+    // managed installation (Nix, `.managed` marker): Hermes answers ok to config writes and writes nothing
+    managed: {
+      kind: 'read', probe: true, required: false, schema: ManagedSchema,
+      routes: [{ via: 'dash', method: 'GET', path: '/api/shared-metrics/consent' }],
     },
     modelInfo: { kind: 'read', probe: true, schema: ModelInfoSchema, routes: [{ via: 'dash', method: 'GET', path: '/api/model/info' }] },
     // May write discovered models into the config file: never probed.

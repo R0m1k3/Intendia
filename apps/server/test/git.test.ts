@@ -226,6 +226,24 @@ describe('writes', () => {
     expect(staged(r)).toEqual([]);
   });
 
+  it('key files are refused or unstaged again; a public key is fine (lot C)', async () => {
+    const t = await setup();
+    const r = repo(join(t.ws, 'projet'));
+    mkdirSync(join(r, 'deploy'));
+    mkdirSync(join(r, 'certs'));
+    writeFileSync(join(r, 'deploy', 'id_ed25519'), 'PRIVATE\n');
+    writeFileSync(join(r, 'deploy', 'id_ed25519.pub'), 'ssh-ed25519 AAAA\n');
+    writeFileSync(join(r, 'certs', 'site.pem'), 'PEM\n');
+    writeFileSync(join(r, '.npmrc'), '//registry/:_authToken=x\n');
+    for (const file of ['deploy/id_ed25519', 'certs/site.pem', '.npmrc']) {
+      expect((await t.request('POST', `${t.G}/stage`, { repo: 'projet', file })).status, file).toBe(403);
+    }
+    expect((await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'deploy/id_ed25519.pub' })).status).toBe(200);
+    const all = await t.request('POST', `${t.G}/stage`, { repo: 'projet' });
+    expect(all.json.unstaged.sort()).toEqual(['.npmrc', 'certs/site.pem', 'deploy/id_ed25519']);
+    expect(staged(r)).toContain('deploy/id_ed25519.pub');
+  });
+
   it('a folder or everything staged: credential files inside are unstaged again and named', async () => {
     const t = await setup();
     const r = repo(join(t.ws, 'projet'));

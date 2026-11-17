@@ -31,6 +31,16 @@ export class HermesError extends Error {
   }
 }
 
+/** The answer of a request was lost (network error, timeout): Hermes may have done the work. */
+export function lostReply(err: unknown): boolean {
+  return err instanceof HermesError && (err.kind === 'network' || err.kind === 'timeout');
+}
+
+/** Lost answer or 5xx: the write may have been done, a retry must not create a second object. */
+export function uncertain(err: unknown): boolean {
+  return lostReply(err) || (err instanceof HermesError && err.kind === 'http' && (err.detail.status ?? 0) >= 500);
+}
+
 /**
  * A passing failure of Hermes (outage): network error (not an abort by the caller), timeout, or HTTP 502/503/504.
  * A 500, a 404 or a schema error stays a normal compatibility failure.

@@ -95,6 +95,17 @@ describe('memory: entries', () => {
     expect(over.json.error).toContain('1,375');
   });
 
+  it('an entry changed by the agent between the read and the edit gives 409 stale (lot C)', async () => {
+    const t = await testApp();
+    const i = FAKE_MEMORY_SEED.memory.findIndex((x) => x.startsWith('Les rapports hebdomadaires partent le lundi matin'));
+    const id = idOf('memory', i);
+    expect((await t.request('GET', `${M}/entry?id=${encodeURIComponent(id)}`)).status).toBe(200);
+    t.fake.memory.entries('default').memory[i] = 'Les rapports hebdomadaires partent le mardi.';
+    const res = await t.request('PUT', `${M}/entry`, { id, content: 'Mon texte.' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('stale');
+  });
+
   it('deletes with a JSON body and the profile', async () => {
     const t = await testApp();
     const id = idOf('profile', 1);

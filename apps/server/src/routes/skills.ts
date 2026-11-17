@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { REVISION_RE } from '../revision.js';
 import { z } from 'zod';
 import type { SkillService } from '../skills/service.js';
 import { ValidationError } from '../workspaces/service.js';
@@ -22,7 +23,7 @@ const CreateBody = z.object({
   description: z.string().max(200),
   body: z.string().max(100_000),
 });
-const ContentBody = z.object({ name: NAME, content: z.string().max(200_000) });
+const ContentBody = z.object({ name: NAME, content: z.string().max(200_000), base: z.string().regex(REVISION_RE) });
 const LockBody = z.object({ name: NAME, locked: z.boolean() });
 
 /** `?profile=`, `default` when absent. */
@@ -51,7 +52,7 @@ export function skillRoutes(skills: SkillService): Hono {
   });
   r.put('/i/:inst/skills/content', async (c) => {
     const body = ContentBody.parse(await c.req.json());
-    return c.json(await skills.putContent(inst(c), profileOf(c), body.name, body.content));
+    return c.json(await skills.putContent(inst(c), profileOf(c), body.name, body.content, body.base));
   });
   r.put('/i/:inst/skills/lock', async (c) => {
     const body = LockBody.parse(await c.req.json());

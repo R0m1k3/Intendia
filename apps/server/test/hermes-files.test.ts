@@ -13,7 +13,8 @@ describe('chat while Hermes files are unreachable', () => {
     const breaks: Record<string, { status: number }> = {};
     const t = await testApp({ breaks });
     await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' });
-    await t.request('PUT', '/x/workspaces/dev/agents-md', { text: 'Réponds en français.' });
+    const { revision } = (await t.request('GET', '/x/workspaces/dev/agents-md')).json;
+    await t.request('PUT', '/x/workspaces/dev/agents-md', { text: 'Réponds en français.', base: revision });
     const s = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
     breaks['dash GET /api/files/download'] = { status: 503 };
     expect((await t.request('POST', `/x/sessions/fake/${s.id}/runs`, { input: 'Bonjour' })).status).toBe(200);
