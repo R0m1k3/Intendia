@@ -1,9 +1,10 @@
 // Starting a run of an Intendia session, shared by the send route, the goal routes and the goal loop (chat/goal.ts):
 // one lock, one cost handover, one way to build the instructions. Also the run_stats settling read by the chat routes.
+import { createHash, randomUUID } from 'node:crypto';
 import { msg } from '../i18n/index.js';
 import type { CompatService } from '../compat/service.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
-import { callOp } from '../connectors/runtime.js';
+import { callOp, HermesError } from '../connectors/runtime.js';
 import type { ConfigService } from '../hermes-config/service.js';
 import type { PromptService } from '../prompts/service.js';
 import { personalityBlock, RunExtrasError, skillBlocks } from '../sessions/run-extras.js';
@@ -21,6 +22,73 @@ export interface StartRunDeps {
   config: ConfigService;
   prompts: PromptService;
   goals: GoalStore;
+  /** Timeout of one `POST /v1/runs` (tests: shorter); default CREATE_RUN_TIMEOUT_MS. */
+  createRunTimeoutMs?: number;
+}
+
+/** Timeout of one `POST /v1/runs`: Hermes may take long to admit a run (loading the agent, a busy model). */
+export const CREATE_RUN_TIMEOUT_MS = 60_000;
+/** Whole `startRun` call, second attempt included (a proxy in front of Intendia must wait longer: docs/install.md). */
+export const START_RUN_BUDGET_MS = 80_000;
+/** No second attempt with less than this left in the budget. */
+export const RETRY_MIN_MS = 10_000;
+const SENT_BODIES_MAX = 500;
+const SENT_BODY_TTL_MS = 24 * 3600_000;
+
+/** Key given by a client (the page: once per composed message). */
+export const CLIENT_KEY_RE = /^[A-Za-z0-9-]{8,64}$/;
+
+/** `Idempotency-Key` of a run: the session id (SESSION_ID_RE) then the intent; at most 255 visible ASCII characters. */
+export function idemKey(sessionId: string, suffix: string): string {
+  return `${sessionId}:${suffix}`;
+}
+
+/** Short stable hash of an intent (goal relaunch, delivery of sub-agents). */
+export const hashKey = (parts: string[]) => createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 32);
+
+/**
+ * Timeout of the next `create()`: the configured one, cut to what is left of the budget; null when a retry would
+ * have less than RETRY_MIN_MS.
+ */
+export function createTimeout(deadline: number, now: number, configured: number, retry: boolean): number | null {
+  const left = deadline - now;
+  if (retry && left < RETRY_MIN_MS) return null;
+  return Math.max(1, Math.min(configured, left));
+}
+
+/** Same key, other text or other skills (checked against the bodies kept by this process): nothing sent. */
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super(msg('Ce message a déjà été envoyé avec un autre contenu : renvoyez-le pour un nouvel envoi'));
+    this.name = 'IdempotencyConflictError';
+  }
+}
+
+/** Hermes answered 409 `idempotency_key_conflict`: it already admitted a run for this key (with another body). */
+export class AlreadySentError extends Error {
+  constructor() {
+    super(msg('Ce message a déjà été reçu par Hermes : sa réponse apparaîtra dans la conversation'));
+    this.name = 'AlreadySentError';
+  }
+}
+
+/**
+ * Bodies sent per key, so a new send of the same key has the same fingerprint at Hermes (which hashes the whole
+ * body: instructions included, and they may have changed meanwhile). In memory: lost on restart.
+ */
+const sentBodies = new Map<string, { body: Record<string, unknown>; input: string; skills: string; at: number }>();
+
+function keepBody(key: string, entry: { body: Record<string, unknown>; input: string; skills: string }) {
+  const now = Date.now();
+  for (const [k, v] of sentBodies) if (now - v.at > SENT_BODY_TTL_MS) sentBodies.delete(k);
+  sentBodies.delete(key);
+  sentBodies.set(key, { ...entry, at: now });
+  while (sentBodies.size > SENT_BODIES_MAX) sentBodies.delete(sentBodies.keys().next().value!);
+}
+
+/** Tests only: forgets the kept bodies (a restart of Intendia). */
+export function resetSentBodies(): void {
+  sentBodies.clear();
 }
 
 export const RUN_BUSY = msg('Un run est déjà en cours dans cette session');
@@ -60,11 +128,32 @@ export async function liveCost(deps: StartRunDeps, ctx: SessionContext, known?: 
 }
 
 /**
+ * Cumulated cost of the session a row ran in, read with `sessions.get` only (never the messages). The session a
+ * run is admitted in does not follow a compression: ended by a compression = the cost moved on, unknown.
+ */
+export async function liveCostFromRow(deps: StartRunDeps, ctx: SessionContext, row: RunStatRow): Promise<CostReading | null> {
+  // a running row has no Hermes session id yet: the live session it started on (its baseline)
+  const sessionId = row.hermesSessionId ?? row.costBeforeSessionId ?? ctx.session.id;
+  try {
+    const s = await callOp<{ actual_cost_usd?: number | null; estimated_cost_usd?: number | null; ended_at?: number | null; end_reason?: string | null }>(
+      deps.compat.http(ctx.instance.id), deps.compat.get(ctx.instance.id), 'sessions', 'get', { params: { session_id: sessionId }, profile: ctx.profile },
+    );
+    if (s.ended_at != null && s.end_reason === 'compression') return null;
+    return { sessionId, cost: sessionCost(s) };
+  } catch (err) {
+    if (err instanceof HermesError && err.detail.status === 404) return { sessionId, cost: 0 };
+    return null;
+  }
+}
+
+/**
  * Records the end of the session's running rows (read once, written once), then re-costs its last finished
  * row while it is not final. Returns the status of the session's last run when it was read.
  */
 export async function settle(
-  deps: StartRunDeps, ctx: SessionContext, opts: { known?: { liveId: string; exists: boolean }; cost?: CostReading | null } = {},
+  deps: StartRunDeps, ctx: SessionContext,
+  /** liveFromRows: without `known`, the cost is read from the row's session (`sessions.get`), never the messages */
+  opts: { known?: { liveId: string; exists: boolean }; cost?: CostReading | null; liveFromRows?: boolean } = {},
 ): Promise<Status | null> {
   const { workspaces } = deps;
   let last: Status | null = null;
@@ -87,7 +176,8 @@ export async function settle(
   const done = workspaces.runStats(inst, ctx.session.id);
   const tail: RunStatRow | undefined = done[done.length - 1];
   if (tail && !tail.costFinal && tail.status !== 'unknown') {
-    const reading = opts.cost !== undefined ? opts.cost : await liveCost(deps, ctx, opts.known);
+    const reading = opts.cost !== undefined ? opts.cost
+      : opts.liveFromRows && !opts.known ? await liveCostFromRow(deps, ctx, tail) : await liveCost(deps, ctx, opts.known);
     const final = tail.endedAt !== null && Date.now() - tail.endedAt > COST_SETTLE_MS;
     workspaces.setRunCost(inst, tail.runId, runCost(tail.costBeforeUsd, tail.costBeforeSessionId, reading), final);
   }
@@ -124,16 +214,23 @@ export function handOverCost(deps: StartRunDeps, ctx: SessionContext, cost: Cost
  * Starts a run of the session: one creation at a time per session (two tabs, or a tab and the goal loop, could
  * otherwise both pass the "no run in progress" check and start two runs, the second overwriting the first in
  * lastRunId). Throws RunBusyError while a run goes on, RunExtrasError for an unknown skill.
+ *
+ * Every run carries an `Idempotency-Key` (session id + `keySuffix`, the intent: a message composed by the page, a
+ * goal relaunch, a delivery of sub-agents; random without one). When Hermes announces durable idempotency, a
+ * timeout or a network error is retried once with the same key: Hermes replays the run instead of starting a
+ * second one. Throws IdempotencyConflictError (same key, other text or skills) and AlreadySentError (Hermes
+ * already admitted a run for this key with another body).
  */
 export async function startRun(
   deps: StartRunDeps, ctx: SessionContext, input: string,
   /** forGoal: an automatic relaunch, started only while the goal is still active (re-read under the run lock) */
-  opts: { skills?: string[]; forGoal?: boolean } = {},
+  opts: { skills?: string[]; forGoal?: boolean; keySuffix?: string } = {},
 ): Promise<{ runId: string; session: PublicSession; notice?: string }> {
   const { workspaces } = deps;
-  const key = runKey(ctx.instance.id, ctx.session.id);
-  if (startingRuns.has(key)) throw new RunBusyError();
-  startingRuns.add(key);
+  const deadline = Date.now() + START_RUN_BUDGET_MS;
+  const lock = runKey(ctx.instance.id, ctx.session.id);
+  if (startingRuns.has(lock)) throw new RunBusyError();
+  startingRuns.add(lock);
   try {
     // re-read: the session may have changed meanwhile
     const fresh = workspaces.getSession(ctx.instance.id, ctx.session.id);
@@ -150,31 +247,73 @@ export async function startRun(
     if (opts.forGoal && deps.goals.get(fresh.instance.id, fresh.session.id)?.status !== 'active') throw new GoalInactiveError();
     const { model, modelProvider, effort } = fresh.session;
     // skills first: an unknown one stops the send before the run (400), the personality never does
-    const extra = opts.skills?.length ? await skillBlocks(deps.skills, fresh, [...new Set(opts.skills)]) : [];
+    const skills = [...new Set(opts.skills ?? [])];
+    const extra = skills.length ? await skillBlocks(deps.skills, fresh, skills) : [];
     const persona = await personalityBlock(deps.config, deps.prompts, fresh);
     const goal = deps.goals.get(fresh.instance.id, fresh.session.id);
     const instructions = [
       await workspaces.instructionsFor(fresh), ...extra, ...(persona.block ? [persona.block] : []),
       ...(goal?.status === 'active' ? [goalBlock(goal.text)] : []),
     ].join('\n\n');
-    const created = await callOp<{ run_id: string }>(deps.compat.http(ctx.instance.id), deps.compat.get(ctx.instance.id), 'chat', 'createRun', {
-      profile: ctx.profile,
-      body: {
-        input, session_id: ctx.session.id, instructions,
-        // provider only with a model picked in a group (docs/hermes-api-notes.md)
-        ...(model ? { model, ...(modelProvider ? { provider: modelProvider } : {}) } : {}),
-        ...(effort ? { model_options: { reasoning_effort: effort } } : {}),
-      },
-    });
+    const key = idemKey(ctx.session.id, opts.keySuffix ?? randomUUID());
+    const skillsKey = [...skills].sort().join('\n');
+    const kept = sentBodies.get(key);
+    if (kept && (kept.input !== input || kept.skills !== skillsKey)) throw new IdempotencyConflictError();
+    // the same key resends the same body (Hermes fingerprints all of it), even if the instructions changed since
+    const body: Record<string, unknown> = kept?.body ?? {
+      input, session_id: ctx.session.id, instructions,
+      // provider only with a model picked in a group (docs/hermes-api-notes.md)
+      ...(model ? { model, ...(modelProvider ? { provider: modelProvider } : {}) } : {}),
+      ...(effort ? { model_options: { reasoning_effort: effort } } : {}),
+    };
+    keepBody(key, { body, input, skills: skillsKey });
+
+    const configured = deps.createRunTimeoutMs ?? CREATE_RUN_TIMEOUT_MS;
+    const create = (timeoutMs: number) => callOp<{ run_id: string; status?: string; replayed?: boolean }>(
+      deps.compat.http(ctx.instance.id), deps.compat.get(ctx.instance.id), 'chat', 'createRun',
+      { profile: ctx.profile, body, headers: { 'Idempotency-Key': key }, timeoutMs },
+    );
+    const conflict = (err: unknown) => err instanceof HermesError && err.kind === 'http' && err.detail.status === 409
+      && Boolean(err.detail.body?.includes('idempotency_key_conflict'));
+    let created: { run_id: string; replayed?: boolean };
+    try {
+      try {
+        created = await create(createTimeout(deadline, Date.now(), configured, false)!);
+      } catch (err) {
+        const runs = deps.compat.get(ctx.instance.id)?.runs;
+        const retryable = err instanceof HermesError && (err.kind === 'timeout' || err.kind === 'network') && runs?.idempotency && runs.durable;
+        const timeoutMs = retryable ? createTimeout(deadline, Date.now(), configured, true) : null;
+        if (timeoutMs === null) throw err;
+        console.warn(`[intendia] createRun ${ctx.instance.id}/${ctx.session.id} : nouvel essai, même clé`);
+        created = await create(timeoutMs);
+      }
+    } catch (err) {
+      if (conflict(err)) throw new AlreadySentError();
+      throw err;
+    }
+
+    const notice = persona.notice ? { notice: persona.notice } : {};
+    const row = { instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running', requestedModel: model, requestedEffort: effort };
+    if (created.replayed === true) {
+      // Hermes replayed a run of this key: never a second row, never lastRunId moved back
+      if (workspaces.runStats(ctx.instance.id, ctx.session.id, { running: true }).some((r) => r.runId === created.run_id)) {
+        return { runId: created.run_id, session: workspaces.getSession(ctx.instance.id, ctx.session.id).session, ...notice };
+      }
+      const s = await status(deps, fresh, created.run_id).catch(() => null);
+      const createdAtMs = s?.createdAt != null ? s.createdAt * 1000 : null;
+      const newer = createdAtMs !== null && workspaces.runStats(ctx.instance.id, ctx.session.id, { running: true }).some((r) => r.startedAt > createdAtMs);
+      // the baseline of a replayed run is not known (it may have spent before this reading)
+      const session = workspaces.recordStartedRun(
+        { ...row, startedAt: createdAtMs ?? Date.now(), costBeforeUsd: null, costBeforeSessionId: null },
+        input, { setLast: !newer },
+      );
+      return { runId: created.run_id, session, ...notice };
+    }
     // after the run was accepted: a refused send leaves the previous row settling
-    workspaces.insertRunStat({
-      instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running',
-      requestedModel: model, requestedEffort: effort, startedAt: Date.now(), ...handOverCost(deps, fresh, cost),
-    });
-    const session = workspaces.recordRun(ctx.instance.id, ctx.session.id, created.run_id, input);
-    return { runId: created.run_id, session, ...(persona.notice ? { notice: persona.notice } : {}) };
+    const session = workspaces.recordStartedRun({ ...row, startedAt: Date.now(), ...handOverCost(deps, fresh, cost) }, input);
+    return { runId: created.run_id, session, ...notice };
   } finally {
-    startingRuns.delete(key);
+    startingRuns.delete(lock);
   }
 }
 

@@ -6,11 +6,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { runStats, sessionGoals } from '../db/schema.js';
+import { hashKey } from './start-run.js';
 
 export type GoalStatus = 'active' | 'paused' | 'done';
 export type GoalMode = 'auto' | 'click';
 export const PAUSE_REASONS = [
-  'user', 'button', 'click', 'blocked', 'failed', 'stopped', 'lost', 'limit', 'budget', 'start_failed', 'gone', 'cost_unknown',
+  'user', 'button', 'click', 'blocked', 'failed', 'stopped', 'lost', 'limit', 'budget', 'start_failed', 'gone', 'cost_unknown', 'key_conflict',
 ] as const;
 export type PauseReason = (typeof PAUSE_REASONS)[number];
 
@@ -29,7 +30,16 @@ export interface Goal {
   reasonDetail: string | null;
   createdAt: number;
   updatedAt: number;
+  /** rank of the relaunch keys (raised by a key conflict) */
+  keyAttempt: number;
 }
+
+/**
+ * `Idempotency-Key` suffix of relaunch `n` after the decided run `lastRunId`: the same relaunch always gives the
+ * same key (retry, restart, a second process), so Hermes starts it once.
+ */
+export const goalKeySuffix = (g: Pick<Goal, 'instanceId' | 'sessionId' | 'keyAttempt'>, lastRunId: string, n: number) =>
+  'goal-' + hashKey([g.instanceId, g.sessionId, lastRunId, String(n), String(g.keyAttempt)]);
 
 export interface GoalSpent {
   /** sum of the known costs of the session's runs since `costSince` */
@@ -125,6 +135,16 @@ export class GoalStore {
     const set: Partial<Row> = { status: 'paused', reason, reasonDetail: opts.detail ?? null, updatedAt: opts.now ?? Date.now() };
     if (opts.handledRunId !== undefined) set.handledRunId = opts.handledRunId;
     return this.db.update(sessionGoals).set(set).where(and(this.key(instanceId, sessionId), eq(sessionGoals.status, 'active'))).run().changes > 0;
+  }
+
+  /**
+   * Hermes (or this process) refused the relaunch key: paused with `key_conflict`, and the key rank raised in the
+   * same statement so the resume derives another key.
+   */
+  pauseForKeyConflict(instanceId: string, sessionId: string, opts: { detail?: string | null; handledRunId?: string; now?: number } = {}): boolean {
+    const set: Partial<Row> = { status: 'paused', reason: 'key_conflict', reasonDetail: opts.detail ?? null, updatedAt: opts.now ?? Date.now() };
+    if (opts.handledRunId !== undefined) set.handledRunId = opts.handledRunId;
+    return this.db.update(sessionGoals).set({ ...set, keyAttempt: sql`${sessionGoals.keyAttempt} + 1` }).where(and(this.key(instanceId, sessionId), eq(sessionGoals.status, 'active'))).run().changes > 0;
   }
 
   /** The loop's end of the goal, only on an active goal whose run was not decided yet. */

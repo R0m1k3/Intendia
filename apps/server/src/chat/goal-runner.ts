@@ -5,8 +5,8 @@
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { NotFoundError, type SessionContext } from '../workspaces/service.js';
 import { readRunStatus } from './history.js';
-import { readMarker, relaunchInput, type Goal, type PauseReason } from './goal.js';
-import { GoalInactiveError, RunBusyError, settle, startRun, type StartRunDeps } from './start-run.js';
+import { goalKeySuffix, readMarker, relaunchInput, type Goal, type PauseReason } from './goal.js';
+import { AlreadySentError, GoalInactiveError, IdempotencyConflictError, RunBusyError, settle, startRun, type StartRunDeps } from './start-run.js';
 
 const EVERY_MS = 3_000;
 /** start errors in a row (other than "a run goes on") before the goal pauses with `start_failed` */
@@ -89,10 +89,19 @@ export class GoalRunner {
     if (g.mode === 'click') return pause('click');
     const n = g.relaunches + 1;
     try {
-      await startRun(this.deps, ctx, relaunchInput(n, g.maxRelaunches), { forGoal: true });
+      // the decided run and the rank give the key: the same relaunch is the same key, whoever retries it
+      await startRun(this.deps, ctx, relaunchInput(n, g.maxRelaunches), { forGoal: true, keySuffix: goalKeySuffix(g, runId, n) });
     } catch (err) {
       // another send got there first: that run is decided at its end; paused or removed meanwhile: nothing to do
       if (err instanceof RunBusyError || err instanceof GoalInactiveError) return { kind: 'wait' };
+      // Hermes already admitted this relaunch with another body (instructions changed after a restart): the user
+      // checks the conversation, and resuming derives another key
+      if (err instanceof AlreadySentError || err instanceof IdempotencyConflictError) {
+        this.failures.delete(key);
+        goals.pauseForKeyConflict(g.instanceId, g.sessionId, { detail: err.message, handledRunId: runId });
+        this.log(`[intendia] objectif ${key} : pause key_conflict`);
+        return { kind: 'pause', reason: 'key_conflict', detail: err.message };
+      }
       const tries = (this.failures.get(key) ?? 0) + 1;
       this.failures.set(key, tries);
       if (tries >= START_TRIES) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RunBusyError } from '../src/chat/start-run.js';
+import { AlreadySentError, hashKey, RunBusyError } from '../src/chat/start-run.js';
 import { DelegationWatcher, MAX_WAKES, summarize, unitsGone, WAKE_TEXT, WAKE_TEXT_PARTIAL, wakeDecision, WakeStore } from '../src/chat/wake.js';
 import type { SubagentChild } from '../src/chat/subagents.js';
 import type { ChatMessage } from '../src/chat/history.js';
@@ -155,8 +155,8 @@ describe('WakeStore', () => {
 
 type T = Awaited<ReturnType<typeof testApp>>;
 
-async function setup(bgDelayMs = 300) {
-  const t = await testApp({ bgDelayMs });
+async function setup(bgDelayMs = 300, opts: Parameters<typeof testApp>[0] = {}) {
+  const t = await testApp({ bgDelayMs, ...opts });
   expect((await t.request('POST', '/x/workspaces', { slug: 'dev', name: 'Dev', instanceId: 'fake' })).status).toBe(201);
   const s = (await t.request('POST', '/x/workspaces/dev/sessions')).json.session;
   return { t, s, base: `/x/sessions/fake/${s.id}` };
@@ -391,3 +391,65 @@ describe('reserved starts', () => {
     }
   });
 });
+
+describe('wake keys (Idempotency-Key)', () => {
+  const deliveryKey = async (t: T, base: string) => {
+    const msgs = (await delivered(t, base)).messages as { id: number; role: string }[];
+    return `m:${msgs.filter((m) => m.role === 'delegation').at(-1)!.id}`;
+  };
+  const posted = async (t: T) => ((await (await t.fake.api.request('/_fake/runs/last')).json()) as { postedKeys: string[] }).postedKeys;
+
+  it('the wake sends wake-<hash of the delivery>, the same for the same delivery', async () => {
+    const { t, s, base } = await setup();
+    const suffixes: string[] = [];
+    const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, {
+      log: () => {}, start: async (_d, _ctx, _input, keySuffix) => { suffixes.push(keySuffix); throw new RunBusyError(); },
+    });
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
+    const dk = await deliveryKey(t, base);
+    await watcher.pass(Date.now() + 20_000);
+    await watcher.pass(Date.now() + 40_000);
+    expect(suffixes).toEqual([`wake-${hashKey(['fake', s.id, dk])}`, `wake-${hashKey(['fake', s.id, dk])}`]);
+    // the real start sends it to Hermes after the session id
+    await new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: () => {} }).pass(Date.now() + 60_000);
+    expect((await posted(t)).at(-1)).toBe(`${s.id}:wake-${hashKey(['fake', s.id, dk])}`);
+  });
+
+  it('a start cut by a restart: retried with the same key on a durable instance, abandoned otherwise', async () => {
+    for (const durable of [true, false]) {
+      const { t, s, base } = await setup(300, { features: { runs_idempotency: { supported: true, durable } } });
+      expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
+      const dk = await deliveryKey(t, base);
+      t.services.wakes.reserve('fake', s.id, dk, 1, Date.now());
+      const before = t.fake.sim.runsPosted;
+      const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: () => {} });
+      watcher.start();
+      watcher.stop();
+      if (durable) {
+        expect(t.services.wakes.get('fake', s.id, dk)).toBeNull();
+        expect((await watcher.pass(Date.now() + 20_000)).get(`fake/${s.id}`)).toBe('wake');
+        expect(t.fake.sim.runsPosted).toBe(before + 1);
+        expect((await posted(t)).at(-1)).toBe(`${s.id}:wake-${hashKey(['fake', s.id, dk])}`);
+      } else {
+        expect(t.services.wakes.get('fake', s.id, dk)?.state).toBe('abandoned');
+        await watcher.pass(Date.now() + 20_000);
+        expect(t.fake.sim.runsPosted).toBe(before);
+      }
+    }
+  });
+
+  it('a key Hermes already took: abandoned at once, never retried', async () => {
+    const { t, s, base } = await setup();
+    let calls = 0;
+    const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, {
+      log: () => {}, start: async () => { calls += 1; throw new AlreadySentError(); },
+    });
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond' })).json.runId)).toBe('completed');
+    const dk = await deliveryKey(t, base);
+    expect((await watcher.pass(Date.now() + 20_000)).get(`fake/${s.id}`)).toBe('quiet');
+    expect(t.services.wakes.get('fake', s.id, dk)?.state).toBe('abandoned');
+    await watcher.pass(Date.now() + 40_000);
+    expect(calls).toBe(1);
+  });
+});
+
