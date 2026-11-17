@@ -28,6 +28,7 @@ import { writtenPaths } from '../chat/written';
 import { Todos } from '../chat/Todos';
 import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
 import { outline } from '../chat/turns';
+import { confirmClose } from '../components/dirty';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useColumn, useOpenSession } from '../chat/column-context';
@@ -869,7 +870,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const found = new Map<string, string>();
     for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
     return {
-      found, open: (path) => { setPreviewPath(path); setPanel(true); }, slug,
+      found, open: (path) => void confirmClose(() => { setPreviewPath(path); setPanel(true); }), slug,
       pending: exists.isFetching && !exists.data,
       mounts: mounts ? { root: mounts.files?.workspaceRoot ?? null } : null,
     };
@@ -894,7 +895,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const side = previewPath ? (
     <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} onInsert={insert} />
   ) : (
-    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={setPreviewPath} onClose={() => setPanel(false)}
+    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={(p) => void confirmClose(() => setPreviewPath(p))} onClose={() => setPanel(false)}
       agentRoot={agentRoot} onInsert={insert} modified={modified} />
   );
 
@@ -925,7 +926,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
             <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
-              aria-expanded={panel} onClick={() => { setPanel(!panel); setPreviewPath(null); }}>
+              aria-expanded={panel} onClick={() => void confirmClose(() => { setPanel(!panel); setPreviewPath(null); })}>
               <PanelRight className="size-4" strokeWidth={1.5} />
             </button>
             {items.length >= OUTLINE_MIN && <TurnPlan items={items} onJump={jumpTo} triggerClass={ICON_BTN} />}

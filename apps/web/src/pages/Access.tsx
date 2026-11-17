@@ -84,9 +84,8 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
     >
       {available === true && q.isPending && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Chargement…')}</p>}
       {q.error && (
-        <div className="mx-1 mt-3 flex flex-col items-start gap-2 rounded-[10px] bg-bad-soft px-3.5 py-3 text-[13px] text-bad" data-list-error>
-          <ErrorText error={q.error} />
-          <Button variant="secondary" onClick={() => void q.refetch()}>{t('Réessayer')}</Button>
+        <div className="mx-1 mt-3" data-list-error>
+          <ErrorText error={q.error} onRetry={() => void q.refetch()} />
         </div>
       )}
       {q.data && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun accès enregistré pour ce profil.')}</p>}

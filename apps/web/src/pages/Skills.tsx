@@ -285,7 +285,7 @@ function Toolsets({ inst, profile, onClose }: { inst: string; profile: string; o
               </li>
             ))}
           </ul>
-        ) : q.error ? <ErrorText error={q.error} /> : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
+        ) : q.error ? <ErrorText error={q.error} onRetry={() => void q.refetch()} /> : <p className="text-sm text-ink-faint">{t('Chargement…')}</p>}
       </DetailBody>
     </section>
   );
@@ -444,7 +444,8 @@ function SkillsView({ inst, profile, picked }: { inst: string; profile: string; 
     >
       {tab === 'installed' ? (
         <>
-          <div className="empty:hidden"><ErrorText error={update.error ?? skills.error} /></div>
+          <div className="empty:hidden"><ErrorText error={skills.error} onRetry={() => void skills.refetch()} /></div>
+          <div className="empty:hidden"><ErrorText error={update.error} /></div>
           {skills.isPending && a.available && <p className={note}>{t('Chargement…')}</p>}
           {skills.isSuccess && all.length === 0 && <p className={note}>{t('Aucun skill pour cet agent')}</p>}
           {skills.isSuccess && all.length > 0 && count === 0 && <p className={note}>{t('Aucun skill ne correspond au filtre')}</p>}

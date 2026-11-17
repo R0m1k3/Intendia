@@ -243,4 +243,7 @@ export default {
   'Intendia a rencontré une erreur': 'Intendia ran into an error',
   'Recharger la page': 'Reload the page',
   'Aller aux sessions': 'Go to sessions',
+  'Abandonner les modifications ?': 'Discard your changes?',
+  'Ce que vous avez saisi sera perdu.': 'What you typed will be lost.',
+  'Abandonner': 'Discard',
 } satisfies Record<string, string>;
