@@ -70,6 +70,18 @@ the exact secrets of the instances, 300 characters at most); never 401 (in the w
 `Retry-After` (Hermes' or 5 s), `hermes_error` 502, `hermes_schema` 502. A `HermesError` written by a service keeps its
 own message with that code and status.
 
+Instances (`src/instances/store.ts`, `InstanceStore`, decrypted once and cached until the next write; declared ones,
+`INTENDIA_INSTANCES`, answer 409 `declarative` to every write). `POST /x/instances` adds one (409 `instance_exists` when
+the id is taken, 422 when the API server is unreachable or refuses the key; a refused dashboard token is saved and
+shown). `PATCH /x/instances/:id` edits one (Settings › Instances › Edit) through `mergeInstance`: absent or empty =
+unchanged, `null` removes `dashboard` (and its token) or `dashboardLink`, `profileKeys` merged by name (`null`
+removes); a new origin of `api` (or `dashboard`) requires `apiKey` (or `dashboardToken`, 400 `secret_required`) and
+drops the `profileKeys` not sent again: a saved secret never goes to a new host. Name only: saved without a check.
+Otherwise the merged settings are checked (422 only when `api`, `apiKey` or `profileKeys` change, so a dashboard token
+can be fixed while the API is down), saved, then checked by `compat.check` (started after the save); the MCP token is
+never touched, and a new `api` gets the share_file entry when it is `missing`. `POST /x/instances/:id/test` checks the
+merged settings without saving (the browser never has the secrets).
+
 ## Workspaces, sessions and runs
 
 - A workspace (`workspaces` table) = a folder `<root>/<slug>/` kept by the Hermes of its instance, served by one Hermes
@@ -356,7 +368,7 @@ keeps the goal itself (`session_goals`, `apps/server/src/chat/goal.ts`, routes `
   rotation, `settings` key `mcp_synced:<instance>`), `manual`, `other_url`, `plugin`, `missing`, `unknown`. Managed
   entry → only `PUT /api/env`; otherwise `ConfigService.replaceMcp` (remove + add in one write, file put back by
   `putRaw` when Hermes refuses the add). Connect and rotate queued per instance; Hermes' test runs after, outside the
-  queue. `POST /x/instances` connects a `missing` entry without test. URL: `INTENDIA_MCP_URL` or
+  queue. `POST /x/instances` (and a `PATCH` that changes `api`) connects a `missing` entry without test. URL: `INTENDIA_MCP_URL` or
   `http://intendia:<INTENDIA_MCP_PORT>`.
 - `src/services.ts` builds `FileRoots`, `WorkspaceService`, `LinkService` and `FileService` once; the web app and the
   MCP app share them.
@@ -575,7 +587,7 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   others: `profileKeys[name]`). Creation sends `name`, `description`, `clone_from` (+ `clone_all` only with it),
   `no_skills`, `soul`, `provider` + `model` (both or none); never `clone_channels` (two agents would fight over one
   bot), `mcp_servers`, `hub_skills`, `keep_skills`. A refused model comes back as `modelError`, the agent stays. The
-  page then tells where the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `POST /x/instances` for a `db`
+  page then tells where the new key goes (`INTENDIA_INSTANCES` for an `env` instance, `PATCH /x/instances/:id` for a `db`
   one). Renaming is not offered (`PATCH /api/profiles/{name}` renames).
 - SOUL.md is shown capped at 64 KiB and masked with `Masker.text`. It is edited as that masked text: `setSoul` reads
   the current text again and puts the placeholders back with `Masker.restoreText` (400 `secret_placeholder` /
