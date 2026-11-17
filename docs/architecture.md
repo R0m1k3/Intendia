@@ -668,3 +668,27 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
    (`compat.test.ts`, schemas in `crons-frame.test.ts`) run on every `fixtures/hermes-*`; the behaviour tests
    and the fake's CLI replay `REFERENCE_FIXTURES` (`apps/fake-hermes/src/index.ts`), a recording made on a used
    instance. CI recordings come from an empty container: move the reference only to a recording with data.
+
+## Tests
+
+Three levels:
+
+- **Unit** (`pnpm -r test`, vitest): server logic against `apps/fake-hermes` in process, web by pure functions.
+- **End-to-end** (`apps/e2e`, Playwright Test): five walks (chat, crons, files, kanban, dialogs) in a real browser
+  against a bench started by `globalSetup` (`bench.ts`: fake-hermes and the repo build on their own ports,
+  `ports.ts`, data in a temporary folder, one sign-in saved as `storageState`). Run `pnpm build && pnpm e2e`; on a
+  machine without `playwright install`, point `E2E_CHROMIUM` at a Chromium. `apps/e2e` has no `test` script, so
+  `pnpm -r test` skips it. CI: job `e2e`, traces in the `e2e-traces` artifact on failure.
+- **Smoke checks** (`.github/scripts/smoke-checks.sh`): one script against a running Intendia (setup, compat,
+  workspace written by the dashboard, reads of every module, a paused cron created and deleted). CI runs it against
+  fake-hermes with the Docker image (job `docker`, `install-smoke.sh`) and against the official Hermes image with
+  the repo build (job `real-hermes`, `start-hermes.sh` + `real-hermes-smoke.sh`): a gap between the fake and Hermes
+  shows as one job red and the other green.
+
+Hermes version: `real-hermes` uses the image `v<newest fixtures/hermes-*>` and checks that exact version, so a new
+Hermes release never turns an unrelated PR red. The weekly `hermes-compat.yml` runs `latest`: `probe record
+--strict` (a module not `full` with the current code), `probe diff` against the newest fixtures and the smoke
+checks. `probe diff` only calls a removal (route, endpoint, feature, response field down to depth 2), a changed
+status or a changed field type a change (exit 4); additions and module states are notes (exit 0); `null` and
+empty arrays tell nothing about a type. A change or a failed smoke opens the issue "Hermes <version>: API changes
+detected"; a clean run comments on and closes the open ones. Then record the new version as in "When Hermes changes".
