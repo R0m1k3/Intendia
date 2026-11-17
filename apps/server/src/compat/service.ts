@@ -64,6 +64,8 @@ export function uncheckedOps(report: CompatReport): string[] {
     const ops = report.modules.find((m) => m.id === mod.id)?.ops ?? {};
     for (const name of Object.keys(mod.ops)) if (!(name in ops)) out.push(`${mod.id}.${name}`);
   }
+  // saved before Intendia 0.1.5: the idempotency of runs was not read
+  if (report.runs === undefined) out.push('chat.runsIdempotency');
   return out;
 }
 
