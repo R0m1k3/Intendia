@@ -41,7 +41,8 @@ const CLOSED = 2;
  * terminal event of the stream, or the status read by `GET …/runs/:runId`, or `run_unknown`).
  *
  * Live: through the Intendia SSE proxy. EventSource reconnects by itself after a network cut (state CONNECTING) and
- * sends Last-Event-ID, so Hermes only replays what was missed. Closed for good (CLOSED: a non-SSE answer, as a 502 of
+ * sends Last-Event-ID, so Hermes only replays what was missed; meanwhile the link reads `offline` (no status read),
+ * and `live` again once the stream opens. Closed for good (CLOSED: a non-SSE answer, as a 502 of
  * a proxy or a 401) or told `intendia.error` by the server, the stream is lost: the run is followed by its status
  * from then on, and a new stream resumes after the last event seen (`?lastSeq=`), at the first status read when the
  * lost stream had brought events, else STREAM_RETRY_MS later. After `run_gone` (Hermes swept the run's events: more
@@ -166,9 +167,20 @@ export function followRun(o: {
       emit();
       if (isTerminal(current.status)) end();
     };
-    // CONNECTING: the EventSource reconnects by itself; CLOSED: it gave up (an answer that is not SSE)
+    // CONNECTING: the EventSource reconnects by itself, the page says Intendia does not answer until it opens again;
+    // CLOSED: it gave up (an answer that is not SSE)
     source.onerror = () => {
-      if (es === source && source.readyState === CLOSED) lose(false);
+      if (es !== source) return;
+      if (source.readyState === CLOSED) { lose(false); return; }
+      if (link.mode === 'live') {
+        link = { mode: 'polling', cause: 'offline' };
+        emit();
+      }
+    };
+    source.onopen = () => {
+      if (es !== source || link.mode === 'live') return;
+      link = { mode: 'live' };
+      emit();
     };
   };
 

@@ -8,6 +8,7 @@ class FakeSource {
   static all: FakeSource[] = [];
   onmessage: ((m: { data: string; lastEventId: string }) => void) | null = null;
   onerror: (() => void) | null = null;
+  onopen: (() => void) | null = null;
   readyState = 1;
   closed = false;
   constructor(public url: string) { FakeSource.all.push(this); }
@@ -15,6 +16,8 @@ class FakeSource {
   send(ev: object, id = '') { this.onmessage?.({ data: JSON.stringify(ev), lastEventId: id }); }
   /** the browser's error event, in the given state (0 CONNECTING, 2 CLOSED) */
   fail(state: 0 | 2) { this.readyState = state; this.onerror?.(); }
+  /** the native reconnection succeeded */
+  open() { this.readyState = 1; this.onopen?.(); }
 }
 
 const RUNNING: RunStatus = { status: 'running', createdAt: 1, output: null, error: null };
@@ -80,12 +83,18 @@ describe('followRun', () => {
     expect(h.states.every(([, l]) => l.mode === 'live')).toBe(true);
   });
 
-  it('an error while CONNECTING: nothing (the EventSource reconnects by itself)', () => {
+  it('an error while CONNECTING: offline shown, no status read nor new stream, live again once it reopens', () => {
     const h = harness({ places: 1 });
-    FakeSource.all[0]!.fail(0);
-    expect(h.link()).toEqual({ mode: 'live' });
+    const src = FakeSource.all[0]!;
+    src.fail(0);
+    expect(h.link()).toEqual(polling('offline'));
+    src.fail(0);
+    expect(h.states.filter(([, l]) => l.mode === 'polling')).toHaveLength(1);
     expect(h.timers).toHaveLength(0);
     expect(FakeSource.all).toHaveLength(1);
+    expect(h.free()).toBe(0);
+    src.open();
+    expect(h.link()).toEqual({ mode: 'live' });
   });
 
   it('CLOSED after events: polling/lost, then live again at the first good read, after the last seq, state kept', async () => {
