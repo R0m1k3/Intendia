@@ -155,7 +155,8 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
   /**
    * Live changes of a board: one dashboard WebSocket per open stream, relayed as SSE `change {taskIds}`.
    * When the WebSocket fails or closes, the stream is closed (the browser falls back to polling). Every RELAY_MAX_MS the
-   * relay is renewed: `closed` with `code: "recycle"`, the browser reopens at once and rereads the board.
+   * relay is renewed: `closed` with `code: "recycle"`, the browser reopens at once and rereads the board after `ready`
+   * (sent once the WebSocket to Hermes is open).
    */
   r.get(`${P}/events`, (c) => {
     const id = inst(c);
@@ -183,7 +184,8 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
           finish();
         }, deps.kanbanRelayMaxMs ?? RELAY_MAX_MS);
         const conn = openKanbanEvents(instance, board, {
-          onOpen: () => send(': open\n\n'),
+          // the WebSocket to Hermes is open, hence subscribed to the board: the browser rereads the board only now
+          onOpen: () => send('event: ready\ndata: {}\n\n'),
           onEvents: (events) => {
             const taskIds = [...new Set(events.map((e) => e.task_id).filter((t): t is string => typeof t === 'string'))];
             send(`event: change\ndata: ${JSON.stringify({ taskIds })}\n\n`);

@@ -7,15 +7,16 @@ const K = '/x/i/fake/kanban';
 const listeners = (t: T) => (t.fake.kanban as unknown as { listeners: Set<unknown> }).listeners.size;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Reads an SSE response until `until(text)` is true, the stream ends, or `ms` pass. */
+/** Reads an SSE response until `until(text)` is true, the stream ends, or `ms` pass; `act` runs once `ready` is read. */
 async function read(res: Response, until: (text: string) => boolean, ms = 2000, act?: () => Promise<unknown>) {
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
   let text = '';
   let ended = false;
   const deadline = Date.now() + ms;
-  const acting = act ? sleep(30).then(act) : null;
+  let acting: Promise<unknown> | null = null;
   while (Date.now() < deadline && !until(text)) {
+    if (act && !acting && text.includes('event: ready')) acting = act();
     const chunk = await Promise.race([
       reader.read(),
       sleep(Math.max(1, deadline - Date.now())).then(() => ({ done: false, value: undefined, timeout: true })),
@@ -45,6 +46,27 @@ describe('kanban live events', () => {
     await reader.cancel();
     await sleep(20);
     expect(listeners(t)).toBe(0);
+  });
+
+  it('sends ready once the WebSocket to Hermes is subscribed, and again after a renewal', async () => {
+    const t = await testApp({ kanbanRelayMaxMs: 300 });
+    const res = await t.raw('GET', `${K}/events?board=default`);
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    let text = '';
+    while (!text.includes('event: ready')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      text += dec.decode(chunk.value, { stream: true });
+    }
+    expect(text).toContain('event: ready');
+    // subscribed when ready arrives: a change written right after is relayed
+    expect(listeners(t)).toBe(1);
+    await reader.cancel();
+    const again = await t.raw('GET', `${K}/events?board=default`);
+    const { text: text2 } = await read(again, (s) => s.includes('event: closed'), 2000);
+    expect(text2.indexOf('event: ready')).toBeGreaterThanOrEqual(0);
+    expect(text2.indexOf('event: ready')).toBeLessThan(text2.indexOf('event: closed'));
   });
 
   it('renews the relay after kanbanRelayMaxMs: closed with code recycle, the WebSocket to Hermes closed', async () => {
