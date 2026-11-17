@@ -12,6 +12,11 @@ of the diff are empty lists (no session, no cron in that container).
 
 ## API server (8642)
 
+- `GET /health` is public (`{"status":"ok","platform":"hermes-agent","version"}`); `/health/detailed` and
+  `/v1/capabilities` need the key (401 without it, checked on 0.23.0, 2026-11-17). An unknown route answers aiohttp's
+  `404: Not Found`. Past `gateway.api_server.max_concurrent_runs`, `POST /v1/runs` answers 429 `rate_limit_exceeded`
+  with `Retry-After: 1`; a draining gateway 503 `gateway_draining` with `Retry-After: 1`.
+
 - `GET /v1/capabilities` returns `features` (flags) and `endpoints` (name → method + path) for runs, sessions,
   skills, toolsets, model options and health. Intendia resolves API server routes from this map.
 - Auth: `Authorization: Bearer $API_SERVER_KEY`. With multi-profile routing, `/p/<profile>/...` uses that profile's key.
@@ -120,6 +125,19 @@ of the diff are empty lists (no session, no cron in that container).
   `hermes mcp add <name> --url <http-url>`.
 - Kanban: `/api/plugins/kanban/*` (board, boards, tasks, links, dispatch, orchestration, profiles...).
 - Files: `/api/files` (list, read, download, upload, mkdir, delete) — a possible path for instances on another host.
+- Token (read in the 0.23.0 source, checked on 0.23.0, 2026-11-17): without `HERMES_DASHBOARD_SESSION_TOKEN` a new
+  token is drawn at every start (`web_server_session_token.py`); the Webapp mode (`hermes webapp`) replaces it with the
+  token kept in its home (`gateway/run_api.py`) even when the variable is set, and `hermes webapp --sign-out` rotates it
+  and closes the sockets. A wrong token gets 401 `{"detail":"Unauthorized"}` (403 answers are about the request: path
+  outside the files root, `profile_mismatch`...).
+- Public paths (no token, `dashboard_auth/public_paths.py`): `/api/health`, `/api/status`, `/api/config/defaults`,
+  `/api/config/schema`, `/api/model/info`, `/api/dashboard/themes`, `/api/dashboard/plugins`,
+  `/api/mcp/oauth/callback/*`, `/api/cron/fire`. `GET /api/health` = light process liveness
+  (`{ok, version, displayVersion, commit, auth_required}`, `web_routers/status.py`); `/api/status` reads the gateway,
+  the profiles, the active sessions and the state database: too heavy for a probe every 30 s. Checking the token takes
+  an authenticated read (Intendia: `GET /api/profiles`).
+- Missing route: an unknown `GET /api/*` answers 404 `{"detail":"No such API endpoint: /api/…"}`
+  (`web_server_dashboard.py`), other methods FastAPI's `{"detail":"Not Found"}`.
 
 ## Crons (checked on 0.23.0, phase 4, 2026-11-09)
 
