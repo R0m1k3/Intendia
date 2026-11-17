@@ -495,8 +495,24 @@ describe('idempotent run creation', () => {
     expect(res.status).toBe(200);
     expect(count(t)).toBe(1);
     expect(rows(t, s.id).map((r) => r.runId)).toEqual([res.json.runId]);
+    // the replay answers the in-call retry: the run of the first attempt, its baseline read just before (known)
+    expect(rows(t, s.id)[0]!.costBeforeUsd).not.toBeNull();
     expect((await t.request('GET', base)).json.session.lastRunId).toBe(res.json.runId);
     expect((await last(t)).postedKeys).toEqual([`${s.id}:u-${KEY}`, `${s.id}:u-${KEY}`]);
+  });
+
+  it('run_busy says whose it is: the first call of this key still waiting, or another intent', async () => {
+    resetSentBodies();
+    const { t, base } = await session();
+    const first = t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY });
+    await until(() => t.fake.sim.runsPosted === 1);
+    const same = await t.request('POST', `${base}/runs`, { input: 'admission-lente', clientKey: KEY });
+    expect(same.status).toBe(409);
+    expect(same.json).toMatchObject({ code: 'run_busy', mine: { runId: null, lastRunId: null } });
+    const other = await t.request('POST', `${base}/runs`, { input: 'Bonjour', clientKey: 'clientkey-0002' });
+    expect(other.json.code).toBe('run_busy');
+    expect(other.json.mine).toBeUndefined();
+    expect((await first).status).toBe(200);
   });
 
   it('no retry without durable idempotency announced: one POST, 504', async () => {
@@ -516,12 +532,14 @@ describe('idempotent run creation', () => {
     const busy = await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY });
     expect(busy.status).toBe(409);
     expect(busy.json.code).toBe('run_busy');
+    expect(busy.json.mine).toEqual({ runId: first.json.runId, lastRunId: null });
     await until(() => t.fake.sim.runs.get(first.json.runId)!.status === 'waiting_for_approval');
     await t.request('POST', `${base}/runs/${first.json.runId}/approval`, { choice: 'once' });
     await waitRun(t, base, first.json.runId);
     const again = await t.request('POST', `${base}/runs`, { input: 'approval', clientKey: KEY });
     expect(again.status).toBe(200);
     expect(again.json.runId).toBe(first.json.runId);
+    expect((await t.request('GET', base)).json.session.lastRunId).toBe(first.json.runId);
     expect(count(t)).toBe(1);
     expect(rows(t, s.id)).toHaveLength(1);
     expect((await t.request('POST', `${base}/runs`, { input: 'autre texte', clientKey: KEY })).json.code).toBe('idempotency_conflict');

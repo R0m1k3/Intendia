@@ -281,15 +281,18 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   /** Largest message id known (null while the history is not loaded: never 0, an unloaded history is not empty). */
   const knownId = (): number | null => (history.isSuccess ? allMessages.reduce((m, x) => Math.max(m, x.id), 0) : null);
   /**
-   * A send refused with `run_busy` (the first send of this message may still wait for Hermes behind a proxy that
-   * answered 502): the session is re-read until its last run changes, then that run is followed.
+   * A send refused with `run_busy` on its own key (`mine` from the server: the first send of this message still
+   * waits for Hermes behind a proxy that answered 502, or its run already started): the session is re-read until its
+   * last run changes from the one before that first send (no other run can start meanwhile: the server holds the
+   * session), then that run is followed. Busy on another intent (no `mine`): an error, the message was not sent.
    */
-  const awaitNewRun = async (previous: string | null): Promise<boolean> => {
+  const awaitOwnRun = async (mine: { runId: string | null; lastRunId: string | null }): Promise<boolean> => {
     for (let i = 0; i < BUSY_READS; i++) {
-      await new Promise((r) => setTimeout(r, BUSY_EVERY_MS));
+      if (mine.runId === null || i > 0) await new Promise((r) => setTimeout(r, BUSY_EVERY_MS));
       const s = await api.session(inst!, sessionId).catch(() => null);
-      if (s && s.session.lastRunId !== previous) {
+      if (s && (mine.runId !== null || s.session.lastRunId !== mine.lastRunId)) {
         qc.setQueryData(['session', inst, sessionId], s);
+        void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
         return true;
       }
     }
@@ -308,7 +311,6 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const kept = loadPendingKey(inst, sessionId);
     const clientKey = key ?? (kept && kept.text === text ? kept.key : newSendKey());
     savePendingKey(inst, sessionId, { text, key: clientKey });
-    const previous = sess.data?.session.lastRunId ?? null;
     try {
       const afterId = knownId();
       const res = await api.send(inst, sessionId, text, skills, clientKey);
@@ -329,10 +331,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
         void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
       }
-      if (code === 'run_busy') {
+      const mine = code === 'run_busy' ? (err as ApiError).data as { mine?: { runId: string | null; lastRunId: string | null } } | null : null;
+      if (mine?.mine) {
         setSending(false);
-        // the run of this very send may be on its way: follow it as soon as the session names it
-        if (await awaitNewRun(previous)) {
+        // the run of this very send is on its way or started: follow it as soon as the session names it
+        if (await awaitOwnRun(mine.mine)) {
           clearPendingKey(inst, sessionId);
           return null;
         }
@@ -767,10 +770,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // persistent goal (option 7): relaunched by the server; the bar above the composer, the dialog of /goal
   const goalQ = useGoal(inst, sessionId);
   const [goalDialog, setGoalDialog] = useState<{ editing: boolean; initial: Partial<GoalSettings> } | null>(null);
-  // key of the goal's creation: drawn when its dialog opens, kept until the creation succeeded (a resend after an
-  // error never starts a second first turn)
-  const goalClientKey = useRef<string | null>(null);
-  useEffect(() => { if (goalDialog && !goalDialog.editing) goalClientKey.current ??= newSendKey(); }, [goalDialog]);
+  // key of the goal's creation, kept with its text until the creation succeeded (same rule as a message's key: a
+  // resend of the same goal after an error never starts a second first turn, another goal gets a new key)
+  const goalClientKey = useRef<{ text: string; key: string } | null>(null);
   const saveGoal = async (g: GoalSettings) => {
     if (!inst) return;
     if (goalDialog?.editing) await api.editGoal(inst, sessionId, g);
@@ -778,7 +780,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       const afterId = knownId();
       let res: Awaited<ReturnType<typeof api.createGoal>>;
       try {
-        res = await api.createGoal(inst, sessionId, g, goalClientKey.current ?? undefined);
+        if (goalClientKey.current?.text !== g.text) goalClientKey.current = { text: g.text, key: newSendKey() };
+        res = await api.createGoal(inst, sessionId, g, goalClientKey.current.key);
       } catch (err) {
         const code = codeOf(err);
         if (code === 'idempotency_conflict' || code === 'already_sent') goalClientKey.current = null;

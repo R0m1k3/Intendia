@@ -76,7 +76,11 @@ export class AlreadySentError extends Error {
  * Bodies sent per key, so a new send of the same key has the same fingerprint at Hermes (which hashes the whole
  * body: instructions included, and they may have changed meanwhile). In memory: lost on restart.
  */
-const sentBodies = new Map<string, { body: Record<string, unknown>; input: string; skills: string; at: number }>();
+/** The key of each start in progress, by session lock (a busy resend of that key is told it is its own). */
+const startingKeys = new Map<string, string>();
+
+/** Kept bodies by key; `runId` once Hermes admitted the run of this key (a resend busy on it is told so). */
+const sentBodies = new Map<string, { body: Record<string, unknown>; input: string; skills: string; at: number; runId?: string }>();
 
 function keepBody(key: string, entry: { body: Record<string, unknown>; input: string; skills: string }) {
   const now = Date.now();
@@ -88,14 +92,22 @@ function keepBody(key: string, entry: { body: Record<string, unknown>; input: st
 
 /** Tests only: forgets the kept bodies (a restart of Intendia). */
 export function resetSentBodies(): void {
+  startingKeys.clear();
   sentBodies.clear();
 }
 
 export const RUN_BUSY = msg('Un run est déjà en cours dans cette session');
 
+/**
+ * What a busy send knows of its own key: the run Hermes admitted for it (`runId`), or its first call still waiting
+ * on Hermes (`runId: null`, `lastRunId` = the session's last run before it). Absent: another intent keeps the
+ * session busy.
+ */
+export type BusyMine = { runId: string | null; lastRunId: string | null };
+
 /** A run of the session goes on (or is being started): the send is refused (409). */
 export class RunBusyError extends Error {
-  constructor() {
+  constructor(readonly mine?: BusyMine) {
     super(RUN_BUSY);
     this.name = 'RunBusyError';
   }
@@ -229,8 +241,17 @@ export async function startRun(
   const { workspaces } = deps;
   const deadline = Date.now() + START_RUN_BUDGET_MS;
   const lock = runKey(ctx.instance.id, ctx.session.id);
-  if (startingRuns.has(lock)) throw new RunBusyError();
+  const key = idemKey(ctx.session.id, opts.keySuffix ?? randomUUID());
+  // a resend of this very intent (a 502 of the proxy while the first call still waits): say whose run it is
+  const mine = (inFlight: boolean): BusyMine | undefined => {
+    const kept = sentBodies.get(key);
+    if (!kept) return undefined;
+    if (kept.runId) return { runId: kept.runId, lastRunId: null };
+    return inFlight && startingKeys.get(lock) === key ? { runId: null, lastRunId: ctx.session.lastRunId } : undefined;
+  };
+  if (startingRuns.has(lock)) throw new RunBusyError(mine(true));
   startingRuns.add(lock);
+  startingKeys.set(lock, key);
   try {
     // re-read: the session may have changed meanwhile
     const fresh = workspaces.getSession(ctx.instance.id, ctx.session.id);
@@ -242,7 +263,7 @@ export async function startRun(
     if (lastRunId && !last && !workspaces.runStats(fresh.instance.id, fresh.session.id).some((r) => r.runId === lastRunId)) {
       last = await status(deps, fresh, lastRunId);
     }
-    if (last && last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) throw new RunBusyError();
+    if (last && last.status !== 'unknown' && !TERMINAL_STATUSES.includes(last.status)) throw new RunBusyError(mine(false));
     // paused or removed while the caller waited on Hermes: no relaunch
     if (opts.forGoal && deps.goals.get(fresh.instance.id, fresh.session.id)?.status !== 'active') throw new GoalInactiveError();
     const { model, modelProvider, effort } = fresh.session;
@@ -255,7 +276,6 @@ export async function startRun(
       await workspaces.instructionsFor(fresh), ...extra, ...(persona.block ? [persona.block] : []),
       ...(goal?.status === 'active' ? [goalBlock(goal.text)] : []),
     ].join('\n\n');
-    const key = idemKey(ctx.session.id, opts.keySuffix ?? randomUUID());
     const skillsKey = [...skills].sort().join('\n');
     const kept = sentBodies.get(key);
     if (kept && (kept.input !== input || kept.skills !== skillsKey)) throw new IdempotencyConflictError();
@@ -266,6 +286,9 @@ export async function startRun(
       ...(model ? { model, ...(modelProvider ? { provider: modelProvider } : {}) } : {}),
       ...(effort ? { model_options: { reasoning_effort: effort } } : {}),
     };
+    // first send of this intent in this process: a replay answering the in-call retry is the run of the first
+    // attempt, admitted after the cost reading above, so its baseline is known
+    const firstSend = !kept;
     keepBody(key, { body, input, skills: skillsKey });
 
     const configured = deps.createRunTimeoutMs ?? CREATE_RUN_TIMEOUT_MS;
@@ -276,6 +299,7 @@ export async function startRun(
     const conflict = (err: unknown) => err instanceof HermesError && err.kind === 'http' && err.detail.status === 409
       && Boolean(err.detail.body?.includes('idempotency_key_conflict'));
     let created: { run_id: string; replayed?: boolean };
+    let retried = false;
     try {
       try {
         created = await create(createTimeout(deadline, Date.now(), configured, false)!);
@@ -286,15 +310,18 @@ export async function startRun(
         if (timeoutMs === null) throw err;
         console.warn(`[intendia] createRun ${ctx.instance.id}/${ctx.session.id} : nouvel essai, même clé`);
         created = await create(timeoutMs);
+        retried = true;
       }
     } catch (err) {
       if (conflict(err)) throw new AlreadySentError();
       throw err;
     }
 
+    const keptNow = sentBodies.get(key);
+    if (keptNow) keptNow.runId = created.run_id;
     const notice = persona.notice ? { notice: persona.notice } : {};
     const row = { instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running', requestedModel: model, requestedEffort: effort };
-    if (created.replayed === true) {
+    if (created.replayed === true && !(retried && firstSend)) {
       // Hermes replayed a run of this key: never a second row, never lastRunId moved back
       if (workspaces.runStats(ctx.instance.id, ctx.session.id, { running: true }).some((r) => r.runId === created.run_id)) {
         return { runId: created.run_id, session: workspaces.getSession(ctx.instance.id, ctx.session.id).session, ...notice };
@@ -314,6 +341,7 @@ export async function startRun(
     return { runId: created.run_id, session, ...notice };
   } finally {
     startingRuns.delete(lock);
+    startingKeys.delete(lock);
   }
 }
 

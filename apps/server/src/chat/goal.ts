@@ -38,8 +38,9 @@ export interface Goal {
  * `Idempotency-Key` suffix of relaunch `n` after the decided run `lastRunId`: the same relaunch always gives the
  * same key (retry, restart, a second process), so Hermes starts it once.
  */
-export const goalKeySuffix = (g: Pick<Goal, 'instanceId' | 'sessionId' | 'keyAttempt'>, lastRunId: string, n: number) =>
-  'goal-' + hashKey([g.instanceId, g.sessionId, lastRunId, String(n), String(g.keyAttempt)]);
+export const goalKeySuffix = (g: Pick<Goal, 'instanceId' | 'sessionId' | 'keyAttempt' | 'maxRelaunches' | 'text'>, lastRunId: string, n: number) =>
+  // the relaunch body carries maxRelaunches (input) and the goal text (instructions): an edit is another intent
+  'goal-' + hashKey([g.instanceId, g.sessionId, lastRunId, String(n), String(g.keyAttempt), String(g.maxRelaunches), g.text]);
 
 export interface GoalSpent {
   /** sum of the known costs of the session's runs since `costSince` */

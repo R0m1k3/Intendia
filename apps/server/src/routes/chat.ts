@@ -212,7 +212,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     try {
       return c.json(await startRun(runDeps, ctx, input, { skills, ...(clientKey ? { keySuffix: 'u-' + clientKey } : {}) }));
     } catch (err) {
-      if (err instanceof RunBusyError) return c.json({ error: err.message, code: 'run_busy' }, 409);
+      if (err instanceof RunBusyError) return c.json({ error: err.message, code: 'run_busy', ...(err.mine ? { mine: err.mine } : {}) }, 409);
       if (err instanceof IdempotencyConflictError) return c.json({ error: err.message, code: 'idempotency_conflict' }, 409);
       if (err instanceof AlreadySentError) return c.json({ error: err.message, code: 'already_sent' }, 409);
       if (err instanceof RunExtrasError) return c.json({ error: err.message, code: err.code }, err.status);
