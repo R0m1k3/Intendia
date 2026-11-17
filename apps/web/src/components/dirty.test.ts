@@ -26,6 +26,8 @@ function mount(dirty: boolean) {
   return { ref, render, unmount: () => act(() => root.unmount()) };
 }
 
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
 beforeEach(() => { _resetDirty(); ask.mockReset(); });
 afterEach(() => _resetDirty());
 
@@ -39,16 +41,34 @@ describe('dirty guard', () => {
     m.unmount();
   });
 
-  it('asks when a screen is modified; Discard clears the registry and closes', async () => {
+  it('asks when a screen is modified; Discard closes it and leaves nothing guarded', async () => {
     const m = mount(true);
     expect(isDirty()).toBe(true);
     ask.mockResolvedValueOnce(true);
-    const close = vi.fn();
+    const close = vi.fn(() => m.unmount());
     expect(await confirmClose(close)).toBe(true);
     expect(ask).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
     expect(isDirty()).toBe(false);
-    m.unmount();
+    await tick();
+    expect(isDirty()).toBe(false);
+  });
+
+  it('closing one modified screen keeps the other one guarded', async () => {
+    const preview = mount(true);
+    const prompts = mount(true);
+    ask.mockResolvedValueOnce(true);
+    expect(await confirmClose(() => prompts.unmount())).toBe(true);
+    expect(isDirty()).toBe(false); // a close that navigates is not asked twice
+    await tick();
+    expect(isDirty()).toBe(true);
+    ask.mockResolvedValueOnce(false);
+    const close = vi.fn();
+    expect(await confirmClose(close)).toBe(false);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(close).not.toHaveBeenCalled();
+    preview.unmount();
+    expect(isDirty()).toBe(false);
   });
 
   it('Cancel keeps the screen open and still guarded', async () => {
