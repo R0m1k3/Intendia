@@ -91,6 +91,8 @@ export interface Break {
 
 export interface FakeOptions {
   fixturesDir: string;
+  /** Installation managed by a package manager: see ConfigStore.managed (FAKE_MANAGED). */
+  managed?: 'off' | 'flag' | 'silent';
   /** "fond" scenarios: delay (ms) between the end of the run and the delivery of the sub-agents (6000; "fond-suivi" 40000). */
   bgDelayMs?: number;
   bgSuiviMs?: number;
@@ -793,6 +795,14 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
     // tests: the credential vault of a profile, secrets in clear (dashboard port, no token)
     if (via === 'dash' && method === 'GET' && path === '/_fake/vault') return c.json({ items: stores.vault.list(c.req.query('profile') ?? 'default') });
     if (via === 'dash' && method === 'DELETE' && path === '/_fake/vault') { stores.vault.clear(); return c.json({ ok: true }); }
+    // tests: a change of the config file made outside Intendia; the managed mode switched at run time
+    if (method === 'POST' && path === '/_fake/config/touch') return c.json({ n: config.touch() });
+    if (method === 'POST' && path === '/_fake/config/managed') {
+      const mode = (body as { mode?: unknown } | undefined)?.mode;
+      if (mode !== 'off' && mode !== 'flag' && mode !== 'silent') return c.json({ detail: 'mode: off | flag | silent' }, 400);
+      config.managed = mode;
+      return c.json({ ok: true, mode });
+    }
     if (method === 'GET' && path === '/_fake/git/calls') return c.json({ calls: stores.git.calls });
     if (method === 'GET' && path === '/_fake/monitor/calls') return c.json({ calls: stores.monitor.calls });
     // tests: the credential pool of a profile, keys in clear; POST seeds an env entry and an OAuth login
@@ -1169,6 +1179,8 @@ export function createFakeHermes(opts: FakeOptions) {
   if (opts.noModel) config.clearModel();
   const profiles = new ProfileStore(opts.fixturesDir, opts.configStepMs ?? opts.stepMs ?? 5);
   const kanban = new KanbanStore(opts.fixturesDir, opts.kanbanStepMs ?? opts.stepMs ?? 5, () => profiles.names(), files.root);
+  if (opts.managed) config.managed = opts.managed;
+  kanban.onOrchestration = (patch) => config.writeKanban(patch);
   const git = new GitStore(opts.git);
   const monitor = new MonitorStore(opts.monitor);
   // learned skills of the graph: the first four of the list (used) and every skill written by the agent

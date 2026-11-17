@@ -26,6 +26,8 @@ const fake = createFakeHermes({ fixturesDir, breaks: process.env.FAKE_BREAKS ? J
   // FAKE_SESSION_STATS=on: the dashboard runs inside the gateway, `session.stats` answers on /api/ws
   sessionStats: process.env.FAKE_SESSION_STATS === 'on',
   noModel: process.env.FAKE_NO_MODEL === 'on',
+  // FAKE_MANAGED=flag|silent: installation managed by a package manager (config writes ignored, flag announced or not)
+  managed: (['flag', 'silent'] as const).find((m) => m === process.env.FAKE_MANAGED) ?? 'off',
   // "fond" scenarios: delay before the delivery of background sub-agents
   ...(process.env.FAKE_BG_DELAY_MS ? { bgDelayMs: Number(process.env.FAKE_BG_DELAY_MS) } : {}),
   ...(process.env.FAKE_BG_SUIVI_MS ? { bgSuiviMs: Number(process.env.FAKE_BG_SUIVI_MS) } : {}),

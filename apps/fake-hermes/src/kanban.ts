@@ -48,6 +48,8 @@ export class KanbanStore {
   workers = new Map<number, Worker>();
   workflow: { columns: { key: string }[]; manual: Record<string, string[]> };
   orchestration: Record<string, unknown>;
+  /** Writes the knobs in the config file; false = the write was ignored (managed installation). */
+  onOrchestration?: (patch: Record<string, unknown>) => boolean;
   private taskSeq = 0;
   private runSeq = 0;
   private eventSeq = 0;
@@ -212,6 +214,10 @@ export class KanbanStore {
     if (method === 'GET' && p === '/workflow') return json(this.workflow);
     if (method === 'GET' && p === '/orchestration') return json(this.orchestration);
     if (method === 'PUT' && p === '/orchestration') {
+      const patch = Object.fromEntries(['orchestrator_profile', 'default_assignee', 'auto_decompose', 'auto_promote_children']
+        .filter((k) => b0[k] !== undefined && b0[k] !== null).map((k) => [k, b0[k]]));
+      // written in the config file like Hermes (save_config): ignored there, ignored here
+      if (this.onOrchestration && !this.onOrchestration(patch)) return json(this.orchestration);
       for (const k of ['orchestrator_profile', 'default_assignee', 'auto_decompose', 'auto_promote_children']) {
         if (b0[k] !== undefined && b0[k] !== null) this.orchestration[k] = b0[k];
       }

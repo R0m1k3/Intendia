@@ -102,6 +102,27 @@ export class ConfigStore {
   failRaw: number | null = null;
   /** Set by tests: PUT /api/config/raw answers this status without writing. */
   failPutRaw: number | null = null;
+  /** Set by tests: PUT /api/env answers 500 without writing. */
+  failPutEnv = false;
+  /**
+   * Installation managed by a package manager (Hermes `is_managed()`): `flag` = GET /api/shared-metrics/consent says
+   * `managed: true` and every config write answers ok without writing (Hermes `save_config`); `silent` = the same
+   * writes ignored, consent route in 404; `off` = normal. Can be switched at run time.
+   */
+  managed: 'off' | 'flag' | 'silent' = 'off';
+  /** Paths (`a.b`) fixed by an administrator: removed without error from every config write (`_strip_managed_keys_for_save`). */
+  pinned: string[] = [];
+  private touches = 0;
+  private rawReads = 0;
+  private rawHook: ((n: number) => void) | undefined;
+  /** Called on every GET /api/config/raw, `n` counted from 1 since the hook was set (tests of the reread before a write). */
+  get onRawRead(): ((n: number) => void) | undefined {
+    return this.rawHook;
+  }
+  set onRawRead(fn: ((n: number) => void) | undefined) {
+    this.rawHook = fn;
+    this.rawReads = 0;
+  }
   /** Name of the MCP server provided by a plugin (listed, refused by POST). */
   pluginMcpName = 'plugin-srv';
   /** Accounts and credential pool, per profile; an approved Nous login writes the main model, like Hermes. */
@@ -133,13 +154,53 @@ export class ConfigStore {
     this.raw = text;
   }
 
+  /** A change made outside Intendia (agent, CLI): `fn` gets the stored text and returns the new one. */
+  externalEdit(fn: (raw: string) => string): void {
+    this.raw = fn(this.raw);
+  }
+
+  /** POST /_fake/config/touch: a comment and a key `x_touch: <n>` added at the end of the file. */
+  touch(): number {
+    this.touches += 1;
+    const n = this.touches;
+    this.externalEdit((raw) => `${raw.replace(/\n*$/, '\n')}# touch ${n}\nx_touch: ${n}\n`);
+    return n;
+  }
+
+  /** Writes of the config file are ignored (managed installation). */
+  private ignored(): boolean {
+    return this.managed !== 'off';
+  }
+
+  /** Removes the pinned paths from a document about to be written. */
+  private strip(obj: Obj): Obj {
+    if (!this.pinned.length) return obj;
+    const out = structuredClone(obj);
+    for (const path of this.pinned) {
+      const keys = path.split('.');
+      let node: unknown = out;
+      for (const k of keys.slice(0, -1)) node = isObj(node) ? node[k] : undefined;
+      if (isObj(node)) delete node[keys[keys.length - 1]!];
+    }
+    return out;
+  }
+
+  /** Kanban orchestration knobs (`kanban.<key>` of the file, like Hermes); false when the write is ignored. */
+  writeKanban(patch: Obj): boolean {
+    if (this.ignored()) return false;
+    const file = this.file();
+    this.write({ ...file, kanban: { ...(isObj(file.kanban) ? file.kanban : {}), ...patch } });
+    return true;
+  }
+
   file(): Obj {
     const v = parseDocument(this.raw, PY).toJS() as unknown;
     return isObj(v) ? v : {};
   }
 
   private write(obj: Obj): void {
-    this.raw = stringify(obj, { version: '1.1' });
+    if (this.ignored()) return;
+    this.raw = stringify(this.strip(obj), { version: '1.1' });
   }
 
   private resolve(v: unknown): unknown {
@@ -241,7 +302,13 @@ export class ConfigStore {
       this.write(deepMerge(this.file(), b.config));
       return json({ ok: true });
     }
+    if (path === '/api/shared-metrics/consent' && method === 'GET') {
+      if (this.managed === 'silent') return json({ detail: 'Not Found' }, 404);
+      return json({ enabled: false, send: false, decided: false, reask: true, managed: this.managed === 'flag' });
+    }
     if (path === '/api/config/raw' && method === 'GET') {
+      this.rawReads += 1;
+      this.rawHook?.(this.rawReads);
       if (this.failRaw) return json({ detail: 'raw config unavailable' }, this.failRaw);
       return json({ yaml: this.raw, path: '/opt/data/config.yaml' });
     }
@@ -251,11 +318,13 @@ export class ConfigStore {
       const doc = parseDocument(text, PY);
       if (doc.errors.length) return json({ detail: `Invalid YAML: ${doc.errors[0]!.message}` }, 400);
       if (!isObj(doc.toJS())) return json({ detail: 'YAML must be a mapping' }, 400);
-      this.raw = text;
+      if (this.ignored()) return json({ ok: true });
+      this.raw = this.pinned.length ? stringify(this.strip(doc.toJS() as Obj), { version: '1.1' }) : text;
       return json({ ok: true });
     }
     if (path === '/api/env' && method === 'GET') return json(this.envList());
     if (path === '/api/env' && method === 'PUT') {
+      if (this.failPutEnv) return json({ detail: 'env write failed' }, 500);
       const key = String(b.key ?? '');
       const value = String(b.value ?? '');
       if (['PATH', 'LD_PRELOAD', 'HERMES_HOME'].includes(key)) return json({ detail: `Refusing to set ${key}` }, 400);
