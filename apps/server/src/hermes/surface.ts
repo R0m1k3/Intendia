@@ -1,17 +1,27 @@
 import { z } from 'zod';
-import { HermesError, type HermesHttp, type Method } from './http.js';
+import { HermesError, isTransient, type HermesHttp, type Method } from './http.js';
+import { msg } from '../i18n/index.js';
 
 /**
  * What an instance says about itself: version, API server capabilities (feature flags and the
  * endpoint map), and the dashboard's OpenAPI path list. Connectors resolve their routes against
  * this instead of trusting hard-coded paths.
  */
+export type Auth = 'ok' | 'refused' | 'unknown';
+
+const refusal = (err: unknown): number | null =>
+  err instanceof HermesError && err.kind === 'http' && (err.detail.status === 401 || err.detail.status === 403) ? err.detail.status : null;
+
 export interface Surface {
   fetchedAt: number;
   version: string | null;
   api: {
     reachable: boolean;
     error?: string;
+    /** `refused`: /v1/capabilities answered 401/403 (wrong key); `unknown`: not read. */
+    auth: Auth;
+    /** Both /v1/capabilities and /health/detailed failed, the last one with a passing error (outage). */
+    down: boolean;
     features: Record<string, unknown>;
     /** capability name -> route, from /v1/capabilities `endpoints` */
     endpoints: Record<string, { method: string; path: string }> | null;
@@ -20,6 +30,10 @@ export interface Surface {
     configured: boolean;
     reachable: boolean;
     error?: string;
+    /** Token check by `GET /api/profiles` (`/api/status` is public): `refused` on 401/403, `unknown` on another error. */
+    auth: Auth;
+    /** /api/status failed with a passing error (outage). */
+    down: boolean;
     version?: string;
     /** "METHOD /path/{param}" entries from /openapi.json, null if the spec is unavailable */
     routes: string[] | null;
@@ -46,8 +60,8 @@ export async function discover(http: HermesHttp): Promise<Surface> {
   const surface: Surface = {
     fetchedAt: Date.now(),
     version: null,
-    api: { reachable: false, features: {}, endpoints: null },
-    dash: { configured: http.hasDashboard(), reachable: false, routes: null },
+    api: { reachable: false, auth: 'unknown', down: false, features: {}, endpoints: null },
+    dash: { configured: http.hasDashboard(), reachable: false, auth: 'unknown', down: false, routes: null },
   };
 
   const apiTask = (async () => {
@@ -56,7 +70,16 @@ export async function discover(http: HermesHttp): Promise<Surface> {
       surface.api.reachable = true;
       surface.api.features = caps.features ?? {};
       surface.api.endpoints = caps.endpoints ?? null;
+      surface.api.auth = 'ok';
     } catch (err) {
+      const status = refusal(err);
+      if (status) {
+        // Hermes answered: the key is wrong, the server is there (/health/detailed would refuse it too)
+        surface.api.reachable = true;
+        surface.api.auth = 'refused';
+        surface.api.error = msg('clé de l’API server refusée par Hermes (HTTP {status})', { status });
+        return;
+      }
       surface.api.error = describe(err);
     }
     try {
@@ -65,6 +88,7 @@ export async function discover(http: HermesHttp): Promise<Surface> {
       surface.version ??= health.version ?? null;
     } catch (err) {
       surface.api.error ??= describe(err);
+      if (!surface.api.reachable && isTransient(err)) surface.api.down = true;
     }
   })();
 
@@ -76,7 +100,19 @@ export async function discover(http: HermesHttp): Promise<Surface> {
       surface.dash.version = status.version;
     } catch (err) {
       surface.dash.error = describe(err);
+      surface.dash.down = isTransient(err);
       return;
+    }
+    // /api/status is public: a cheap authenticated read tells whether the token is still accepted
+    try {
+      await http.json('dash', 'GET', '/api/profiles', { timeoutMs: 10_000 });
+      surface.dash.auth = 'ok';
+    } catch (err) {
+      const status = refusal(err);
+      if (status) {
+        surface.dash.auth = 'refused';
+        surface.dash.error = msg('jeton du dashboard refusé par Hermes (HTTP {status})', { status });
+      }
     }
     try {
       const spec = OpenApiSchema.parse(await http.json('dash', 'GET', '/openapi.json', { timeoutMs: 30_000 }));

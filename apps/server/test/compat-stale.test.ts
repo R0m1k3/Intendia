@@ -27,7 +27,11 @@ function setup() {
   const db = openDb(dataDir);
   const store = new InstanceStore(db, config);
   const { fetchImpl } = fakeHttp();
-  const make = () => new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
+  const make = () => {
+    const c = new CompatService(db, store, { moduleStates: async () => {} }, fetchImpl);
+    made.push(c);
+    return c;
+  };
   return { db, make, id: fakeInstance().id };
 }
 
@@ -39,7 +43,11 @@ function dropOp(db: ReturnType<typeof openDb>, id: string) {
   db.update(compatReports).set({ reportJson: JSON.stringify(report) }).where(eq(compatReports.id, row.id)).run();
 }
 
+// a failed check starts the follow-up (a check 30 s later): every service is stopped after its test
+const made: CompatService[] = [];
+
 afterEach(() => {
+  for (const c of made.splice(0)) c.stop();
   vi.restoreAllMocks();
   failNext.count = 0;
 });
@@ -81,7 +89,7 @@ describe('compat report saved by an older Intendia', () => {
     expect(compat.get(id)!.checkError).toBeUndefined();
   });
 
-  it('a failure after a version change is logged once per tick', async () => {
+  it('a failure after a version change is logged once per check (no retry inside the tick)', async () => {
     const { make, id } = setup();
     const compat = make();
     await compat.check(id);

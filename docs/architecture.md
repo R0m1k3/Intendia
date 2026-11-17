@@ -31,8 +31,44 @@ The compatibility engine (`compat/engine.ts`), for every operation, walks its ro
 Module state: `unavailable` if a required read has no working route, `readonly` if a write has none, `full` otherwise.
 At runtime `connectors/runtime.ts` (`callOp`, `streamOp`) only uses the route chosen by the last report.
 
-Checks run at start-up, when `/health/detailed` announces a new version (polled every 5 minutes), every 24 h and on
-demand from the State screen. State changes go to the webhook.
+Checks (`src/compat/service.ts`, one at a time per instance; a request made during a check gets the next one, started
+when it ends and shared by every request made meanwhile):
+- at start-up and on demand from the State screen;
+- **outage**: a side whose answers fail with a passing error (`isTransient` in `hermes/http.ts`: network error that is
+  not an abort by the caller, timeout, HTTP 502/503/504) is `down` (API server: `/v1/capabilities` and
+  `/health/detailed` both failed, the last one that way; dashboard: `/api/status`). The report then carries
+  `outage: {since, api, dash}` (`since` kept across the checks of one outage), the routes of that side are refused with
+  the code `hermes_unreachable` (callOp answers 504 at once, without calling Hermes) and the routes of the other side
+  stay chosen (crons by `api GET /api/jobs`...). Nothing is taken from the previous report;
+- **refused key or token**: 401/403 on `/v1/capabilities` = `api.auth: "refused"` (the server is reachable); the
+  dashboard is checked by `GET /api/profiles` after `/api/status` (public in Hermes) = `dash.auth`. Routes of a refused
+  side carry `api_key_refused` / `dash_token_refused` and the action (Settings › Instances › Edit);
+- **follow-up** of an unhealthy report, one step every 30 s while it has a followed cause (`causes()`): three full
+  checks after a failed check, without a report, or after a probe that failed with a passing error (`transient`:
+  `op.transient`, `files.transient`); for a side down, its public probe without token (`GET /health`, `GET /api/health`,
+  5 s), a full check only when the probe moves from failing to answering. Refused credentials and a missing files root
+  need the user: left to the tick;
+- **tick** (every `INTENDIA_VERSION_CHECK_MINUTES`, 5 by default; instances in parallel, a tick is skipped while the
+  previous one runs), first matching rule: (1) no report, unchecked ops, failed check, no `files` or older than 24 h →
+  full check; (2) side down → its public probe, full check if it answers; (3) `transient` → full check; (4) refused side
+  → one authenticated read (`GET /v1/capabilities` / `GET /api/profiles`), full check if it passes; (5) API server
+  unreachable for another reason → full check; (6) no files root → full check if the report is older than 15 min;
+  (7) else `GET /health/detailed`, full check when the version changed or the call fails;
+- **runtime signals** (observer of the clients of `CompatService.http(id)`; checks and probes run without one): a 401
+  (30 s debounce), a missing route (404 `{"detail":"Not Found"}`, `{"detail":"No such API endpoint: …"}` or
+  `404: Not Found`) or an unexpected shape (schema error, 2xx that is not JSON; 3 min), a passing error (5 min) ask for a
+  check. Business 404s and 403s (missing session, path outside the files root), aborted calls and anonymous calls
+  never do.
+
+State changes go to the webhook (an outage changes module states, so it is reported, and so is the return).
+
+Hermes errors that reach `onError` unchanged (`connectors/errors.ts`) get a stable `code` and a French message (English
+through `translateResponses`), plus `hermesStatus` and `hermesDetail` (Hermes' `detail`, masked by `Masker.text()` and
+the exact secrets of the instances, 300 characters at most); never 401 (in the web, 401 = Intendia session expired):
+`hermes_unconfigured` 422, `hermes_unreachable` / `hermes_timeout` 504, `dash_token_refused` / `api_key_refused` 502
+(409 once the report knows it, from `ModuleUnavailableError.code`), `hermes_conflict` 409, `hermes_busy` 503 with
+`Retry-After` (Hermes' or 5 s), `hermes_error` 502, `hermes_schema` 502. A `HermesError` written by a service keeps its
+own message with that code and status.
 
 ## Workspaces, sessions and runs
 

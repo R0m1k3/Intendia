@@ -12,6 +12,9 @@ describe.each(RECORDINGS)('compatibility engine on the Hermes $version recording
     const { report } = await checkInstance(fakeHttp({ fixturesDir: dir }).http);
     expect(report.hermesVersion).toBe(version);
     expect(report.dash.openapi).toBe(true);
+    expect(report.api.auth).toBe('ok');
+    expect(report.dash.auth).toBe('ok');
+    expect(report.outage).toBeUndefined();
     expect(states(report)).toEqual({
       health: 'full', chat: 'full', sessions: 'full', crons: 'full',
       skills: 'full', config: 'full', agents: 'full', kanban: 'full', files: 'full', git: 'full', monitor: 'full', memory: 'full', plugins: 'full',
@@ -106,6 +109,18 @@ describe('compatibility engine (Hermes 0.23.0 recording)', () => {
     expect(report.api.reachable).toBe(false);
     expect(state(report, 'chat').state).toBe('unavailable');
     expect(state(report, 'kanban').state).toBe('full');
+    // a network error: an outage of the API server, its ops refused at once
+    expect(report.outage).toMatchObject({ api: true, dash: false });
+    expect(state(report, 'chat').ops.createRun!.code).toBe('hermes_unreachable');
+  });
+
+  it('a wrong dashboard token: reachable, refused, dashboard routes refused with the action', async () => {
+    const { http } = fakeHttp({}, fakeInstance({ dashboardToken: 'mauvais-jeton-0000' }));
+    const { report } = await checkInstance(http);
+    expect(report.dash).toMatchObject({ reachable: true, auth: 'refused' });
+    expect(state(report, 'kanban').state).toBe('unavailable');
+    expect(state(report, 'kanban').ops.board!.code).toBe('dash_token_refused');
+    expect(state(report, 'chat').state).toBe('full');
   });
 });
 

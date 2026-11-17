@@ -65,7 +65,10 @@ function missionOf(c: Context): string {
 
 const PING_MS = 25_000;
 
-export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory; wsOpenTimeoutMs?: number }): Hono {
+/** Life of one relay: a half-open WebSocket to Hermes (no ping in Node's WebSocket) lasts this long at most. */
+export const RELAY_MAX_MS = 10 * 60_000;
+
+export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionService; config: ConfigService; compat: CompatService; wsFactory?: WsFactory; wsOpenTimeoutMs?: number; kanbanRelayMaxMs?: number }): Hono {
   const { kanban } = deps;
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
@@ -151,7 +154,9 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
 
   /**
    * Live changes of a board: one dashboard WebSocket per open stream, relayed as SSE `change {taskIds}`.
-   * When the WebSocket fails or closes, the stream is closed (the browser falls back to polling).
+   * When the WebSocket fails or closes, the stream is closed (the browser falls back to polling). Every RELAY_MAX_MS the
+   * relay is renewed: `closed` with `code: "recycle"`, the browser reopens at once and rereads the board after `ready`
+   * (sent once the WebSocket to Hermes is open).
    */
   r.get(`${P}/events`, (c) => {
     const id = inst(c);
@@ -169,12 +174,18 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
           if (done) return;
           done = true;
           clearInterval(ping);
+          clearTimeout(recycle);
           conn.close();
           try { ctrl.close(); } catch { /* already closed */ }
         };
         const ping = setInterval(() => send(': ping\n\n'), PING_MS);
+        const recycle = setTimeout(() => {
+          send(`event: closed\ndata: ${JSON.stringify({ reason: toLang(msg('Flux du kanban renouvelé'), lang), code: 'recycle' })}\n\n`);
+          finish();
+        }, deps.kanbanRelayMaxMs ?? RELAY_MAX_MS);
         const conn = openKanbanEvents(instance, board, {
-          onOpen: () => send(': open\n\n'),
+          // the WebSocket to Hermes is open, hence subscribed to the board: the browser rereads the board only now
+          onOpen: () => send('event: ready\ndata: {}\n\n'),
           onEvents: (events) => {
             const taskIds = [...new Set(events.map((e) => e.task_id).filter((t): t is string => typeof t === 'string'))];
             send(`event: change\ndata: ${JSON.stringify({ taskIds })}\n\n`);

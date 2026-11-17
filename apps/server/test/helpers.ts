@@ -55,6 +55,8 @@ export function combineFetch(routes: { hosts: { api: string; dash: string }; fet
 export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   instance?: Partial<InstanceConfig>; extra?: (Partial<InstanceConfig> & { ownFake?: boolean })[]; env?: Record<string, string>;
   uploadTimeoutMs?: number; fileOpts?: import('../src/files/service.js').FileServiceOpts;
+  /** Life of a kanban live relay before it is renewed (default 10 min). */
+  kanbanRelayMaxMs?: number;
   /** timeout of one POST /v1/runs (chat/start-run.ts) */
   createRunTimeoutMs?: number;
 } = {}) {
@@ -97,7 +99,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   await compat.check(inst.id);
   for (const e of extra) await compat.check(e.id);
   const services = createServices({ config, db, store, compat, uploadTimeoutMs: opts.uploadTimeoutMs, fileOpts: opts.fileOpts, createRunTimeoutMs: opts.createRunTimeoutMs });
-  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300 });
+  const app = createApp({ config, db, auth, store, compat, fetchImpl, services, version: 'test', wsFactory: fakeWebSocketFactory(fake), wsOpenTimeoutMs: 300, kanbanRelayMaxMs: opts.kanbanRelayMaxMs });
   const mcp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: 'test' });
 
   let cookie = '';
@@ -130,7 +132,7 @@ export async function testApp(opts: Omit<FakeOptions, 'fixturesDir'> & {
   await raw('POST', '/x/setup/password', { code: auth.setupCode, password: 'test-password-123' });
   /** Workspace root of the main instance (the fake's managed files root, real path). */
   const root = fake.files.root;
-  return { app, mcp, db, root, fake, fakes, inst, store, compat, config, services, links: services.links, request, raw, rawRequest };
+  return { app, mcp, db, root, fake, fakes, inst, store, compat, config, services, links: services.links, request, raw, rawRequest, /** session cookie (name=value) */ cookie: () => cookie };
 }
 
 /** Reads an SSE body into events ({id, data}); stops at the end of the stream or after `ms`. */

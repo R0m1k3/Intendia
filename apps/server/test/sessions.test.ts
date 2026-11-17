@@ -313,13 +313,15 @@ describe('sessions', () => {
     expect(child.status).toBe(409);
     expect(child.json.code).toBe('child');
 
-    // a turn running: Hermes refuses, Intendia says why; another 409 stays a Hermes error
+    // a turn running: Hermes refuses, Intendia says why; another 409 stays a Hermes conflict
     await seed({ id: 'tg_busy', busy: 'session_active_turn' });
     const busy = await t.request('DELETE', '/x/i/fake/external/tg_busy');
     expect(busy.status).toBe(409);
     expect(busy.json.code).toBe('run_active');
     await seed({ id: 'tg_other', busy: 'autre_code' });
-    expect((await t.request('DELETE', '/x/i/fake/external/tg_other')).status).toBe(502);
+    const other = await t.request('DELETE', '/x/i/fake/external/tg_other');
+    expect(other.status).toBe(409);
+    expect(other.json.code).toBe('hermes_conflict');
     expect((await t.request('GET', '/x/i/fake/other-sessions')).json.sessions.map((x: any) => x.id)).toEqual(expect.arrayContaining(['tg_busy', 'tg_other', 'suite_1']));
 
     expect((await t.request('DELETE', '/x/i/fake/external/mauvais%20id')).status).toBe(400);
