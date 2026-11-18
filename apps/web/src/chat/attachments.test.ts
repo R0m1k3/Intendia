@@ -36,4 +36,9 @@ describe('splitAttachments', () => {
   it('the workspace folder alone is not a file', () => {
     expect(splitAttachments('Salut\n/opt/data/workspace/ws/', m).files).toEqual([]);
   });
+  it('an archive note before the paths stays in the text, the paths are attachments', () => {
+    const note = '[Intendia] Archive `photos.zip` : 1 fichier non décompressé.\n- `video.mov` : plus de 32 Mo, non décompressé\n[Intendia] Décompression incomplète : la limite de l\'archive a été atteinte.';
+    expect(splitAttachments(`Trie-les\n${note}\n/opt/data/workspace/ws/inbox/photos\ninbox/b.pdf`, m))
+      .toEqual({ text: `Trie-les\n${note}`, files: ['/opt/data/workspace/ws/inbox/photos', 'inbox/b.pdf'] });
+  });
 });

@@ -97,7 +97,7 @@ export async function extractArchive(
   stop: () => boolean = () => false,
 ): Promise<{ count: number; skipped: Skipped[]; partial: boolean }> {
   const skipped: Skipped[] = [];
-  const big = kind === 'zip' ? precheckZip(bytes, limits) : new Set<string>();
+  const big = kind === 'zip' ? precheckZip(bytes, limits) : new Map<string, boolean[]>();
   if (kind === 'tar') precheckTar(bytes, limits);
 
   let count = 0;
@@ -157,13 +157,46 @@ interface Reader {
   end(): void;
 }
 
+/** Most skipped files listed one by one in the note for the agent. */
+const NOTE_MAX = 10;
+const NAME_MAX = 120;
+
+/**
+ * A name from the archive is untrusted data going into the agent's message: control characters (line breaks
+ * included) and backticks become spaces, it is cut at 120 characters, then put between backticks.
+ */
+export function cleanName(raw: string): string {
+  const flat = raw.replace(/[\p{Cc}`]/gu, ' ');
+  const chars = [...flat];
+  const cut = chars.length > NAME_MAX ? `${chars.slice(0, NAME_MAX - 1).join('')}…` : flat;
+  return `\`${cut}\``;
+}
+
+/**
+ * Note sent to the agent before the attachment paths when an archive was not unpacked whole; null when everything
+ * went through. Always in French: what is sent to Hermes is never translated (the reasons are French inside the server).
+ */
+export function archiveAgentNote(archiveName: string, skipped: Skipped[], partial: boolean): string | null {
+  if (!skipped.length && !partial) return null;
+  const lines: string[] = [];
+  if (skipped.length) {
+    const n = skipped.length;
+    lines.push(`[Intendia] Archive ${cleanName(archiveName)} : ${n} ${n === 1 ? 'fichier non décompressé' : 'fichiers non décompressés'}.`);
+    for (const s of skipped.slice(0, NOTE_MAX)) lines.push(`- ${cleanName(s.path)} : ${s.reason}`);
+    if (n > NOTE_MAX) lines.push(`- … et ${n - NOTE_MAX} ${n - NOTE_MAX === 1 ? 'autre' : 'autres'}`);
+  }
+  if (partial) lines.push("[Intendia] Décompression incomplète : la limite de l'archive a été atteinte.");
+  return lines.join('\n');
+}
+
 // --- zip ---------------------------------------------------------------------------------------------------------
 
 /**
- * The central directory gives every size before anything is unpacked. Returns the names of the files announced bigger
- * than `maxFile`: never started, so neither unpacked nor counted in the total.
+ * The central directory gives every size before anything is unpacked. Returns, for each file name, whether each of its
+ * occurrences (in central directory order) is announced bigger than `maxFile`: such a file is never started, so neither
+ * unpacked nor counted in the total. A zip may hold the same name twice: a small namesake still counts.
  */
-function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): Set<string> {
+function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): Map<string, boolean[]> {
   const infos: UnzipFileInfo[] = [];
   try {
     unzipSync(bytes, { filter: (f) => { infos.push(f); return false; } });
@@ -172,19 +205,33 @@ function precheckZip(bytes: Uint8Array, limits: ArchiveLimits): Set<string> {
   }
   const files = infos.filter((f) => !f.name.endsWith('/'));
   if (files.length > limits.maxEntries) throw tooBig(msg("Plus de {max} fichiers dans l'archive", { max: limits.maxEntries }));
-  const big = new Set(files.filter((f) => f.originalSize > limits.maxFile).map((f) => f.name));
-  const total = files.reduce((n, f) => (big.has(f.name) ? n : n + f.originalSize), 0);
+  const big = new Map<string, boolean[]>();
+  let total = 0;
+  for (const f of files) {
+    const tooLargeFile = f.originalSize > limits.maxFile;
+    const list = big.get(f.name) ?? [];
+    list.push(tooLargeFile);
+    big.set(f.name, list);
+    if (!tooLargeFile) total += f.originalSize;
+  }
   if (total > limits.maxTotal) throw tooBig(msg('Archive trop grosse une fois décompressée'));
   return big;
 }
 
-function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits, big: Set<string>): Reader {
+function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits, big: Map<string, boolean[]>): Reader {
   let failure: ArchiveError | null = null;
   // every byte unpacked, kept or not: a file dropped past maxFile is still inflated to its end (fflate's
   // UnzipInflate has no real terminate), so it must not make the extraction run without end
   let seen = 0;
+  // occurrences of each name met so far, to read the right entry of `big`. This assumes the local headers come in
+  // the order of the central directory (true for every common zip writer); otherwise a big file started is cut at
+  // maxFile below, or a small namesake is skipped as too big.
+  const seenNames = new Map<string, number>();
   const unzip = new Unzip((file) => {
     if (file.name.endsWith('/')) return;
+    // counted before any early return, so the indices stay aligned with the central directory
+    const nth = seenNames.get(file.name) ?? 0;
+    seenNames.set(file.name, nth + 1);
     const safe = safePath(file.name);
     if ('reason' in safe) { skipped.push({ path: file.name, reason: safe.reason }); return; }
     if (file.compression !== 0 && file.compression !== 8) {
@@ -192,11 +239,11 @@ function zipReader(queue: Ready[], skipped: Skipped[], limits: ArchiveLimits, bi
       return;
     }
     // announced too big (central directory or local header): never started, its data is passed over
-    if (big.has(file.name) || (file.originalSize ?? 0) > limits.maxFile) {
+    if (big.get(file.name)?.[nth] || (file.originalSize ?? 0) > limits.maxFile) {
       skipped.push({ path: safe.path, reason: tooLarge(limits) });
       return;
     }
-    let chunks: Uint8Array[] | null = [];
+  let chunks: Uint8Array[] | null = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
       if (failure) return;

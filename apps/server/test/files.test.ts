@@ -182,6 +182,13 @@ describe('files', () => {
     writeFileSync(join(t.ws, 'inbox', 'gros.zip'), zipSync({ 'big.bin': new Uint8Array(1024 * 1024 + 1), 'petit.txt': enc.encode('p') }));
     const gros = await ex('inbox/gros.zip');
     expect(gros).toMatchObject({ status: 201, json: { folder: 'inbox/gros', count: 1, partial: false, skipped: [{ path: 'big.bin', reason: 'plus de 1 Mo, non décompressé' }] } });
+    expect(gros.json.agentNote).toBe('[Intendia] Archive `gros.zip` : 1 fichier non décompressé.\n- `big.bin` : plus de 1 Mo, non décompressé');
+    expect(ok.json.agentNote).toBe('[Intendia] Archive `Lot.zip` : 2 fichiers non décompressés.\n' + ok.json.skipped.map((s: any) => `- \`${s.path}\` : ${s.reason}`).join('\n'));
+    // English browser: the reasons shown are translated, the note for the agent stays in French
+    const en = await t.raw('POST', `${t.F}/extract`, { path: 'inbox/gros.zip' }, { Cookie: `${t.cookie()}; intendia-lang=en` });
+    const enJson = (await en.json()) as { skipped: { reason: string }[]; agentNote: string };
+    expect(enJson.skipped[0]!.reason).not.toBe('plus de 1 Mo, non décompressé');
+    expect(enJson.agentNote).toBe('[Intendia] Archive `gros.zip` : 1 fichier non décompressé.\n- `big.bin` : plus de 1 Mo, non décompressé');
     expect(readFileSync(join(t.ws, 'inbox', 'gros', 'petit.txt'), 'utf8')).toBe('p');
     expect(existsSync(join(t.ws, 'inbox', 'gros', 'big.bin'))).toBe(false);
   });

@@ -7,7 +7,7 @@ import { LinkService } from '../links/service.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
 import type { Workspace, WorkspaceService } from '../workspaces/service.js';
 import { mapLimit, type FileRoots, type FsEntry, type HermesFs } from './hermes-fs.js';
-import { ArchiveError, archiveKind, archiveStem, EXTRACT_FILE_MAX, extractArchive, precheckArchive, type Skipped } from './archive.js';
+import { ArchiveError, archiveAgentNote, archiveKind, archiveStem, EXTRACT_FILE_MAX, extractArchive, precheckArchive, type Skipped } from './archive.js';
 import { checkName, hiddenByHermes, normalizeRel, toVolumePath } from './paths.js';
 import { FILE_READ_MAX, idleGuard, MOVE_MAX_BYTES, MOVE_MAX_FILES, walk, type WalkResult } from './walk.js';
 import { ZIP_WALK, zipFolder, zipSlot } from './zip.js';
@@ -222,7 +222,7 @@ export class FileService {
    * (" (2)"… when taken). One extraction at a time on the server; it goes on when the browser drops the request,
    * for at most EXTRACT_MAX_MS (then stops: files already written stay, `partial`).
    */
-  async extract(slug: string, relIn: string): Promise<{ folder: string; count: number; skipped: Skipped[]; partial: boolean }> {
+  async extract(slug: string, relIn: string): Promise<{ folder: string; count: number; skipped: Skipped[]; partial: boolean; agentNote: string | null }> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn);
     const name = nameOf(rel);
@@ -264,7 +264,8 @@ export class FileService {
         return 'written';
       }, () => Date.now() - started > EXTRACT_MAX_MS);
       if (res.partial) console.warn(`[files] extraction partielle de ${slug}/${rel} : ${res.count} fichiers écrits`);
-      return { folder, ...res };
+      // agentNote is not a TEXT_FIELDS entry: it goes to the agent as is, in French
+      return { folder, ...res, agentNote: archiveAgentNote(name, res.skipped, res.partial) };
     } finally {
       extracting = false;
     }
