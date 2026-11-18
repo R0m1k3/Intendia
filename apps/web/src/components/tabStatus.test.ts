@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BADGE_RUNNING, BADGE_WAITING, badgeColor, tabTitle } from './tabStatus';
+import { BADGES, badgeKind, tabTitle } from './tabStatus';
 
 describe('tabTitle', () => {
   it('counts what waits', () => expect(tabTitle({ base: 'Crons', waiting: 2, running: false })).toBe('(2) Crons · Intendia'));
@@ -11,9 +11,13 @@ describe('tabTitle', () => {
   });
 });
 
-describe('badgeColor', () => {
-  it('nothing: the plain icon', () => expect(badgeColor({ waiting: 0, running: false })).toBeNull());
-  it('waiting: red', () => expect(badgeColor({ waiting: 1, running: false })).toBe(BADGE_WAITING));
-  it('working: dark orange', () => expect(badgeColor({ waiting: 0, running: true })).toBe(BADGE_RUNNING));
-  it('both: red', () => expect(badgeColor({ waiting: 3, running: true })).toBe('#b42318'));
+describe('badgeKind', () => {
+  it('nothing: the plain icon', () => expect(badgeKind({ waiting: 0, running: false })).toBeNull());
+  it('waiting', () => expect(badgeKind({ waiting: 1, running: false })).toBe('waiting'));
+  it('working', () => expect(badgeKind({ waiting: 0, running: true })).toBe('running'));
+  it('both: waiting wins', () => expect(badgeKind({ waiting: 3, running: true })).toBe('waiting'));
+  it('the two dots differ in colour and place', () => {
+    expect(BADGES.waiting.color).not.toBe(BADGES.running.color);
+    expect([BADGES.waiting.x, BADGES.waiting.y]).not.toEqual([BADGES.running.x, BADGES.running.y]);
+  });
 });
