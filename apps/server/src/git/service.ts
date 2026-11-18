@@ -318,7 +318,10 @@ export class GitService {
       }
       if (row.status === 'A') await this.call(r, 'unstage', { body: { file: f.path } });
       await this.call(r, 'revert', { body: { file: f.path } });
-      if ((await this.list(r)).some((x) => x.path === f.path)) throw new GitError('git_failed', msg('Annulation non faite : {path} est toujours modifié', { path: f.path }));
+      // read whole: a malformed row dropped from a tolerant list would pass for a done revert
+      const after = await this.list(r);
+      if (rawLength(after) !== after.length) throw new GitError('git_failed', msg('Liste des changements de Hermes incomplète : annulation de {path} non vérifiée', { path: f.path }));
+      if (after.some((x) => x.path === f.path)) throw new GitError('git_failed', msg('Annulation non faite : {path} est toujours modifié', { path: f.path }));
       return { ok: true as const };
     });
   }

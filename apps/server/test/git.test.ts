@@ -328,6 +328,23 @@ describe('writes', () => {
     expect(staged(r)).toEqual([]);
   });
 
+  it('a revert Hermes did not do, with the list read after it incomplete: reported, never taken for done', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const breaks: Record<string, { status?: number; body?: unknown }> = {};
+    const t = await setup({ git: { revertNoop: true }, breaks });
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    writeFileSync(join(r, 'b.txt'), 'deux bis\n');
+    // the read after the revert: a.txt in an unexpected shape (dropped), b.txt valid
+    const bad = { status: 200, body: { files: [{ path: 'a.txt', status: 'M', added: 'x' }, { path: 'b.txt', status: 'M' }] } };
+    let lists = 0;
+    Object.defineProperty(breaks, 'dash GET /api/git/review/list', { enumerable: true, get: () => (++lists >= 2 ? bad : undefined) });
+    const res = await t.request('POST', `${t.G}/revert`, { repo: 'projet', file: 'a.txt' });
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('git_failed');
+    expect(res.json.error).toBe('Liste des changements de Hermes incomplète : annulation de a.txt non vérifiée');
+  });
+
   it('a revert Hermes did not do is reported', async () => {
     const t = await setup({ git: { revertNoop: true } });
     const r = repo(join(t.ws, 'projet'));

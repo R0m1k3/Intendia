@@ -295,6 +295,7 @@ export default {
   'git a échoué': 'git failed',
   'Liste des changements de Hermes incomplète : action refusée par prudence': 'Hermes sent an incomplete change list: action refused to be safe',
   'Liste des changements de Hermes incomplète : indexation annulée par prudence': 'Hermes sent an incomplete change list: staging undone to be safe',
+  'Liste des changements de Hermes incomplète : annulation de {path} non vérifiée': 'Hermes sent an incomplete change list: the revert of {path} could not be checked',
   '{path} : ce dossier n\'est pas la racine d\'un dépôt git du workspace': '{path}: this folder is not the root of a git repository of the workspace',
   '{path} : dépôt refusé, son .git est un lien ou un fichier (sous-module, worktree lié)': '{path}: repository refused, its .git is a link or a file (submodule, linked worktree)',
   'Ce dossier n\'est plus un dépôt git': 'This folder is no longer a git repository',
