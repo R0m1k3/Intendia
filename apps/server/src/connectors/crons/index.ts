@@ -93,7 +93,7 @@ export const BlueprintSchema = z.looseObject({
 export const BlueprintListSchema = z.looseObject({ blueprints: tolerantArray(BlueprintSchema, 'crons.blueprints') });
 
 export const TargetListSchema = z.looseObject({
-  targets: z.array(z.looseObject({ id: z.string(), name: z.string().nullish() })),
+  targets: tolerantArray(z.looseObject({ id: z.string(), name: z.string().nullish() }), 'crons.targets'),
 });
 
 /** Update body: the dashboard wants `{ updates }` (PUT), the API server the fields themselves (PATCH). */

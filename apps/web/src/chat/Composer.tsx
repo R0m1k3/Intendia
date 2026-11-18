@@ -43,6 +43,8 @@ interface Attachment {
   note?: string;
   /** files left out of the archive with their reason, shown on hover */
   detail?: string;
+  /** note from the server sent to the agent before the paths (never translated: it goes to Hermes) */
+  agentNote?: string;
 }
 
 let nextId = 1;
@@ -230,7 +232,8 @@ export function Composer({
   const canSend = (text.trim() !== '' || files.length > 0) && !waiting && !sending && !disabled;
   // what was sent: a file added or text typed while the send is pending stays in the draft
   const submit = async (how: (message: string, skills?: string[]) => Promise<boolean>) => {
-    const message = [text.trim(), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
+    // notes before the paths: splitAttachments() only takes the last lines that are paths as attachments
+    const message = [text.trim(), ...files.map((a) => a.agentNote), ...files.map((a) => a.agentPath)].filter(Boolean).join('\n');
     const sentText = text;
     const sent = new Set(files.map((a) => a.id));
     const sentSkills = skills;
@@ -555,7 +558,7 @@ async function unpack(done: { agentPath: string; path: string }, extract: Extrac
     const n = plural(r.count, '{n} fichier', '{n} fichiers');
     const extra = [r.skipped.length ? t('{n} ignorés', { n: r.skipped.length }) : '', r.partial ? t('incomplet') : ''].filter(Boolean).join(', ');
     const detail = r.skipped.length ? skippedLines(r.skipped) : undefined;
-    return { state: 'done', agentPath, detail, note: extra ? t('{files} dans {folder}/ ({extra})', { files: n, folder: r.folder, extra }) : t('{files} dans {folder}/', { files: n, folder: r.folder }) };
+    return { state: 'done', agentPath, detail, agentNote: r.agentNote ?? undefined, note: extra ? t('{files} dans {folder}/ ({extra})', { files: n, folder: r.folder, extra }) : t('{files} dans {folder}/', { files: n, folder: r.folder }) };
   } catch (err) {
     return { state: 'done', agentPath: done.agentPath, note: t('Non décompressée : {error}', { error: err instanceof Error ? err.message : String(err) }) };
   }

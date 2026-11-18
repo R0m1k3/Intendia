@@ -28,7 +28,7 @@ export const TaskSchema = z.looseObject({
 export type HermesTask = z.infer<typeof TaskSchema>;
 
 export const BoardSchema = z.looseObject({
-  columns: z.array(z.looseObject({ name: z.string(), tasks: tolerantArray(TaskSchema, 'kanban.tasks') })),
+  columns: tolerantArray(z.looseObject({ name: z.string(), tasks: tolerantArray(TaskSchema, 'kanban.tasks') }), 'kanban.columns'),
   latest_event_id: z.number().optional(),
 });
 export const BoardListSchema = z.looseObject({
@@ -38,11 +38,11 @@ export const BoardListSchema = z.looseObject({
   current: z.string().optional(),
 });
 export const WorkflowSchema = z.looseObject({
-  columns: z.array(z.looseObject({ key: z.string(), label: z.string().optional(), drag_target: z.boolean().optional() })),
+  columns: tolerantArray(z.looseObject({ key: z.string(), label: z.string().optional(), drag_target: z.boolean().optional() }), 'kanban.workflow'),
   manual: z.record(z.string(), z.array(z.string())).optional(),
 });
 export const AssigneesSchema = z.looseObject({
-  assignees: z.array(z.looseObject({ name: z.string(), on_disk: z.boolean().optional() })),
+  assignees: tolerantArray(z.looseObject({ name: z.string(), on_disk: z.boolean().optional() }), 'kanban.assignees'),
 });
 /** Fields from the SQL of `list_active_workers` (plugin_api.py). */
 export const WorkersSchema = z.looseObject({
@@ -65,12 +65,12 @@ export const OrchestrationSchema = z.looseObject({
 });
 export const TaskDetailSchema = z.looseObject({
   task: TaskSchema,
-  comments: z.array(z.looseObject({ id: id, author: z.string().nullish(), body: z.string(), created_at: z.number().nullish() })).optional(),
-  events: z.array(z.looseObject({ id: id, kind: z.string(), created_at: z.number().nullish() })).optional(),
-  attachments: z.array(z.looseObject({ id: id })).optional(),
+  comments: tolerantArray(z.looseObject({ id: id, author: z.string().nullish(), body: z.string(), created_at: z.number().nullish() }), 'kanban.comments').optional(),
+  events: tolerantArray(z.looseObject({ id: id, kind: z.string(), created_at: z.number().nullish() }), 'kanban.events').optional(),
+  attachments: tolerantArray(z.looseObject({ id: id }), 'kanban.attachments').optional(),
   links: z.looseObject({ parents: z.array(z.string()).optional(), children: z.array(z.string()).optional() }).optional(),
-  link_tasks: z.array(z.looseObject({ id: z.string(), title: z.string().nullish(), status: z.string().nullish() })).optional(),
-  runs: z.array(z.looseObject({ id: id })).optional(),
+  link_tasks: tolerantArray(z.looseObject({ id: z.string(), title: z.string().nullish(), status: z.string().nullish() }), 'kanban.link_tasks').optional(),
+  runs: tolerantArray(z.looseObject({ id: id }), 'kanban.runs').optional(),
 });
 export const TaskLogSchema = z.looseObject({ content: z.string().nullish(), truncated: z.boolean().optional(), exists: z.boolean().optional() });
 

@@ -9,6 +9,7 @@ import type { CompatService } from '../compat/service.js';
 import { GitBranchesSchema, GitContextSchema, type HermesGitListFile, type HermesGitStatus } from '../connectors/git/index.js';
 import type { CompatReport } from '../connectors/types.js';
 import { callOp, HermesError, hermesDetail, type HermesHttp } from '../connectors/runtime.js';
+import { rawLength } from '../connectors/list.js';
 import type { FileRoots } from '../files/hermes-fs.js';
 import { hiddenByHermes, normalizeRel } from '../files/paths.js';
 import type { InstanceConfig } from '../config.js';
@@ -258,8 +259,14 @@ export class GitService {
     }
   }
 
-  private async list(r: Repo): Promise<HermesGitListFile[]> {
-    return (await this.call<{ files: HermesGitListFile[] }>(r, 'list', { query: { scope: 'uncommitted' } })).files;
+  /**
+   * The changed files. The list is tolerant (a row in an unexpected shape is dropped); `complete` = the list guards
+   * a write (what is staged, what is sensitive): a dropped row then refuses the action rather than miss a file.
+   */
+  private async list(r: Repo, complete = false): Promise<HermesGitListFile[]> {
+    const files = (await this.call<{ files: HermesGitListFile[] }>(r, 'list', { query: { scope: 'uncommitted' } })).files;
+    if (complete && rawLength(files) !== files.length) throw new GitError('git_failed', msg('Liste des changements de Hermes incomplète : action refusée par prudence'));
+    return files;
   }
 
   private sensitive(r: Repo, path: string): boolean {
@@ -275,9 +282,15 @@ export class GitService {
     const f = file === null ? null : checkFile(file);
     return this.locked(slug, repo, async (r) => {
       if (f && !f.dir && this.sensitive(r, f.path)) throw new GitError('sensitive', msg("{path} : fichier sensible, Intendia ne l'indexe pas", { path: f.path }));
-      const before = new Set((await this.list(r)).filter((x) => x.staged && this.sensitive(r, x.path)).map((x) => x.path));
+      const before = new Set((await this.list(r, true)).filter((x) => x.staged && this.sensitive(r, x.path)).map((x) => x.path));
       await this.call(r, 'stage', { body: f ? { file: f.path } : {} });
-      const added = (await this.list(r)).filter((x) => x.staged && this.sensitive(r, x.path) && !before.has(x.path)).map((x) => x.path);
+      const after = await this.list(r);
+      if (rawLength(after) !== after.length) {
+        // the staging happened but cannot be checked: undo it (everything, for "stage all", even what was staged before)
+        await this.call(r, 'unstage', { body: f ? { file: f.path } : {} });
+        throw new GitError('git_failed', msg('Liste des changements de Hermes incomplète : indexation annulée par prudence'));
+      }
+      const added = after.filter((x) => x.staged && this.sensitive(r, x.path) && !before.has(x.path)).map((x) => x.path);
       for (const path of added) await this.call(r, 'unstage', { body: { file: path } });
       return { unstaged: added };
     });
@@ -305,7 +318,10 @@ export class GitService {
       }
       if (row.status === 'A') await this.call(r, 'unstage', { body: { file: f.path } });
       await this.call(r, 'revert', { body: { file: f.path } });
-      if ((await this.list(r)).some((x) => x.path === f.path)) throw new GitError('git_failed', msg('Annulation non faite : {path} est toujours modifié', { path: f.path }));
+      // read whole: a malformed row dropped from a tolerant list would pass for a done revert
+      const after = await this.list(r);
+      if (rawLength(after) !== after.length) throw new GitError('git_failed', msg('Liste des changements de Hermes incomplète : annulation de {path} non vérifiée', { path: f.path }));
+      if (after.some((x) => x.path === f.path)) throw new GitError('git_failed', msg('Annulation non faite : {path} est toujours modifié', { path: f.path }));
       return { ok: true as const };
     });
   }
@@ -318,7 +334,7 @@ export class GitService {
     const text = message.trim();
     if (!text || text.length > MESSAGE_MAX) throw new ValidationError(msg('Message de commit vide ou trop long ({max} caractères au plus)', { max: MESSAGE_MAX }));
     return this.locked(slug, repo, async (r) => {
-      const staged = (await this.list(r)).filter((x) => x.staged);
+      const staged = (await this.list(r, true)).filter((x) => x.staged);
       if (!staged.length) throw new GitError('nothing_staged', msg("Rien n'est indexé : indexez d'abord les fichiers à valider"));
       const bad = staged.filter((x) => this.sensitive(r, x.path)).map((x) => x.path);
       if (bad.length) throw new GitError('staged_sensitive', msg('Fichiers sensibles indexés : {files} ; désindexez-les avant de valider', { files: bad.join(', ') }));

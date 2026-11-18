@@ -123,7 +123,14 @@ export interface ModelPin { provider: string | null; model: string }
 export interface RunMode { id: string; name: string; model: string | null; provider: string | null; effort: Effort | null; personality: string | null }
 export type PromptKind = 'prompt' | 'personality';
 export interface Prompt { id: string; kind: PromptKind; title: string; body: string; createdAt: number; updatedAt: number }
-export interface ExtractResult { folder: string; count: number; skipped: { path: string; reason: string }[]; partial: boolean }
+export interface ExtractResult {
+  folder: string;
+  count: number;
+  skipped: { path: string; reason: string }[];
+  partial: boolean;
+  /** French note for the agent (files left out, extraction cut), null when everything went through; never translated */
+  agentNote: string | null;
+}
 
 export interface Session {
   id: string;

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { archiveKind, archiveStem, ArchiveError, EXTRACT_FILE_MAX, extractArchive, safePath, type ArchiveKind } from '../src/files/archive.js';
+import { archiveAgentNote, archiveKind, archiveStem, ArchiveError, cleanName, EXTRACT_FILE_MAX, extractArchive, safePath, type ArchiveKind } from '../src/files/archive.js';
 import { tempDir } from './helpers.js';
 import { toLang } from '../src/i18n/index.js';
 
@@ -33,6 +33,19 @@ function tar(entries: [string, string | Uint8Array | null, string?][]): Uint8Arr
   }
   blocks.push(new Uint8Array(1024));
   return new Uint8Array(Buffer.concat(blocks));
+}
+
+/** zipSync output with every `from` name (local header and central directory) renamed `to`, same length. */
+function renamed(zip: Uint8Array, from: string, to: string): Uint8Array {
+  const a = enc.encode(from);
+  const b = enc.encode(to);
+  const out = new Uint8Array(zip);
+  let n = 0;
+  for (let i = 0; i + a.length <= out.length; i++) {
+    if (a.every((x, j) => out[i + j] === x)) { out.set(b, i); n += 1; }
+  }
+  expect(n).toBe(2);
+  return out;
 }
 
 async function run(bytes: Uint8Array, kind: ArchiveKind, limits = LIMITS, stop?: () => boolean) {
@@ -94,6 +107,20 @@ describe('extractArchive', () => {
     const many = zipSync(Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`f${i}`, enc.encode('x')])));
     await expect(run(many, 'zip', { ...LIMITS, maxEntries: 4 })).rejects.toMatchObject({ code: 'too_big' });
     await expect(run(enc.encode('pas une archive'), 'zip')).rejects.toBeInstanceOf(ArchiveError);
+  });
+
+  it('zip: two entries of the same name, one too big → the small one written, in both orders', async () => {
+    const small = enc.encode('petit');
+    for (const entries of [{ 'a.bin': small, 'b.bin': new Uint8Array(6000) }, { 'b.bin': new Uint8Array(6000), 'a.bin': small }]) {
+      const zip = renamed(zipSync(entries, { level: 0 }), 'b.bin', 'a.bin');
+      const written: [string, string][] = [];
+      const res = await extractArchive(zip, 'zip', LIMITS, async (p, d) => { written.push([p, new TextDecoder().decode(d)]); return 'written'; });
+      expect(written).toEqual([['a.bin', 'petit']]);
+      expect(res).toMatchObject({ count: 1, partial: false, skipped: [{ path: 'a.bin', reason: 'plus de 0 Mo, non décompressé' }] });
+    }
+    // the small namesake counts in the total announced: 3000 + 4500 + 4500 > 10000
+    const counted = renamed(zipSync({ 'a.bin': new Uint8Array(3000), 'b.bin': new Uint8Array(6000), c: new Uint8Array(4500), d: new Uint8Array(4500) }, { level: 0 }), 'b.bin', 'a.bin');
+    await expect(run(counted, 'zip')).rejects.toMatchObject({ code: 'too_big' });
   });
 
   it('tar: plain files, folders, links and special files skipped', async () => {
@@ -191,5 +218,46 @@ describe('extractArchive', () => {
     let calls = 0;
     const r = await run(tar([['a', 'a'], ['b', 'b']]), 'tar', LIMITS, () => ++calls > 1);
     expect(r).toMatchObject({ count: 1, partial: true });
+  });
+});
+
+describe('archiveAgentNote', () => {
+  const skip = (n: number) => Array.from({ length: n }, (_, i) => ({ path: `f${i + 1}.mov`, reason: 'plus de 32 Mo, non décompressé' }));
+
+  it('nothing skipped and whole → null', () => {
+    expect(archiveAgentNote('a.zip', [], false)).toBeNull();
+  });
+
+  it('one file: singular', () => {
+    expect(archiveAgentNote('photos.zip', skip(1), false)).toBe(
+      '[Intendia] Archive `photos.zip` : 1 fichier non décompressé.\n- `f1.mov` : plus de 32 Mo, non décompressé',
+    );
+  });
+
+  it('12 files and partial: 10 lines, then the rest counted, then the partial line', () => {
+    const lines = archiveAgentNote('photos.zip', skip(12), true)!.split('\n');
+    expect(lines[0]).toBe('[Intendia] Archive `photos.zip` : 12 fichiers non décompressés.');
+    expect(lines.slice(1, 11)).toHaveLength(10);
+    expect(lines[10]).toBe('- `f10.mov` : plus de 32 Mo, non décompressé');
+    expect(lines[11]).toBe('- … et 2 autres');
+    expect(lines[12]).toBe("[Intendia] Décompression incomplète : la limite de l'archive a été atteinte.");
+    expect(lines).toHaveLength(13);
+  });
+
+  it('partial alone', () => {
+    expect(archiveAgentNote('a.zip', [], true)).toBe("[Intendia] Décompression incomplète : la limite de l'archive a été atteinte.");
+  });
+
+  it('untrusted names: control characters and backticks removed, cut at 120, between backticks', () => {
+    const note = archiveAgentNote('a\nb.zip', [{ path: `x\n\`y\`\r${'z'.repeat(300)}`, reason: 'nom invalide' }], false)!;
+    const lines = note.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('`a b.zip`');
+    const name = /^- `([^`]*)` : nom invalide$/.exec(lines[1]!)?.[1];
+    expect(name).toBeDefined();
+    expect([...name!]).toHaveLength(120);
+    expect(name!.startsWith('x  y  z')).toBe(true);
+    expect(name!.endsWith('…')).toBe(true);
+    expect(cleanName('ok.txt')).toBe('`ok.txt`');
   });
 });

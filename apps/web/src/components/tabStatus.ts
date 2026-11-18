@@ -1,6 +1,7 @@
 // The browser tab tells what Intendia waits for from another tab: its title (« (2) Crons · Intendia » when two
 // approvals or questions wait, « • … » while a run or background sub-agents work on the current instance) and a dot
-// on the favicon (red: waiting, dark orange: working).
+// on the favicon, told apart at 16 px by colour and place: a big red dot at the top right while something waits, a
+// smaller blue-black one at the bottom right while working.
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { api } from '../api';
@@ -8,9 +9,16 @@ import { useCurrentInstance } from '../instance/current';
 import { runMarks } from '../sessions/running';
 import { useActivePageValue } from './activePage';
 
-/** Fixed colours of the light theme: the favicon sits on the browser's tab bar, not on the page. */
-export const BADGE_WAITING = '#b42318';
-export const BADGE_RUNNING = '#b5480c';
+export type BadgeKind = 'waiting' | 'running';
+
+/**
+ * The favicon's dots on a 64×64 canvas: centre, radius of the white ring and of the coloured dot. Fixed colours: the
+ * favicon sits on the browser's tab bar, not on the page.
+ */
+export const BADGES: Record<BadgeKind, { color: string; x: number; y: number; ring: number; dot: number }> = {
+  waiting: { color: '#e5281b', x: 44, y: 20, ring: 20, dot: 15 },
+  running: { color: '#1f2937', x: 48, y: 48, ring: 15, dot: 11 },
+};
 const APP = 'Intendia';
 const ICON = '/favicon.svg';
 
@@ -22,9 +30,9 @@ export function tabTitle({ base, waiting, running }: { base: string | null; wait
 }
 
 /** The favicon's dot: waiting wins over working; null = the plain icon. */
-export function badgeColor({ waiting, running }: { waiting: number; running: boolean }): string | null {
-  if (waiting > 0) return BADGE_WAITING;
-  return running ? BADGE_RUNNING : null;
+export function badgeKind({ waiting, running }: { waiting: number; running: boolean }): BadgeKind | null {
+  if (waiting > 0) return 'waiting';
+  return running ? 'running' : null;
 }
 
 let image: Promise<HTMLImageElement> | null = null;
@@ -38,37 +46,44 @@ function loadIcon(): Promise<HTMLImageElement> {
   return image;
 }
 
-let drawn: string | null = null;
-/** Writes the favicon: the icon with a white-ringed dot at the top right, or the plain SVG. */
-async function drawBadge(color: string | null): Promise<void> {
-  if (color === drawn) return;
-  drawn = color;
+let drawn: BadgeKind | null = null;
+/** PNG data URL of each badged icon, drawn once. */
+const cache = new Map<BadgeKind, string>();
+/** Writes the favicon: the icon with its white-ringed dot, or the plain SVG. */
+async function drawBadge(kind: BadgeKind | null): Promise<void> {
+  if (kind === drawn) return;
+  drawn = kind;
   const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   if (!link) return;
-  if (!color) {
+  if (!kind) {
     link.type = 'image/svg+xml';
     link.href = ICON;
     return;
   }
   try {
-    const img = await loadIcon();
-    if (drawn !== color) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(img, 0, 0, 64, 64);
-    ctx.beginPath();
-    // a dot of a third of the icon: still visible at 16 px
-    ctx.arc(46, 18, 18, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(46, 18, 13, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
+    let url = cache.get(kind);
+    if (!url) {
+      const img = await loadIcon();
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const b = BADGES[kind];
+      ctx.drawImage(img, 0, 0, 64, 64);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.ring, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.dot, 0, Math.PI * 2);
+      ctx.fillStyle = b.color;
+      ctx.fill();
+      url = canvas.toDataURL('image/png');
+      cache.set(kind, url);
+    }
+    if (drawn !== kind) return;
     link.type = 'image/png';
-    link.href = canvas.toDataURL('image/png');
+    link.href = url;
   } catch {
     // the icon could not be read: the plain favicon stays
   }
@@ -89,7 +104,7 @@ export function useTabStatus(navLabel: string | null): void {
   const running = inst !== null && [...runMarks(activity.data?.runs ?? [], [], inst, activity.data?.subagents ?? []).values()]
     .some((m) => m.state === 'running' || m.state === 'subagents');
   const title = tabTitle({ base: page?.title || navLabel, waiting, running });
-  const color = badgeColor({ waiting, running });
+  const kind = badgeKind({ waiting, running });
   useEffect(() => { document.title = title; }, [title]);
-  useEffect(() => { void drawBadge(color); }, [color]);
+  useEffect(() => { void drawBadge(kind); }, [kind]);
 }
