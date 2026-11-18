@@ -2,8 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { JobListSchema } from '../src/connectors/crons/index.js';
-import { DROP_LOG_MS, resetDropLog, tolerantArray } from '../src/connectors/list.js';
+import { cronsModule, JobListSchema } from '../src/connectors/crons/index.js';
+import { gitModule } from '../src/connectors/git/index.js';
+import { kanbanModule } from '../src/connectors/kanban/index.js';
+import type { ModuleDef } from '../src/connectors/types.js';
+import { DROP_LOG_MS, rawLength, resetDropLog, tolerantArray } from '../src/connectors/list.js';
 import { FIXTURES, testApp } from './helpers.js';
 
 const Item = z.looseObject({ id: z.string() });
@@ -82,5 +85,52 @@ describe('tolerant lists, end to end', () => {
     } });
     const op = t.compat.get('fake')!.modules.find((m) => m.id === 'crons')!.ops.list!;
     expect(op.ok).toBe(false);
+  });
+});
+
+/** The read schema of the op behind this exact route. */
+function schemaOf(mod: ModuleDef, path: string): z.ZodType {
+  const op = Object.values(mod.ops).find((o) => o.kind === 'read' && o.routes.some((r) => r.path === path));
+  expect(op?.schema, path).toBeDefined();
+  return op!.schema!;
+}
+
+describe('lists made tolerant after B3', () => {
+  beforeEach(() => resetDropLog());
+  afterEach(() => vi.restoreAllMocks());
+  const K = '/api/plugins/kanban';
+  const task = { id: 't1', title: 'T', status: 'todo' };
+  // [label, module, route, body around the list, valid item, invalid item]
+  const cases: [string, ModuleDef, string, (list: unknown[]) => Record<string, unknown>, unknown, unknown][] = [
+    ['crons.targets', cronsModule, '/api/cron/delivery-targets', (l) => ({ targets: l }), { id: 'local' }, { id: 1 }],
+    ['kanban.columns', kanbanModule, `${K}/board`, (l) => ({ columns: l }), { name: 'todo', tasks: [task] }, { name: 2, tasks: [] }],
+    ['kanban.workflow', kanbanModule, `${K}/workflow`, (l) => ({ columns: l }), { key: 'todo' }, { label: 'sans clé' }],
+    ['kanban.assignees', kanbanModule, `${K}/assignees`, (l) => ({ assignees: l }), { name: 'default' }, { on_disk: true }],
+    ['kanban.comments', kanbanModule, `${K}/tasks/{task_id}`, (l) => ({ task, comments: l }), { id: 1, body: 'b' }, { id: 2 }],
+    ['kanban.events', kanbanModule, `${K}/tasks/{task_id}`, (l) => ({ task, events: l }), { id: 1, kind: 'created' }, { id: 2 }],
+    ['kanban.attachments', kanbanModule, `${K}/tasks/{task_id}`, (l) => ({ task, attachments: l }), { id: 1 }, { name: 'x' }],
+    ['kanban.link_tasks', kanbanModule, `${K}/tasks/{task_id}`, (l) => ({ task, link_tasks: l }), { id: 't2' }, { id: 3 }],
+    ['kanban.runs', kanbanModule, `${K}/tasks/{task_id}`, (l) => ({ task, runs: l }), { id: 1 }, {}],
+    ['git.status_files', gitModule, '/api/git/status', (l) => ({ branch: 'main', files: l }), { path: 'a' }, { path: 1 }],
+    ['git.list', gitModule, '/api/git/review/list', (l) => ({ files: l }), { path: 'a', status: 'M' }, { status: 'M' }],
+    ['git.branches', gitModule, '/api/git/branches', (l) => ({ branches: l }), { name: 'main' }, { name: null }],
+  ];
+
+  it.each(cases)('%s: a bad item dropped and logged, a list without a valid item refused', (label, mod, path, wrap, good, bad) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const schema = schemaOf(mod, path);
+    const key = Object.keys(wrap([])).find((k) => k !== 'task' && k !== 'branch')!;
+    const parsed = schema.parse(wrap([good, bad])) as Record<string, unknown[]>;
+    expect(parsed[key]).toHaveLength(1);
+    expect(rawLength(parsed[key]!)).toBe(2);
+    expect(warn.mock.calls.some((c) => String(c[0]).startsWith(`[intendia] ${label}: 1 élément(s) ignoré(s) sur 2`))).toBe(true);
+    expect(schema.safeParse(wrap([bad])).success).toBe(false);
+  });
+
+  it('one bad delivery target: the compat probe of crons stays ok', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const t = await testApp({ breaks: { 'dash GET /api/cron/delivery-targets': { body: { targets: [{ id: 'local', name: 'Local' }, { id: 7 }] } } } });
+    const op = t.compat.get('fake')!.modules.find((m) => m.id === 'crons')!.ops.targets!;
+    expect(op).toMatchObject({ ok: true, route: { path: '/api/cron/delivery-targets' } });
   });
 });

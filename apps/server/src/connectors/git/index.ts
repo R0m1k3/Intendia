@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ModuleDef, OpDef } from '../types.js';
+import { tolerantArray } from '../list.js';
 
 export const GitRootSchema = z.looseObject({ root: z.string().nullable() });
 
@@ -13,30 +14,31 @@ export const GitStatusSchema = z.looseObject({
   unstaged: z.number().optional(),
   untracked: z.number().optional(),
   conflicted: z.number().optional(),
-  files: z.array(z.looseObject({
+  files: tolerantArray(z.looseObject({
     path: z.string(),
     staged: z.boolean().optional(),
     unstaged: z.boolean().optional(),
     untracked: z.boolean().optional(),
     conflicted: z.boolean().optional(),
-  })).optional(),
+  }), 'git.status_files').optional(),
 }).nullable();
 export type HermesGitStatus = NonNullable<z.infer<typeof GitStatusSchema>>;
 
 export const GitListSchema = z.looseObject({
-  files: z.array(z.looseObject({
+  // tolerant for the screen; GitService.list(r, true) refuses staging and commits when a row was dropped
+  files: tolerantArray(z.looseObject({
     path: z.string(),
     added: z.number().optional(),
     removed: z.number().optional(),
     status: z.string().optional(),
     staged: z.boolean().optional(),
-  })),
+  }), 'git.list'),
 });
 export type HermesGitListFile = z.infer<typeof GitListSchema>['files'][number];
 
 export const GitDiffSchema = z.looseObject({ diff: z.string() });
 export const GitBranchesSchema = z.looseObject({
-  branches: z.array(z.looseObject({ name: z.string(), checkedOut: z.boolean().optional(), isRemote: z.boolean().optional() })),
+  branches: tolerantArray(z.looseObject({ name: z.string(), checkedOut: z.boolean().optional(), isRemote: z.boolean().optional() }), 'git.branches'),
 });
 export const GitContextSchema = z.looseObject({ diff: z.string(), recent: z.string().nullish() });
 

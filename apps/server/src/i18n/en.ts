@@ -293,6 +293,8 @@ export default {
   'Fichier invalide': 'Invalid file',
   '{name} : Intendia ne gère pas ce nom (caractère * ? [ ] ou : au début), demandez-le à l\'agent': '{name}: Intendia does not handle this name (a * ? [ ] character or : at the start), ask the agent',
   'git a échoué': 'git failed',
+  'Liste des changements de Hermes incomplète : action refusée par prudence': 'Hermes sent an incomplete change list: action refused to be safe',
+  'Liste des changements de Hermes incomplète : indexation annulée par prudence': 'Hermes sent an incomplete change list: staging undone to be safe',
   '{path} : ce dossier n\'est pas la racine d\'un dépôt git du workspace': '{path}: this folder is not the root of a git repository of the workspace',
   '{path} : dépôt refusé, son .git est un lien ou un fichier (sous-module, worktree lié)': '{path}: repository refused, its .git is a link or a file (submodule, linked worktree)',
   'Ce dossier n\'est plus un dépôt git': 'This folder is no longer a git repository',

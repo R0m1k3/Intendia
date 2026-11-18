@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { checkFile } from '../src/git/service.js';
 import { hiddenByHermes } from '../src/files/paths.js';
 import { tempDir, testApp } from './helpers.js';
@@ -288,6 +288,44 @@ describe('writes', () => {
     for (const file of ['d', 'd/', 'absent.txt']) expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet', file })).status, file).toBe(400);
     expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet' })).status).toBe(400);
     expect(git(r, 'status', '--porcelain', '--untracked-files=all')).toContain('d/.env');
+  });
+
+  it('a row of the change list Hermes sent in an unexpected shape: shown, but staging and commits refused', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const breaks: Record<string, { status?: number; body?: unknown }> = {};
+    const t = await setup({ breaks });
+    const r = repo(join(t.ws, 'projet'));
+    writeFileSync(join(r, 'a.txt'), 'changé\n');
+    git(r, 'add', 'a.txt');
+    writeFileSync(join(r, 'b.txt'), 'deux bis\n');
+    // the fake ignores a git break without a status; reads of the list from now on: one row without a path
+    const bad = { status: 200, body: { files: [{ path: 'a.txt', status: 'M', staged: true }, { path: 'b.txt', status: 'M' }, { status: 'M' }] } };
+    // which reads of the list (counted from 1 since `lists = 0`) get the bad row
+    let lists = 0;
+    let broken = (_n: number) => true;
+    Object.defineProperty(breaks, 'dash GET /api/git/review/list', { enumerable: true, get: () => (broken(++lists) ? bad : undefined) });
+    const res = await t.request('GET', `${t.G}?repo=projet`);
+    expect(res.status).toBe(200);
+    expect(res.json.files.map((f: any) => f.path).sort()).toEqual(['a.txt', 'b.txt']);
+    const commit = await t.request('POST', `${t.G}/commit`, { repo: 'projet', message: 'essai', push: false });
+    expect(commit.json.code).toBe('git_failed');
+    expect(git(r, 'log', '--format=%s')).not.toContain('essai');
+    const stage = await t.request('POST', `${t.G}/stage`, { repo: 'projet', file: 'b.txt' });
+    expect(stage.json.code).toBe('git_failed');
+    expect(staged(r)).toEqual(['a.txt']);
+    // revert stays tolerant: the file is listed, then the list after the revert is whole
+    lists = 0;
+    broken = (n) => n === 1;
+    expect((await t.request('POST', `${t.G}/revert`, { repo: 'projet', file: 'b.txt' })).status).toBe(200);
+    expect(git(r, 'status', '--porcelain')).toBe('M  a.txt\n');
+    // the list read after staging everything is incomplete: the whole index is undone
+    lists = 0;
+    broken = (n) => n >= 2;
+    writeFileSync(join(r, 'b.txt'), 'deux ter\n');
+    const all = await t.request('POST', `${t.G}/stage`, { repo: 'projet' });
+    expect(all.json.code).toBe('git_failed');
+    expect(all.json.error).toBe('Liste des changements de Hermes incomplète : indexation annulée par prudence');
+    expect(staged(r)).toEqual([]);
   });
 
   it('a revert Hermes did not do is reported', async () => {
