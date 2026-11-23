@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveRun, RecentSession } from '../api';
-import { runMarks, withRunning, RUNNING_LABEL, type Group } from './running';
+import { runMarks, withMarked, withRunning, RUNNING_LABEL, type Group } from './running';
 
 const run = (sessionId: string, at: number, more: Partial<ActiveRun> = {}): ActiveRun => ({
   instance: 'i', workspace: 'perso', workspaceName: 'Personnel', sessionId, title: `T ${sessionId}`, runId: `r-${sessionId}`,
@@ -59,5 +59,15 @@ describe('runMarks: background sub-agents', () => {
   it('the session goes to « En cours »', () => {
     const m = runMarks([], [], 'i', [sub('a', 2)]);
     expect(ids(withRunning([{ label: 'Aujourd’hui', items: [row('a', 5), row('z', 4)] }], m, 'i', true))).toEqual([`${RUNNING_LABEL}: a`, 'Aujourd’hui: z']);
+  });
+});
+
+describe('withMarked', () => {
+  const m = { state: 'running' as const, at: 9, title: 'Loin', workspace: 'ws', workspaceName: 'WS', profile: 'veille' };
+  const row = { kind: 'intendia' as const, instanceId: 'i', profile: 'default', id: 'a', source: 'intendia', title: 'A', sub: '', workspace: 'ws', at: 1, snippet: null };
+  it('adds a row for a marked session not loaded; none when the filter excludes Intendia', () => {
+    const marks = new Map([['far', m], ['a', m]]);
+    expect(withMarked([row], marks, 'i', true).map((r) => [r.id, r.profile, r.title])).toEqual([['a', 'default', 'A'], ['far', 'veille', 'Loin']]);
+    expect(withMarked([row], marks, 'i', false).map((r) => r.id)).toEqual(['a']);
   });
 });

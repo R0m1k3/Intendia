@@ -12,7 +12,7 @@ import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
 import { openBeside, updateChat } from '../chat/columns';
 import { agentColor, agentInitials, agentTree, type AgentFilter, type AgentNode, type FolderNode } from './agentTree';
-import { runMarks, type RunMark } from './running';
+import { runMarks, withMarked, type RunMark } from './running';
 import { afterRemoveRoute, useRemoveSession, type RemoveTarget } from './remove';
 import { SessionRow } from './SessionRow';
 import { invalidateSessionLists, SESSION_LIST_KEYS, showUndo } from './UndoBar';
@@ -124,7 +124,9 @@ export function AgentsPane({ openId, onBeside }: {
   useEffect(() => { if (openId && openAt) seen(openId, openAt); }, [openId, openAt, seen]);
 
   const mine = useMemo(() => (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst), [workspaces.data, inst]);
-  const tree = agentTree({ sessions: list.data?.sessions ?? [], agents: agents.data, workspaces: mine, marks, isUnread, filter: view });
+  // a session that works or waits shows even beyond the 200 loaded ones
+  const loaded = inst ? withMarked(list.data?.sessions ?? [], marks, inst, source === 'all' || source === 'intendia') : [];
+  const tree = agentTree({ sessions: loaded, agents: agents.data, workspaces: mine, marks, isUnread, filter: view });
 
   const removeRow = async (s: RecentSession) => {
     const target: RemoveTarget = { kind: s.kind, inst: s.instanceId, profile: s.profile, id: s.id, slug: s.workspace ?? undefined };
@@ -154,11 +156,14 @@ export function AgentsPane({ openId, onBeside }: {
     await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
   };
 
-  /** A new session in a folder, opened beside the active chat (as « Nouvelle session »). */
-  const newIn = async (slug: string) => {
+  /** A new session in a folder with `agent`, opened beside the active chat (as « Nouvelle session »). */
+  const newIn = async (slug: string, agent: string) => {
     setError(null);
     try {
       const { session } = await api.createSession(slug);
+      // a folder of another agent (one of this agent's sessions lives there): the new session keeps this agent
+      const owner = mine.find((w) => w.slug === slug)?.profile ?? 'default';
+      if (inst && owner !== agent) await api.updateSession(inst, session.id, { profile: agent });
       localStorage.setItem('intendia-last-workspace', slug);
       void invalidateSessionLists(qc);
       updateChat((c) => openBeside(c, { slug, id: session.id }));
@@ -182,10 +187,11 @@ export function AgentsPane({ openId, onBeside }: {
       return null;
     }
   };
-  /** A new session with an agent: in its most recent folder, else in a new one. */
+  /** A new session with an agent: in its most recent own folder, else in a new one. */
   const newWith = async (a: AgentNode) => {
-    const slug = a.folders[0]?.workspace.slug ?? await newFolder(a.name);
-    if (slug) await newIn(slug);
+    const own = a.folders.find((f) => (f.workspace.profile ?? 'default') === a.name);
+    const slug = own?.workspace.slug ?? await newFolder(a.name);
+    if (slug) await newIn(slug, a.name);
   };
 
   const row = (s: RecentSession, compact: boolean) => (
@@ -231,7 +237,7 @@ export function AgentsPane({ openId, onBeside }: {
             <span className="min-w-0 flex-1 truncate">{f.workspace.name}</span>
             {unread > 0 && <span className="shrink-0 rounded-full bg-accent-soft px-1.5 font-mono text-[10.5px] text-accent-ink" aria-label={plural(unread, '{n} non lu', '{n} non lus')}>{unread}</span>}
           </button>
-          <button type="button" onClick={() => void newIn(f.workspace.slug)} title={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
+          <button type="button" onClick={() => void newIn(f.workspace.slug, a.name)} title={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
             aria-label={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
             className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-raised hover:text-ink md:invisible md:group-hover/f:visible md:group-focus-within/f:visible">
             <Plus className="size-3.5" strokeWidth={1.75} />
