@@ -36,6 +36,7 @@ import { MONITOR_TABS, MonitorPage, type MonitorSearch, type MonitorTab } from '
 import { LOG_FILES } from './monitor/Logs';
 import { PERIODS, type Period } from './monitor/Usage';
 import { ExternalSessionPage } from './pages/ExternalSession';
+import { ChannelPage } from './channels/ChannelPage';
 import { FilesPage, type FilesSearch } from './pages/Files';
 import { GitPage, type GitSearch } from './pages/Git';
 import { InstanceFilesPage, type InstanceFilesSearch } from './pages/InstanceFiles';
@@ -290,9 +291,11 @@ const kanbanRoute = createRoute({
 });
 const activityRoute = createRoute({ getParentRoute: () => appRoute, path: '/activite', component: CentrePage });
 const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/$inst/p/$profile/s/$sessionId', component: ExternalSessionPage });
+/** A channel with several agents (lot 7), in the agents column's layout. */
+const channelRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/canaux/$channelId', component: ChannelPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute, channelRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
   defaultErrorComponent: RouteError,
 });

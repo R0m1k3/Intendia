@@ -922,6 +922,16 @@ export interface SessionGoal {
 }
 export interface GoalSettings { text: string; maxRelaunches: number; budgetUsd: number | null; mode: 'auto' | 'click' }
 
+/** Channels with several agents (lot 7): a member is an agent of an instance, `handle` is its @name in the channel. */
+export interface ChannelMember { handle: string; instanceId: string; instanceLabel: string; profile: string; sessionId: string }
+export interface ChannelItem { id: string; name: string; lead: string; lastAt: number; busy: boolean; stopped: boolean; members: ChannelMember[] }
+export interface ChannelMessage { seq: number; author: string; text: string; at: number }
+export interface ChannelTurn { id: number; handle: string; status: 'queued' | 'running' | 'done' | 'stopped' | 'cancelled'; chain: number; detail: string | null; at: number }
+export interface ChannelDetail {
+  channel: { id: string; name: string; instructions: string; lead: string; createdAt: number };
+  members: ChannelMember[]; messages: ChannelMessage[]; turns: ChannelTurn[]; cost: { usd: number; unpriced: number };
+}
+
 export const api = {
   setup: () => call<SetupState>('GET', '/setup'),
   setPassword: (code: string, password: string) => call<{ ok: true }>('POST', '/setup/password', { code, password }),
@@ -999,6 +1009,15 @@ export const api = {
   modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
   setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
   /** colour index of each agent's avatar (agents/look.ts), per instance */
+  channels: () => call<{ channels: ChannelItem[] }>('GET', '/channels'),
+  channel: (id: string) => call<ChannelDetail>('GET', `/channels/${enc(id)}`),
+  createChannel: (body: { name: string; instructions: string; lead: number; members: { instanceId: string; profile: string }[] }) =>
+    call<{ channel: { id: string; name: string } }>('POST', '/channels', body),
+  updateChannel: (id: string, patch: { name?: string; instructions?: string; lead?: string }) => call<unknown>('PATCH', `/channels/${enc(id)}`, patch),
+  archiveChannel: (id: string) => call<{ ok: true }>('DELETE', `/channels/${enc(id)}`),
+  postChannel: (id: string, text: string) => call<{ message: { seq: number } }>('POST', `/channels/${enc(id)}/messages`, { text }),
+  decideTurn: (id: string, turn: number, body: { action: 'continue' | 'cancel' } | { action: 'reassign'; handle: string }) =>
+    call<{ ok: true }>('POST', `/channels/${enc(id)}/turns/${turn}`, body),
   agentLooks: (inst: string) => call<{ looks: Record<string, number> }>('GET', instPath(inst, 'agent-looks')),
   setAgentLooks: (inst: string, looks: Record<string, number>) => call<{ looks: Record<string, number> }>('PUT', instPath(inst, 'agent-looks'), { looks }),
   modes: (inst: string, profile: string) => call<{ modes: RunMode[] }>('GET', instPath(inst, `modes?profile=${enc(profile)}`)),

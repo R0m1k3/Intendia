@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Brain, Brush, ChevronRight, KeyRound, Layers, Ellipsis, Folder, FolderPlus, Inbox, MessageSquareText, PenLine, Plus, Search, SlidersHorizontal, UserRound } from 'lucide-react';
+import { Link, useNavigate, useRouterState, useSearch } from '@tanstack/react-router';
+import { Brain, Brush, ChevronRight, KeyRound, Layers, Ellipsis, Folder, FolderPlus, Hash, Inbox, MessageSquareText, PenLine, Plus, Search, SlidersHorizontal, UserRound } from 'lucide-react';
+import { NewChannel } from '../channels/NewChannel';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type RecentSession, type SessionSource } from '../api';
 import { ask, askText } from '../components/Dialog';
@@ -110,6 +111,10 @@ export function AgentsPane({ openId, onBeside }: {
   const [error, setError] = useState<unknown>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [addingAgent, setAddingAgent] = useState(false);
+  const [addingChannel, setAddingChannel] = useState(false);
+  // channels are shared by every instance (their members may come from several)
+  const channelList = useQuery({ queryKey: ['channels'], queryFn: api.channels, refetchInterval: 10_000, retry: false });
+  const channelOpen = /^\/canaux\/([^/]+)/.exec(useRouterState({ select: (s) => s.location.pathname }))?.[1] ?? null;
   const rm = useRemoveSession();
 
   const rows = (searching ? found.data?.sessions : list.data?.sessions) ?? [];
@@ -327,6 +332,7 @@ export function AgentsPane({ openId, onBeside }: {
               { label: t('Nouvelle session'), icon: <PenLine className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/chat/nouvelle' }) },
               { label: t('Nouveau dossier…'), icon: <FolderPlus className="size-4" strokeWidth={1.5} />, onSelect: () => setAddingFolder(true) },
               { label: t('Nouvel agent…'), icon: <UserRound className="size-4" strokeWidth={1.5} />, onSelect: () => setAddingAgent(true) },
+              { label: t('Nouveau canal…'), icon: <Hash className="size-4" strokeWidth={1.5} />, onSelect: () => setAddingChannel(true) },
             ]}
           />
         </>
@@ -362,6 +368,10 @@ export function AgentsPane({ openId, onBeside }: {
             if (modelError) void ask({ title: t('Agent créé, modèle non appliqué'), message: t('Modèle non appliqué : {error}', { error: modelError }), confirmLabel: t('Compris') });
           }} />
       )}
+      {addingChannel && (
+        <NewChannel onClose={() => setAddingChannel(false)}
+          onCreated={(id) => { setAddingChannel(false); void navigate({ to: '/canaux/$channelId', params: { channelId: id } }); }} />
+      )}
       {addingFolder && (
         <div className="m-1.5 rounded-xl border border-line p-3">
           <NewWorkspace onCancel={() => setAddingFolder(false)} onCreated={() => { setAddingFolder(false); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }} />
@@ -389,6 +399,25 @@ export function AgentsPane({ openId, onBeside }: {
           {group(t('Vous attend'), tree.needsYou, 'needs-you')}
           {group(t('En cours'), tree.working, 'working')}
           {view === 'all' && group(t('Épinglées'), tree.pinned, 'pinned')}
+          {view === 'all' && (channelList.data?.channels.length ?? 0) > 0 && (
+            <div role="group" aria-label={t('Canaux')} data-group="channels">
+              <ListLabel>{t('Canaux')}</ListLabel>
+              <ul className="flex flex-col gap-0.5">
+                {channelList.data!.channels.map((ch) => (
+                  <li key={ch.id}>
+                    <Link to="/canaux/$channelId" params={{ channelId: ch.id }} data-channel-row={ch.id}
+                      className={cx('flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm hover:bg-paper', channelOpen === ch.id && 'bg-accent-soft')}>
+                      <Hash className="size-3.5 shrink-0 text-ink-faint" strokeWidth={2} />
+                      <span className="min-w-0 flex-1 truncate">{ch.name}</span>
+                      {ch.stopped ? <span className="text-xs text-warn">{t('arrêté')}</span>
+                        : ch.busy ? <span className="size-1.5 rounded-full bg-accent" aria-label={t('En cours')} />
+                          : <span className="font-mono text-[11px] text-ink-faint">{ch.members.length}</span>}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {tree.agents.length > 0 && (
             <div role="group" aria-label={t('Agents')}>
               <ListLabel>{t('Agents')}</ListLabel>

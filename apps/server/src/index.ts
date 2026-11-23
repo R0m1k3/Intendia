@@ -39,6 +39,7 @@ function main() {
   services.autoApprover.start();
   services.goalRunner.start();
   services.watcher.start();
+  services.channelRunner.start();
   // splits cut by a stop of Intendia: Hermes may have finished them
   services.missions.resume();
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
