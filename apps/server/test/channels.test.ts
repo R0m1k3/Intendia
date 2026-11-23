@@ -87,4 +87,31 @@ describe('channels', () => {
     expect(v.messages.map((m: { author: string }) => m.author)).toEqual(['user', 'system', 'default-fake']);
     expect(v.messages[1].text).toBe('Tâche confiée à @default-fake à la place de @default-maison');
   });
+
+  it('a message posted during a member\'s run reaches it at its next turn', async () => {
+    const { t, runner, id } = await setup();
+    t.services.channels.post(id, 'premier');
+    await runner.pass();
+    expect((await view(t, id)).turns[0].status).toBe('running');
+    // posted while the lead runs: queued for the lead, never marked seen by its answer
+    t.services.channels.post(id, 'deuxième');
+    await drive(t, id, runner);
+    const runs = [...fakeOf(t, 'fake').sim.runs.values()];
+    expect(runs).toHaveLength(2);
+    expect(runs[1]!.input).toContain('— Utilisateur : deuxième');
+    expect(runs[1]!.input).not.toContain('premier');
+    // its own answer is not sent back to it
+    expect(runs[1]!.input).not.toContain('— @default-fake');
+  });
+
+  it('records the end of the hidden sessions\' runs for the channel cost', async () => {
+    const { t, runner, id } = await setup();
+    t.services.channels.post(id, 'combien ?');
+    await drive(t, id, runner);
+    const v = await view(t, id);
+    const stats = t.services.workspaces.runStats('fake', v.members[0].sessionId);
+    expect(stats).toHaveLength(1);
+    expect(stats[0]!.status).toBe('completed');
+    expect(stats[0]!.endedAt).not.toBeNull();
+  });
 });

@@ -5,7 +5,7 @@
 // the turn « stopped »: the user continues, reassigns or cancels it.
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { readRunStatus } from '../chat/history.js';
-import { RunBusyError, startRun, type StartRunDeps } from '../chat/start-run.js';
+import { RunBusyError, settle, startRun, type StartRunDeps } from '../chat/start-run.js';
 import { msg } from '../i18n/index.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
@@ -45,6 +45,7 @@ export class ChannelRunner {
     const { channels } = this.deps;
     const open = channels.openTurns(ch.id);
     const running = open.find((t) => t.status === 'running');
+    await this.settleCosts(ch, running?.handle);
     if (running) { await this.follow(ch, running); return; }
     // a stopped turn waits for the user's decision before anything else
     if (open.some((t) => t.status === 'stopped')) return;
@@ -54,6 +55,28 @@ export class ChannelRunner {
 
   private member(ch: ChannelRow, handle: string) {
     return this.deps.channels.members(ch.id).find((m) => m.handle === handle) ?? null;
+  }
+
+  /**
+   * Records the end and the cost of the hidden sessions' runs (nobody opens them, so the chat routes never do):
+   * until each last run's cost is final, else the channel's cost would stay unknown. The running turn's member is
+   * left to follow().
+   */
+  private async settleOne(ch: ChannelRow, m: { handle: string; instanceId: string; sessionId: string }): Promise<void> {
+    try {
+      await settle(this.deps, this.deps.workspaces.getSession(m.instanceId, m.sessionId));
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) this.log(`[intendia] canal ${ch.id} : coût de @${m.handle} : ${(err as Error).message}`);
+    }
+  }
+
+  private async settleCosts(ch: ChannelRow, skip?: string): Promise<void> {
+    for (const m of this.deps.channels.members(ch.id)) {
+      if (m.handle === skip) continue;
+      const tail = this.deps.workspaces.runStats(m.instanceId, m.sessionId).at(-1);
+      if (!tail || tail.costFinal || tail.status === 'unknown') continue;
+      await this.settleOne(ch, m);
+    }
   }
 
   private halt(ch: ChannelRow, t: TurnRow, detail: string): void {
@@ -72,14 +95,17 @@ export class ChannelRunner {
       if (err instanceof NotFoundError) { this.halt(ch, t, msg('La session cachée de @{handle} n’existe plus', { handle: t.handle })); return; }
       throw err;
     }
-    const unseen = channels.messages(ch.id, m.seenSeq);
+    // its own answers are not sent back to it, but count as seen
+    const since = channels.messages(ch.id, m.seenSeq);
+    const unseen = since.filter((x) => x.author !== m.handle);
     const members = channels.members(ch.id).map((x) => ({ handle: x.handle, profile: x.profile, instanceLabel: this.deps.store.get(x.instanceId)?.label ?? x.instanceId }));
     const input = turnInput({ channel: ch, members, me: m.handle, messages: unseen.length ? unseen : [{ seq: 0, author: 'system', text: msg('Reprenez où vous en étiez.') }] });
     try {
       // the turn's id gives the key: the same turn started twice (a restart) is one run at Hermes
       const { runId } = await startRun(this.deps, ctx, input, { keySuffix: `canal-${ch.id}-${t.id}-${t.attempt}` });
       channels.setTurn(t.id, { status: 'running', runId, detail: null });
-      const last = unseen.at(-1)?.seq;
+      // the watermark of what was sent: a message posted during the run stays unseen for the member's next turn
+      const last = since.at(-1)?.seq;
       if (last) channels.seen(ch.id, m.handle, last);
       this.failures.delete(t.id);
     } catch (err) {
@@ -102,9 +128,9 @@ export class ChannelRunner {
     if (!TERMINAL_STATUSES.includes(s.status)) return;
     if (s.status === 'failed') { this.halt(ch, t, s.error ?? msg('Le run a échoué')); return; }
     if (s.status !== 'completed') { this.halt(ch, t, msg('Le run a été arrêté')); return; }
+    await this.settleOne(ch, m);
     const text = (s.output ?? '').trim() || msg('(réponse vide)');
-    const row = channels.append(ch.id, m.handle, text, t.runId);
-    channels.seen(ch.id, m.handle, row.seq);
+    channels.append(ch.id, m.handle, text, t.runId);
     channels.setTurn(t.id, { status: 'done' });
     const handles = channels.members(ch.id).map((x) => x.handle);
     const named = mentions(text, handles, m.handle);
