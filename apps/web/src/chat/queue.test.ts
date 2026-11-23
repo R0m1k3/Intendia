@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearPendingKey, dropItem, EMPTY_QUEUE, enqueue, firstTime, loadPendingKey, loadQueue, pauseQueue, pushHead, resumeQueue, saveQueue,
-  savePendingKey, takeHead,
+  savePendingKey, takeHead, moveItem, editItem,
 } from './queue';
 
 function memory(): Storage {
@@ -92,5 +92,22 @@ describe('queue', () => {
     expect(loadPendingKey('a', 's1', store)).toBeNull();
     store.setItem('intendia-pending-key:a:s3', '{x');
     expect(loadPendingKey('a', 's3', store)).toBeNull();
+  });
+});
+
+describe('reorder and edit', () => {
+  const q3 = () => ['a', 'b', 'c'].reduce((q, t) => enqueue(q, t), EMPTY_QUEUE);
+  it('moves a message up or down, bounded', () => {
+    const q = q3();
+    expect(moveItem(q, q.items[2]!.id, -1).items.map((i) => i.text)).toEqual(['a', 'c', 'b']);
+    expect(moveItem(q, q.items[1]!.id, -5).items.map((i) => i.text)).toEqual(['b', 'a', 'c']);
+    expect(moveItem(q, q.items[2]!.id, 1)).toBe(q);
+  });
+  it('edits with a new key, removes when emptied', () => {
+    const q = q3();
+    const e = editItem(q, q.items[0]!.id, 'z');
+    expect(e.items[0]!.text).toBe('z');
+    expect(e.items[0]!.key).not.toBe(q.items[0]!.key);
+    expect(editItem(q, q.items[0]!.id, '  ').items).toHaveLength(2);
   });
 });
