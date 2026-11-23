@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { renderPersonality } from '../src/sessions/personalities.js';
 import { skillBlocks, SKILL_CHARS } from '../src/sessions/run-extras.js';
 import type { SkillService } from '../src/skills/service.js';
 import type { SessionContext } from '../src/workspaces/service.js';
@@ -46,35 +45,5 @@ describe('skills asked by /use', () => {
     expect(b).toContain('skill_view');
     const cut = { content: async () => ({ name: 'y', content: 'court', truncated: true }) } as unknown as SkillService;
     expect((await skillBlocks(cut, ctx, ['y']))[0]).toContain('skill_view');
-  });
-});
-
-describe('personality of a session', () => {
-  it('rendered like Hermes', () => {
-    expect(renderPersonality('Bref.')).toBe('Bref.');
-    expect(renderPersonality({ system_prompt: 'Formel.', tone: 'courtois', style: 'complet' })).toBe('Formel.\nTone: courtois\nStyle: complet');
-    expect(renderPersonality({})).toBeNull();
-  });
-
-  it('listed from the config and Intendia; added to each run; a missing one is left out with a notice', async () => {
-    const { t, base } = await setup();
-    const own = (await t.request('POST', '/x/prompts', { kind: 'personality', title: 'Avocat du diable', body: 'Contredis-moi.' })).json.prompt;
-    const list = (await t.request('GET', '/x/i/fake/personalities')).json;
-    expect(list.items.map((i: any) => i.value)).toEqual(['hermes:brief', 'hermes:formel', `intendia:${own.id}`]);
-    await t.request('PATCH', base, { personality: 'hermes:formel' });
-    const r = await t.request('POST', `${base}/runs`, { input: 'Bonjour' });
-    expect(r.json.notice).toBeUndefined();
-    expect(instructions(t)).toContain('[Intendia] Personnalité pour cette session : formel\nTu es un assistant formel.\nTone: courtois');
-    await waitRun(t, base, r.json.runId);
-    await t.request('PATCH', base, { personality: `intendia:${own.id}` });
-    const r2 = await t.request('POST', `${base}/runs`, { input: 'Encore' });
-    expect(instructions(t)).toContain('Contredis-moi.');
-    await waitRun(t, base, r2.json.runId);
-    await t.request('DELETE', `/x/prompts/${own.id}`);
-    const r3 = await t.request('POST', `${base}/runs`, { input: 'Toujours' });
-    expect(r3.status).toBe(200);
-    expect(r3.json.notice).toContain('introuvable');
-    expect(instructions(t)).not.toContain('Personnalité pour cette session');
-    expect((await t.request('PATCH', base, { personality: 'autre' })).status).toBe(400);
   });
 });

@@ -144,8 +144,6 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const vaultOn = useVaultAvailable(inst ?? '') === true;
   const skillList = useQuery({ queryKey: ['skills', inst, agentProfile], queryFn: () => api.skills(inst!, agentProfile).then((r) => r.skills), enabled: Boolean(inst && sess.data), staleTime: 60_000 });
   const skillNames = useMemo(() => (skillList.data ?? []).filter((x) => x.enabled !== false).map((x) => x.name), [skillList.data]);
-  // why the last run went without its personality (shown under the composer until the next send)
-  const [notice, setNotice] = useState<string | null>(null);
   const [active, setActive] = useState<ActiveRun | null>(null);
   const history = useQuery({
     queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
@@ -322,7 +320,6 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       const afterId = knownId();
       const res = await api.send(inst, sessionId, text, skills, clientKey);
       clearPendingKey(inst, sessionId);
-      setNotice(res.notice ?? null);
       // the server paused an active goal (the user writes)
       void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
       const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
@@ -440,11 +437,11 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   });
   /** Model / effort of the next messages (also remembered as the workspace's last choice). */
   const setOptions = useMutation({
-    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null; personality?: string | null; autoApprove?: boolean; profile?: string | null }) =>
+    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null; autoApprove?: boolean; profile?: string | null }) =>
       api.updateSession(inst!, sessionId, patch),
     onSuccess: (res, patch) => {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      // another agent: the effective profile (models, modes, personalities, skills) is read again
+      // another agent: the effective profile (models, modes, skills) is read again
       if (patch.profile !== undefined) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
       void qc.invalidateQueries({ queryKey: ['workspace', slug] });
     },
@@ -1219,7 +1216,6 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             onAttachmentsChange={setAttached}
             onSend={(text, sk) => { setUsageOpen(false); return send(text, sk); }}
             skillNames={skillNames}
-            notice={notice}
             autoApprove={sess.data?.session.autoApprove ? { onOff: () => void setAutoApprove(false) } : null}
             onStop={stop}
             commands={commands}
@@ -1245,7 +1241,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
                 model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
-                personality={sess.data.session.personality ?? null} onProfile={(p) => void changeProfile(p)}
+                onProfile={(p) => void changeProfile(p)}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
                 modelOpen={modelOpen} onModelOpenChange={setModelOpen}
                 onChange={(patch) => setOptions.mutate(patch)}

@@ -1,11 +1,10 @@
 // Pinned models and modes (option 17) of an agent (instance + profile), kept by Intendia in `settings`. A mode is a
-// saved model + effort + personality, applied to the session in one PATCH; it never changes the profile (that would
+// saved model + effort, applied to the session in one PATCH; it never changes the profile (that would
 // copy the session: option 18 stays the explicit action).
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db/index.js';
 import { settings } from '../db/schema.js';
-import { PERSONALITY_RE } from '../sessions/personalities.js';
 
 export const PINS_MAX = 20;
 export const MODES_MAX = 30;
@@ -19,7 +18,6 @@ export const Mode = z.object({
   model: Name.nullable(),
   provider: Name.nullable(),
   effort: z.string().max(32).nullable(),
-  personality: z.string().regex(PERSONALITY_RE).nullable(),
 });
 export const Modes = z.array(Mode).max(MODES_MAX);
 export type PinList = z.infer<typeof Pins>;

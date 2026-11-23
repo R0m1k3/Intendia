@@ -59,7 +59,7 @@ describe('picker groups', () => {
   });
 
   it('modes first, then Auto, the pinned group (also in its own group), pin and mode actions', () => {
-    const modes = [{ id: 'm1', name: 'Rapide', model: 'b', provider: 'openrouter', effort: 'low' as const, personality: null }];
+    const modes = [{ id: 'm1', name: 'Rapide', model: 'b', provider: 'openrouter', effort: 'low' as const }];
     const pins = [{ provider: 'anthropic', model: 'c' }];
     const items = modelItems(LIST, { model: 'c', provider: 'anthropic' }, noop, { modes, pins, togglePin: noop, saveMode: noop, removeMode: noop });
     expect(items.map((i) => ('heading' in i ? `# ${i.heading}` : i.label))).toEqual([

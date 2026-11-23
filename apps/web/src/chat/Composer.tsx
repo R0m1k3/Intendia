@@ -63,14 +63,12 @@ let nextId = 1;
  */
 export function Composer({
   onSend, onStop, running, disabled, placeholder, upload, onAttachmentsChange, leading, options, hint, ref: handle,
-  queue, onQueue, onSteer, steerDisabled, commands, onCommand, draftKey, extract, prompts, skillNames, autoApprove, notice,
+  queue, onQueue, onSteer, steerDisabled, commands, onCommand, draftKey, extract, prompts, skillNames, autoApprove,
 }: {
   /** skills offered by `/use` (activated ones of the session's agent) */
   skillNames?: string[];
   /** « Sans confirmation » is on: a pill above the text, a click turns it off */
   autoApprove?: { onOff: () => void } | null;
-  /** a line under the text (e.g. a personality left out of the last run) */
-  notice?: string | null;
   /** localStorage key of the draft (chat/draft.ts); none = not kept */
   draftKey?: string;
   extract?: ExtractArchive;
@@ -446,7 +444,6 @@ export function Composer({
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
       {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}
-      {notice && <p role="status" data-run-notice className="px-2 pb-1 text-[12px] text-warn">{notice}</p>}
       {/* sized by the composer, not the window: a Chat column can be narrow on a wide screen */}
       <div className="@container">
       <div className="flex flex-wrap items-center gap-1 @2xl:flex-nowrap">

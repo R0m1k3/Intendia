@@ -7,9 +7,9 @@ describe('prompts', () => {
     const a = await t.request('POST', '/x/prompts', { title: ' Relire ', body: 'Relis ce texte.' });
     expect(a.status).toBe(201);
     expect(a.json.prompt).toMatchObject({ kind: 'prompt', title: 'Relire', body: 'Relis ce texte.' });
-    await t.request('POST', '/x/prompts', { title: 'Avocat', body: 'Contredis-moi.', kind: 'personality' });
+    await t.request('POST', '/x/prompts', { title: 'Avocat', body: 'Contredis-moi.' });
     await t.request('POST', '/x/prompts', { title: 'Analyse', body: 'Analyse.' });
-    expect((await t.request('GET', '/x/prompts?kind=prompt')).json.prompts.map((p: any) => p.title)).toEqual(['Analyse', 'Relire']);
+    expect((await t.request('GET', '/x/prompts?kind=prompt')).json.prompts.map((p: any) => p.title)).toEqual(['Analyse', 'Avocat', 'Relire']);
     expect((await t.request('GET', '/x/prompts')).json.prompts).toHaveLength(3);
     const id = a.json.prompt.id;
     const up = await t.request('PATCH', `/x/prompts/${id}`, { title: 'Relecture' });
@@ -27,6 +27,7 @@ describe('prompts', () => {
     expect((await post({ title: 'x', body: ' ' })).status).toBe(400);
     expect((await post({ title: 'x', body: 'x'.repeat(20_001) })).status).toBe(400);
     expect((await post({ title: 'x', body: 'x', kind: 'autre' })).status).toBe(400);
+    expect((await post({ title: 'x', body: 'x', kind: 'personality' })).status).toBe(400);
     expect((await post({ title: 'x'.repeat(80), body: 'x'.repeat(20_000) })).status).toBe(201);
     expect((await t.request('GET', '/x/prompts?kind=autre')).status).toBe(400);
   });

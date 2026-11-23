@@ -5,9 +5,7 @@ import { msg } from '../i18n/index.js';
 import type { CompatService } from '../compat/service.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { callOp, HermesError } from '../connectors/runtime.js';
-import type { ConfigService } from '../hermes-config/service.js';
-import type { PromptService } from '../prompts/service.js';
-import { personalityBlock, RunExtrasError, skillBlocks } from '../sessions/run-extras.js';
+import { RunExtrasError, skillBlocks } from '../sessions/run-extras.js';
 import type { SkillService } from '../skills/service.js';
 import { pushTitle } from '../workspaces/title.js';
 import type { PublicSession, RunStatRow, SessionContext, WorkspaceService } from '../workspaces/service.js';
@@ -19,8 +17,6 @@ export interface StartRunDeps {
   compat: CompatService;
   workspaces: WorkspaceService;
   skills: SkillService;
-  config: ConfigService;
-  prompts: PromptService;
   goals: GoalStore;
   /** Timeout of one `POST /v1/runs` (tests: shorter); default CREATE_RUN_TIMEOUT_MS. */
   createRunTimeoutMs?: number;
@@ -237,7 +233,7 @@ export async function startRun(
   deps: StartRunDeps, ctx: SessionContext, input: string,
   /** forGoal: an automatic relaunch, started only while the goal is still active (re-read under the run lock) */
   opts: { skills?: string[]; forGoal?: boolean; keySuffix?: string } = {},
-): Promise<{ runId: string; session: PublicSession; notice?: string }> {
+): Promise<{ runId: string; session: PublicSession }> {
   const { workspaces } = deps;
   const deadline = Date.now() + START_RUN_BUDGET_MS;
   const lock = runKey(ctx.instance.id, ctx.session.id);
@@ -267,13 +263,12 @@ export async function startRun(
     // paused or removed while the caller waited on Hermes: no relaunch
     if (opts.forGoal && deps.goals.get(fresh.instance.id, fresh.session.id)?.status !== 'active') throw new GoalInactiveError();
     const { model, modelProvider, effort } = fresh.session;
-    // skills first: an unknown one stops the send before the run (400), the personality never does
+    // skills first: an unknown one stops the send before the run (400)
     const skills = [...new Set(opts.skills ?? [])];
     const extra = skills.length ? await skillBlocks(deps.skills, fresh, skills) : [];
-    const persona = await personalityBlock(deps.config, deps.prompts, fresh);
     const goal = deps.goals.get(fresh.instance.id, fresh.session.id);
     const instructions = [
-      await workspaces.instructionsFor(fresh), ...extra, ...(persona.block ? [persona.block] : []),
+      await workspaces.instructionsFor(fresh), ...extra,
       ...(goal?.status === 'active' ? [goalBlock(goal.text)] : []),
     ].join('\n\n');
     const skillsKey = [...skills].sort().join('\n');
@@ -319,12 +314,11 @@ export async function startRun(
 
     const keptNow = sentBodies.get(key);
     if (keptNow) keptNow.runId = created.run_id;
-    const notice = persona.notice ? { notice: persona.notice } : {};
     const row = { instanceId: ctx.instance.id, runId: created.run_id, sessionId: ctx.session.id, status: 'running', requestedModel: model, requestedEffort: effort };
     if (created.replayed === true && !(retried && firstSend)) {
       // Hermes replayed a run of this key: never a second row, never lastRunId moved back
       if (workspaces.runStats(ctx.instance.id, ctx.session.id, { running: true }).some((r) => r.runId === created.run_id)) {
-        return { runId: created.run_id, session: workspaces.getSession(ctx.instance.id, ctx.session.id).session, ...notice };
+        return { runId: created.run_id, session: workspaces.getSession(ctx.instance.id, ctx.session.id).session };
       }
       const s = await status(deps, fresh, created.run_id).catch(() => null);
       const createdAtMs = s?.createdAt != null ? s.createdAt * 1000 : null;
@@ -334,11 +328,11 @@ export async function startRun(
         { ...row, startedAt: createdAtMs ?? Date.now(), costBeforeUsd: null, costBeforeSessionId: null },
         input, { setLast: !newer },
       );
-      return { runId: created.run_id, session, ...notice };
+      return { runId: created.run_id, session };
     }
     // after the run was accepted: a refused send leaves the previous row settling
     const session = workspaces.recordStartedRun({ ...row, startedAt: Date.now(), ...handOverCost(deps, fresh, cost) }, input);
-    return { runId: created.run_id, session, ...notice };
+    return { runId: created.run_id, session };
   } finally {
     startingRuns.delete(lock);
     startingKeys.delete(lock);

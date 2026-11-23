@@ -89,7 +89,7 @@ export function createServices(deps: {
   const providers = new ProvidersService(deps.compat, deps.store, deps.config.secret, config);
   const mcpLink = new McpLink(config, deps.db, deps.config);
   const goals = new GoalStore(deps.db);
-  const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, config, prompts: new PromptService(deps.db), goals, createRunTimeoutMs: deps.createRunTimeoutMs };
+  const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, goals, createRunTimeoutMs: deps.createRunTimeoutMs };
   const wakes = new WakeStore(deps.db);
   const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));

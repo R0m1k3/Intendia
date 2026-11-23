@@ -57,7 +57,6 @@ export const sessionWorkspace = sqliteTable(
     /** Taken by the purger: next attempt (lease, then retry after a failure). */
     purgeAfter: integer('purge_after'),
     /** 'hermes:<name>' (config of the profile) or 'intendia:<prompt id>'; NULL = none. */
-    personality: text('personality'),
     /** « Sans confirmation »: Intendia answers the approvals of this session's runs. */
     autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
     /** Hermes profile of this session; NULL = the workspace's default profile. */

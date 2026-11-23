@@ -12,7 +12,7 @@ export function encodeChoice(model: string, provider: string | null): string {
 
 /** A pinned model is also listed in its group: its own value, so the two lines are distinct. */
 const PIN = '\u0002';
-/** A mode: applies its model, effort and personality. */
+/** A mode: applies its model and effort. */
 const MODE = '\u0003';
 
 export const modeValue = (id: string) => `${MODE}${id}`;
@@ -50,7 +50,7 @@ export function modelItems(
   if (extras.modes?.length) {
     items.push({ heading: 'Modes' });
     for (const m of extras.modes) {
-      const what = [m.model ? shortModel(m.model) : 'Auto', m.effort ? t('effort {effort}', { effort: m.effort }) : null, m.personality ? t('personnalité') : null].filter(Boolean).join(' · ');
+      const what = [m.model ? shortModel(m.model) : 'Auto', m.effort ? t('effort {effort}', { effort: m.effort }) : null].filter(Boolean).join(' · ');
       items.push({ value: modeValue(m.id), label: m.name, hint: what });
     }
   }

@@ -14,7 +14,6 @@ import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { RUN_ACTIVE, SESSION_ID_RE, sessionParams } from './workspaces.js';
 import { PROFILE_RE } from './params.js';
-import { personalityExists } from '../sessions/personalities.js';
 
 /** Created by the browser once per action: the same key again gives the same copy. */
 const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, msg('clé invalide'));
@@ -50,8 +49,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const { session: s, workspace } = ctx;
     const newId = copyId(inst, workspace.slug, key);
     const title = `${s.title || 'Nouvelle session'} (copie)`;
-    // same agent and personality; « Sans confirmation » starts off on a copy
-    const options = { model: s.model, provider: s.modelProvider, effort: s.effort, profile: s.profile, personality: s.personality };
+    // same agent; « Sans confirmation » starts off on a copy
+    const options = { model: s.model, provider: s.modelProvider, effort: s.effort, profile: s.profile };
     const done = workspaces.existingCopy(workspace.slug, newId);
     if (done) return c.json({ session: done });
     // never sent to Hermes: nothing to copy there, a new empty session with the same options
@@ -86,8 +85,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const newId = copyId(inst, workspace.slug, `${key}:${profile}`);
     const done = workspaces.existingCopy(workspace.slug, newId);
     if (done) return c.json({ session: done });
-    const personality = s.personality && await personalityExists(deps.services.config, inst, profile, s.personality) ? s.personality : null;
-    const options = { title: s.title, model: s.model, provider: s.modelProvider, effort: s.effort, profile, personality };
+    const options = { title: s.title, model: s.model, provider: s.modelProvider, effort: s.effort, profile };
     if (!s.lastRunId && !s.copiedFrom) {
       const res = await workspaces.adoptSession(workspace.slug, newId, { ...options, copiedFrom: null });
       return c.json({ session: res.session }, res.created ? 201 : 200);

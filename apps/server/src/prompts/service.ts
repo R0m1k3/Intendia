@@ -1,5 +1,4 @@
-// Prompts saved by the user (kind 'prompt': inserted in the composer) and personalities written in Intendia
-// (kind 'personality'). Shared by every instance: a text, not a Hermes setting.
+// Prompts saved by the user (kind 'prompt': inserted in the composer). Shared by every instance: a text, not a Hermes setting.
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
@@ -7,7 +6,7 @@ import { prompts } from '../db/schema.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
 
-export const PROMPT_KINDS = ['prompt', 'personality'] as const;
+export const PROMPT_KINDS = ['prompt'] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
 export const PROMPT_TITLE_MAX = 80;
 export const PROMPT_BODY_MAX = 20_000;
