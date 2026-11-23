@@ -1087,6 +1087,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               {k === 'subagents' && <span className="ml-1.5 font-mono text-[11px] text-ink-faint">{subCards.reduce((n, c) => n + c.nodes.length, 0)}</span>}
             </button>
           ))}
+          {/* the files and the agent's card have their own close button; these tabs get one here (the panel covers
+              the page on small screens) */}
+          {(sideTab === 'subagents' || sideTab === 'aside') && (
+            <button type="button" onClick={() => setPanel(false)} aria-label={t('Fermer le panneau')}
+              className="mb-1 ml-auto flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-ink-faint hover:bg-raised hover:text-ink">
+              <X className="size-4" strokeWidth={1.5} />
+            </button>
+          )}
         </div>
       )}
       <div className="min-h-0 flex-1">
