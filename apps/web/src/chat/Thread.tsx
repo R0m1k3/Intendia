@@ -12,6 +12,7 @@ import { locale, t } from '../i18n';
 import { rehypePaths } from '../files/rehypePaths';
 import { splitAttachments } from './attachments';
 import type { Approval, Entry } from './events';
+import { AgentAvatar as FaceAvatar } from '../agents/look';
 import { Artifact } from './Artifact';
 import { splitArtifacts } from './artifacts';
 import { RunFooter } from './RunFooter';
@@ -158,12 +159,13 @@ function Step({ e }: { e: ToolEntry }) {
 }
 
 /**
- * Consecutive tool calls of a reply: open at first while one runs or when there are 3 or fewer (or the times are
- * shown: the card is created again when they are turned on), then only by click.
+ * Consecutive tool calls of a reply, folded under « N étapes » once done (OpenBot-like): open at first only while one
+ * runs, when one failed, or when the times are shown (the card is created again when they are turned on).
  */
 function Steps({ tools }: { tools: ToolEntry[] }) {
   const times = useContext(Times) !== null;
-  const [open, setOpen] = useState(() => times || tools.length <= 3 || tools.some((tool) => tool.state === 'running'));
+  const failed = tools.some((tool) => tool.state === 'failed');
+  const [open, setOpen] = useState(() => times || failed || tools.some((tool) => tool.state === 'running'));
   return (
     <div className="rounded-lg bg-paper px-1.5 py-1.5 text-ink-soft" data-steps>
       <button
@@ -171,7 +173,7 @@ function Steps({ tools }: { tools: ToolEntry[] }) {
         className="flex w-full items-center gap-2 rounded-md px-1.5 py-[3px] text-left font-mono text-xs text-ink-faint hover:text-ink"
       >
         <ChevronDown className={cx('size-3.5 shrink-0 transition-transform duration-150', !open && '-rotate-90')} strokeWidth={1.75} />
-        {stepsLabel(tools)}
+        <span className={failed ? 'text-bad' : undefined}>{stepsLabel(tools)}</span>
       </button>
       <VaultLinks tools={tools} />
       {open && <ul className="flex flex-col gap-0.5">{tools.map((tool) => <Step key={tool.key} e={tool} />)}</ul>}
@@ -223,8 +225,13 @@ function CopyReply({ text }: { text: string }) {
   );
 }
 
-/** Round 28 px avatar with an initial: the agent on orange with a black letter, the user on grey. */
+/** The face of the session's agent (its profile and colour, agents/look.tsx); none: the orange « H ». */
+export const AgentFace = createContext<{ profile: string; color: string } | null>(null);
+
+/** 28 px avatar: the agent's face (its colour and initials), else an initial on orange; the user on grey. */
 export function Avatar({ name, agent }: { name: string; agent: boolean }) {
+  const face = useContext(AgentFace);
+  if (agent && face) return <FaceAvatar name={face.profile} color={face.color} size={28} />;
   return (
     <span aria-hidden className={cx(
       'grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold uppercase',

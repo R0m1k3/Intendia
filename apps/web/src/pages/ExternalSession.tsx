@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import { ArrowLeft, MessageSquarePlus, Trash2 } from 'lucide-react';
 import { askChoice } from '../components/Dialog';
 import { newKey, useCopyOps } from '../sessions/copies';
@@ -9,7 +10,8 @@ import { api, type RecentSession } from '../api';
 import { applyDeliveries, delegationState } from '../chat/deliveries';
 import { historyEntries } from '../chat/events';
 import { agentName } from '../chat/format';
-import { Thread } from '../chat/Thread';
+import { AgentFace, Thread } from '../chat/Thread';
+import { useAgentLooks } from '../agents/look';
 import { Button, cx, ErrorText } from '../components/ui';
 import { sourceLabel } from '../home/labels';
 import { FullScreen, ICON_BTN, when } from './Session';
@@ -25,6 +27,9 @@ export function ExternalSessionPage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const label = instances.data?.instances.find((i) => i.id === inst)?.label;
   const agent = agentName(profile, label);
+  const looks = useAgentLooks(inst);
+  const faceColor = looks.color(profile);
+  const face = useMemo(() => ({ profile, color: faceColor }), [profile, faceColor]);
   // title, source and date as the inbox column read them (no extra request)
   // (same key as the column's default view: shared; another filter there costs one more read)
   const recent = useQuery({ queryKey: ['sessions-list', inst, 'all', 50], queryFn: () => api.recentSessions(inst, 50, 'all'), refetchOnWindowFocus: false });
@@ -90,7 +95,7 @@ export function ExternalSessionPage() {
         <ErrorText error={carryOn.error} />
         <ErrorText error={remove.error} />
         {messages.isSuccess && entries.length === 0 && <p className="text-sm text-ink-faint">{t('Aucun message')}</p>}
-        <Thread entries={entries} agent={agent} />
+        <AgentFace.Provider value={face}><Thread entries={entries} agent={agent} /></AgentFace.Provider>
       </div>
     </div>
   );
