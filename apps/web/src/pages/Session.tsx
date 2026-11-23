@@ -1,3 +1,5 @@
+import { AgentPanel } from '../agents/AgentPanel';
+import { AgentAvatar, useAgentLooks } from '../agents/look';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
@@ -186,6 +188,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const agent = agentName(sess.data?.profile, mounts?.label);
   // closed at first: the inbox column takes the room; opening it (or a preview) moves the column aside
   const [panel, setPanel] = useState(false);
+  /** the side panel's tab: the session's files or its agent's card (OpenBot-like) */
+  const [panelTab, setPanelTab] = useState<'files' | 'agent'>('files');
+  const looks = useAgentLooks(inst ?? null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const inbox = useInbox();
   const sideOpen = panel || previewPath !== null;
@@ -1047,11 +1052,32 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   }, [slug, qc]);
   const addFiles = (f: File[]) => composer.current?.addFiles(f);
 
-  const side = previewPath ? (
+  const files = previewPath ? (
     <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} onInsert={insert} />
   ) : (
     <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={(p) => void confirmClose(() => setPreviewPath(p))} onClose={() => setPanel(false)}
       agentRoot={agentRoot} onInsert={insert} modified={modified} />
+  );
+  const sideTab = previewPath ? 'files' : panelTab;
+  const side = (
+    <div className="flex h-full flex-col">
+      {!previewPath && (
+        <div role="tablist" aria-label={t('Panneau latéral')} className="flex shrink-0 gap-1 border-b border-line/70 px-3 pt-2">
+          {([['files', t('Fichiers')], ['agent', t('Agent')]] as const).map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={sideTab === k} onClick={() => setPanelTab(k)}
+              className={cx('-mb-px border-b-2 px-2.5 pb-2 pt-1 text-[13px] transition-colors', sideTab === k ? 'border-ink font-medium text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        {sideTab === 'agent' && inst ? (
+          <AgentPanel inst={inst} profile={sess.data?.profile ?? 'default'} autoApprove={Boolean(sess.data?.session.autoApprove)}
+            onAutoApprove={(on) => void setAutoApprove(on)} onClose={() => setPanel(false)} />
+        ) : files}
+      </div>
+    </div>
   );
 
   return (
@@ -1080,8 +1106,16 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               onClick={copyLink}>
               {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
             </button>
-            <button type="button" className={cx(ICON_BTN, sideOpen && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
-              aria-expanded={panel} onClick={() => void confirmClose(() => { setPanel(!panel); setPreviewPath(null); })}>
+            {inst && (
+              <button type="button" className={cx('flex h-[34px] shrink-0 items-center gap-1.5 rounded-lg border border-line bg-sheet px-1.5 text-ink transition-colors hover:bg-paper lg:pr-2.5', panel && panelTab === 'agent' && !previewPath && 'bg-raised')} data-agent-button=""
+                aria-label={t('Fiche de l’agent {name}', { name: sess.data?.profile ?? 'default' })} title={t('Fiche de l’agent {name}', { name: sess.data?.profile ?? 'default' })}
+                onClick={() => void confirmClose(() => { const open = panel && panelTab === 'agent' && !previewPath; setPanel(!open); setPanelTab('agent'); setPreviewPath(null); })}>
+                <AgentAvatar name={sess.data?.profile ?? 'default'} color={looks.color(sess.data?.profile ?? 'default')} size={22} />
+                <span className="hidden max-w-[9rem] truncate text-[13px] font-medium lg:inline">{sess.data?.profile ?? 'default'}</span>
+              </button>
+            )}
+            <button type="button" className={cx(ICON_BTN, panel && panelTab === 'files' && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
+              aria-expanded={panel && panelTab === 'files'} onClick={() => void confirmClose(() => { const open = panel && panelTab === 'files'; setPanel(!open); setPanelTab('files'); setPreviewPath(null); })}>
               <PanelRight className="size-4" strokeWidth={1.5} />
             </button>
             {items.length >= OUTLINE_MIN && <TurnPlan items={items} onJump={jumpTo} triggerClass={ICON_BTN} />}

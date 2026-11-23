@@ -347,4 +347,5 @@ export default {
   'Connexion perdue avec Intendia : nouvel essai en cours…': 'Connection to Intendia lost: trying again…',
   'Connexion à Intendia expirée : reconnectez-vous pour suivre ce travail.': 'Your Intendia sign-in expired: sign in again to follow this work.',
   'Relance déjà reçue par Hermes avec un autre contenu : vérifiez la conversation, puis reprenez': 'Relaunch already received by Hermes with other content: check the conversation, then resume',
+  "Panneau latéral": "Side panel",
 } satisfies Record<string, string>;

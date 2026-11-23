@@ -998,6 +998,9 @@ export const api = {
     }),
   modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
   setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
+  /** colour index of each agent's avatar (agents/look.ts), per instance */
+  agentLooks: (inst: string) => call<{ looks: Record<string, number> }>('GET', instPath(inst, 'agent-looks')),
+  setAgentLooks: (inst: string, looks: Record<string, number>) => call<{ looks: Record<string, number> }>('PUT', instPath(inst, 'agent-looks'), { looks }),
   modes: (inst: string, profile: string) => call<{ modes: RunMode[] }>('GET', instPath(inst, `modes?profile=${enc(profile)}`)),
   setModes: (inst: string, profile: string, modes: RunMode[]) => call<{ modes: RunMode[] }>('PUT', instPath(inst, `modes?profile=${enc(profile)}`), { modes }),
   toProfile: (inst: string, id: string, profile: string, key: string) => call<{ session: Session }>('POST', `${sessionPath(inst, id)}/to-profile`, { profile, key }),

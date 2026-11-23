@@ -234,4 +234,5 @@ export default {
   "Aucun agent ne travaille": "No agent is working",
   "Tout est lu": "All read",
   "non lu": "unread",
+  "Nouvel agent…": "New agent…",
 } satisfies Record<string, string>;

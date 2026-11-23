@@ -1,3 +1,5 @@
+import { AGENT_COLORS } from '../sessions/agentTree';
+import { AgentAvatar, ColorChoice, useAgentLooks } from '../agents/look';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Bot, Plus, X } from 'lucide-react';
@@ -26,7 +28,7 @@ const SELECT = 'h-9 w-full rounded-lg border border-line bg-sheet px-2.5 text-sm
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 
-function NewAgent({ inst, agents, onClose, onCreated }: {
+export function NewAgent({ inst, agents, onClose, onCreated }: {
   inst: string; agents: Agent[]; onClose: () => void; onCreated: (name: string, source: 'env' | 'db', modelError: string | null) => void;
 }) {
   const qc = useQueryClient();
@@ -37,6 +39,8 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
   const [noSkills, setNoSkills] = useState(false);
   const [soul, setSoul] = useState('');
   const [model, setModel] = useState<{ model: string; provider: string } | null>(null);
+  const [color, setColor] = useState<number | null>(null);
+  const looks = useAgentLooks(inst);
   const create = useMutation({
     mutationFn: () => api.createAgent(inst, {
       name: name.trim(), description: description.trim() || undefined, cloneFrom: cloneFrom || undefined,
@@ -45,6 +49,8 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
     }),
     onSuccess: async (r) => {
       guard.release();
+      // the face is Intendia's: a failure there never hides the agent's creation
+      if (color !== null) await looks.set(r.name, color).catch(() => {});
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['profiles', inst] });
       onCreated(r.name, r.keySource, r.modelError);
@@ -63,6 +69,12 @@ function NewAgent({ inst, agents, onClose, onCreated }: {
           <Field label={t('Nom')} hint={t('Minuscules, chiffres, - et _ ; c’est le nom du profil Hermes')}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder={t('recherche')} autoFocus
               aria-invalid={name !== '' && !nameOk} />
+          </Field>
+          <Field label={t('Couleur')} hint={t('Celle de son avatar dans Intendia')}>
+            <div className="flex items-center gap-3">
+              <AgentAvatar name={name.trim() || '?'} color={color !== null ? AGENT_COLORS[color] : undefined} size={32} />
+              <ColorChoice value={color} onPick={setColor} />
+            </div>
           </Field>
           <Field label={t('Description')} hint={t('Ce que fait cet agent ; le kanban s’en sert pour lui confier des tâches')}>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} rows={4}

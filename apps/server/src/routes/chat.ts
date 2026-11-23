@@ -17,7 +17,7 @@ import { toUsage } from '../chat/usage.js';
 import { HISTORY_PAGE, readHistory, whenIdle, readRunStatus, type ChatMessage } from '../chat/history.js';
 import { listChildren } from '../chat/subagents.js';
 import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
-import { presets, Modes, Pins } from '../chat/presets.js';
+import { Looks, presets, Modes, Pins } from '../chat/presets.js';
 import { SKILLS_MAX } from '../sessions/run-extras.js';
 import {
   AlreadySentError, CLIENT_KEY_RE, IdempotencyConflictError, RunBusyError, RunExtrasError, settle as settleRuns, startRun,
@@ -117,6 +117,13 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const pins = Pins.parse((await c.req.json()).pins);
     presets.setPins(deps.db, inst, profileOf(c), pins);
     return c.json({ pins });
+  });
+  r.get('/i/:inst/agent-looks', (c) => c.json({ looks: presets.looks(deps.db, instOf(c)) }));
+  r.put('/i/:inst/agent-looks', async (c) => {
+    const inst = instOf(c);
+    const looks = Looks.parse((await c.req.json()).looks);
+    presets.setLooks(deps.db, inst, looks);
+    return c.json({ looks });
   });
   r.get('/i/:inst/modes', (c) => c.json({ modes: presets.modes(deps.db, instOf(c), profileOf(c)) }));
   r.put('/i/:inst/modes', async (c) => {
