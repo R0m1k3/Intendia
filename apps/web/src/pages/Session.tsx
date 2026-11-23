@@ -5,8 +5,11 @@ import { Link, useParams } from '@tanstack/react-router';
 import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions/UndoBar';
 import { useRemoveSession } from '../sessions/remove';
+import { clampWidth, readPanel, savePanel, type PanelPrefs, type PanelTab } from '../sessions/panelPrefs';
+import { Subagents } from '../chat/Subagents';
+import { AsideQuestion } from '../chat/AsideQuestion';
 import { download, newKey, useCopyOps } from '../sessions/copies';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { api, ApiError, rawUrl, type ApprovalChoice, type ChatMessage, type Effort, type RunStat, type RunStatus } from '../api';
 import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
 import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
@@ -25,7 +28,7 @@ import {
   saveQueue, savePendingKey, takeHead, type Queue,
 } from '../chat/queue';
 import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
-import { AGENT_INDENT, AgentFace, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
+import { AGENT_INDENT, AgentFace, ApprovalCard, OpenSubagents, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
 import { lastTodos } from '../chat/todos';
@@ -188,8 +191,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const agent = agentName(sess.data?.profile, mounts?.label);
   // closed at first: the inbox column takes the room; opening it (or a preview) moves the column aside
   const [panel, setPanel] = useState(false);
-  /** the side panel's tab: the session's files or its agent's card (OpenBot-like) */
-  const [panelTab, setPanelTab] = useState<'files' | 'agent'>('files');
+  /** the side panel's tab (files, sub-agents, the agent's card: OpenBot-like) and width, kept per session */
+  const [panelPrefs, setPanelPrefs] = useState<PanelPrefs>(() => readPanel(sessionId));
+  const panelTab = panelPrefs.tab;
+  const setPanelTab = useCallback((tab: PanelTab) => setPanelPrefs((p) => {
+    const next = { ...p, tab };
+    savePanel(sessionId, next);
+    return next;
+  }), [sessionId]);
   const looks = useAgentLooks(inst ?? null);
   const faceProfile = sess.data?.profile ?? 'default';
   const faceColor = looks.color(faceProfile);
@@ -988,6 +997,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // « /goal » can be typed when the message field can
   const goalOk = Boolean(inst) && chat.available && !switching;
   const openFiles = () => void confirmClose(() => { setPanel(true); setPanelTab('files'); setPreviewPath(null); });
+  const openSubagents = () => void confirmClose(() => { setPanel(true); setPanelTab('subagents'); setPreviewPath(null); });
   // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
   const handlers = useRef({ stop, onCommand, renameSession, copyLink, openFiles });
   handlers.current = { stop, onCommand, renameSession, copyLink, openFiles };
@@ -1061,15 +1071,20 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={(p) => void confirmClose(() => setPreviewPath(p))} onClose={() => setPanel(false)}
       agentRoot={agentRoot} onInsert={insert} modified={modified} />
   );
-  const sideTab = previewPath ? 'files' : panelTab;
+  const subCards = entries.filter((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
+  const tabs: [PanelTab, string][] = [['files', t('Fichiers')], ...(subCards.length ? [['subagents', t('Sous-agents')] as [PanelTab, string]] : []),
+    // not inside a frame: no side question of a side question
+    ...(EMBEDDED ? [] : [['aside', t('Question annexe')] as [PanelTab, string]]), ['agent', t('Agent')]];
+  const sideTab: PanelTab = previewPath || (panelTab === 'subagents' && !subCards.length) || (panelTab === 'aside' && EMBEDDED) ? 'files' : panelTab;
   const side = (
     <div className="flex h-full flex-col">
       {!previewPath && (
-        <div role="tablist" aria-label={t('Panneau latéral')} className="flex shrink-0 gap-1 border-b border-line/70 px-3 pt-2">
-          {([['files', t('Fichiers')], ['agent', t('Agent')]] as const).map(([k, label]) => (
+        <div role="tablist" aria-label={t('Panneau latéral')} className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-line/70 px-2.5 pt-2">
+          {tabs.map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={sideTab === k} onClick={() => setPanelTab(k)}
-              className={cx('-mb-px border-b-2 px-2.5 pb-2 pt-1 text-[13px] transition-colors', sideTab === k ? 'border-ink font-medium text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
+              className={cx('-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 pb-2 pt-1 text-[13px] transition-colors', sideTab === k ? 'border-ink font-medium text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
               {label}
+              {k === 'subagents' && <span className="ml-1.5 font-mono text-[11px] text-ink-faint">{subCards.reduce((n, c) => n + c.nodes.length, 0)}</span>}
             </button>
           ))}
         </div>
@@ -1078,6 +1093,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {sideTab === 'agent' && inst ? (
           <AgentPanel inst={inst} profile={sess.data?.profile ?? 'default'} autoApprove={Boolean(sess.data?.session.autoApprove)}
             onAutoApprove={(on) => void setAutoApprove(on)} onClose={() => setPanel(false)} />
+        ) : sideTab === 'aside' && inst ? (
+          <AsideQuestion inst={inst} slug={slug} parentId={sessionId} profile={sess.data?.profile ?? 'default'} />
+        ) : sideTab === 'subagents' ? (
+          <div data-subagents-panel className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+            {[...subCards].reverse().map((c) => <Subagents key={c.key} nodes={c.nodes} openSince={c.openSince} live />)}
+          </div>
         ) : files}
       </div>
     </div>
@@ -1190,7 +1211,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
-        <AgentFace.Provider value={face}>
+        <AgentFace.Provider value={face}><OpenSubagents.Provider value={openSubagents}>
         {history.isPending && entries.length === 0 ? <SkeletonThread /> : (
           <Thread
             entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
@@ -1199,7 +1220,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           />
         )}
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
-        </AgentFace.Provider>
+        </OpenSubagents.Provider></AgentFace.Provider>
         {running && link.mode === 'polling' && (
           <p data-deferred={link.cause} className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>
             {link.cause === 'cap' ? t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')
@@ -1309,13 +1330,45 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           ? 'absolute inset-y-0 right-0 z-20 w-full max-w-full border-l border-line/70 bg-sheet shadow-xl'
           : 'fixed inset-0 z-30 bg-sheet lg:z-auto lg:shrink-0 lg:border-l lg:border-line/70',
         col ? (col.wide && 'lg:static lg:h-full') : 'lg:sticky lg:top-0 lg:h-[var(--content-h)]',
-        !(col && !col.wide) && (previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[340px]'),
-      )}>
+        !(col && !col.wide) && (previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[var(--panel-w)]'),
+      )} style={{ '--panel-w': `${panelPrefs.width}px` } as CSSProperties}>
+        {!previewPath && !(col && !col.wide) && <PanelResizer width={panelPrefs.width} onResize={(w, keep) => setPanelPrefs((p) => {
+          const next = { ...p, width: clampWidth(w) };
+          if (keep) savePanel(sessionId, next);
+          return next;
+        })} />}
         {side}
       </aside>
     )}
     </div>
     </FilePaths.Provider>
+  );
+}
+
+/** Left edge of the side panel (wide screens): drag to resize it, arrows by 20 px; the width is kept on release. */
+function PanelResizer({ width, onResize }: { width: number; onResize: (width: number, keep: boolean) => void }) {
+  const start = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const move = (ev: PointerEvent) => onResize(width + (x0 - ev.clientX), false);
+    const up = (ev: PointerEvent) => {
+      onResize(width + (x0 - ev.clientX), true);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.removeProperty('cursor');
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div role="separator" aria-orientation="vertical" aria-label={t('Largeur du panneau')} aria-valuenow={width} tabIndex={0} data-panel-resizer
+      onPointerDown={start}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); onResize(width + 20, true); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); onResize(width - 20, true); }
+      }}
+      className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize transition-colors hover:bg-accent/30 focus-visible:bg-accent/40 focus-visible:outline-none lg:block" />
   );
 }
 

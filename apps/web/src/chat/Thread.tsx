@@ -207,9 +207,23 @@ function PartBody({ p }: { p: Exclude<Part, { kind: 'steps' }> }) {
   }
 }
 
+/** Opens the session's side panel on its sub-agents (none: the card has no « Ouvrir » link). */
+export const OpenSubagents = createContext<(() => void) | null>(null);
+
 function SubagentsPart({ p }: { p: Extract<Part, { kind: 'subagents' }> }) {
   const live = useContext(LiveDeliveries);
-  return <Subagents nodes={p.nodes} openSince={p.openSince} live={live} />;
+  const open = useContext(OpenSubagents);
+  return (
+    <div className="relative">
+      <Subagents nodes={p.nodes} openSince={p.openSince} live={live} />
+      {open && (
+        <button type="button" onClick={open} data-open-subagents
+          className="absolute right-2 top-2 rounded-md px-1.5 py-0.5 text-xs text-ink-faint hover:bg-raised hover:text-ink">
+          {t('Ouvrir dans le panneau')}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function CopyReply({ text }: { text: string }) {
