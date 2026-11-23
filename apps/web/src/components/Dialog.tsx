@@ -13,6 +13,8 @@ export interface AskTextOptions extends Common {
   label?: string; value?: string; maxLength?: number; placeholder?: string;
   /** Password field (masked, kept as typed: not trimmed). */
   password?: boolean;
+  /** Several lines (a message, instructions): Enter adds a line, Ctrl/⌘ + Enter confirms. */
+  multiline?: boolean;
 }
 export interface AskChoiceOptions extends Common { label?: string; options: { value: string; label: string }[] }
 
@@ -59,6 +61,7 @@ export function DialogHost() {
 function DialogView({ req, done }: { req: Request; done: () => void }) {
   const [text, setText] = useState(req.kind === 'text' ? req.opts.value ?? '' : req.kind === 'copy' ? req.opts.text : req.kind === 'choice' ? req.opts.options[0]?.value ?? '' : '');
   const input = useRef<HTMLInputElement>(null);
+  const area = useRef<HTMLTextAreaElement>(null);
   const ok = useRef<HTMLButtonElement>(null);
   const before = useRef<Element | null>(document.activeElement);
 
@@ -76,7 +79,8 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
     // the page behind is inert (no Tab, no click) while the dialog is open; the dialog is portalled outside #root
     const root = document.getElementById('root');
     root?.setAttribute('inert', '');
-    if (input.current) { input.current.focus(); input.current.select(); } else ok.current?.focus();
+    const field = input.current ?? area.current;
+    if (field) { field.focus(); field.select(); } else ok.current?.focus();
     // capture on window: runs before the page's own shortcuts (Ctrl/Cmd K), which are swallowed
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
@@ -116,14 +120,21 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
         {(req.kind === 'text' || req.kind === 'copy') && (
           <label className="mt-4 block">
             {req.kind === 'text' && req.opts.label && <span className="mb-2 block text-sm font-medium">{req.opts.label}</span>}
-            <Input
+            {req.kind === 'text' && req.opts.multiline ? (
+              <textarea
+                ref={area} value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={req.opts.maxLength} placeholder={req.opts.placeholder}
+                aria-label={req.opts.label ?? title}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+                className="block w-full resize-y rounded-lg border border-line bg-sheet px-3 py-2 text-sm placeholder:text-ink-faint focus:border-ink focus:outline-none"
+              />
+            ) : <Input
               ref={input} value={text} readOnly={req.kind === 'copy'} onChange={(e) => setText(e.target.value)}
               {...(req.kind === 'text' && req.opts.password ? { type: 'password', autoComplete: 'current-password' } : {})}
               maxLength={req.kind === 'text' ? req.opts.maxLength : undefined}
               placeholder={req.kind === 'text' ? req.opts.placeholder : undefined}
               aria-label={req.kind === 'text' ? req.opts.label ?? title : title}
               className={req.kind === 'copy' ? 'font-mono text-xs' : undefined}
-            />
+            />}
           </label>
         )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
