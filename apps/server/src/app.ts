@@ -1,4 +1,5 @@
 import { goalRoutes } from './routes/goal.js';
+import { channelRoutes } from './routes/channels.js';
 import { msg, translateResponses } from './i18n/index.js';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -341,6 +342,7 @@ export function createApp(deps: AppDeps) {
   priv.route('/', workspaceRoutes({ ...deps, workspaces }));
   priv.route('/', chatRoutes({ ...deps, workspaces }));
   priv.route('/', goalRoutes(deps.services.runDeps));
+  priv.route('/', channelRoutes({ channels: deps.services.channels, runner: deps.services.channelRunner, store: deps.store }));
   priv.route('/', sessionCopyRoutes({ ...deps, workspaces }));
   priv.route('/', fileRoutes(files, deps.services.instanceFiles));
   priv.route('/', gitRoutes(deps.services.git));

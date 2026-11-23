@@ -31,6 +31,8 @@ import { DelegationWatcher, WakeStore } from './chat/wake.js';
 import { GoalRunner } from './chat/goal-runner.js';
 import type { StartRunDeps } from './chat/start-run.js';
 import { PromptService } from './prompts/service.js';
+import { ChannelService } from './channels/service.js';
+import { ChannelRunner } from './channels/runner.js';
 
 export interface Services {
   roots: FileRoots;
@@ -64,6 +66,9 @@ export interface Services {
   /** wakes of the agent after its background sub-agents (chat/wake.ts) */
   wakes: WakeStore;
   watcher: DelegationWatcher;
+  /** channels with several agents and the loop that plays their turns */
+  channels: ChannelService;
+  channelRunner: ChannelRunner;
 }
 
 /** Built once and shared by the web app (port 3000) and the MCP app (port 3001). */
@@ -93,5 +98,7 @@ export function createServices(deps: {
   const wakes = new WakeStore(deps.db);
   const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));
-  return { goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), vault: new VaultService(deps.compat, deps.store), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
+  const channels = new ChannelService(deps.db, deps.store, workspaces);
+  const channelRunner = new ChannelRunner({ ...runDeps, channels, store: deps.store });
+  return { channels, channelRunner, goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), vault: new VaultService(deps.compat, deps.store), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }

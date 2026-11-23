@@ -12,7 +12,7 @@ describe('migrations', () => {
     const dir = tempDir();
     const db = new Database(join(dir, 'intendia.db'));
     const r = migrate(db, dir, MIGRATIONS);
-    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0004_run_cost_runs.sql', '0005_model_provider.sql', '0006_session_flags.sql', '0007_session_replaces.sql', '0008_prompts.sql', '0009_session_settings.sql', '0010_kanban_missions.sql', '0011_session_goals.sql', '0012_delegation_wakes.sql', '0013_goal_key_attempt.sql', '0014_drop_personality.sql']);
+    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0004_run_cost_runs.sql', '0005_model_provider.sql', '0006_session_flags.sql', '0007_session_replaces.sql', '0008_prompts.sql', '0009_session_settings.sql', '0010_kanban_missions.sql', '0011_session_goals.sql', '0012_delegation_wakes.sql', '0013_goal_key_attempt.sql', '0014_drop_personality.sql', '0015_channels.sql']);
     expect(r.backup).toBeNull();
   });
 

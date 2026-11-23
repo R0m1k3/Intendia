@@ -294,6 +294,23 @@ keeps the goal itself (`session_goals`, `apps/server/src/chat/goal.ts`, routes `
   from its run. A click reopens it and follows the run live.
 - The session list folds when several chats are visible (button « Afficher la liste », kept in `localStorage`).
 
+### Channels with several agents
+
+A channel (`apps/server/src/channels/`, tables `channels`, `channel_members`, `channel_messages`, `channel_turns`,
+migration 0015) is a thread kept by Intendia. Its members are agents of one or several instances. Each member has a
+hidden Intendia session: it is archived and titled `Canal « name » · @handle`, so its approvals show in « Vous attend »
+with the channel's name.
+
+- A message of the user gives a turn to the members it names (`@handle`, `@tous`), else to the lead.
+- `ChannelRunner` (every 3 s, on the server) plays one turn at a time per channel. It sends the member, through
+  `startRun`, the channel's frame and the messages it has not seen yet; the turn's id and attempt give the
+  Idempotency-Key. It then posts the run's output in the channel.
+- An answer that names other members gives them a turn, 5 relays at most after a message of the user.
+- A run that fails, stops or is forgotten leaves the turn `stopped`. Nothing else is played until the user
+  chooses Continuer (new attempt), Réattribuer or Annuler.
+- The cost of a channel is the sum of its hidden sessions' runs.
+- Channels are shared by every instance (an exception to « everything per instance », like the Chat columns).
+
 ## Files, share links and MCP
 
 - **No shared volume**: every workspace file goes through the dashboard of the workspace's own instance, connector

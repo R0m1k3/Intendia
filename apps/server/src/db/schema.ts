@@ -181,3 +181,55 @@ export const delegationWakes = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.sessionId, t.deliveryKey] })],
 );
+
+/** Channels with several agents (0015, channels/). */
+export const channels = sqliteTable('channels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  instructions: text('instructions').notNull().default(''),
+  lead: text('lead').notNull(),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const channelMembers = sqliteTable(
+  'channel_members',
+  {
+    channelId: text('channel_id').notNull(),
+    handle: text('handle').notNull(),
+    instanceId: text('instance_id').notNull(),
+    profile: text('profile').notNull(),
+    sessionId: text('session_id').notNull(),
+    seenSeq: integer('seen_seq').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.channelId, t.handle] })],
+);
+
+export const channelMessages = sqliteTable(
+  'channel_messages',
+  {
+    channelId: text('channel_id').notNull(),
+    seq: integer('seq').notNull(),
+    author: text('author').notNull(),
+    text: text('text').notNull(),
+    runId: text('run_id'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.channelId, t.seq] })],
+);
+
+export const channelTurns = sqliteTable(
+  'channel_turns',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    channelId: text('channel_id').notNull(),
+    handle: text('handle').notNull(),
+    status: text('status').notNull(),
+    chain: integer('chain').notNull().default(0),
+    runId: text('run_id'),
+    detail: text('detail'),
+    attempt: integer('attempt').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('channel_turns_open').on(t.channelId, t.status)],
+);
