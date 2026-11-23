@@ -76,7 +76,7 @@ export function ChannelPage() {
             triggerClass="flex size-8 items-center justify-center rounded-lg border border-line text-ink-soft hover:bg-raised"
             trigger={<><Ellipsis className="size-4" strokeWidth={1.5} /><span className="sr-only">{t('Actions du canal')}</span></>}
             items={[
-              { label: t('Modifier les consignes…'), onSelect: () => void askText({ title: t('Consignes du canal'), value: d.channel.instructions, maxLength: 4000, confirmLabel: t('Enregistrer') }).then(async (v) => { if (v !== null) { await api.updateChannel(channelId, { instructions: v }); refresh(); } }) },
+              { label: t('Modifier les consignes…'), onSelect: () => void askText({ title: t('Consignes du canal'), value: d.channel.instructions, maxLength: 4000, confirmLabel: t('Enregistrer'), multiline: true }).then(async (v) => { if (v !== null) { await api.updateChannel(channelId, { instructions: v }); refresh(); } }) },
               ...d.members.filter((m) => m.handle !== d.channel.lead).map((m) => ({ label: t('Nommer @{handle} chef', { handle: m.handle }), onSelect: () => void api.updateChannel(channelId, { lead: m.handle }).then(refresh) })),
               { label: t('Archiver le canal…'), danger: true, onSelect: () => void ask({ title: t('Archiver « {name} » ?', { name: d.channel.name }), message: t('Ses tours en attente sont annulés. Les sessions cachées des agents restent dans les archives.'), danger: true, confirmLabel: t('Archiver') }).then(async (yes) => { if (yes) { await api.archiveChannel(channelId); refresh(); void navigate({ to: '/' }); } }) },
             ]} />
