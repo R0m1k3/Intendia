@@ -12,7 +12,7 @@ describe('migrations', () => {
     const dir = tempDir();
     const db = new Database(join(dir, 'intendia.db'));
     const r = migrate(db, dir, MIGRATIONS);
-    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0004_run_cost_runs.sql', '0005_model_provider.sql', '0006_session_flags.sql', '0007_session_replaces.sql', '0008_prompts.sql', '0009_session_settings.sql', '0010_kanban_missions.sql', '0011_session_goals.sql', '0012_delegation_wakes.sql', '0013_goal_key_attempt.sql']);
+    expect(r.applied).toEqual(['0001_init.sql', '0002_sessions.sql', '0003_run_options.sql', '0004_run_cost_runs.sql', '0005_model_provider.sql', '0006_session_flags.sql', '0007_session_replaces.sql', '0008_prompts.sql', '0009_session_settings.sql', '0010_kanban_missions.sql', '0011_session_goals.sql', '0012_delegation_wakes.sql', '0013_goal_key_attempt.sql', '0014_drop_personality.sql']);
     expect(r.backup).toBeNull();
   });
 
@@ -63,6 +63,24 @@ describe('migrations', () => {
     expect(db.prepare('SELECT session_id, model, effort FROM session_workspace ORDER BY session_id').all()).toEqual([
       { session_id: 's1', model: 'opus', effort: null }, { session_id: 's2', model: null, effort: null },
     ]);
+  });
+
+  it('0014 removes the personalities and the session column, keeps the rest', () => {
+    const dir = tempDir();
+    const mdir = join(dir, 'migrations');
+    mkdirSync(mdir);
+    const all = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
+    for (const f of all.filter((f) => f < '0014')) copyFileSync(join(MIGRATIONS, f), join(mdir, f));
+    const db = new Database(join(dir, 'intendia.db'));
+    migrate(db, dir, mdir);
+    db.prepare("INSERT INTO workspaces (slug, name, instance_id, created_at) VALUES ('a', 'A', 'i', 1)").run();
+    db.prepare("INSERT INTO session_workspace (session_id, instance_id, workspace_slug, created_at, personality, effort) VALUES ('s1', 'i', 'a', 1, 'hermes:brief', 'low')").run();
+    db.prepare("INSERT INTO prompts (id, kind, title, body, created_at, updated_at) VALUES ('p1', 'prompt', 'P', 'x', 1, 1), ('p2', 'personality', 'Q', 'y', 1, 1)").run();
+    copyFileSync(join(MIGRATIONS, '0014_drop_personality.sql'), join(mdir, '0014_drop_personality.sql'));
+    expect(migrate(db, dir, mdir).applied).toEqual(['0014_drop_personality.sql']);
+    expect(db.prepare('SELECT * FROM session_workspace').get()).not.toHaveProperty('personality');
+    expect(db.prepare('SELECT session_id, effort FROM session_workspace').all()).toEqual([{ session_id: 's1', effort: 'low' }]);
+    expect(db.prepare('SELECT id FROM prompts').all()).toEqual([{ id: 'p1' }]);
   });
 
   it('keeps only the last five backups', () => {

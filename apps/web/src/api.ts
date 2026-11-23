@@ -118,10 +118,9 @@ export interface RunStat {
   /** approvals Intendia gave by itself (« Sans confirmation ») */
   autoApproved?: number;
 }
-export interface PersonalityItem { value: string; label: string; source: 'hermes' | 'intendia' }
 export interface ModelPin { provider: string | null; model: string }
-export interface RunMode { id: string; name: string; model: string | null; provider: string | null; effort: Effort | null; personality: string | null }
-export type PromptKind = 'prompt' | 'personality';
+export interface RunMode { id: string; name: string; model: string | null; provider: string | null; effort: Effort | null }
+export type PromptKind = 'prompt';
 export interface Prompt { id: string; kind: PromptKind; title: string; body: string; createdAt: number; updatedAt: number }
 export interface ExtractResult {
   folder: string;
@@ -152,8 +151,6 @@ export interface Session {
   copiedFrom: string | null;
   /** The session this one replaced (edit, retry, undo, clear), restorable for 10 s. */
   replacesId: string | null;
-  /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
-  personality?: string | null;
   /** « Sans confirmation »: Intendia approves the actions of its runs */
   autoApprove?: boolean;
   /** profile chosen for this session (null = the workspace's) */
@@ -954,7 +951,7 @@ export const api = {
   session: (inst: string, id: string) => call<{ session: Session; workspace: Workspace; profile: string }>('GET', sessionPath(inst, id)),
   updateSession: (inst: string, id: string, patch: {
     title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: Effort | null;
-    personality?: string | null; autoApprove?: boolean; profile?: string | null;
+    autoApprove?: boolean; profile?: string | null;
   }) =>
     call<{ session: Session }>('PATCH', sessionPath(inst, id), patch),
   /** Hidden at once, deleted at Hermes after `undoUntil` unless restored. */
@@ -994,10 +991,9 @@ export const api = {
   sessionSubagents: (inst: string, id: string) => call<{ children: SubagentChild[] }>('GET', `${sessionPath(inst, id)}/subagents`),
   /** `clientKey`: drawn once per composed message, kept until the send succeeded (one run at Hermes per message). */
   send: (inst: string, id: string, input: string, skills?: string[], clientKey?: string) =>
-    call<{ runId: string; session: Session; notice?: string }>('POST', `${sessionPath(inst, id)}/runs`, {
+    call<{ runId: string; session: Session }>('POST', `${sessionPath(inst, id)}/runs`, {
       input, ...(skills?.length ? { skills } : {}), ...(clientKey ? { clientKey } : {}),
     }),
-  personalities: (inst: string, profile: string) => call<{ items: PersonalityItem[]; error?: string }>('GET', instPath(inst, `personalities?profile=${enc(profile)}`)),
   modelPins: (inst: string, profile: string) => call<{ pins: ModelPin[] }>('GET', instPath(inst, `model-pins?profile=${enc(profile)}`)),
   setModelPins: (inst: string, profile: string, pins: ModelPin[]) => call<{ pins: ModelPin[] }>('PUT', instPath(inst, `model-pins?profile=${enc(profile)}`), { pins }),
   modes: (inst: string, profile: string) => call<{ modes: RunMode[] }>('GET', instPath(inst, `modes?profile=${enc(profile)}`)),

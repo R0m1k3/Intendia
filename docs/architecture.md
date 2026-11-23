@@ -135,8 +135,7 @@ merged settings without saving (the browser never has the secrets).
 - Every run sends `instructions`: workspace name, working folder as the agent sees it (`<workspace root>/<slug>`), the session
   folder, the `share_file` rule, and the first 4 KiB of `AGENTS.md`; then, for that run only, the skills asked by
   `/use` (12 000 characters each, else their start and a pointer to `skill_view`; unknown → 400 `skill_not_found`
-  before the run), and on every run the session's personality (`hermes:<name>` from the profile's `personalities` /
-  `agent.personalities`, or `intendia:<id>` from the `prompts` table; missing → left out, `notice` in the answer).
+  before the run). No personality (removed in 0.1.8, migration 0014).
 - **Profile of a session**: a workspace has a *default* profile; a session may use another profile of the same
   instance (`session_workspace.profile`, NULL = the workspace's). Every query reading a session's profile takes
   `coalesce(session_workspace.profile, workspaces.profile)` (lists, search, purge, recent runs → approvals, activity,
@@ -149,7 +148,7 @@ merged settings without saving (the browser never has the secrets).
   `src/sessions/auto-approve.ts` answers `once` to the approvals of those sessions' runs, one pass every 2 s over the
   runs `ActivityService` follows (24 h window, 200 sessions); counted in `run_stats.auto_approved`, logged. Questions
   of the agent (clarify) are never answered. Copies keep it only when they replace the session (edit, retry, undo).
-- Pinned models and modes (model + effort + personality, never the profile) per agent: `settings`
+- Pinned models and modes (model + effort, never the profile) per agent: `settings`
   `model_pins:<inst>:<profile>` (20) and `run_modes:<inst>:<profile>` (30), `GET|PUT /x/i/:inst/model-pins|modes`.
 - Stream: `GET …/runs/<run>/events` relays Hermes's SSE bytes as they are (`id:` = `seq`), forwarding `Last-Event-ID`
   (the header, else `?lastSeq=` sent by a new `EventSource` of the page). The browser's `EventSource` reconnects by
@@ -243,7 +242,7 @@ merged settings without saving (the browser never has the secrets).
   approximate rate (output tokens over the whole run) and « (secours) » when the served model differs from the one asked.
 - Composer comfort: the text being written is kept by the browser only (`localStorage`, `intendia-draft:<inst>:<session>`
   or `intendia-draft:home`, dropped after 30 days, `apps/web/src/chat/draft.ts`); saved prompts live in the `prompts`
-  table (`kind` `prompt` | `personality`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
+  table (`kind` `prompt`, shared by every instance, `/x/prompts`); a paste over 4 000 characters becomes
   a `collage-<date>.txt` attachment.
 
 ### Session goal (`/goal`)

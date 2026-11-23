@@ -3,7 +3,6 @@ import { REVISION_RE } from '../revision.js';
 import { z } from 'zod';
 import type { AppDeps } from '../app.js';
 import { EFFORTS } from '../chat/run-stats.js';
-import { PERSONALITY_RE } from '../sessions/personalities.js';
 import { PROFILE_RE } from './params.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { pushTitle } from '../workspaces/title.js';
@@ -36,8 +35,6 @@ const PatchSession = z.object({
   /** Provider of `model` (picker group); accepts `custom:<name>` keys. Only with `model`. */
   provider: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, msg('fournisseur invalide')).nullable().optional(),
   effort: z.enum(EFFORTS).nullable().optional(),
-  /** 'hermes:<name>' | 'intendia:<prompt id>' | null */
-  personality: z.string().regex(PERSONALITY_RE).nullable().optional(),
   /** « Sans confirmation » */
   autoApprove: z.boolean().optional(),
   /** another profile of the instance (with its key), only before the first message; null = the workspace's */

@@ -36,7 +36,6 @@ export interface PublicSession {
   /** The session this one replaced (edit, retry, undo, clear), restorable during its undo window. */
   replacesId: string | null;
   /** 'hermes:<name>' or 'intendia:<prompt id>', added to the instructions of each run; null = none. */
-  personality: string | null;
   /** « Sans confirmation »: Intendia answers the approvals of its runs. */
   autoApprove: boolean;
   /** Hermes profile chosen for this session; null = the workspace's default profile (see SessionContext.profile). */
@@ -117,7 +116,7 @@ function toPublic(r: SessionRow): PublicSession {
   return {
     id: r.sessionId, instanceId: r.instanceId, workspace: r.workspaceSlug, title: r.title, archived: r.archived,
     lastRunId: r.lastRunId, lastActiveAt: r.lastActiveAt, createdAt: r.createdAt, model: r.model, modelProvider: r.modelProvider, effort: r.effort,
-    pinned: r.pinned, copiedFrom: r.copiedFrom, replacesId: r.replacesId, personality: r.personality, autoApprove: r.autoApprove,
+    pinned: r.pinned, copiedFrom: r.copiedFrom, replacesId: r.replacesId, autoApprove: r.autoApprove,
     profile: r.profile,
   };
 }
@@ -362,8 +361,8 @@ export class WorkspaceService {
         sessionId: o.newId, instanceId: o.instanceId, workspaceSlug: o.slug, title: o.title ? titleFrom(o.title) : null, archived: false,
         createdAt: now, lastActiveAt: now, model: f.model, modelProvider: f.model ? f.modelProvider : null, effort: f.effort,
         pinned: f.pinned, copiedFrom: o.copiedFrom, replacesId: o.replaces ? f.id : null,
-        // same agent and personality; « Sans confirmation » only stays on the same session for the user (a replacement)
-        profile: f.profile, personality: f.personality, autoApprove: o.replaces ? f.autoApprove : false,
+        // same agent; « Sans confirmation » only stays on the same session for the user (a replacement)
+        profile: f.profile, autoApprove: o.replaces ? f.autoApprove : false,
       }).run();
       for (const r of runs) {
         tx.insert(runStats).values({ ...r, runId: `${r.runId}@${o.newId}`, sessionId: o.newId, hermesSessionId: o.newId, costFinal: true })
@@ -410,8 +409,8 @@ export class WorkspaceService {
     slug: string, id: string,
     o: {
       title: string | null; model: string | null; provider: string | null; effort: string | null; copiedFrom: string | null;
-      /** profile of the copy (null or the workspace's default = the workspace's) and its personality */
-      profile?: string | null; personality?: string | null;
+      /** profile of the copy (null or the workspace's default = the workspace's) */
+      profile?: string | null;
     },
   ): Promise<{ session: PublicSession; created: boolean }> {
     const ws = this.getWorkspace(slug);
@@ -430,7 +429,7 @@ export class WorkspaceService {
     this.db.insert(sessionWorkspace).values({
       sessionId: id, instanceId: ws.instanceId, workspaceSlug: slug, title: o.title ? titleFrom(o.title) : null, archived: false,
       createdAt: now, lastActiveAt: now, model: o.model, modelProvider: o.model ? o.provider : null, effort: o.effort, copiedFrom: o.copiedFrom,
-      profile: o.profile && o.profile !== (ws.profile ?? 'default') ? o.profile : null, personality: o.personality ?? null,
+      profile: o.profile && o.profile !== (ws.profile ?? 'default') ? o.profile : null,
     }).onConflictDoNothing().run();
     return { session: this.getSession(ws.instanceId, id).session, created: true };
   }
@@ -439,7 +438,7 @@ export class WorkspaceService {
     instanceId: string, sessionId: string,
     patch: {
       title?: string | null; archived?: boolean; pinned?: boolean; model?: string | null; provider?: string | null; effort?: string | null;
-      personality?: string | null; autoApprove?: boolean;
+      autoApprove?: boolean;
       /** the caller checks the session was never sent and the profile has its key */
       profile?: string | null;
     },
@@ -449,7 +448,6 @@ export class WorkspaceService {
     if (patch.title !== undefined) set.title = patch.title ? titleFrom(patch.title) : null;
     if (patch.archived !== undefined) set.archived = patch.archived;
     if (patch.pinned !== undefined) set.pinned = patch.pinned;
-    if (patch.personality !== undefined) set.personality = patch.personality || null;
     if (patch.autoApprove !== undefined) set.autoApprove = patch.autoApprove;
     if (patch.profile !== undefined) set.profile = patch.profile && patch.profile !== (workspace.profile ?? 'default') ? patch.profile : null;
     // the run options are also remembered as the workspace's last choice (start of its next sessions)

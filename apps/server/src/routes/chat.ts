@@ -18,8 +18,6 @@ import { HISTORY_PAGE, readHistory, whenIdle, readRunStatus, type ChatMessage } 
 import { listChildren } from '../chat/subagents.js';
 import { answerApproval, ApproveError, CONTROL_ERRORS, controlBody } from '../chat/approve.js';
 import { presets, Modes, Pins } from '../chat/presets.js';
-import { PromptService } from '../prompts/service.js';
-import { listPersonalities } from '../sessions/personalities.js';
 import { SKILLS_MAX } from '../sessions/run-extras.js';
 import {
   AlreadySentError, CLIENT_KEY_RE, IdempotencyConflictError, RunBusyError, RunExtrasError, settle as settleRuns, startRun,
@@ -107,14 +105,12 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   const settle = (ctx: SessionContext, opts?: Parameters<typeof settleRuns>[2]) => settleRuns(runDeps, ctx, opts);
   const goals = deps.services.goals;
 
-  const prompts = new PromptService(deps.db);
   const instOf = (c: { req: { param: (k: string) => string | undefined } }) => {
     const id = c.req.param('inst') ?? '';
     if (!deps.store.get(id)) throw new NotFoundError(msg('Instance inconnue : {id}', { id }));
     return id;
   };
 
-  r.get('/i/:inst/personalities', async (c) => c.json(await listPersonalities(deps.services.config, prompts, instOf(c), profileOf(c))));
   r.get('/i/:inst/model-pins', (c) => c.json({ pins: presets.pins(deps.db, instOf(c), profileOf(c)) }));
   r.put('/i/:inst/model-pins', async (c) => {
     const inst = instOf(c);

@@ -27,7 +27,7 @@ hand on a reference Hermes 0.23. Intendia has not yet been run for long on a pro
 - Chat with Hermes in streamed sessions: tool calls, approvals (once, for the session, always, or deny), clarification
   questions, to-do lists, sub-agents (including background sub-agents, with an automatic follow-up once their results
   arrive), the cost and token count of each run, and a context gauge.
-- Choose the model, the reasoning effort, the personality and the profile per session. Queue messages while the agent
+- Choose the model, the reasoning effort and the profile per session. Queue messages while the agent
   works, steer it mid-run, stop it, or switch on YOLO mode to approve everything for one session.
 - Give a session a goal (`/goal`): Intendia keeps the agent working until it reports the goal reached or blocked,
   within a budget you set.

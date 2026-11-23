@@ -56,7 +56,7 @@ describe('profile per session', () => {
 
   it('to-profile: full copy in the other profile, same key = same copy; same profile, no key, run going refused', async () => {
     const { t, s, base } = await setup();
-    await t.request('PATCH', base, { title: 'Promo', personality: 'hermes:brief', autoApprove: true, effort: 'low' });
+    await t.request('PATCH', base, { title: 'Promo', autoApprove: true, effort: 'low' });
     await send(t, base, 'Prépare la promo');
     expect((await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'default' })).json.code).toBe('same_profile');
     expect((await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'nokey' })).json.code).toBe('no_key');
@@ -64,8 +64,6 @@ describe('profile per session', () => {
     expect(res.status).toBe(201);
     const copy = res.json.session;
     expect(copy).toMatchObject({ profile: 'dev', copiedFrom: s.id, workspace: 'ws', title: 'Promo', effort: 'low', autoApprove: false });
-    // the fake's config is the same for every profile: the Hermes personality exists there too
-    expect(copy.personality).toBe('hermes:brief');
     const again = await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'dev' });
     expect(again.status).toBe(200);
     expect(again.json.session.id).toBe(copy.id);

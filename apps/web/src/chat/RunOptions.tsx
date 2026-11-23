@@ -17,16 +17,16 @@ export const chatModelsQuery = (inst: string, profile: string) => ({
   queryKey: ['chat-models', inst, profile], queryFn: () => api.chatModels(inst, profile), enabled: Boolean(inst), retry: false, staleTime: 60_000,
 });
 
-export interface RunPatch { model?: string | null; provider?: string | null; effort?: Effort | null; personality?: string | null }
+export interface RunPatch { model?: string | null; provider?: string | null; effort?: Effort | null }
 
 /**
  * Options of the session's next messages: model (with the agent's modes and pinned models), reasoning effort,
- * personality, and the agent (profile) when the instance has several. "Auto" = what the Hermes agent is set to.
+ * and the agent (profile) when the instance has several. "Auto" = what the Hermes agent is set to.
  * Changing the model of a session that already ran asks first: the new model reads the whole conversation again
  * without cache, once.
  */
-export function RunOptions({ inst, profile, model, provider, effort, personality, hasRuns, disabled, onChange, onProfile, modelOpen, onModelOpenChange }: {
-  inst: string; profile: string; model: string | null; provider: string | null; effort: Effort | null; personality?: string | null;
+export function RunOptions({ inst, profile, model, provider, effort, hasRuns, disabled, onChange, onProfile, modelOpen, onModelOpenChange }: {
+  inst: string; profile: string; model: string | null; provider: string | null; effort: Effort | null;
   hasRuns: boolean; disabled?: boolean;
   onChange: (patch: RunPatch) => void;
   /** another agent of the instance: the page changes it, or copies the session there */
@@ -41,7 +41,6 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
   const list = useQuery(chatModelsQuery(inst, profile));
   const pins = useQuery({ queryKey: ['model-pins', inst, profile], queryFn: () => api.modelPins(inst, profile).then((r) => r.pins), enabled: Boolean(inst), staleTime: 60_000 });
   const modes = useQuery({ queryKey: ['modes', inst, profile], queryFn: () => api.modes(inst, profile).then((r) => r.modes), enabled: Boolean(inst), staleTime: 60_000 });
-  const personas = useQuery({ queryKey: ['personalities', inst, profile], queryFn: () => api.personalities(inst, profile), enabled: Boolean(inst), staleTime: 60_000 });
   const agents = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst).then((r) => r.agents), enabled: Boolean(inst && onProfile), staleTime: 60_000 });
 
   const manage = () => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: profile === 'default' ? undefined : profile, tab: 'modeles' } });
@@ -56,13 +55,11 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
   const saveMode = async () => {
     const name = await askText({
       title: t('Enregistrer comme mode'), label: t('Nom du mode'), maxLength: 60, confirmLabel: t('Enregistrer'),
-      message: personality
-        ? t('Modèle {model}, effort {effort}, avec la personnalité. Le mode ne change pas d’agent.', { model: model ? shortModel(model) : 'Auto', effort: effortLabel(effort) })
-        : t('Modèle {model}, effort {effort}. Le mode ne change pas d’agent.', { model: model ? shortModel(model) : 'Auto', effort: effortLabel(effort) }),
+      message: t('Modèle {model}, effort {effort}. Le mode ne change pas d’agent.', { model: model ? shortModel(model) : 'Auto', effort: effortLabel(effort) }),
     });
     if (!name) return;
     const id = globalThis.crypto.randomUUID();
-    await setModes([...(modes.data ?? []), { id, name, model, provider, effort, personality: personality ?? null }]);
+    await setModes([...(modes.data ?? []), { id, name, model, provider, effort }]);
   };
   const removeMode = async () => {
     const id = await askChoice({ title: t('Retirer un mode'), options: (modes.data ?? []).map((m) => ({ value: m.id, label: m.name })), confirmLabel: t('Retirer') });
@@ -81,34 +78,12 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
       const m = modes.data?.find((x) => x.id === modeId);
       if (!m) return;
       if (m.model !== model && !(await confirmModel())) return;
-      onChange({ model: m.model, provider: m.model ? m.provider : null, effort: m.effort, personality: m.personality });
+      onChange({ model: m.model, provider: m.model ? m.provider : null, effort: m.effort });
       return;
     }
     if (!(await confirmModel())) return;
     onChange(decodeChoice(v));
   };
-
-  const newPersonality = async () => {
-    const title = await askText({ title: t('Nouvelle personnalité'), label: t('Nom'), maxLength: 80, confirmLabel: t('Suivant') });
-    if (!title) return;
-    const body = await askText({ title: t('Personnalité « {title} »', { title }), label: t('Consigne donnée à l’agent à chaque message'), maxLength: 20_000, confirmLabel: t('Enregistrer') });
-    if (!body) return;
-    const { prompt } = await api.createPrompt({ title, body, kind: 'personality' });
-    await qc.invalidateQueries({ queryKey: ['personalities'] });
-    onChange({ personality: `intendia:${prompt.id}` });
-  };
-  const personaList = personas.data?.items ?? [];
-  const personaItems: Item[] = [
-    { value: null, label: t('Aucune'), hint: t('Le comportement réglé pour l’agent') },
-    ...(personaList.some((p) => p.source === 'hermes') ? [{ heading: t('De l’agent') }] : []),
-    ...personaList.filter((p) => p.source === 'hermes').map((p) => ({ value: p.value, label: p.label })),
-    ...(personaList.some((p) => p.source === 'intendia') ? [{ heading: 'Intendia' }] : []),
-    ...personaList.filter((p) => p.source === 'intendia').map((p) => ({ value: p.value, label: p.label })),
-    // a personality removed since: still shown so it can be cleared
-    ...(personality && !personaList.some((p) => p.value === personality) && personas.data ? [{ value: personality, label: personality.replace(/^\w+:/, ''), hint: t('introuvable') }] : []),
-    { action: () => void newPersonality(), label: t('Nouvelle personnalité…') },
-  ];
-  const personaLabel = personality ? (personaList.find((p) => p.value === personality)?.label ?? personality.replace(/^\w+:/, '')) : null;
 
   const withKey = (agents.data ?? []).filter((a) => a.hasKey);
   const profileItems: Item[] = withKey.map((a) => ({ value: a.name, label: a.name, ...(a.name === profile ? { hint: t('cette session') } : {}) }));
@@ -132,11 +107,6 @@ export function RunOptions({ inst, profile, model, provider, effort, personality
         title={t('Effort de raisonnement')} items={effortItems} value={effort} disabled={disabled}
         onPick={(v) => onChange({ effort: v as Effort | null })}
         label={<><span className="hidden sm:inline">{t('Effort : ')}</span><span className="sm:hidden">Effort </span>{effortLabel(effort)}</>}
-      />
-      <Picker
-        title={t('Personnalité de la session')} items={personaItems} value={personality ?? null} disabled={disabled}
-        onPick={(v) => onChange({ personality: v })}
-        label={personaLabel ? <span className="max-w-[8rem] truncate">{personaLabel}</span> : <span className="hidden lg:inline">{t('Personnalité')}</span>}
       />
     </div>
   );

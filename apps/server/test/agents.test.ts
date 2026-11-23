@@ -200,7 +200,7 @@ describe('agents: administration (lot 8 B)', () => {
     const { presets } = await import('../src/chat/presets.js');
     await t.request('POST', BASE, { name: 'veille' });
     presets.setPins(t.db, 'fake', 'veille', [{ provider: 'anthropic', model: 'claude-sonnet-4.6' }]);
-    presets.setModes(t.db, 'fake', 'veille', [{ id: 'm1', name: 'Rapide', model: null, provider: null, effort: 'low', personality: null }]);
+    presets.setModes(t.db, 'fake', 'veille', [{ id: 'm1', name: 'Rapide', model: null, provider: null, effort: 'low' }]);
     presets.setPins(t.db, 'fake', 'default', [{ provider: 'anthropic', model: 'claude-sonnet-4.6' }]);
     const res = await t.request('DELETE', `${BASE}/veille`);
     expect(res.status).toBe(200);
