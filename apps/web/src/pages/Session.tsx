@@ -25,7 +25,7 @@ import {
   saveQueue, savePendingKey, takeHead, type Queue,
 } from '../chat/queue';
 import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
-import { AGENT_INDENT, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
+import { AGENT_INDENT, AgentFace, ApprovalCard, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
 import { lastTodos } from '../chat/todos';
@@ -191,6 +191,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   /** the side panel's tab: the session's files or its agent's card (OpenBot-like) */
   const [panelTab, setPanelTab] = useState<'files' | 'agent'>('files');
   const looks = useAgentLooks(inst ?? null);
+  const faceProfile = sess.data?.profile ?? 'default';
+  const faceColor = looks.color(faceProfile);
+  const face = useMemo(() => ({ profile: faceProfile, color: faceColor }), [faceProfile, faceColor]);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const inbox = useInbox();
   const sideOpen = panel || previewPath !== null;
@@ -1187,6 +1190,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
         {live?.truncated && (
           <p className="mb-4 text-xs text-ink-faint">{t('Le début de ce run n’est plus disponible en direct : il apparaîtra à la fin')}</p>
         )}
+        <AgentFace.Provider value={face}>
         {history.isPending && entries.length === 0 ? <SkeletonThread /> : (
           <Thread
             entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
@@ -1195,6 +1199,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           />
         )}
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
+        </AgentFace.Provider>
         {running && link.mode === 'polling' && (
           <p data-deferred={link.cause} className={cx('mt-2 text-xs text-ink-faint', AGENT_INDENT)}>
             {link.cause === 'cap' ? t('Suivi en différé : trois suivis en direct sont déjà ouverts. La réponse s’affichera à la fin.')

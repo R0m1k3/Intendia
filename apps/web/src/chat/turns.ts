@@ -56,12 +56,18 @@ export function toTurns(entries: Entry[], footers?: Map<string, RunStat[]>): Tur
   return turns;
 }
 
-/** "N étapes" with the summed duration when every step has one (live runs only: Hermes' history has none). */
+/**
+ * "N étapes", the failed ones ("· 1 échec"), and the summed duration when every step has one (live runs only:
+ * Hermes' history has none).
+ */
 export function stepsLabel(tools: ToolEntry[]): string {
-  const n = plural(tools.length, '{n} étape', '{n} étapes');
-  if (tools.some((tool) => tool.duration === null)) return n;
-  const s = tools.reduce((sum, tool) => sum + (tool.duration ?? 0), 0);
-  return `${n} · ${s.toLocaleString('fr-FR', { maximumFractionDigits: s < 10 ? 1 : 0 })} s`;
+  const failed = tools.filter((tool) => tool.state === 'failed').length;
+  const parts = [plural(tools.length, '{n} étape', '{n} étapes'), ...(failed ? [plural(failed, '{n} échec', '{n} échecs')] : [])];
+  if (!tools.some((tool) => tool.duration === null)) {
+    const s = tools.reduce((sum, tool) => sum + (tool.duration ?? 0), 0);
+    parts.push(`${s.toLocaleString('fr-FR', { maximumFractionDigits: s < 10 ? 1 : 0 })} s`);
+  }
+  return parts.join(' · ');
 }
 
 export interface OutlineItem { key: string; text: string; ts: number | null }

@@ -42,6 +42,8 @@ describe('stepsLabel', () => {
     expect(stepsLabel([tool('a', 2), tool('b', null)])).toBe('2 étapes');
     expect(stepsLabel([tool('a', 2.25), tool('b', 1)])).toBe('2 étapes · 3,3 s');
     expect(stepsLabel([tool('a', 12), tool('b', 1)])).toBe('2 étapes · 13 s');
+    expect(stepsLabel([{ ...tool('a', 1), state: 'failed' }, tool('b', 1), tool('c', 1)])).toBe('3 étapes · 1 échec · 3 s');
+    expect(stepsLabel([{ ...tool('a'), state: 'failed' }, { ...tool('b'), state: 'failed' }])).toBe('2 étapes · 2 échecs');
   });
 });
 
