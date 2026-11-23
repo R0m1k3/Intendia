@@ -24,10 +24,8 @@ export default {
   'Rechercher ({key}) ; un fichier : {fileKey}': 'Search ({key}); a file: {fileKey}',
   'Rechercher': 'Search',
   'Navigation principale': 'Main navigation',
-  'Automatisation': 'Automation',
   'Agent': 'Agent',
   'Se déconnecter': 'Sign out',
-  'Version d’Intendia': 'Intendia version',
   'Plus': 'More',
   'Nouvelle session': 'New session',
   'Revenir à la liste': 'Back to the list',
@@ -267,4 +265,9 @@ export default {
   'Maj|touche': 'Shift',
   // palette: the open session's actions
   'Session ouverte': 'Open session',
+  "Tâches": "Tasks",
+  "Usage": "Usage",
+  "Dossiers": "Folders",
+  "Gérer les agents": "Manage agents",
+  "Barre latérale": "Sidebar",
 } satisfies Record<string, string>;

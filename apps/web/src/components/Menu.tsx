@@ -115,7 +115,7 @@ export interface PickerAction { action: () => void; label: string }
 export interface PickerHeading { heading: string; collapsible?: boolean }
 export type PickerItem = PickerChoice | PickerAction | PickerHeading;
 
-const PICKER_BTN = 'flex h-7 max-w-[14rem] min-w-0 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50 aria-expanded:bg-raised';
+export const PICKER_BTN = 'flex h-7 max-w-[14rem] min-w-0 items-center gap-1 rounded-md px-2 text-xs text-ink-soft transition-colors hover:bg-raised hover:text-ink disabled:opacity-50 aria-expanded:bg-raised';
 
 /** A text button opening a list of choices (one checked). */
 export function Picker({ label, title, items, value, disabled, onPick, placement = 'above', triggerClass, open, onOpenChange }: {

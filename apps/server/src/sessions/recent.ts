@@ -41,6 +41,8 @@ export interface RecentSession {
   at: number;
   /** Search hit in the messages (Hermes text, hit between `>>>` and `<<<`); null outside a search. */
   snippet: string | null;
+  /** Pinned in Intendia (Intendia's sessions only; always false for the others). */
+  pinned: boolean;
 }
 
 export interface HermesSessionRaw {
@@ -78,7 +80,7 @@ export function mergeRecent(
   const out: RecentSession[] = intendia.map((s) => ({
     kind: 'intendia', instanceId: s.instanceId, profile: s.profile, id: s.id, source: 'intendia',
     title: s.title || msg('Nouvelle session'), sub: s.workspaceName, workspace: s.workspace, at: s.lastActiveAt ?? s.createdAt,
-    snippet: s.snippet ?? null,
+    snippet: s.snippet ?? null, pinned: Boolean(s.pinned),
   }));
   const seen = new Set(out.map((s) => `${s.instanceId}:${s.id}`));
   for (const h of hermes) {
@@ -93,7 +95,7 @@ export function mergeRecent(
         kind: 'hermes', instanceId: h.instanceId, profile: h.profile, id, source: text(raw.source),
         title: lineTitle(raw.title, raw.preview ?? (snippet ? stripMarks(snippet) : null)),
         sub: count === null ? h.label : `${h.label} · ${count} message${count > 1 ? 's' : ''}`,
-        workspace: null, at: secMs(raw.last_active) ?? secMs(raw.started_at) ?? 0, snippet,
+        workspace: null, at: secMs(raw.last_active) ?? secMs(raw.started_at) ?? 0, snippet, pinned: false,
       });
     }
   }

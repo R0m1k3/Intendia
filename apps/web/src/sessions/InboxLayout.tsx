@@ -4,7 +4,7 @@ import { EMBEDDED } from '../chat/embed';
 import { SplitView } from '../components/Panes';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { openBeside, updateChat, useChat, withPanel } from '../chat/columns';
-import { SessionsPane } from './SessionsPane';
+import { AgentsPane } from './AgentsPane';
 import { t } from '../i18n';
 
 interface Inbox {
@@ -51,11 +51,11 @@ export function InboxLayout() {
   return (
     <InboxContext.Provider value={value}>
       <SplitView
-        label={t('Sessions')}
+        label={t('Agents')}
         selected={inSession}
         phoneBoth={!inSession}
         listHidden={inSession ? (full || panelOpen ? true : inChat ? false : 'narrow') : false}
-        list={<SessionsPane openId={params.sessionId ?? null} onBeside={inChat ? onBeside : undefined} />}
+        list={<AgentsPane openId={params.sessionId ?? null} onBeside={inChat ? onBeside : undefined} />}
       >
         <Outlet />
       </SplitView>

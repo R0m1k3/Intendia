@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, Inbox, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,7 +9,7 @@ import { currentTab, navTarget, setTab, useCurrentInstance, useUrlInstance, type
 import { Approvals } from './Approvals';
 import { CommandPalette, shortcutLabel } from './CommandPalette';
 import type { PaletteMode } from './palette';
-import { InstanceSwitcher } from './InstanceSwitcher';
+import { InstanceRail, InstanceSwitcher } from './InstanceSwitcher';
 import { EMBEDDED, isSideChatKey, toggleFromFrame } from '../chat/embed';
 import { flushDrafts } from '../chat/draft';
 import { useChat } from '../chat/columns';
@@ -20,35 +20,36 @@ import { isEditable, overlayOpen, shortcutOf } from './shortcuts';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { getActivePage } from './activePage';
 import { DirtyBlocker } from './dirty';
-import { cx, Wordmark } from './ui';
+import { cx, LogoMark } from './ui';
 import { plural, t } from '../i18n';
 
-type NavGroup = 'top' | 'auto' | 'agent' | 'foot';
+/** rail: the page rail (OpenBot-like); foot: its bottom; more: only in the palette, the agent's menu and « Plus » */
+type NavGroup = 'rail' | 'foot' | 'more';
 
-interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage }
+interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage; short?: string }
 
-/** In display order; `group` places each entry in the sidebar; `page`: per instance. */
+/** In display order; `group` places each entry; `page`: per instance; `short`: the rail's label under the icon. */
 const NAV: readonly NavEntry[] = [
-  { key: 'home', to: '/', label: t('Sessions'), icon: Inbox, group: 'top' },
-  { key: 'chat', to: '/chat', label: t('Chat'), icon: MessagesSquare, group: 'top' },
-  { key: 'workspaces', to: '/w', label: t('Workspaces'), icon: Folder, group: 'top' },
-  { key: 'files', to: '/files', label: t('Fichiers'), icon: Files, group: 'top', page: 'files' },
-  { key: 'crons', to: '/crons', label: t('Crons'), icon: CalendarClock, group: 'auto', page: 'crons' },
-  { key: 'kanban', to: '/kanban', label: t('Kanban'), icon: KanbanSquare, group: 'auto', page: 'kanban' },
-  { key: 'skills', to: '/skills', label: t('Skills'), icon: Layers, group: 'agent', page: 'skills' },
-  { key: 'memory', to: '/memoire', label: t('Mémoire'), icon: Brain, group: 'agent', page: 'memoire' },
-  { key: 'access', to: '/acces', label: t('Accès'), icon: KeyRound, group: 'agent', page: 'acces' },
-  { key: 'agents', to: '/agents', label: t('Agents'), icon: Bot, group: 'agent', page: 'agents' },
-  { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'agent', page: 'config' },
-  { key: 'monitor', to: '/suivi', label: t('Suivi'), icon: LineChart, group: 'foot', page: 'suivi' },
-  { key: 'activity', to: '/activite', label: t('Centre'), icon: Activity, group: 'foot' },
+  { key: 'home', to: '/', label: t('Agents'), icon: Bot, group: 'rail' },
+  { key: 'kanban', to: '/kanban', label: t('Tâches'), icon: KanbanSquare, group: 'rail', page: 'kanban' },
+  { key: 'crons', to: '/crons', label: t('Planning'), icon: CalendarClock, group: 'rail', page: 'crons' },
+  { key: 'files', to: '/files', label: t('Fichiers'), icon: Files, group: 'rail', page: 'files' },
+  { key: 'monitor', to: '/suivi', label: t('Usage'), icon: LineChart, group: 'rail', page: 'suivi' },
+  { key: 'activity', to: '/activite', label: t('Centre'), icon: Activity, group: 'rail' },
+  { key: 'chat', to: '/chat', label: t('Chat'), icon: MessagesSquare, group: 'more' },
+  { key: 'workspaces', to: '/w', label: t('Dossiers'), icon: Folder, group: 'more' },
+  { key: 'skills', to: '/skills', label: t('Skills'), icon: Layers, group: 'more', page: 'skills' },
+  { key: 'memory', to: '/memoire', label: t('Mémoire'), icon: Brain, group: 'more', page: 'memoire' },
+  { key: 'access', to: '/acces', label: t('Accès'), icon: KeyRound, group: 'more', page: 'acces' },
+  { key: 'agents', to: '/agents', label: t('Gérer les agents'), icon: Bot, group: 'more', page: 'agents', short: t('Agents') },
+  { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'more', page: 'config' },
   { key: 'status', to: '/etat', label: t('État'), icon: Server, group: 'foot' },
   { key: 'settings', to: '/reglages', label: t('Réglages'), icon: Settings2, group: 'foot' },
 ];
 
-/** Which entry the address belongs to: sessions open in the inbox light "Sessions", a workspace "Workspaces". */
+/** Which entry the address belongs to: sessions, folders and the chat all live in « Agents ». */
 export function activeKey(pathname: string): string | null {
-  if (/^\/w\/[^/]+\/s\//.test(pathname)) return 'chat';
+  if (/^\/w\/[^/]+\/s\//.test(pathname) || pathname === '/chat' || pathname.startsWith('/chat/')) return 'home';
   if (pathname === '/' || pathname === '/sessions' || /^\/i\/[^/]+\/p\//.test(pathname)) return 'home';
   if (/^\/w(\/[^/]+(\/fichiers)?)?\/?$/.test(pathname)) return 'workspaces';
   if (pathname === '/files' || /^\/i\/[^/]+\/files(\/|$)/.test(pathname) || pathname === '/liens') return 'files';
@@ -59,11 +60,12 @@ export function activeKey(pathname: string): string | null {
   return null;
 }
 
-const ROW = 'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink';
-/** Selected entry: a white tab with a hairline ring (the ! classes win over ROW's hover). */
-const ACTIVE = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line)]';
-
-const GROUP = 'px-2.5 pb-1 pt-4 text-xs text-ink-faint';
+/** A page of the rail: icon over a short label. */
+const RAIL_ITEM = 'flex w-full flex-col items-center gap-1 rounded-[12px] px-1 pb-1.5 pt-2 text-ink-soft transition-colors hover:bg-raised hover:text-ink';
+/** Selected page: a white tile with a hairline ring (the ! classes win over the hover). */
+const RAIL_ON = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line)]';
+/** An icon-only button of the rail's foot. */
+const RAIL_ICON = 'flex size-9 items-center justify-center rounded-[10px] text-ink-faint transition-colors hover:bg-raised hover:text-ink';
 
 export function Layout() {
   return <>{EMBEDDED ? <EmbeddedLayout /> : <FullLayout />}<DirtyBlocker /></>;
@@ -197,68 +199,68 @@ function FullLayout() {
     await navigate({ to: '/connexion' });
   };
 
-  const entries = (group: NavGroup) => NAV.filter((n) => n.group === group).map((n) => {
+  const railEntry = (n: NavEntry) => {
     const on = current === n.key;
+    const c = counts[n.key] ?? {};
     return (
       <Link
         key={n.key}
         {...(navTarget(n, inst) as { to: string })}
         activeOptions={{ exact: true }}
         activeProps={{}}
-        className={cx(ROW, on && ACTIVE)}
+        title={c.label ? `${n.label} (${c.label})` : n.label}
+        className={cx(RAIL_ITEM, on && RAIL_ON)}
         // same marks as a router-active link, so assistive tech and tests see the entry as current
         {...(on ? { 'aria-current': 'page' as const, 'data-status': 'active' } : { 'aria-current': undefined, 'data-status': undefined })}
       >
-        <n.icon className="size-4 shrink-0" strokeWidth={1.5} />
-        <span className="flex-1 truncate">{n.label}</span>
-        <Count {...(counts[n.key] ?? {})} />
+        <span className="relative">
+          <n.icon className="size-[19px]" strokeWidth={1.5} />
+          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-white' : 'bg-raised text-ink-soft')} aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
+        </span>
+        <span className="max-w-full truncate text-[10.5px] leading-none">{n.short ?? n.label}</span>
       </Link>
     );
-  });
+  };
 
   return (
     <div className="flex h-full flex-col md:flex-row">
-      <aside className="hidden w-[232px] shrink-0 flex-col bg-paper px-2.5 pb-3 pt-3.5 md:flex">
-        <div className="flex items-center justify-between pb-3.5 pl-2.5 pt-0.5">
-          <Wordmark />
+      <aside className="hidden w-[76px] shrink-0 flex-col items-center gap-1 bg-paper pb-3 pt-3.5 md:flex" aria-label={t('Barre latérale')}>
+        <Link to="/" title="Intendia" className="mb-1 rounded-[12px] focus-visible:outline-2"><LogoMark className="size-9" /></Link>
+        <InstanceRail />
+        <div className="my-1.5 h-px w-8 shrink-0 bg-line" />
+        <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5" aria-label={t('Navigation principale')}>
+          {NAV.filter((n) => n.group === 'rail').map(railEntry)}
+        </nav>
+        <div className="flex w-full flex-col items-center gap-0.5 px-1.5 pt-2">
+          <Link to="/chat/nouvelle" preload={false} title={t('Nouvelle session')} aria-label={t('Nouvelle session')}
+            className="mb-1 flex size-10 items-center justify-center rounded-[12px] border border-accent-strong bg-accent text-on-accent transition-colors hover:bg-accent-strong">
+            <PenLine className="size-[18px]" strokeWidth={1.75} />
+          </Link>
+          <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" aria-label={t('Rechercher')}
+            title={t('Rechercher ({key}) ; un fichier : {fileKey}', { key: shortcutLabel(), fileKey: shortcutLabel().replace('K', 'P') })}
+            className={RAIL_ICON}>
+            <Search className="size-[18px]" strokeWidth={1.5} />
+          </button>
           {!onSession && inst && (
             <button type="button" onClick={side ? closeSide : openSide} aria-expanded={side}
               aria-label={t('Chat latéral')} title={t('Chat latéral ({key})', { key: shortcutLabel().replace('K', 'J') })}
-              className={cx('flex size-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-raised hover:text-ink', side && 'bg-raised text-ink')}>
-              <MessageSquareText className="size-4" strokeWidth={1.5} />
+              className={cx(RAIL_ICON, side && 'bg-raised text-ink')}>
+              <MessageSquareText className="size-[18px]" strokeWidth={1.5} />
             </button>
           )}
-        </div>
-        <NewSessionButton />
-        <InstanceSwitcher className="mt-2.5" />
-        <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" title={t('Rechercher ({key}) ; un fichier : {fileKey}', { key: shortcutLabel(), fileKey: shortcutLabel().replace('K', 'P') })}
-          className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-raised hover:text-ink">
-          <Search className="size-4 shrink-0" strokeWidth={1.5} />
-          <span className="flex-1 text-left">{t('Rechercher')}</span>
-          <kbd className="font-mono text-[11px] text-ink-faint">{shortcutLabel()}</kbd>
-        </button>
-
-        <nav className="-mx-1 mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-4" aria-label={t('Navigation principale')}>
-          {entries('top')}
-          <p className={GROUP}>{t('Automatisation')}</p>
-          {entries('auto')}
-          <p className={GROUP}>{t('Agent')}</p>
-          {entries('agent')}
-        </nav>
-
-        <div className="flex flex-col gap-0.5 pt-3">
-          {entries('foot')}
-          <div className="mt-2 flex items-center gap-2.5 border-t border-line px-2.5 pt-2.5">
-            <button onClick={logout} className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg text-sm text-ink-soft transition-colors hover:text-ink">
-              <LogOut className="size-4 shrink-0" strokeWidth={1.5} />
-              <span className="truncate">{t('Se déconnecter')}</span>
-            </button>
-            <button type="button" onClick={() => setHelp(true)} aria-haspopup="dialog" aria-label={t('Raccourcis')} title={t('Raccourcis clavier')}
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-raised hover:text-ink">
-              <Keyboard className="size-3.5" strokeWidth={1.5} />
-            </button>
-            {version && <span className="shrink-0 font-mono text-[11px] text-ink-faint" title={t('Version d’Intendia')}>v{version}</span>}
-          </div>
+          {NAV.filter((n) => n.group === 'foot').map((n) => (
+            <Link key={n.key} {...(navTarget(n, inst) as { to: string })} title={n.label} aria-label={n.label}
+              className={cx(RAIL_ICON, current === n.key && 'bg-sheet text-ink shadow-[0_0_0_1px_var(--color-line)]')}
+              {...(current === n.key ? { 'aria-current': 'page' as const } : {})}>
+              <n.icon className="size-[18px]" strokeWidth={1.5} />
+            </Link>
+          ))}
+          <button type="button" onClick={() => setHelp(true)} aria-haspopup="dialog" aria-label={t('Raccourcis')} title={t('Raccourcis clavier')} className={RAIL_ICON}>
+            <Keyboard className="size-[18px]" strokeWidth={1.5} />
+          </button>
+          <button type="button" onClick={logout} aria-label={t('Se déconnecter')} title={version ? `${t('Se déconnecter')} · Intendia v${version}` : t('Se déconnecter')} className={RAIL_ICON}>
+            <LogOut className="size-[18px]" strokeWidth={1.5} />
+          </button>
         </div>
       </aside>
 
@@ -278,14 +280,8 @@ function FullLayout() {
   );
 }
 
-/** Small counter at the end of a sidebar entry; hidden for 0; red for failures. */
-function Count({ n, bad, label }: { n?: number; bad?: boolean; label?: string }) {
-  if (!n) return null;
-  return <span className={cx('shrink-0 text-xs', bad ? 'font-semibold text-bad' : 'text-ink-faint')} aria-label={`(${label ?? n})`} title={label}>{n}</span>;
-}
-
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
-const MOBILE_MAIN: string[] = ['home', 'workspaces', 'activity', 'agents'];
+const MOBILE_MAIN: string[] = ['home', 'activity', 'kanban', 'crons'];
 
 function MobileNav({ current, onSearch, onChat, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
