@@ -984,7 +984,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const modelOk = Boolean(inst && sess.data) && !modelPickerDisabled({ disabled: running || setOptions.isPending || !chat.available, loading: models.isLoading });
   // « /goal » can be typed when the message field can
   const goalOk = Boolean(inst) && chat.available && !switching;
-  const openFiles = () => void confirmClose(() => { setPanel(true); setPreviewPath(null); });
+  const openFiles = () => void confirmClose(() => { setPanel(true); setPanelTab('files'); setPreviewPath(null); });
   // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
   const handlers = useRef({ stop, onCommand, renameSession, copyLink, openFiles });
   handlers.current = { stop, onCommand, renameSession, copyLink, openFiles };

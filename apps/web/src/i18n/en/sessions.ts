@@ -235,4 +235,6 @@ export default {
   "Tout est lu": "All read",
   "non lu": "unread",
   "Nouvel agent…": "New agent…",
+  "Agent créé, modèle non appliqué": "Agent created, model not applied",
+  "Compris": "Got it",
 } satisfies Record<string, string>;
