@@ -77,3 +77,17 @@ export function withRunning(groups: Group<RecentSession>[], marks: ReadonlyMap<s
   top.sort((a, b) => b.at - a.at);
   return [{ label: RUNNING_LABEL, items: top.map((x) => x.row) }, ...rest];
 }
+
+/**
+ * The loaded rows plus a row built from each marked Intendia session that is not loaded (beyond the list's limit), so
+ * a session that works or waits always shows; with `synth` false (a source filter that excludes Intendia), rows as is.
+ */
+export function withMarked(rows: readonly RecentSession[], marks: ReadonlyMap<string, RunMark>, inst: string, synth: boolean): RecentSession[] {
+  if (!synth || !marks.size) return [...rows];
+  const out = [...rows];
+  for (const [id, m] of marks) {
+    if (!m.workspace || rows.some((r) => r.id === id && r.instanceId === inst)) continue;
+    out.push({ kind: 'intendia', instanceId: inst, profile: m.profile, id, source: 'intendia', title: m.title ?? t('Session sans titre'), sub: m.workspaceName, workspace: m.workspace, at: m.at, snippet: null });
+  }
+  return out;
+}
