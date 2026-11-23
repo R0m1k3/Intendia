@@ -355,7 +355,12 @@ export function AgentsPane({ openId, onBeside }: {
     >
       {addingAgent && inst && (
         <NewAgent inst={inst} agents={agents.data ?? []} onClose={() => setAddingAgent(false)}
-          onCreated={(name) => { setAddingAgent(false); void navigate({ to: '/i/$inst/agents/$name', params: { inst, name } }); }} />
+          onCreated={(name, _source, modelError) => {
+            setAddingAgent(false);
+            void navigate({ to: '/i/$inst/agents/$name', params: { inst, name } });
+            // Hermes made the agent but refused the model: say it, the card does not keep this error
+            if (modelError) void ask({ title: t('Agent créé, modèle non appliqué'), message: t('Modèle non appliqué : {error}', { error: modelError }), confirmLabel: t('Compris') });
+          }} />
       )}
       {addingFolder && (
         <div className="m-1.5 rounded-xl border border-line p-3">
