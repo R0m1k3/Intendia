@@ -66,6 +66,14 @@ export function AsideQuestion({ inst, slug, parentId, profile }: { inst: string;
 
   useLayoutEffect(() => () => flushFrame(frame.current), []);
 
+  /** The session the frame shows now (an edit, a copy or a change of agent moves it to another one). */
+  const expand = () => {
+    let path: string | null = null;
+    try { path = frame.current?.contentWindow?.location.pathname ?? null; } catch { /* other origin: the stored one */ }
+    if (!path || !/^\/w\/[^/]+\/s\//.test(path)) path = shown ? embedUrl(shown).split('?')[0]! : null;
+    if (path) router.history.push(path);
+  };
+
   return (
     <div data-aside-question className="flex h-full flex-col">
       <div className="flex h-10 shrink-0 items-center gap-1 pl-4 pr-2">
@@ -74,7 +82,7 @@ export function AsideQuestion({ inst, slug, parentId, profile }: { inst: string;
           <Plus className="size-4" strokeWidth={1.5} />
         </Button>
         <Button variant="ghost" className="size-8 px-0" aria-label={t('Ouvrir en grand')} title={t('Ouvrir en grand')} disabled={!shown}
-          onClick={() => { if (shown) router.history.push(embedUrl(shown).split('?')[0]!); }}>
+          onClick={expand}>
           <Maximize2 className="size-4" strokeWidth={1.5} />
         </Button>
       </div>
