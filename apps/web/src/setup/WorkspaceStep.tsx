@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../api';
 import { AgentAvatar, ColorChoice, useAgentLooks } from '../agents/look';
+import { ask } from '../components/Dialog';
 import { NewWorkspace } from '../components/NewWorkspace';
 import { Button } from '../components/ui';
 import { NewAgent } from '../pages/Agents';
@@ -39,7 +40,13 @@ export function WorkspaceStep() {
           </div>
           {creating && (
             <NewAgent inst={inst} agents={agents.data ?? []} onClose={() => setCreating(false)}
-              onCreated={(name) => { setCreating(false); finishSetup(navigate, inst); void navigate({ to: '/i/$inst/agents/$name', params: { inst, name } }); }} />
+              onCreated={(name, _source, modelError) => {
+                setCreating(false);
+                finishSetup(navigate, inst);
+                void navigate({ to: '/i/$inst/agents/$name', params: { inst, name } });
+                // Hermes made the agent but refused the model: say it, the card does not keep this error
+                if (modelError) void ask({ title: t('Agent créé, modèle non appliqué'), message: t('Modèle non appliqué : {error}', { error: modelError }), confirmLabel: t('Compris') });
+              }} />
           )}
         </div>
       )}

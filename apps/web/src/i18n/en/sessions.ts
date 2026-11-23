@@ -83,6 +83,7 @@ export default {
   "Modifier « {text} »": "Edit “{text}”",
   "Modifier le message en attente": "Edit the waiting message",
   "Envoyer maintenant": "Send now",
+  "Envoi en cours…": "Sending…",
   "Avec un skill : attend la fin du travail": "With a skill: waits for the work to end",
   "Entrée : mettre en file · Réorienter : donner le texte tout de suite": "Enter: queue · Steer: give the text right away",
   "Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes": "Enter: send · Shift+Enter: new line · /: commands",
