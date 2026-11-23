@@ -107,3 +107,17 @@ describe('open session group', () => {
     expect(ids.filter((id) => id.startsWith('o:'))).toEqual(['o:files']);
   });
 });
+
+describe('agents and folders', () => {
+  it('finds an agent, and sessions by their agent or folder', () => {
+    const mine = { ...session('v1', 'Prix du cuivre'), profile: 'veille-prix' };
+    const inFolder: RecentSession = { ...session('m1', 'Planning'), kind: 'intendia', workspace: 'maison' };
+    const s = src({ agents: { inst: 'a', list: [{ name: 'veille-prix', description: 'Surveille les prix' }, { name: 'default' }] }, recent: [mine, inFolder] });
+    const byAgent = paletteGroups('veille', s);
+    expect(byAgent.find((g) => g.id === 'agents')?.items[0]?.target).toEqual({ to: '/i/$inst/agents/$name', params: { inst: 'a', name: 'veille-prix' } });
+    expect(byAgent.find((g) => g.id === 'sessions')?.items.map((i) => i.id)).toEqual(['s:a:v1']);
+    // two letters or more: the server's search first, then the recent ones matching by folder
+    const byFolder = paletteGroups('électricité', { ...s, found: [] });
+    expect(byFolder.find((g) => g.id === 'sessions')?.items.map((i) => i.id)).toEqual(['s:a:m1']);
+  });
+});

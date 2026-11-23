@@ -143,7 +143,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
                   ) : (
                     <p className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-sm text-ink-faint" title={m.path}>
                       <span className="min-w-0 truncate line-through">{baseName(m.path)}</span>
-                      <span className="shrink-0 text-[11px]">{t('supprimé ou hors du workspace')}</span>
+                      <span className="shrink-0 text-[11px]">{t('supprimé ou hors du dossier')}</span>
                     </p>
                   )}
                   {m.rel && <PathActions agentRoot={agentRoot} rel={m.rel} onInsert={onInsert} />}

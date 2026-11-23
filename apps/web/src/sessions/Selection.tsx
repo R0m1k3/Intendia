@@ -48,10 +48,10 @@ export function SessionSelectList({ workspace, sessions }: { workspace: Workspac
         .map((w) => ({ value: w.slug, label: w.name }));
       if (!options.length) {
         setFailures([]);
-        setError(new Error(t('Aucun autre workspace pour cet agent : créez-en un d’abord')));
+        setError(new Error(t('Aucun autre dossier pour cet agent : créez-en un d’abord')));
         return;
       }
-      const picked = await askChoice({ title: plural(ids.length, 'Déplacer {n} session', 'Déplacer {n} sessions'), label: t('Vers le workspace'), options, confirmLabel: t('Déplacer') });
+      const picked = await askChoice({ title: plural(ids.length, 'Déplacer {n} session', 'Déplacer {n} sessions'), label: t('Vers le dossier'), options, confirmLabel: t('Déplacer') });
       if (!picked) return;
       target = picked;
     }

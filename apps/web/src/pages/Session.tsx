@@ -489,8 +489,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (!(await ask({
       title: t('Continuer avec l’agent {profile} ?', { profile }), confirmLabel: t('Copier la conversation'),
       message: s.autoApprove
-        ? t('La conversation est copiée chez l’agent {profile}, dans ce workspace ; cette session reste telle quelle. « Sans confirmation » repart désactivé.', { profile })
-        : t('La conversation est copiée chez l’agent {profile}, dans ce workspace ; cette session reste telle quelle.', { profile }),
+        ? t('La conversation est copiée chez l’agent {profile}, dans ce dossier ; cette session reste telle quelle. « Sans confirmation » repart désactivé.', { profile })
+        : t('La conversation est copiée chez l’agent {profile}, dans ce dossier ; cette session reste telle quelle.', { profile }),
     }))) return;
     try {
       const { session } = await api.toProfile(inst, sessionId, profile, newKey());
@@ -693,7 +693,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       workspaces: allWorkspaces.data?.workspaces ?? [], inst: to, chat: loadChat(), last: localStorage.getItem('intendia-last-workspace'),
     });
     if (!slugTo) {
-      setError(new Error(t('Aucun workspace sur {label}', { label: pickable.find((i) => i.id === to)?.label ?? to })));
+      setError(new Error(t('Aucun dossier sur {label}', { label: pickable.find((i) => i.id === to)?.label ?? to })));
       return;
     }
     setSwitching(true);
@@ -1206,14 +1206,14 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             {neverSent && siblings.length > 1 && (
               <div className="mt-2 flex justify-center" data-move-empty>
                 <Picker
-                  title={t('Workspace de cette session')} placement="below" value={slug}
+                  title={t('Dossier de cette session')} placement="below" value={slug}
                   items={siblings.map((w) => ({ value: w.slug, label: w.name }))}
                   onPick={(v) => void moveTo(v)}
-                  label={<>{t('Changer de workspace')}</>}
+                  label={<>{t('Changer de dossier')}</>}
                 />
               </div>
             )}
-            <p className="mt-1.5 text-sm text-ink-faint">{t('L’agent travaille dans le dossier du workspace et range ses fichiers dans celui de la session')}</p>
+            <p className="mt-1.5 text-sm text-ink-faint">{t('L’agent travaille dans le dossier et range ses fichiers dans celui de la session')}</p>
           </div>
         )}
         {live?.truncated && (

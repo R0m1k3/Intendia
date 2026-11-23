@@ -15,7 +15,7 @@ export interface Command {
 }
 
 export const COMMANDS: { name: CommandName; args?: string; label: string }[] = [
-  { name: 'new', label: t('Nouvelle session dans ce workspace') },
+  { name: 'new', label: t('Nouvelle session dans ce dossier') },
   { name: 'clear', label: t('Vider la conversation') },
   { name: 'undo', label: t('Annuler le dernier échange') },
   { name: 'retry', label: t('Réessayer la dernière réponse') },

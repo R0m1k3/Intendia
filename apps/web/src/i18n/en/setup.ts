@@ -87,7 +87,6 @@ export default {
   // setup steps (Frame, ProviderStep, ModelStep, WorkspaceStep)
   'Fournisseur': 'Provider',
   'Modèle': 'Model',
-  'Workspace': 'Workspace',
   'Continuer': 'Continue',
   'Étapes': 'Steps',
   'Passer cette étape': 'Skip this step',
@@ -111,8 +110,9 @@ export default {
   'L’agent de {label} a besoin d’un abonnement ou d’une clé d’API pour répondre. Les clés restent dans Hermes.': 'The agent of {label} needs a subscription or an API key to answer. Keys stay in Hermes.',
   'L’agent a besoin d’un abonnement ou d’une clé d’API pour répondre. Les clés restent dans Hermes.': 'The agent needs a subscription or an API key to answer. Keys stay in Hermes.',
   'Ce changement compte après un redémarrage de la passerelle (Configuration de l’instance).': 'This change applies after a gateway restart (instance Configuration).',
-  'Créer un premier workspace': 'Create a first workspace',
-  'Un dossier partagé avec l’agent, ses consignes et ses sessions de travail.': 'A folder shared with the agent, its instructions and its work sessions.',
+  'Votre premier agent': 'Your first agent',
+  'Hermes a déjà un agent principal. Donnez-lui une couleur et un premier dossier : ses sessions y rangent leurs fichiers.': 'Hermes already has a main agent. Give it a colour and a first folder: its sessions keep their files there.',
+  'Créer un autre agent…': 'Create another agent…',
   // Setup page
   'Les deux mots de passe diffèrent': 'The two passwords differ',
   'Premier lancement': 'First launch',
@@ -128,7 +128,7 @@ export default {
   'complet': 'full',
   'lecture seule': 'read only',
   'indisponible': 'unavailable',
-  'Fichiers des workspaces': 'Workspace files',
+  'Fichiers des dossiers': 'Folder files',
   'État : ': 'Status: ',
   'Ouvrir dans le dashboard officiel': 'Open in the official dashboard',
   'aucune route': 'no route',

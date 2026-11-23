@@ -36,7 +36,7 @@ export function FilesPage() {
   const instLabel = instances.data?.instances.find((i) => i.id === ws.data?.workspace.instanceId)?.label ?? ws.data?.workspace.instanceId;
   // the workspace folder itself is missing on its Hermes (made in another volume before 0.0.4, or deleted by the agent)
   const treeError = !dir && tree.error instanceof ApiError && tree.error.status === 404
-    ? new Error(t('Dossier introuvable chez {instance} : copiez-le dans la racine des workspaces de cette instance, ou supprimez ce workspace.', { instance: instLabel ?? 'Hermes' }))
+    ? new Error(t('Dossier introuvable chez {instance} : copiez-le dans la racine des dossiers de cette instance, ou supprimez ce dossier.', { instance: instLabel ?? 'Hermes' }))
     : tree.error;
   // the repository holding this folder, when it starts in the workspace (never above it)
   const gitOn = useModuleAvailability(ws.data?.workspace.instanceId, 'git', GIT_REQUIRED, []).available && Boolean(ws.data);
@@ -56,7 +56,7 @@ export function FilesPage() {
   const create = async (kind: 'file' | 'dir') => {
     const name = await askText({
       title: kind === 'file' ? t('Nouveau fichier') : t('Nouveau dossier'),
-      label: dir ? t('Nom (dans {dir}/)', { dir }) : t('Nom (dans la racine du workspace)'),
+      label: dir ? t('Nom (dans {dir}/)', { dir }) : t('Nom (dans la racine du dossier)'),
       value: kind === 'file' ? 'notes.md' : '', confirmLabel: t('Créer'),
     });
     if (!name?.trim()) return;
@@ -100,7 +100,7 @@ export function FilesPage() {
       <PageHeader
         eyebrow={<Link to="/w/$slug" params={{ slug }} className="hover:text-ink">{ws.data?.workspace.name ?? slug}</Link>}
         title={t('Fichiers')}
-        subtitle={t('Le dossier du workspace, partagé avec l’agent')}
+        subtitle={t('Le dossier, partagé avec l’agent')}
         action={
           <div className="flex items-center gap-2">
             {repo !== null && (
@@ -166,7 +166,7 @@ export function FilesPage() {
                 <button onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
               </p>
             )}
-            {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? t('Recherche…') : plural(entries.length, '{n} résultat dans tout le workspace', '{n} résultats dans tout le workspace') + (found.data?.truncated ? t(' (liste coupée)') : '')}</p>}
+            {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? t('Recherche…') : plural(entries.length, '{n} résultat dans tout le dossier', '{n} résultats dans tout le dossier') + (found.data?.truncated ? t(' (liste coupée)') : '')}</p>}
             {entries.length > 0 ? (
               <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} agentRoot={tree.data?.agentRoot} />
             ) : (tree.isSuccess && !debounced) ? (

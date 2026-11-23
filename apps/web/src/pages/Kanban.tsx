@@ -207,7 +207,7 @@ function NewTask({ inst, board, assignees, autoDecompose, onClose, onCreated }: 
           {START.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
       </Field>
-      <Field label={t('Workspace (facultatif)')} hint={t('L’agent travaillera dans un dossier kanban/… de ce workspace')}>
+      <Field label={t('Dossier (facultatif)')} hint={t('L’agent travaillera dans un dossier kanban/… de ce dossier')}>
         <select className={SELECT} value={f.workspace} onChange={(e) => setF({ ...f, workspace: e.target.value })}>
           <option value="">{t('Aucun')}</option>
           {mine.map((w) => <option key={w.slug} value={w.slug}>{w.name}</option>)}

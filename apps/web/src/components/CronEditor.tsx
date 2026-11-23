@@ -171,7 +171,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
           <Field label={t('Prompt')} hint={t('Ce que l’agent doit faire à chaque exécution')}>
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} required maxLength={20_000} rows={6}
               className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
-              placeholder={t('Fais le point des ventes de la semaine et range le tableau dans le workspace.')} />
+              placeholder={t('Fais le point des ventes de la semaine et range le tableau dans le dossier.')} />
           </Field>
 
           <Row>
@@ -192,16 +192,16 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
             {form.kind === 'monthly' && form.day > 28 && <p className="text-xs text-ink-faint">{t('Les mois sans ce jour sont sautés')}</p>}
           </Row>
 
-          <Field label={t('Workspace')} hint={ws
+          <Field label={t('Dossier')} hint={ws
             ? t('Le prompt reçoit le bloc de cadrage : l’agent lit AGENTS.md et range ses fichiers dans crons/{folder}/ ; profil {profile}', { folder: cron?.workspace?.folder ?? t('nom-du-cron'), profile: ws.profile ?? 'default' })
-            : t('Facultatif : rattache le cron au dossier d’un workspace')}>
+            : t('Facultatif : rattache le cron à un dossier')}>
             <select value={workspace} onChange={(e) => setWorkspace(e.target.value)} className={cx(SELECT, 'w-full')}>
               <option value="">{t('Aucun')}</option>
               {mine.map((w) => <option key={w.slug} value={w.slug}>{w.name} ({w.slug})</option>)}
             </select>
           </Field>
           {cron?.workspace?.missing && (
-            <p className="-mt-3 text-xs text-warn">{t('Le workspace « {slug} » n’existe plus : enregistrer sans workspace retire le cadrage du prompt', { slug: cron.workspace.slug })}</p>
+            <p className="-mt-3 text-xs text-warn">{t('Le dossier « {slug} » n’existe plus : enregistrer sans dossier retire le cadrage du prompt', { slug: cron.workspace.slug })}</p>
           )}
 
           <Field label={t('Destination du résultat')}>

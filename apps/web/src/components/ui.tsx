@@ -159,7 +159,7 @@ export const MODULE_META: Record<ModuleId, { icon: LucideIcon; label: string; do
   config: { icon: SlidersHorizontal, label: t('Configuration'), does: t('Configuration et modèles') },
   agents: { icon: Bot, label: t('Agents'), does: t('Profils d’agents') },
   kanban: { icon: KanbanSquare, label: t('Kanban'), does: t('Tableau de tâches') },
-  git: { icon: GitBranch, label: t('Git'), does: t('Statut, diff et commits des dépôts des workspaces') },
+  git: { icon: GitBranch, label: t('Git'), does: t('Statut, diff et commits des dépôts des dossiers') },
   monitor: { icon: LineChart, label: t('Suivi'), does: t('Utilisation, journaux et métriques du serveur') },
   memory: { icon: Brain, label: t('Mémoire'), does: t('Mémoire de l’agent et ce qu’il a appris') },
   plugins: { icon: Puzzle, label: t('Plugins'), does: t('Plugins d’Hermes : installés et catalogue') },

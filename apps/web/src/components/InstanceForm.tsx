@@ -90,7 +90,7 @@ export function InstanceForm({ onSaved, edit }: { onSaved: (r: CompatReport) => 
         <Field label={t('Clé de l’API server')} hint={edit ? keyHelp : t('API_SERVER_KEY, 16 caractères minimum')}>
           <Input value={v.apiKey} onChange={set('apiKey')} required={!edit} minLength={16} type="password" autoComplete="off" name="apiKey" />
         </Field>
-        <Field label={t('URL du dashboard')} hint={t('Port 9119 ; requis pour les fichiers des workspaces')}>
+        <Field label={t('URL du dashboard')} hint={t('Port 9119 ; requis pour les fichiers des dossiers')}>
           <Input value={v.dashboard} onChange={set('dashboard')} type="url" placeholder="http://hermes:9119" />
         </Field>
         <Field label={t('Jeton du dashboard')} hint={edit ? keyHelp : 'HERMES_DASHBOARD_SESSION_TOKEN'}>
@@ -123,7 +123,7 @@ export function InstanceForm({ onSaved, edit }: { onSaved: (r: CompatReport) => 
           {report.files && (
             <div className="border-b border-line px-4 py-3 text-sm">
               {report.files.workspaceRoot
-                ? <T k="Racine des workspaces : {root}" vars={{ root: <span className="font-mono text-xs">{report.files.workspaceRoot}</span> }} />
+                ? <T k="Racine des dossiers : {root}" vars={{ root: <span className="font-mono text-xs">{report.files.workspaceRoot}</span> }} />
                 : <span className="text-bad">{report.files.reason}</span>}
             </div>
           )}
