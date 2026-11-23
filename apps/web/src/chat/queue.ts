@@ -52,6 +52,22 @@ export const dropItem = (q: Queue, id: string): Queue => {
   const items = q.items.filter((i) => i.id !== id);
   return { items, paused: items.length ? q.paused : null };
 };
+/** Moves a message `delta` places (−1: up), within the queue. */
+export function moveItem(q: Queue, id: string, delta: number): Queue {
+  const from = q.items.findIndex((i) => i.id === id);
+  if (from < 0) return q;
+  const to = Math.max(0, Math.min(q.items.length - 1, from + delta));
+  if (to === from) return q;
+  const items = [...q.items];
+  const [it] = items.splice(from, 1);
+  items.splice(to, 0, it!);
+  return { ...q, items };
+}
+/** New text for a waiting message: a new intent, so a new send key; an empty text removes it. */
+export function editItem(q: Queue, id: string, text: string): Queue {
+  if (!text.trim()) return dropItem(q, id);
+  return { ...q, items: q.items.map((i) => (i.id === id ? { ...i, text, key: newSendKey() } : i)) };
+}
 /** The first message and the queue without it (an empty queue is never paused). */
 export function takeHead(q: Queue): [QueueItem | null, Queue] {
   const [head, ...items] = q.items;

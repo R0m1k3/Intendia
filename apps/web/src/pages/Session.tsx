@@ -24,7 +24,7 @@ import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from
 import { applyDeliveries, attachChildren, delegationState, pollDelay } from '../chat/deliveries';
 import { measure, startFollow, type FollowState } from '../chat/follow';
 import {
-  clearPendingKey, EMPTY_QUEUE, dropItem, enqueue, firstTime, loadPendingKey, loadQueue, newSendKey, pauseQueue, pushHead, resumeQueue,
+  clearPendingKey, EMPTY_QUEUE, dropItem, editItem, enqueue, moveItem, firstTime, loadPendingKey, loadQueue, newSendKey, pauseQueue, pushHead, resumeQueue,
   saveQueue, savePendingKey, takeHead, type Queue,
 } from '../chat/queue';
 import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
@@ -1295,6 +1295,17 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             queue={{
               items: queue.items, paused: queue.paused,
               onRemove: (id) => setQueue((q) => dropItem(q, id)),
+              onMove: (id, delta) => setQueue((q) => moveItem(q, id, delta)),
+              onEdit: (id, text) => setQueue((q) => editItem(q, id, text)),
+              // while the agent works: a reorientation (the skills of `/use` only go with a run); else first, sent now
+              sendNowBlocked: (it) => (active ? (steerDisabled ?? (it.skills?.length ? t('Avec un skill : attend la fin du travail') : null)) : null),
+              onSendNow: (id) => {
+                const it = queue.items.find((i) => i.id === id);
+                if (!it) return;
+                if (active) { void steer(it.text).then((done) => { if (done) setQueue((q) => dropItem(q, id)); }); return; }
+                setQueue((q) => resumeQueue(moveItem(q, id, -q.items.length)));
+                setDrain(`now-${Date.now()}`);
+              },
               onResume: () => { setQueue(resumeQueue); if (!active) setDrain(`resume-${Date.now()}`); },
             }}
             options={inst && sess.data && (
@@ -1307,7 +1318,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 onChange={(patch) => setOptions.mutate(patch)}
               />
             )}
-            placeholder={running ? (live?.status === 'waiting_for_approval' ? t('En attente de votre approbation') : live?.status === 'waiting_for_clarify' ? t('Hermes vous pose une question') : t('L’agent travaille… Entrée met votre message en file')) : entries.length ? t('Répondre à {agent}…', { agent }) : t('Écrire à {agent}…', { agent })}
+            placeholder={running ? (live?.status === 'waiting_for_approval' ? t('En attente de votre approbation') : live?.status === 'waiting_for_clarify' ? t('Hermes vous pose une question') : t('L’agent travaille… Entrée met votre message en file')) : t('Message à {agent}…', { agent })}
             hint={entries.length ? <ContextGauge usage={usage.data} estimate={estimate} />
               : running ? t('Entrée : mettre en file · Réorienter : donner le texte tout de suite') : t('Entrée : envoyer · Maj+Entrée : à la ligne · / : commandes')}
           />

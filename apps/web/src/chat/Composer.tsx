@@ -1,4 +1,5 @@
-import { ArrowUp, CornerDownRight, FileText, FolderArchive, ShieldOff, Sparkles, ListPlus, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CornerDownRight, FileText, FolderArchive, ShieldOff, Sparkles, ListPlus, Loader2, Paperclip, Pencil, Square, X } from 'lucide-react';
+import { askText } from '../components/Dialog';
 import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode, type Ref } from 'react';
 import type { ExtractResult } from '../api';
 import { cx } from '../components/ui';
@@ -77,7 +78,14 @@ export function Composer({
   /** `skills`: asked by `/use` for this message */
   onSend: (text: string, skills?: string[]) => Promise<boolean>;
   /** messages waiting for the end of the run; `paused`: why they wait for « Reprendre » */
-  queue?: { items: QueueItem[]; paused: string | null; onRemove: (id: string) => void; onResume: () => void };
+  queue?: {
+    items: QueueItem[]; paused: string | null; onRemove: (id: string) => void; onResume: () => void;
+    /** −1 up, +1 down */
+    onMove?: (id: string, delta: number) => void;
+    onEdit?: (id: string, text: string) => void;
+    /** gives this message to the agent at once (a reorientation while it works); null: not possible now (why) */
+    onSendNow?: (id: string) => void; sendNowBlocked?: (item: QueueItem) => string | null;
+  };
   onQueue?: (text: string, skills?: string[]) => void;
   /** true when the agent took the text */
   onSteer?: (text: string) => Promise<boolean>;
@@ -318,17 +326,43 @@ export function Composer({
     <div className={cx('card p-2 pl-2.5 transition-colors focus-within:border-ink-faint', disabled && 'opacity-60')}>
       {queue && queue.items.length > 0 && (
         <div className="px-1 pb-1.5 pt-1" data-queue>
-          <ul className="flex flex-wrap gap-1.5" aria-label={t('Messages en attente')}>
-            {queue.items.map((q, i) => (
-              <li key={q.id} data-queued className="flex max-w-full items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
-                <span className="text-ink-faint">{i + 1}.</span>
-                <span className="max-w-[16rem] truncate" title={q.text}>{q.text}</span>
-                <button type="button" onClick={() => queue.onRemove(q.id)} aria-label={t('Retirer « {text} » de la file', { text: q.text.slice(0, 40) })}
-                  className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
-                  <X className="size-3" strokeWidth={2} />
-                </button>
-              </li>
-            ))}
+          <ul className="flex flex-col gap-1" aria-label={t('Messages en attente')}>
+            {queue.items.map((q, i) => {
+              const short = q.text.slice(0, 40);
+              const blocked = queue.sendNowBlocked?.(q) ?? null;
+              const small = 'flex size-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-sheet hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent';
+              return (
+                <li key={q.id} data-queued className="group flex min-w-0 items-center gap-1 rounded-lg border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
+                  <span className="font-mono text-ink-faint">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate" title={q.text}>{q.text}</span>
+                  {queue.onMove && (
+                    <>
+                      <button type="button" disabled={i === 0} onClick={() => queue.onMove!(q.id, -1)} aria-label={t('Monter « {text} »', { text: short })} className={small}>
+                        <ArrowUp className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button type="button" disabled={i === queue.items.length - 1} onClick={() => queue.onMove!(q.id, 1)} aria-label={t('Descendre « {text} »', { text: short })} className={small}>
+                        <ArrowDown className="size-3.5" strokeWidth={1.75} />
+                      </button>
+                    </>
+                  )}
+                  {queue.onEdit && (
+                    <button type="button" aria-label={t('Modifier « {text} »', { text: short })} className={small}
+                      onClick={() => void askText({ title: t('Modifier le message en attente'), value: q.text, confirmLabel: t('Enregistrer') }).then((v) => { if (v !== null) queue.onEdit!(q.id, v); })}>
+                      <Pencil className="size-3.5" strokeWidth={1.5} />
+                    </button>
+                  )}
+                  {queue.onSendNow && (
+                    <button type="button" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => queue.onSendNow!(q.id)} data-send-now
+                      className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent-ink hover:bg-sheet disabled:text-ink-faint disabled:hover:bg-transparent">
+                      {t('Envoyer maintenant')}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => queue.onRemove(q.id)} aria-label={t('Retirer « {text} » de la file', { text: short })} className={small}>
+                    <X className="size-3" strokeWidth={2} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           <p className="mt-1 text-[11px] text-ink-faint">
             {queue.paused ? (
