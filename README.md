@@ -1,7 +1,7 @@
 # Intendia
 
 Intendia is a web interface for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It runs as a single
-container next to your Hermes instances and lets you work with the agent (chat, workspaces, files) and administer it
+container next to your Hermes instances and lets you work with the agent (chat, agents, folders, files) and administer it
 (crons, skills, models, providers, profiles, kanban, memory) from one place, in English or French.
 
 Intendia talks to Hermes only through its HTTP APIs: the API server (port 8642) and the dashboard (port 9119). It never
@@ -9,10 +9,11 @@ imports the agent's code and never reads or writes its files, so Hermes can keep
 
 | | |
 |---|---|
-| ![Home: ask Hermes, recent sessions of every source](docs/screenshots/home.png) | ![Chat](docs/screenshots/chat.png) |
-| ![File produced by the agent](docs/screenshots/session-files.png) | ![Kanban](docs/screenshots/kanban.png) |
-| ![Crons](docs/screenshots/crons.png) | ![Skills](docs/screenshots/skills.png) |
-| ![Hermes settings](docs/screenshots/settings.png) | ![State of each module](docs/screenshots/state.png) |
+| ![Home: the agents, their folders and sessions](docs/screenshots/home.png) | ![Chat](docs/screenshots/chat.png) |
+| ![The agent's card beside the session: brain, knows, does, rules](docs/screenshots/agent.png) | ![File produced by the agent](docs/screenshots/session-files.png) |
+| ![Kanban](docs/screenshots/kanban.png) | ![Crons](docs/screenshots/crons.png) |
+| ![Skills](docs/screenshots/skills.png) | ![Hermes settings](docs/screenshots/settings.png) |
+| ![State of each module](docs/screenshots/state.png) | |
 
 ## Status
 
@@ -33,11 +34,11 @@ hand on a reference Hermes 0.23. Intendia has not yet been run for long on a pro
   within a budget you set.
 - Open up to four sessions side by side on the Chat page, and keep a side chat next to any page.
 - Browse every session of an instance, whatever started it (Intendia, CLI, Telegram, Discord, crons, kanban): search,
-  pin, rename, copy, move to another workspace, export (Markdown, HTML, JSON) or delete.
-- Group sessions in workspaces. A workspace is a real folder that the agent works in; its files can be browsed,
+  pin, rename, copy, move to another folder, export (Markdown, HTML, JSON) or delete.
+- Group sessions in folders under their agent. A folder is a real directory that the agent works in; its files can be browsed,
   previewed (code, Markdown, PDF, images, CSV, Office documents, Excalidraw), uploaded, renamed, moved and
   downloaded as zip.
-- Use git in a workspace: status, diff, stage, and commit with a message written by the agent.
+- Use git in a folder: status, diff, stage, and commit with a message written by the agent.
 - Get links to the files the agent delivers. Intendia gives Hermes a `share_file` MCP tool, so a cron or a Telegram
   conversation can answer with a private link to a file.
 
@@ -88,7 +89,7 @@ docker logs intendia     # prints the installation code asked by the web UI on f
 ```
 
 Open the public address, enter the installation code, choose a password, then add your Hermes instances (or declare
-them in `INTENDIA_INSTANCES`). A short first-run guide helps you pick a provider, a model and a first workspace.
+them in `INTENDIA_INSTANCES`). A short first-run guide helps you pick a provider, a model and a first agent with its folder.
 A `docker-compose.portainer.yml` builds the image from the repository for Portainer stacks.
 
 The image is `ghcr.io/r0m1k3/intendia`, tagged `X.Y.Z`, `X.Y`, `X` and `latest`. Until 1.0, follow the minor tag
@@ -116,7 +117,7 @@ The full list is in [.env.example](.env.example).
 - Instance keys are encrypted at rest with `INTENDIA_SECRET`. Secrets read from Hermes (API keys, tokens, vault
   entries) are masked and never sent back to the browser.
 - Ports 8642 and 9119 of Hermes, and Intendia's MCP port 3001, must stay on the Docker network; never publish them.
-- Share links are random, can be revoked, and serve files only from the workspaces of their instance.
+- Share links are random, can be revoked, and serve files only from the folders of their instance.
 
 ## Language
 

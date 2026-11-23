@@ -30,9 +30,9 @@ export function WorkspacesPage() {
 
   const pane = (
     <ListPane
-      title={t('Workspaces')}
+      title={t('Dossiers')}
       action={!empty && (
-        <Button className="w-[34px] px-0" aria-label={t('Nouveau workspace')} title={t('Nouveau workspace')} onClick={() => setAdding(true)}>
+        <Button className="w-[34px] px-0" aria-label={t('Nouveau dossier')} title={t('Nouveau dossier')} onClick={() => setAdding(true)}>
           <Plus className="size-4" strokeWidth={1.5} />
         </Button>
       )}
@@ -40,10 +40,10 @@ export function WorkspacesPage() {
       <ErrorText error={workspaces.error} onRetry={() => void workspaces.refetch()} />
       {creating && (
         <button type="button" className={listItemClass(true)} onClick={() => setAdding(true)}>
-          <ListItemBody title={t('Nouveau workspace')} sub={t('Un dossier partagé avec l’agent')} />
+          <ListItemBody title={t('Nouveau dossier')} sub={t('Un dossier partagé avec l’agent')} />
         </button>
       )}
-      <ul className="flex flex-col gap-0.5" aria-label={t('Workspaces')}>
+      <ul className="flex flex-col gap-0.5" aria-label={t('Dossiers')}>
         {list.map((w) => {
           const on = !creating && w.slug === shown;
           return (
@@ -65,11 +65,11 @@ export function WorkspacesPage() {
   );
 
   return (
-    <SplitView label={t('Workspaces')} selected={Boolean(slug) || adding} list={pane}>
+    <SplitView label={t('Dossiers')} selected={Boolean(slug) || adding} list={pane}>
       {creating ? (
         <>
           <DetailHeader
-            title={t('Nouveau workspace')}
+            title={t('Nouveau dossier')}
             sub={instance && instances.length > 1 ? t('Un dossier partagé avec l’agent, ses consignes et ses sessions, sur {label}', { label: instance.label }) : t('Un dossier partagé avec l’agent, ses consignes et ses sessions')}
             back={adding ? { to: '/w' } : undefined}
           />

@@ -27,7 +27,7 @@ export function InstancePick({ value, instances, disabled, allowEmpty, onPick }:
           label: i.label,
           count: i.workspaces,
           disabled: !allowEmpty && i.workspaces === 0,
-          title: i.workspaces === 0 ? t('Aucun workspace sur cette instance') : plural(i.workspaces, '{n} workspace', '{n} workspaces'),
+          title: i.workspaces === 0 ? t('Aucun dossier sur cette instance') : plural(i.workspaces, '{n} dossier', '{n} dossiers'),
         }))}
       />
     </div>

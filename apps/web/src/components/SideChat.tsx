@@ -113,7 +113,7 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
         </Button>
       </div>
       {!ready ? (
-        <p className="p-6 text-sm text-ink-soft">{t('Créez d’abord un workspace sur cette instance.')}</p>
+        <p className="p-6 text-sm text-ink-soft">{t('Créez d’abord un dossier sur cette instance.')}</p>
       ) : error ? (
         <p className="p-6 text-sm text-bad">{error}</p>
       ) : shown ? (

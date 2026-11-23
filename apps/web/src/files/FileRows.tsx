@@ -49,11 +49,11 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
   const refresh = () => qc.invalidateQueries({ queryKey: [...scope.key] });
 
   const move = async (e: FileEntry) => {
-    const to = await askText({ title: t('Renommer ou déplacer {name}', { name: e.name }), label: t('Nouveau chemin (relatif au workspace)'), value: e.path, confirmLabel: t('Renommer') });
+    const to = await askText({ title: t('Renommer ou déplacer {name}', { name: e.name }), label: t('Nouveau chemin (relatif au dossier)'), value: e.path, confirmLabel: t('Renommer') });
     if (!to || to === e.path || !slug) return;
     if (e.kind === 'dir' && !(await ask({
       title: t('Déplacer le dossier {path} et tout son contenu ?', { path: e.path }),
-      message: t('Évitez pendant qu’une session de ce workspace travaille.'), confirmLabel: t('Déplacer'),
+      message: t('Évitez pendant qu’une session de ce dossier travaille.'), confirmLabel: t('Déplacer'),
     }))) return;
     try {
       const res = await api.moveFile(slug, e.path, to);

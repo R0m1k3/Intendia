@@ -6,10 +6,10 @@ test('workspace, session, answer, approval, resume after reload', async ({ page 
   const n = Date.now() % 100000;
   const slug = `e2e-chat-${n}`;
   await page.goto('/w');
-  const add = page.getByRole('button', { name: 'Nouveau workspace' });
+  const add = page.getByRole('button', { name: 'Nouveau dossier' });
   if (await add.isVisible()) await add.click();
   await page.fill('input[placeholder="Magasins"]', `E2E Chat ${n}`);
-  await page.click('text=Créer le workspace');
+  await page.click('text=Créer le dossier');
   await page.waitForURL(new RegExp(`/w/${slug}$`));
 
   const agents = page.locator('textarea[aria-label="Consignes du projet"]:not([disabled])');

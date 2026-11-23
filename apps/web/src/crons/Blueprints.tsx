@@ -72,7 +72,7 @@ function BlueprintForm({ instanceId, profile, bp, onBack, onCreated }: {
             </Field>
           );
         })}
-        <Field label={t('Workspace')} hint={mine.length ? t('Facultatif : le prompt reçoit le bloc de cadrage du workspace') : t('Aucun workspace de l’agent {profile} sur cette instance', { profile })}>
+        <Field label={t('Dossier')} hint={mine.length ? t('Facultatif : le prompt reçoit le bloc de cadrage du dossier') : t('Aucun dossier de l’agent {profile} sur cette instance', { profile })}>
           <select value={workspace} onChange={(e) => setWorkspace(e.target.value)} className={SELECT} disabled={!mine.length}>
             <option value="">{t('Aucun')}</option>
             {mine.map((w) => <option key={w.slug} value={w.slug}>{w.name} ({w.slug})</option>)}

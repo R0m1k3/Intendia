@@ -61,7 +61,7 @@ export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: (
             <p className="flex h-9 items-center text-sm" data-new-workspace-instance="">{current.label}</p>
           </Field>
         )}
-        <Field label={t('Agent')} hint={t('Profil Hermes qui sert ce workspace')}>
+        <Field label={t('Agent')} hint={t('Profil Hermes qui sert ce dossier')}>
           <select value={profile} onChange={(e) => setProfile(e.target.value)}
             className="h-9 w-full rounded-lg border border-line bg-sheet px-3 text-sm focus:border-ink focus:outline-none">
             <option value="default">default</option>
@@ -76,7 +76,7 @@ export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: (
       )}
       <ErrorText error={error} />
       <div className="flex gap-2">
-        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? t('Création…') : t('Créer le workspace')}</Button>
+        <Button variant="primary" disabled={busy || !inst || !root}>{busy ? t('Création…') : t('Créer le dossier')}</Button>
         {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>{t('Annuler')}</Button>}
       </div>
     </form>

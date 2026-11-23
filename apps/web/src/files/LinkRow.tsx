@@ -76,7 +76,7 @@ export function LinkRow({ l }: { l: ShareLink }) {
             {!l.exists && <span className="shrink-0 rounded bg-raised px-1.5 py-px font-mono text-[11px] text-ink-soft">{t('introuvable')}</span>}
           </div>
           <p className="mt-0.5 truncate pl-5 font-mono text-[11px] text-ink-faint" title={l.agentPath}>
-            {l.workspace ?? t('hors workspace')} · {inWs ?? l.path} · {t('créé {ago}', { ago: timeAgo(l.createdAt) })}
+            {l.workspace ?? t('hors dossier')} · {inWs ?? l.path} · {t('créé {ago}', { ago: timeAgo(l.createdAt) })}
           </p>
         </div>
         <div className="w-40 shrink-0 text-[13px]">

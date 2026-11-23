@@ -80,7 +80,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   });
   const rename = async () => {
     if (!w) return;
-    const n = await askText({ title: t('Renommer le workspace'), label: t('Nom affiché'), value: w.name, maxLength: 80, message: t('Le dossier reste {slug}/ : seul le nom change.', { slug: w.slug }), confirmLabel: t('Renommer') });
+    const n = await askText({ title: t('Renommer le dossier'), label: t('Nom affiché'), value: w.name, maxLength: 80, message: t('Le dossier reste {slug}/ : seul le nom change.', { slug: w.slug }), confirmLabel: t('Renommer') });
     if (n && n !== w.name) saveName.mutate(n);
   };
   const openFile = (e: FileEntry) => {
@@ -125,7 +125,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
 
         <section aria-labelledby="ws-consignes">
           <div className="flex items-baseline gap-2">
-            <h3 id="ws-consignes" className="text-[15px] font-semibold">{t('Consignes du workspace')}</h3>
+            <h3 id="ws-consignes" className="text-[15px] font-semibold">{t('Consignes du dossier')}</h3>
             <span className="font-mono text-[11px] text-ink-faint">AGENTS.md</span>
           </div>
           <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Envoyées à l’agent avec chaque message de ce dossier (4 premiers Kio)')}</p>

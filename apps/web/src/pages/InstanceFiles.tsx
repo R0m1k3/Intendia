@@ -37,7 +37,7 @@ export function InstanceFilesPage() {
     <div>
       <PageHeader
         title={t('Fichiers')}
-        subtitle={<T k="Tous les fichiers de {label}, en lecture ; on écrit dans le dossier d’un workspace" vars={{ label: <span className="text-ink">{label}</span> }} />}
+        subtitle={<T k="Tous les fichiers de {label}, en lecture ; on écrit dans un dossier" vars={{ label: <span className="text-ink">{label}</span> }} />}
       />
       <div className="px-4 pb-5 md:px-8">
         <Chips
@@ -110,9 +110,9 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
         <div className="px-4 pt-3 empty:hidden"><ErrorText error={debounced ? found.error : tree.error} /></div>
         {wsSlug && (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-paper px-4 py-2.5 text-[13px] text-ink-soft">
-            <T k="Dossier du workspace {slug} : pour déposer, renommer ou modifier, {link}" vars={{
+            <T k="Dossier {slug} : pour déposer, renommer ou modifier, {link}" vars={{
               slug: <span className="font-mono">{wsSlug}</span>,
-              link: <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="font-medium text-ink underline underline-offset-2">{t('ouvrez le workspace')}</Link>,
+              link: <Link to="/w/$slug/fichiers" params={{ slug: wsSlug }} search={{ path: crumbs.slice(1).join('/') || undefined }} className="font-medium text-ink underline underline-offset-2">{t('ouvrez le dossier')}</Link>,
             }} />
           </p>
         )}
@@ -124,7 +124,7 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
         ) : null}
         {workspaces.length > 0 && !debounced && (
           <div className="border-t border-line/70 px-4 py-3">
-            <p className="mb-2 text-xs text-ink-faint">{t('Workspaces de cette instance')}</p>
+            <p className="mb-2 text-xs text-ink-faint">{t('Dossiers de cette instance')}</p>
             <div className="flex flex-wrap gap-2">
               {workspaces.map((e) => (
                 <Link key={e.path} to="/w/$slug/fichiers" params={{ slug: e.workspace! }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[13px] font-medium hover:bg-paper">
@@ -167,7 +167,7 @@ function SharedLinks({ inst }: { inst: string }) {
               </>
             )}
           >
-            {t('Partagez un fichier depuis l’explorateur d’un workspace, ou demandez-le à l’agent. Il ne crée que des liens privés.')}
+            {t('Partagez un fichier depuis l’explorateur d’un dossier, ou demandez-le à l’agent. Il ne crée que des liens privés.')}
           </Empty>
         </div>
       ) : (

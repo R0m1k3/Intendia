@@ -7,7 +7,7 @@ import { setTab, useCurrentInstance } from '../instance/current';
 import { t } from '../i18n';
 
 export interface StepSearch { inst?: string }
-const LABELS = [t('Fournisseur'), t('Modèle'), t('Workspace')];
+const LABELS = [t('Fournisseur'), t('Modèle'), t('Agent')];
 
 /** Instance of the steps: the one just created (`?inst=`), else the current one; profile `default`. */
 export function useStepInstance(): { inst: string | null; label: string | null } {

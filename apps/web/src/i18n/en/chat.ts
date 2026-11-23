@@ -1,7 +1,7 @@
 // English of zone A: the chat (apps/web/src/chat/).
 export default {
   // commands
-  'Nouvelle session dans ce workspace': 'New session in this workspace',
+  'Nouvelle session dans ce dossier': 'New session in this folder',
   'Vider la conversation': 'Clear the conversation',
   'Annuler le dernier échange': 'Undo the last exchange',
   'Réessayer la dernière réponse': 'Retry the last answer',
@@ -118,9 +118,9 @@ export default {
   'Copier le texte': 'Copy the text',
   // InstancePick
   'Instance de la session': 'Session instance',
-  'Aucun workspace sur cette instance': 'No workspace on this instance',
-  '{n} workspace': '{n} workspace',
-  '{n} workspaces': '{n} workspaces',
+  'Aucun dossier sur cette instance': 'No folder on this instance',
+  '{n} dossier': '{n} folder',
+  '{n} dossiers': '{n} folders',
   // SubagentsBar
   '{n} sous-agent travaille · l’agent reprendra à sa fin': '{n} sub-agent working · the agent will resume when it is done',
   '{n} sous-agents travaillent · l’agent reprendra à leur fin': '{n} sub-agents working · the agent will resume when they are done',

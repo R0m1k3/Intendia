@@ -40,6 +40,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
   const { id: inst } = useCurrentInstance();
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const crons = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), staleTime: 60_000 });
+  const agentList = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst!).then((r) => r.agents), enabled: inst !== null, staleTime: 60_000, retry: false });
   const recent = useQuery({ queryKey: ['sessions-recent', inst], queryFn: () => api.recentSessions(inst!, 20), enabled: inst !== null, staleTime: 60_000 });
   const searching = q.length >= SEARCH_MIN && text.trim() === q;
   const found = useQuery({
@@ -56,10 +57,11 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
     nav,
     workspaces: (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst),
     crons: (crons.data?.crons ?? []).filter((c) => c.instanceId === inst),
+    agents: inst ? { inst, list: agentList.data ?? [] } : undefined,
     recent: recent.data?.sessions ?? [],
     found: searching ? found.data?.sessions ?? null : null,
     page,
-  }), [text, nav, inst, workspaces.data, crons.data, recent.data, searching, found.data, page]);
+  }), [text, nav, inst, workspaces.data, crons.data, agentList.data, recent.data, searching, found.data, page]);
   const fileGroups = useMemo<PaletteGroup[]>(() => {
     if (!fileQuery || text.trim() !== q || !files.data) return [];
     const items = fileItems(inst!, files.data.results, mine);
@@ -118,7 +120,7 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
             ref={input} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list"
             aria-activedescendant={current ? `${id}-${current.id}` : undefined}
-            placeholder={mode === 'files' ? t('Nom d’un fichier de l’instance (2 lettres au moins)…') : t('Rechercher une page, un workspace, un cron, une session…')}
+            placeholder={mode === 'files' ? t('Nom d’un fichier de l’instance (2 lettres au moins)…') : t('Rechercher un agent, un dossier, une session, une page…')}
             className="h-13 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-faint"
           />
           <kbd className="shrink-0 rounded border border-line px-1.5 font-mono text-[11px] text-ink-faint">{t('Échap')}</kbd>

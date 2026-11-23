@@ -46,9 +46,9 @@ export function ExternalSessionPage() {
       const options = (workspaces.data?.workspaces ?? [])
         .filter((w) => w.instanceId === inst && (w.profile ?? 'default') === profile)
         .map((w) => ({ value: w.slug, label: w.name }));
-      if (!options.length) throw new Error(t('Créez d’abord un workspace pour l’agent {agent}', { agent }));
+      if (!options.length) throw new Error(t('Créez d’abord un dossier pour l’agent {agent}', { agent }));
       const slug = await askChoice({
-        title: t('Continuer dans Intendia'), label: t('Copier la conversation dans le workspace'), options, confirmLabel: t('Continuer'),
+        title: t('Continuer dans Intendia'), label: t('Copier la conversation dans le dossier'), options, confirmLabel: t('Continuer'),
         message: t('Une copie est créée ; la session d’origine ne change pas.'),
       });
       if (!slug) return null;

@@ -157,9 +157,9 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
           ...(cron.skills.length ? [{ label: t('Skills'), value: cron.skills.join(', '), mono: true }] : []),
           ...advancedFacts(cron, all),
           ...(cron.workspace ? [{
-            label: t('Workspace'),
+            label: t('Dossier'),
             value: cron.workspace.missing
-              ? <span className="text-warn">{t('workspace supprimé ({slug})', { slug: cron.workspace.slug })}</span>
+              ? <span className="text-warn">{t('dossier supprimé ({slug})', { slug: cron.workspace.slug })}</span>
               : (
                 <Link to="/w/$slug/fichiers" params={{ slug: cron.workspace.slug }} search={{ path: `crons/${cron.workspace.folder}`, f: undefined }}
                   className="inline-flex items-center gap-1 font-mono text-[13px] underline-offset-2 hover:underline">
@@ -290,7 +290,7 @@ export function CronsPage() {
           {selected && unattached?.key === cronKey(selected) && (
             <div className="px-4 pt-4 md:px-6">
               <p role="alert" className="flex items-start gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
-                <span className="flex-1">{t('Cron créé, mais pas rattaché au workspace « {workspace} » : modifiez-le pour le rattacher.', { workspace: unattached.workspace })}</span>
+                <span className="flex-1">{t('Cron créé, mais pas rattaché au dossier « {workspace} » : modifiez-le pour le rattacher.', { workspace: unattached.workspace })}</span>
                 <button type="button" aria-label={t('Masquer')} onClick={() => setUnattached(null)}><X className="size-3.5" strokeWidth={1.5} /></button>
               </p>
             </div>

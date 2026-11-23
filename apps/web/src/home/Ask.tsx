@@ -88,7 +88,7 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
         hint={t('Entrée pour envoyer · une nouvelle session est créée')}
         leading={(
           <Picker
-            title={t('Workspace de la nouvelle session')} placement="below" value={ws.slug} disabled={attached > 0}
+            title={t('Dossier de la nouvelle session')} placement="below" value={ws.slug} disabled={attached > 0}
             items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? t('agent {profile}', { profile: w.profile }) : undefined }))}
             onPick={(v) => v && setSlug(v)}
             triggerClass="flex h-7 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-paper hover:text-ink aria-expanded:bg-paper"
@@ -96,8 +96,8 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
           />
         )}
       />
-      {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">{t('Retirez les pièces jointes pour changer de workspace')}</p>}
-      {!chat.available && !chat.onlyPending && <p className="text-xs text-ink-faint">{t('Le chat n’est pas disponible sur l’instance de ce workspace')}</p>}
+      {attached > 0 && workspaces.length > 1 && <p className="text-xs text-ink-faint">{t('Retirez les pièces jointes pour changer de dossier')}</p>}
+      {!chat.available && !chat.onlyPending && <p className="text-xs text-ink-faint">{t('Le chat n’est pas disponible sur l’instance de ce dossier')}</p>}
       <ErrorText error={error} />
     </div>
   );

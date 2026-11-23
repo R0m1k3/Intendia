@@ -57,10 +57,10 @@ export function HomePage() {
           </Panel>
         ) : workspaces.isSuccess && list.length > 0 && ws.length === 0 ? (
           <Panel>
-            <p className="text-[15px]">{instance && list.length > 1 ? t('Commencez par un workspace sur {label}', { label: instance.label }) : t('Commencez par un workspace')}</p>
+            <p className="text-[15px]">{instance && list.length > 1 ? t('Commencez par un dossier sur {label}', { label: instance.label }) : t('Commencez par un dossier')}</p>
             <p className="mt-1 text-sm text-ink-soft">{t('Un dossier partagé avec l’agent, ses consignes et ses sessions de travail')}</p>
             <Link to="/w" className="mt-4 inline-flex h-[34px] items-center rounded-lg border border-accent-strong bg-accent px-3.5 text-[13.5px] font-medium text-on-accent transition-colors hover:bg-accent-strong">
-              {t('Créer un workspace')}
+              {t('Créer un dossier')}
             </Link>
           </Panel>
         ) : (

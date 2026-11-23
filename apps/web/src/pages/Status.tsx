@@ -28,7 +28,7 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
       >
         <StateIcon className={cx('size-4 shrink-0', st.icon)} strokeWidth={1.75} aria-hidden />
         <span className="w-36 shrink-0 font-medium">{moduleLabel(m)}</span>
-        <span className="hidden min-w-0 flex-1 truncate text-ink-faint sm:inline">{MODULE_META[m.id]?.does ?? ((m.id as string) === 'files' ? t('Fichiers des workspaces') : '')}</span>
+        <span className="hidden min-w-0 flex-1 truncate text-ink-faint sm:inline">{MODULE_META[m.id]?.does ?? ((m.id as string) === 'files' ? t('Fichiers des dossiers') : '')}</span>
         <span className="ml-auto flex items-center gap-2">
           <Tag className={st.tag}><span className="sr-only">{t('État : ')}</span>{st.label}</Tag>
           <ChevronRight className={cx('size-4 shrink-0 text-ink-faint transition-transform duration-150', open && 'rotate-90')} strokeWidth={1.5} />

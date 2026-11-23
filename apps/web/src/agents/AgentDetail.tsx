@@ -77,7 +77,7 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
 /** "workspaces a, b et 2 sessions": what still uses an agent. */
 function inUseText(u: { workspaces?: string[]; sessions?: number }): string {
   const ws = u.workspaces?.length
-    ? plural(u.workspaces.length, 'workspace {list}', 'workspaces {list}', { n: u.workspaces.length, list: u.workspaces.join(', ') }) : '';
+    ? plural(u.workspaces.length, 'dossier {list}', 'dossiers {list}', { n: u.workspaces.length, list: u.workspaces.join(', ') }) : '';
   const ss = u.sessions ? plural(u.sessions, '{n} session', '{n} sessions', { n: u.sessions }) : '';
   return ws && ss ? t('{a} et {b}', { a: ws, b: ss }) : ws || ss;
 }
