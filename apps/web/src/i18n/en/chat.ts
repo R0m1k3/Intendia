@@ -348,4 +348,9 @@ export default {
   'Connexion à Intendia expirée : reconnectez-vous pour suivre ce travail.': 'Your Intendia sign-in expired: sign in again to follow this work.',
   'Relance déjà reçue par Hermes avec un autre contenu : vérifiez la conversation, puis reprenez': 'Relaunch already received by Hermes with other content: check the conversation, then resume',
   "Panneau latéral": "Side panel",
+  "Ouvrir dans le panneau": "Open in the panel",
+  "Largeur du panneau": "Panel width",
+  "Question annexe": "Side question",
+  "À côté du fil, avec le même agent": "Beside the thread, with the same agent",
+  "Nouvelle question": "New question",
 } satisfies Record<string, string>;
