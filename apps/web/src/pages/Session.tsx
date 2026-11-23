@@ -385,6 +385,8 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     });
   }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** the waiting message being given to the agent (« Envoyer maintenant »), until Hermes answered */
+  const [sendingNow, setSendingNow] = useState<string | null>(null);
   const steer = async (text: string): Promise<boolean> => {
     if (!inst || !active) return false;
     setError(null);
@@ -1306,11 +1308,16 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               onMove: (id, delta) => setQueue((q) => moveItem(q, id, delta)),
               onEdit: (id, text) => setQueue((q) => editItem(q, id, text)),
               // while the agent works: a reorientation (the skills of `/use` only go with a run); else first, sent now
-              sendNowBlocked: (it) => (active ? (steerDisabled ?? (it.skills?.length ? t('Avec un skill : attend la fin du travail') : null)) : null),
+              // one reorientation at a time: a second click never sends the same text twice
+              sendNowBlocked: (it) => (sendingNow ? t('Envoi en cours…') : active ? (steerDisabled ?? (it.skills?.length ? t('Avec un skill : attend la fin du travail') : null)) : null),
               onSendNow: (id) => {
                 const it = queue.items.find((i) => i.id === id);
-                if (!it) return;
-                if (active) { void steer(it.text).then((done) => { if (done) setQueue((q) => dropItem(q, id)); }); return; }
+                if (!it || sendingNow) return;
+                if (active) {
+                  setSendingNow(id);
+                  void steer(it.text).then((done) => { if (done) setQueue((q) => dropItem(q, id)); }).finally(() => setSendingNow(null));
+                  return;
+                }
                 setQueue((q) => resumeQueue(moveItem(q, id, -q.items.length)));
                 setDrain(`now-${Date.now()}`);
               },

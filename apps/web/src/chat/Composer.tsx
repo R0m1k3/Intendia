@@ -347,7 +347,7 @@ export function Composer({
                   )}
                   {queue.onEdit && (
                     <button type="button" aria-label={t('Modifier « {text} »', { text: short })} className={small}
-                      onClick={() => void askText({ title: t('Modifier le message en attente'), value: q.text, confirmLabel: t('Enregistrer') }).then((v) => { if (v !== null) queue.onEdit!(q.id, v); })}>
+                      onClick={() => void askText({ title: t('Modifier le message en attente'), value: q.text, confirmLabel: t('Enregistrer'), multiline: true }).then((v) => { if (v !== null) queue.onEdit!(q.id, v); })}>
                       <Pencil className="size-3.5" strokeWidth={1.5} />
                     </button>
                   )}
