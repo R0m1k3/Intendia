@@ -41,8 +41,12 @@ function RunBadge({ run, subagents }: { run: RunState; subagents?: number }) {
  * One session of the inbox column: title, time, workspace or search hit, source tag; highlighted when open, tinted
  * with the agent's state while it works (`run`).
  */
-export function SessionRow({ s, open, onBeside, run, subagents, onRemove, busy }: {
+export function SessionRow({ s, open, onBeside, run, subagents, onRemove, busy, unread, compact }: {
   s: RecentSession; open: boolean; onBeside?: (slug: string, id: string) => void; run?: RunState;
+  /** moved since it was last open in this browser (sessions/unread.ts) */
+  unread?: boolean;
+  /** one line, inside an agent's folder (AgentsPane) */
+  compact?: boolean;
   /** run `subagents`: how many work */
   subagents?: number;
   /** the trash shown on hover (disabled while the agent works or the deletion runs: `busy`) */
@@ -56,18 +60,29 @@ export function SessionRow({ s, open, onBeside, run, subagents, onRemove, busy }
   const ws = s.kind === 'intendia' ? s.workspace : null;
   const beside = onBeside && ws ? () => onBeside(ws, s.id) : null;
   return (
-    <li data-recent={s.source ?? 'hermes'} data-run={run} className={cx('group relative', run && !open && 'rounded-[10px] bg-accent-soft/40')}>
-      <ListLink link={link} selected={open}
+    <li data-recent={s.source ?? 'hermes'} data-run={run} data-unread={unread ? '' : undefined} className={cx('group relative', run && !open && 'rounded-[10px] bg-accent-soft/40')}>
+      <ListLink link={link} selected={open} className={compact ? '!flex items-center !gap-2 !py-1.5 !pl-3 !pr-2.5' : undefined}
         onClick={beside ? (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); beside(); } } : undefined}>
+        {compact ? (
+          <>
+            <span aria-hidden className={cx('size-1.5 shrink-0 rounded-full', unread ? 'bg-accent' : 'bg-transparent')} />
+            <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', unread ? 'font-semibold text-ink' : 'text-ink-soft')}>{s.title}</span>
+            {unread && <span className="sr-only">{t('non lu')}</span>}
+            <span className={cx('shrink-0 font-mono text-[11px] text-ink-faint', onRemove && 'md:group-hover:invisible md:group-focus-within:invisible')}>
+              {run ? <RunBadge run={run} subagents={subagents} /> : when(s.at)}
+            </span>
+          </>
+        ) : (
         <ListItemBody
-          title={s.title}
+          title={unread ? <span className="font-semibold"><span aria-hidden className="mr-1.5 inline-block size-1.5 rounded-full bg-accent align-middle" />{s.title}<span className="sr-only"> ({t('non lu')})</span></span> : s.title}
           // the trash takes the place of the time on hover
           meta={<span className={onRemove ? 'md:group-hover:invisible md:group-focus-within:invisible' : undefined}>{run ? <RunBadge run={run} subagents={subagents} /> : when(s.at)}</span>}
           sub={s.snippet ? <Snippet text={s.snippet} /> : s.sub}
           tag={<Tag className={open ? 'bg-sheet' : undefined}>{sourceLabel(s.source).toLowerCase()}</Tag>}
         />
+        )}
       </ListLink>
-      {beside && (
+      {beside && !compact && (
         <button type="button" onClick={beside} aria-label={t('Ouvrir à côté')} title={t('Ouvrir à côté (Ctrl + clic)')}
           className="absolute bottom-2 right-3 hidden items-center gap-1 rounded-md border border-line bg-sheet px-1.5 py-0.5 text-[11.5px] text-ink-soft shadow-sm hover:text-ink md:group-hover:flex md:group-focus-within:flex">
           <Columns2 className="size-3.5" strokeWidth={1.5} />
@@ -77,7 +92,7 @@ export function SessionRow({ s, open, onBeside, run, subagents, onRemove, busy }
       {onRemove && (
         <button type="button" onClick={onRemove} disabled={Boolean(run) || busy} aria-label={t('Supprimer la session {title}', { title: s.title })}
           title={run ? t('L’agent travaille : attendez la fin pour supprimer') : t('Supprimer')}
-          className="absolute right-3 top-2 hidden rounded-md border border-line bg-sheet p-1 text-ink-soft shadow-sm hover:text-bad disabled:opacity-50 disabled:hover:text-ink-soft md:group-hover:flex md:group-focus-within:flex">
+          className={cx('absolute right-3 hidden rounded-md border border-line bg-sheet p-1 text-ink-soft shadow-sm hover:text-bad disabled:opacity-50 disabled:hover:text-ink-soft md:group-hover:flex md:group-focus-within:flex', compact ? 'top-1' : 'top-2')}>
           <Trash2 className="size-3.5" strokeWidth={1.5} />
         </button>
       )}

@@ -11,7 +11,7 @@ const own = (id: string, at: number, extra: Record<string, unknown> = {}) => ({
 describe('mergeRecent', () => {
   it('mixes both sources by activity (Hermes seconds, Intendia ms), drops duplicates, cuts at the limit', () => {
     const list = mergeRecent(
-      [own('iw-1', 2_000_000), own('iw-2', 500_000, { title: 'Rapport' })],
+      [own('iw-1', 2_000_000), own('iw-2', 500_000, { title: 'Rapport', pinned: true })],
       [
         { instanceId: 'a', label: 'Hermes 1', profile: 'default', sessions: [
           { id: 'tg', source: 'telegram', title: null, preview: 'x'.repeat(100), started_at: 1_000, last_active: 1_500, message_count: 4 },
@@ -22,8 +22,9 @@ describe('mergeRecent', () => {
       10,
     );
     expect(list.map((s) => s.id)).toEqual(['iw-1', 'tg', 'iw-2', 'cr']);
-    expect(list[0]).toMatchObject({ kind: 'intendia', source: 'intendia', title: 'Nouvelle session', sub: 'Dev', workspace: 'dev' });
-    expect(list[1]).toMatchObject({ kind: 'hermes', source: 'telegram', sub: 'Hermes 1 · 4 messages', at: 1_500_000, workspace: null });
+    expect(list[0]).toMatchObject({ kind: 'intendia', source: 'intendia', title: 'Nouvelle session', sub: 'Dev', workspace: 'dev', pinned: false });
+    expect(list[1]).toMatchObject({ kind: 'hermes', source: 'telegram', sub: 'Hermes 1 · 4 messages', at: 1_500_000, workspace: null, pinned: false });
+    expect(list[2]).toMatchObject({ id: 'iw-2', pinned: true });
     expect(list[1]!.title).toHaveLength(80);
     expect(list[3]).toMatchObject({ title: 'Basket', sub: 'Hermes 1', at: 100_000 });
     expect(mergeRecent([own('iw-1', 2)], [{ instanceId: 'a', label: 'H', profile: 'default', sessions: [{ id: 'x' }] }], 1)).toHaveLength(1);

@@ -263,6 +263,8 @@ export interface RecentSession {
   at: number;
   /** Search hit in the messages (hit between `>>>` and `<<<`); null outside a search. */
   snippet: string | null;
+  /** pinned in Intendia (its own sessions only) */
+  pinned?: boolean;
 }
 export type SessionSource = 'all' | 'intendia' | 'cli' | 'telegram' | 'discord' | 'cron' | 'kanban';
 export const SESSION_SOURCES: SessionSource[] = ['all', 'intendia', 'cli', 'telegram', 'discord', 'cron', 'kanban'];

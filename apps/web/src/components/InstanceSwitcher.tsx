@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Check, ChevronsUpDown, Settings2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Settings2 } from 'lucide-react';
 import { api, type CompatReport, type PublicInstance } from '../api';
 import { failedCount } from '../home/summary';
 import { useCurrentInstance } from '../instance/current';
@@ -114,5 +114,56 @@ export function InstanceSwitcher({ className, onPicked }: { className?: string; 
         )}
       </Popover>
     </div>
+  );
+}
+
+/** Two letters of an instance's name for its tile: « Hermes simulé » → « HS », « maison » → « MA ». */
+export function instanceInitials(label: string): string {
+  const words = label.split(/[\s_.-]+/).filter(Boolean);
+  const letters = words.length > 1 ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}` : label.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/**
+ * The servers column of the rail (OpenBot's server rail): one tile per Hermes instance, the current one marked; a dot
+ * for its state (compatibility), a red count of what waits there (approvals, failed crons). A click changes this tab's
+ * instance; « + » goes to the instances' settings.
+ */
+export function InstanceRail() {
+  const { id, instances, select } = useCurrentInstance();
+  const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat, refetchInterval: 60_000 });
+  const alerts = useAlerts();
+  return (
+    <nav aria-label={t('Instances')} data-instance-rail="" className="flex w-full flex-col items-center gap-1.5">
+      {instances.map((i) => {
+        const report = compat.data?.reports.find((r) => r.instanceId === i.id);
+        const a = alerts(i.id);
+        const n = a.failed + a.approvals;
+        const label = alertLabel(a);
+        const on = i.id === id;
+        const version = report?.hermesVersion ? ` · v${report.hermesVersion.replace(/^v/, '')}` : '';
+        return (
+          <div key={i.id} className="relative flex w-full justify-center">
+            <span aria-hidden className={cx('absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-ink transition-all', on ? 'h-7' : 'h-0')} />
+            <button type="button" data-instance={i.id} aria-pressed={on} onClick={() => { if (!on) select(i.id); }}
+              title={`${i.label}${version}${label ? ` · ${label}` : ''}`} aria-label={label ? `${i.label} (${label})` : i.label}
+              className={cx('relative flex size-10 items-center justify-center rounded-[12px] text-[13px] font-semibold transition-all',
+                on ? 'bg-ink text-sheet' : 'bg-sheet text-ink-soft shadow-[0_0_0_1px_var(--color-line)] hover:rounded-[10px] hover:text-ink')}>
+              {instanceInitials(i.label)}
+              <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-paper">
+                <Mark state={report ? worst(report.modules.map((m) => m.state)) : null} />
+              </span>
+              {n > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-white ring-2 ring-paper">{n}</span>
+              )}
+            </button>
+          </div>
+        );
+      })}
+      <Link to="/reglages" title={t('Gérer les instances')} aria-label={t('Gérer les instances')}
+        className="flex size-10 items-center justify-center rounded-[12px] border border-dashed border-line text-ink-faint transition-colors hover:border-ink-faint hover:text-ink">
+        <Plus className="size-4" strokeWidth={1.75} />
+      </Link>
+    </nav>
   );
 }
