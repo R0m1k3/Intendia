@@ -6,17 +6,19 @@ import { api, type RecentSession, type SessionSource } from '../api';
 import { ask, askText } from '../components/Dialog';
 import { Menu, Picker, PICKER_BTN } from '../components/Menu';
 import { NewWorkspace, slugify } from '../components/NewWorkspace';
+import { NewAgent } from '../pages/Agents';
 import { Empty, ListLabel, ListPane } from '../components/Panes';
 import { Button, Chips, cx, ErrorText, SkeletonList } from '../components/ui';
 import { FILTERS } from '../home/labels';
 import { useCurrentInstance } from '../instance/current';
 import { openBeside, updateChat } from '../chat/columns';
-import { agentColor, agentInitials, agentTree, type AgentFilter, type AgentNode, type FolderNode } from './agentTree';
+import { agentTree, type AgentFilter, type AgentNode, type FolderNode } from './agentTree';
 import { runMarks, withMarked, type RunMark } from './running';
 import { afterRemoveRoute, useRemoveSession, type RemoveTarget } from './remove';
 import { SessionRow } from './SessionRow';
 import { invalidateSessionLists, SESSION_LIST_KEYS, showUndo } from './UndoBar';
 import { useSeen } from './unread';
+import { AgentAvatar, useAgentLooks } from '../agents/look';
 import { plural, t } from '../i18n';
 
 /** Sessions read for the column (the server's maximum). */
@@ -55,16 +57,6 @@ function useFolded(inst: string | null): [ReadonlySet<string>, (key: string, fol
     return next;
   });
   return [set, toggle];
-}
-
-/** The agent's face: its initials on its colour. */
-export function AgentAvatar({ name, size = 28 }: { name: string; size?: number }) {
-  return (
-    <span aria-hidden className="flex shrink-0 items-center justify-center rounded-[9px] font-semibold text-white"
-      style={{ width: size, height: size, background: agentColor(name), fontSize: size <= 22 ? 10 : 12 }}>
-      {agentInitials(name)}
-    </span>
-  );
 }
 
 /** What the agent is doing, in words (under its name). */
@@ -112,10 +104,12 @@ export function AgentsPane({ openId, onBeside }: {
   const marks: Map<string, RunMark> = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst, activity.data?.subagents ?? []) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
   const { isUnread, seen } = useSeen(inst);
+  const looks = useAgentLooks(inst);
   const [folded, setFolded] = useFolded(inst);
   const [more, setMore] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<unknown>(null);
   const [addingFolder, setAddingFolder] = useState(false);
+  const [addingAgent, setAddingAgent] = useState(false);
   const rm = useRemoveSession();
 
   const rows = (searching ? found.data?.sessions : list.data?.sessions) ?? [];
@@ -262,7 +256,7 @@ export function AgentsPane({ openId, onBeside }: {
           <button type="button" onClick={() => setFolded(key, open)} aria-expanded={open}
             className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left">
             <span className="relative">
-              <AgentAvatar name={a.name} />
+              <AgentAvatar name={a.name} color={looks.color(a.name)} />
               {a.state && <span className={cx('absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-sheet', a.state === 'waiting' ? 'bg-bad' : 'animate-pulse bg-accent')} />}
             </span>
             <span className="min-w-0 flex-1">
@@ -332,6 +326,7 @@ export function AgentsPane({ openId, onBeside }: {
             items={[
               { label: t('Nouvelle session'), icon: <PenLine className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/chat/nouvelle' }) },
               { label: t('Nouveau dossier…'), icon: <FolderPlus className="size-4" strokeWidth={1.5} />, onSelect: () => setAddingFolder(true) },
+              { label: t('Nouvel agent…'), icon: <UserRound className="size-4" strokeWidth={1.5} />, onSelect: () => setAddingAgent(true) },
             ]}
           />
         </>
@@ -358,6 +353,15 @@ export function AgentsPane({ openId, onBeside }: {
         </>
       )}
     >
+      {addingAgent && inst && (
+        <NewAgent inst={inst} agents={agents.data ?? []} onClose={() => setAddingAgent(false)}
+          onCreated={(name, _source, modelError) => {
+            setAddingAgent(false);
+            void navigate({ to: '/i/$inst/agents/$name', params: { inst, name } });
+            // Hermes made the agent but refused the model: say it, the card does not keep this error
+            if (modelError) void ask({ title: t('Agent créé, modèle non appliqué'), message: t('Modèle non appliqué : {error}', { error: modelError }), confirmLabel: t('Compris') });
+          }} />
+      )}
       {addingFolder && (
         <div className="m-1.5 rounded-xl border border-line p-3">
           <NewWorkspace onCancel={() => setAddingFolder(false)} onCreated={() => { setAddingFolder(false); void qc.invalidateQueries({ queryKey: ['workspaces'] }); }} />

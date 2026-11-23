@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { settings } from '../src/db/schema.js';
+import { presets } from '../src/chat/presets.js';
 import { testApp } from './helpers.js';
 
 describe('pinned models and modes', () => {
@@ -29,5 +30,17 @@ describe('pinned models and modes', () => {
     expect((await t.request('PUT', '/x/i/fake/modes', { modes: Array.from({ length: 31 }, (_, i) => mode(i)) })).status).toBe(400);
     t.db.insert(settings).values({ key: 'model_pins:fake:default', value: '{pas du json' }).onConflictDoUpdate({ target: settings.key, set: { value: '{pas du json' } }).run();
     expect((await t.request('GET', '/x/i/fake/model-pins')).json.pins).toEqual([]);
+  });
+
+  it('agent looks: per instance, bounded colour, dropped with the profile', async () => {
+    const t = await testApp();
+    expect((await t.request('GET', '/x/i/fake/agent-looks')).json.looks).toEqual({});
+    expect((await t.request('PUT', '/x/i/fake/agent-looks', { looks: { default: 2, veille: 7 } })).json.looks).toEqual({ default: 2, veille: 7 });
+    expect((await t.request('GET', '/x/i/fake/agent-looks')).json.looks).toEqual({ default: 2, veille: 7 });
+    expect((await t.request('PUT', '/x/i/fake/agent-looks', { looks: { default: 8 } })).status).toBe(400);
+    expect((await t.request('PUT', '/x/i/fake/agent-looks', { looks: { 'a b': 1 } })).status).toBe(400);
+    expect((await t.request('GET', '/x/i/inconnue/agent-looks')).status).toBe(404);
+    presets.dropProfile(t.db, 'fake', 'veille');
+    expect((await t.request('GET', '/x/i/fake/agent-looks')).json.looks).toEqual({ default: 2 });
   });
 });
