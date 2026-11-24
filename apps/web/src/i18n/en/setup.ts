@@ -10,6 +10,7 @@ export default {
   'Mot de passe': 'Password',
   'Connexion…': 'Signing in…',
   'Se connecter': 'Sign in',
+  'Mot de passe accepté, mais le navigateur a refusé le cookie de session. Ouvrez Intendia par son adresse habituelle (https) ou autorisez les cookies pour ce site.': 'Password accepted, but the browser refused the session cookie. Open Intendia at its usual address (https) or allow cookies for this site.',
   // Settings
   'Redémarrer la passerelle': 'Restart the gateway',
   'Redémarrez Hermes vous-même : cette instance ne permet pas de le faire depuis Intendia.': 'Restart Hermes yourself: this instance does not allow it from Intendia.',
