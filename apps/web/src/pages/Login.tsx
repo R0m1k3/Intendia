@@ -52,6 +52,11 @@ export function LoginPage() {
     setError(null);
     try {
       await api.login(password);
+      // the password was right but the browser may have refused the session cookie: say so instead of
+      // bouncing back to this screen with no word
+      if (!(await api.setup()).authenticated) {
+        throw new Error(t('Mot de passe accepté, mais le navigateur a refusé le cookie de session. Ouvrez Intendia par son adresse habituelle (https) ou autorisez les cookies pour ce site.'));
+      }
       await qc.invalidateQueries();
       const next = followUp();
       if (next) return window.location.assign(next); // full load: /f/* is served by the server, not the app

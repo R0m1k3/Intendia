@@ -108,3 +108,27 @@ describe('sliding session', () => {
     expect(t.row()!.expiresAt).toBe(before);
   });
 });
+
+describe('Secure cookie flag', () => {
+  const make = (env: Record<string, string>) => {
+    const dataDir = tempDir();
+    const config = loadConfig({ INTENDIA_SECRET: 'x'.repeat(40), INTENDIA_DATA_DIR: dataDir, ...env });
+    const auth = new Auth(openDb(dataDir), config);
+    const app = new Hono();
+    app.post('/login', (c) => { auth.createSession(c); return c.json({ ok: true }); });
+    return async (url: string, headers: Record<string, string> = {}) =>
+      /;\s*Secure/i.test((await app.request(url, { method: 'POST', headers })).headers.get('set-cookie') ?? '');
+  };
+
+  it('is not set over plain http, even with an https public address', async () => {
+    const secure = make({ INTENDIA_PUBLIC_URL: 'https://intendia.example.com' });
+    expect(await secure('http://192.168.1.20:3000/login', { host: '192.168.1.20:3000' })).toBe(false);
+    expect(await secure('http://192.168.1.20:3000/login', { host: '192.168.1.20:3000', 'x-forwarded-proto': 'http' })).toBe(false);
+  });
+
+  it('is set over https: proxy header, or the public host when the proxy sends none', async () => {
+    const secure = make({ INTENDIA_PUBLIC_URL: 'https://intendia.example.com' });
+    expect(await secure('http://intendia:3000/login', { host: 'intendia:3000', 'x-forwarded-proto': 'https' })).toBe(true);
+    expect(await secure('http://intendia.example.com/login', { host: 'intendia.example.com' })).toBe(true);
+  });
+});

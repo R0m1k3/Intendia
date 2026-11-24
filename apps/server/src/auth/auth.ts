@@ -123,10 +123,19 @@ export class Auth {
     return Boolean(this.session(c));
   }
 
+  /**
+   * `Secure` only when this request really came over https: a browser drops a Secure cookie set over http
+   * (LAN address `http://192.168.x.x:3000` next to an https public address), and the login screen came back.
+   */
   private isSecure(c: Context): boolean {
-    if (this.config.publicUrl) return this.config.publicUrl.startsWith('https://');
-    const proto = this.config.trustProxy ? c.req.header('x-forwarded-proto') : undefined;
-    return (proto ?? new URL(c.req.url).protocol.replace(':', '')) === 'https';
+    const proto = this.config.trustProxy ? c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() : undefined;
+    if (proto) return proto === 'https';
+    const url = new URL(c.req.url);
+    if (url.protocol === 'https:') return true;
+    // a proxy that sends no X-Forwarded-Proto: trust the public address, but only for its own host
+    const host = (this.config.trustProxy ? c.req.header('x-forwarded-host')?.split(',')[0]?.trim() : undefined) ?? c.req.header('host') ?? url.host;
+    const pub = this.config.publicUrl ? new URL(this.config.publicUrl) : null;
+    return Boolean(pub && pub.protocol === 'https:' && pub.host === host);
   }
 
   clientIp(c: Context): string {
