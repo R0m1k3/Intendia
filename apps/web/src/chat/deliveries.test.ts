@@ -143,7 +143,7 @@ describe('attachChildren', () => {
       kid({ id: 'a', goal: 'compter  les', cut: true, toolCalls: 7, lastActive: 50 }),
       kid({ id: 'b', goal: 'Relire les ventes', endedAt: 40 }),
     ]);
-    expect(acts(out)).toEqual([{ lastActive: 10, toolCalls: 2, ended: true }, { lastActive: 50, toolCalls: 7, ended: false }]);
+    expect(acts(out)).toEqual([{ lastActive: 10, toolCalls: 2, apiCalls: 1, ended: true }, { lastActive: 50, toolCalls: 7, apiCalls: 1, ended: false }]);
   });
 
   it('by child session id first; a child started long before the node is ignored; an empty goal never matches', () => {
@@ -152,8 +152,15 @@ describe('attachChildren', () => {
       kid({ id: 'x0', goal: 'autre but', toolCalls: 1 }),
       kid({ id: 'old', goal: 'Compter les rayons', startedAt: 3 - 200 }),
       kid({ id: 'empty', goal: '' }),
+      kid({ id: 'empty2', goal: '' }),
     ]);
-    expect(acts(out)).toEqual([{ lastActive: 10, toolCalls: 1, ended: false }, null]);
+    expect(acts(out)).toEqual([{ lastActive: 10, toolCalls: 1, apiCalls: 1, ended: false }, null]);
+  });
+
+  it('goals previewed otherwise by Hermes: as many children as nodes left → paired in start order; else none', () => {
+    const out = attachChildren(open, [kid({ id: '2', goal: 'Tu es un relecteur', startedAt: 5, toolCalls: 2 }), kid({ id: '1', goal: 'Tu es un relecteur', startedAt: 4, toolCalls: 1 })]);
+    expect(acts(out).map((a) => a?.toolCalls)).toEqual([1, 2]);
+    expect(acts(attachChildren(open, [kid({ id: '1', goal: 'Tu es un relecteur' })]))).toEqual([null, null]);
   });
 
   it('two nodes with the same beginning: in the order of the children', () => {

@@ -42,6 +42,8 @@ const WAKE_RE = /^\s*\[Intendia\] Reprise automatique :/;
 
 /** The message Intendia's server sends when background sub-agents delivered (server: chat/wake.ts). */
 export const isWake = (text: string): boolean => WAKE_RE.test(text);
+/** The wake sent past the longest wait, nothing delivered (server: waitTextExpired). */
+export const isExpiredWake = (text: string): boolean => isWake(text) && /n’ont rien livré après \d+ min/.test(text);
 
 /** A relaunch message of Intendia; null = an ordinary message. */
 export function parseRelaunch(text: string): { n: number; max: number } | null {

@@ -32,12 +32,16 @@ function useNow(on: boolean): number {
   return now;
 }
 
-/** « actif il y a 20 s · 7 outils », or « fini · résultat en route » (live tracking of a background node). */
+/** « actif il y a 20 s · 12 étapes · 7 outils », or « fini · résultat en route » (live tracking of a background node). */
 export function activityText(a: NonNullable<SubagentNode['activity']>, nowSec: number): string {
   if (a.ended) return t('fini · résultat en route');
   const age = a.lastActive === null ? null : Math.max(0, nowSec - a.lastActive);
   const when = age === null ? t('actif') : age < 10 ? t('actif à l’instant') : t('actif il y a {time}', { time: formatDuration(age * 1000) });
-  return a.toolCalls ? `${when} · ${plural(a.toolCalls, '{n} outil', '{n} outils')}` : when;
+  return [
+    when,
+    a.apiCalls ? plural(a.apiCalls, '{n} étape', '{n} étapes') : null,
+    a.toolCalls ? plural(a.toolCalls, '{n} outil', '{n} outils') : null,
+  ].filter(Boolean).join(' · ');
 }
 
 export function duration(s: number): string {

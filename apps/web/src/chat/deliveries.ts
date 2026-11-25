@@ -117,8 +117,9 @@ export function attachChildren(entries: Entry[], children: SubagentChild[]): Ent
   const byId = new Map(children.map((c) => [c.id, c]));
   return entries.map((e) => {
     if (e.kind !== 'subagents' || !e.nodes.some((n) => n.status === 'background')) return e;
-    const nodes = e.nodes.map((n): SubagentNode => {
-      if (n.status !== 'background') return n;
+    const found = new Map<string, SubagentChild>();
+    for (const n of e.nodes) {
+      if (n.status !== 'background') continue;
       let c = n.childSessionId ? byId.get(n.childSessionId) : undefined;
       if (c && taken.has(c.id)) c = undefined;
       if (!c) {
@@ -130,9 +131,22 @@ export function attachChildren(entries: Entry[], children: SubagentChild[]): Ent
           return x.cut ? goal.startsWith(g) : goal === g;
         });
       }
-      if (!c) return n;
+      if (!c) continue;
       taken.add(c.id);
-      return { ...n, activity: { lastActive: c.lastActive, toolCalls: c.toolCalls, ended: c.endedAt !== null } };
+      found.set(n.id, c);
+    }
+    // goals Hermes previews otherwise: as many children left (started with the card) as nodes left → in start order
+    const restNodes = e.nodes.filter((n) => n.status === 'background' && !found.has(n.id));
+    const first = Math.min(...restNodes.map((n) => n.startedAt ?? Infinity));
+    const restKids = children
+      .filter((x) => !taken.has(x.id) && (x.startedAt === null || !Number.isFinite(first) || x.startedAt >= first - CHILD_EARLY_S))
+      .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+    if (restNodes.length && restKids.length === restNodes.length) {
+      restNodes.forEach((n, i) => { taken.add(restKids[i]!.id); found.set(n.id, restKids[i]!); });
+    }
+    const nodes = e.nodes.map((n): SubagentNode => {
+      const c = found.get(n.id);
+      return c ? { ...n, activity: { lastActive: c.lastActive, toolCalls: c.toolCalls, apiCalls: c.apiCalls, ended: c.endedAt !== null } } : n;
     });
     return { ...e, nodes };
   });

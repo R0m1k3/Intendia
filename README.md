@@ -106,6 +106,7 @@ The image is `ghcr.io/r0m1k3/intendia`, tagged `X.Y.Z`, `X.Y`, `X` and `latest`.
 | `INTENDIA_MCP_URL` | Address Hermes uses to reach Intendia's MCP port (default `http://intendia:3001`). |
 | `INTENDIA_WEBHOOK_URL` | Optional webhook called when a module changes state after a Hermes update. |
 | `INTENDIA_UPLOAD_MAX_MB` | Largest upload in MB (default and maximum 100). |
+| `INTENDIA_SUBAGENT_MAX_WAIT_MIN` | Minutes background sub-agents are waited for at most (default 60, `0` = 24 h): past it, the agent goes on without their results (a late result still wakes it). |
 | `PUID` / `PGID` | Owner of the data volume. |
 
 The full list is in [.env.example](.env.example).

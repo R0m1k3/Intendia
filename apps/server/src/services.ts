@@ -96,7 +96,7 @@ export function createServices(deps: {
   const goals = new GoalStore(deps.db);
   const runDeps: StartRunDeps = { compat: deps.compat, workspaces, skills, goals, createRunTimeoutMs: deps.createRunTimeoutMs };
   const wakes = new WakeStore(deps.db);
-  const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS });
+  const watcher = new DelegationWatcher({ ...runDeps, wakes }, { graceS: deps.config.subagentGraceS, maxWaitS: deps.config.subagentMaxWaitMin === undefined ? undefined : deps.config.subagentMaxWaitMin * 60 });
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));
   const channels = new ChannelService(deps.db, deps.store, workspaces);
   const channelRunner = new ChannelRunner({ ...runDeps, channels, store: deps.store });

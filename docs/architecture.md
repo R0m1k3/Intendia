@@ -688,6 +688,14 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   and wakes; a wake that leaves a lost unit out says so (`WAKE_TEXT_PARTIAL`). The routes of the messages (Intendia and
   external) return `openUnits`, the server's open units: the cards show the others, neither open nor delivered, as
   « non livré ».
+- Longest wait (`chat/wake.ts`, `INTENDIA_SUBAGENT_MAX_WAIT_MIN`, default 60, `0` = 24 h): Hermes caps neither the
+  time nor (below 250 iterations) the work of a sub-agent, so a child may stay alive for hours. Once every open unit
+  of a waiting session has a ticket older than the longest wait, the watcher gives them up (`lost:<unit>`, as above)
+  whether children are alive or not, and wakes the agent once: the usual wake when a delivery is in the queue
+  (partial text), else `waitTextExpired(min)` under the key `expired:<units>` (counted in the 5 wakes). A late delivery
+  still wakes. The summary carries `waitUntil` (newest open ticket + longest wait): « au plus tard à 15:26 » on the
+  bar. The cards add each child's steps (`api_call_count`) to its activity; children whose preview matches no goal
+  are paired with the nodes left in start order when they are as many.
 - Tool results in the history go to the first open call of the same tool in the last assistant message with tool
   calls (Hermes writes them in call order), else to the last open call of that tool.
 - Agent task list (`chat/todos.ts`, `Todos.tsx`): the last `todo_list` result of the session (always the full list)

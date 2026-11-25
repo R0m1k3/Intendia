@@ -1,3 +1,4 @@
+import { isExpiredWake } from './goal';
 import { thinkingState } from './thinking';
 import { Link } from '@tanstack/react-router';
 import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, KeyRound, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
@@ -379,7 +380,7 @@ function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; action
       <div className="flex flex-col items-center gap-1" data-turn="user" {...(r ? { 'data-relaunch': `${r.n}/${r.max}` } : { 'data-wake': '' })} data-key={turn.key}>
         <div className="flex items-center gap-2 text-[12px] text-ink-faint" title={turn.entry.text}>
           <span className="h-px w-8 bg-line" />
-          <span>{r ? t('Relance automatique {n}/{max}', { n: r.n, max: r.max }) : t('Reprise automatique · sous-agents terminés')}</span>
+          <span>{r ? t('Relance automatique {n}/{max}', { n: r.n, max: r.max }) : isExpiredWake(turn.entry.text) ? t('Reprise automatique · sous-agents plus attendus') : t('Reprise automatique · sous-agents terminés')}</span>
           <span className="h-px w-8 bg-line" />
         </div>
         {turn.footers.length > 0 && <div className="flex flex-col items-center">{turn.footers.map((r) => <RunFooter key={r.runId} r={r} />)}</div>}
