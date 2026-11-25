@@ -147,7 +147,10 @@ export class InstanceStore {
   /** Keys made by Intendia fill in the profiles without one; a key of the configuration wins. */
   private withMadeKeys(list: InstanceConfig[]): InstanceConfig[] {
     const made = new Map<string, Record<string, string>>();
+    const origins = new Map(list.map((i) => [i.id, origin(i.api)]));
     for (const row of this.db.select().from(profileKeys).all()) {
+      // a key goes only to the API server it was written for
+      if (origins.get(row.instanceId) !== row.apiOrigin) continue;
       try {
         made.set(row.instanceId, { ...made.get(row.instanceId), [row.profile]: decrypt(this.config.secret, row.keyEnc, KEY_PURPOSE) });
       } catch {
@@ -164,9 +167,11 @@ export class InstanceStore {
 
   /** A key Intendia wrote in a profile's .env (instances of INTENDIA_INSTANCES too). */
   setProfileKey(instanceId: string, profile: string, key: string): void {
+    const apiOrigin = origin(this.configured().find((i) => i.id === instanceId)?.api);
+    if (!apiOrigin) throw new Error(`Unknown instance "${instanceId}"`);
     const keyEnc = encrypt(this.config.secret, key, KEY_PURPOSE);
-    this.db.insert(profileKeys).values({ instanceId, profile, keyEnc, createdAt: Date.now() })
-      .onConflictDoUpdate({ target: [profileKeys.instanceId, profileKeys.profile], set: { keyEnc } }).run();
+    this.db.insert(profileKeys).values({ instanceId, profile, keyEnc, apiOrigin, createdAt: Date.now() })
+      .onConflictDoUpdate({ target: [profileKeys.instanceId, profileKeys.profile], set: { keyEnc, apiOrigin } }).run();
     this.cache = null;
   }
 
@@ -186,7 +191,7 @@ export class InstanceStore {
     const parsed = InstanceConfigSchema.parse(input);
     const before = this.configured().find((i) => i.id === parsed.id);
     // a key made by Intendia stays in profile_keys (read back by list()), never copied into the saved config
-    const made = this.withMadeKeys([{ ...parsed, profileKeys: {} }])[0]!.profileKeys;
+    const made = this.withMadeKeys([{ ...parsed, api: before?.api ?? parsed.api, profileKeys: {} }])[0]!.profileKeys;
     const value = { ...parsed, profileKeys: Object.fromEntries(Object.entries(parsed.profileKeys).filter(([p, k]) => made[p] !== k)) };
     if (before && origin(before.api) !== origin(value.api)) {
       this.removeProfileKeys(value.id); // keys never go to a new API server

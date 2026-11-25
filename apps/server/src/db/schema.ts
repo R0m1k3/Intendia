@@ -19,6 +19,7 @@ export const profileKeys = sqliteTable(
     instanceId: text('instance_id').notNull(),
     profile: text('profile').notNull(),
     keyEnc: text('key_enc').notNull(),
+    apiOrigin: text('api_origin').notNull(),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.instanceId, t.profile] })],

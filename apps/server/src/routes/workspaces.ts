@@ -168,14 +168,24 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
     const { inst, id } = sessionParams(c);
     const body = PatchSession.parse(await c.req.json());
     if (body.profile !== undefined) {
-      const ctx = workspaces.getSession(inst, id);
       // a session with a history at Hermes changes agent by a copy (POST …/to-profile)
       // a first message on its way keeps the profile it was sent with
-      if (startingRuns.has(runKey(inst, id))) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
-      if (ctx.session.lastRunId || ctx.session.copiedFrom) {
-        return c.json({ error: msg('Cette session a déjà des messages : copiez-la vers l’autre agent'), code: 'has_history' }, 409);
+      const refusal = () => {
+        const ctx = workspaces.getSession(inst, id);
+        if (startingRuns.has(runKey(inst, id))) return c.json({ error: RUN_ACTIVE, code: 'run_active' }, 409);
+        if (ctx.session.lastRunId || ctx.session.copiedFrom) {
+          return c.json({ error: msg('Cette session a déjà des messages : copiez-la vers l’autre agent'), code: 'has_history' }, 409);
+        }
+        return null;
+      };
+      const before = refusal();
+      if (before) return before;
+      if (body.profile && body.profile !== 'default') {
+        await deps.services.agents.connect(inst, body.profile);
+        // a first message may have left while the agent was being connected
+        const after = refusal();
+        if (after) return after;
       }
-      if (body.profile && body.profile !== 'default') await deps.services.agents.connect(inst, body.profile);
       if (body.profile && body.profile !== 'default' && !deps.store.get(inst)?.profileKeys[body.profile]) {
         return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile: body.profile }), code: 'no_key' }, 400);
       }

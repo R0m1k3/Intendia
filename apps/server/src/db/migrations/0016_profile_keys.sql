@@ -5,6 +5,8 @@ CREATE TABLE profile_keys (
   instance_id TEXT NOT NULL,
   profile TEXT NOT NULL,
   key_enc TEXT NOT NULL,
+  -- origin of the API server the key was written for: never sent to another host (an edited INTENDIA_INSTANCES)
+  api_origin TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   PRIMARY KEY (instance_id, profile)
 );

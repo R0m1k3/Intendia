@@ -301,4 +301,13 @@ describe('agents: Connecter à Intendia', () => {
     t.store.save({ ...t.store.get('fake')!, api: 'http://autre-hote:8642' });
     expect(t.store.get('fake')!.profileKeys.veille).toBeUndefined();
   });
+
+  it('never sends a made key to another API server (INTENDIA_INSTANCES edited, same id)', async () => {
+    const t = await testApp();
+    t.store.setProfileKey('fake', 'veille', 'made-key-000000000000000');
+    const { InstanceStore } = await import('../src/instances/store.js');
+    const moved = new InstanceStore(t.db, { ...t.config, envInstances: t.config.envInstances!.map((i) => ({ ...i, api: 'http://autre-hote:8642' })) });
+    expect(moved.get('fake')!.profileKeys.veille).toBeUndefined();
+    expect(t.store.get('fake')!.profileKeys.veille).toBe('made-key-000000000000000');
+  });
 });
