@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costLine, goalLine, isWake, parseRelaunch, REASON_LABELS } from './goal';
+import { costLine, goalLine, isExpiredWake, isWake, parseRelaunch, REASON_LABELS } from './goal';
 
 describe('goal labels', () => {
   it('says the state, with the reason of a pause and its detail', () => {
@@ -29,5 +29,7 @@ describe('isWake', () => {
     expect(isWake('[Intendia] Reprise automatique : tes sous-agents ont terminé, leurs résultats sont ci-dessus. Poursuis ton travail.')).toBe(true);
     expect(isWake('[Intendia] Relance automatique 1/5 : continue')).toBe(false);
     expect(isWake('Reprise automatique : moi')).toBe(false);
+    expect(isExpiredWake('[Intendia] Reprise automatique : tes sous-agents n’ont rien livré après 60 min, Intendia ne les attend plus (un résultat tardif te sera transmis). Poursuis ton travail sans relancer les mêmes sous-agents.')).toBe(true);
+    expect(isExpiredWake('[Intendia] Reprise automatique : tes sous-agents ont terminé.')).toBe(false);
   });
 });

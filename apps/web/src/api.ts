@@ -214,6 +214,8 @@ export interface SubagentsSummary {
   wakePending: boolean;
   /** a unit given up less than 24 h ago (no delivery): the page keeps re-reading in case it comes */
   lostRecent?: boolean;
+  /** seconds: the agent goes on without them at the latest then (INTENDIA_SUBAGENT_MAX_WAIT_MIN); null = no cap */
+  waitUntil?: number | null;
 }
 /** A session whose background sub-agents still work (GET /activity). */
 export interface WorkingSubagents {

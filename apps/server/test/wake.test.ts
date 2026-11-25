@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AlreadySentError, hashKey, RunBusyError } from '../src/chat/start-run.js';
-import { DelegationWatcher, MAX_WAKES, summarize, unitsGone, WAKE_TEXT, WAKE_TEXT_PARTIAL, wakeDecision, WakeStore } from '../src/chat/wake.js';
+import { DelegationWatcher, MAX_WAIT_S, MAX_WAKES, summarize, waitTextExpired, unitsGone, WAKE_TEXT, WAKE_TEXT_PARTIAL, wakeDecision, WakeStore } from '../src/chat/wake.js';
 import type { SubagentChild } from '../src/chat/subagents.js';
 import type { ChatMessage } from '../src/chat/history.js';
 import type { DelegationInfo, TicketInfo } from '../src/chat/delegation.js';
@@ -63,13 +63,13 @@ describe('wakeDecision', () => {
 
   it('summary: pending while the delivery is recent and not answered, or the start goes on', () => {
     const d = wakeDecision([...base, dl(4)], 100, 0);
-    expect(summarize(d, null, 100)).toEqual({ openTasks: 0, since: null, capped: false, wakePending: true, lostRecent: false });
+    expect(summarize(d, null, 100)).toEqual({ openTasks: 0, since: null, capped: false, wakePending: true, lostRecent: false, waitUntil: null });
     expect(summarize(d, null, 4 + 601)).toBeNull();
     const row = { instanceId: 'i', sessionId: 's', deliveryKey: 'm:4', state: 'starting', runId: null, chain: 1, createdAt: 0 };
     expect(summarize(d, row, 100)?.wakePending).toBe(true);
     expect(summarize(d, { ...row, state: 'started', runId: 'r' }, 100)).toBeNull();
     expect(summarize(d, { ...row, state: 'abandoned' }, 100)).toBeNull();
-    expect(summarize(wakeDecision([...base, dl(4)], 100, MAX_WAKES), null, 100)).toEqual({ openTasks: 0, since: null, capped: true, wakePending: false, lostRecent: false });
+    expect(summarize(wakeDecision([...base, dl(4)], 100, MAX_WAKES), null, 100)).toEqual({ openTasks: 0, since: null, capped: true, wakePending: false, lostRecent: false, waitUntil: null });
   });
 });
 
@@ -80,7 +80,7 @@ describe('lost units', () => {
   it('a lost unit alone: quiet, not waited for, but recent (re-read)', () => {
     const d = wakeDecision([msg(1, 'user', 'fond'), tk(2, {}), msg(3, 'assistant', 'ok')], NOW, 0, new Set(['d1']));
     expect(d).toMatchObject({ kind: 'quiet', openTasks: 0, openUnits: [], lostRecent: true });
-    expect(summarize(d, null, NOW)).toEqual({ openTasks: 0, since: null, capped: false, wakePending: false, lostRecent: true });
+    expect(summarize(d, null, NOW)).toEqual({ openTasks: 0, since: null, capped: false, wakePending: false, lostRecent: true, waitUntil: null });
     expect(wakeDecision([msg(1, 'user', 'fond'), tk(2, {})], 90_000, 0, new Set(['d1'])).lostRecent).toBe(false);
   });
 
@@ -336,6 +336,39 @@ describe('DelegationWatcher: lost deliveries (fake)', () => {
     await watcher.pass(Date.now() + 60_000); await watcher.settled();
     expect(t.services.wakes.lostUnits('fake', s.id).size).toBe(1);
     expect((await watcher.pass(Date.now() + 80_000)).get(key)).toBe('quiet');
+  });
+
+  it('longest wait: a child working for ever is no longer waited for, the agent goes on once; 0 = no cap', async () => {
+    const alive = async (): Promise<SubagentChild[]> => {
+      const now = Date.now() / 1000 + 3600;
+      return [{ id: 'c', goal: 'g', cut: false, startedAt: now - 3000, endedAt: null, endReason: null, lastActive: now - 5, toolCalls: 40, apiCalls: 60 }];
+    };
+    const { t, s, base } = await setup(60_000);
+    const lines: string[] = [];
+    const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: (l) => lines.push(l), graceS: 5, maxWaitS: 600, children: alive });
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond-oublie' })).json.runId)).toBe('completed');
+    const key = `fake/${s.id}`;
+    const page = (await t.request('GET', `${base}/messages`)).json;
+    expect(page.subagents.waitUntil - page.subagents.since).toBe(MAX_WAIT_S); // the app's watcher (default)
+    expect((await watcher.pass(Date.now() + 60_000)).get(key)).toBe('wait');
+    await watcher.settled();
+    expect(t.services.wakes.lostUnits('fake', s.id).size).toBe(0);
+    const before = runs(t);
+    expect((await watcher.pass(Date.now() + 700_000)).get(key)).toBe('wake');
+    expect(t.services.wakes.lostUnits('fake', s.id).size).toBe(1);
+    expect(runs(t)).toBe(before + 1);
+    expect(inputs(t).at(-1)).toBe(waitTextExpired(10));
+    expect(waitTextExpired(60)).not.toMatch(/fond/i);
+    expect(lines.some((l) => l.includes('plus de 10 min'))).toBe(true);
+    await waitRun(t, base, await lastRunId(t, base));
+    expect((await watcher.pass(Date.now() + 800_000)).get(key)).toBe('quiet');
+    expect(runs(t)).toBe(before + 1);
+
+    const b = await setup(60_000);
+    const never = new DelegationWatcher({ ...b.t.services.runDeps, wakes: b.t.services.wakes }, { log: () => {}, graceS: 5, maxWaitS: 0, children: alive });
+    expect(await waitRun(b.t, b.base, (await b.t.request('POST', `${b.base}/runs`, { input: 'fond-oublie' })).json.runId)).toBe('completed');
+    expect((await never.pass(Date.now() + 7_200_000)).get(`fake/${b.s.id}`)).toBe('wait');
+    expect(MAX_WAIT_S).toBe(3600);
   });
 
   it('a delivery after the unit was given up still wakes the agent (plain text)', async () => {

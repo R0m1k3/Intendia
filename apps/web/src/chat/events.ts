@@ -39,7 +39,7 @@ export interface SubagentNode {
   /** session of the sub-agent at Hermes (live event only) */
   childSessionId: string | null;
   /** live tracking of a background node: its child session (chat/deliveries.ts attachChildren) */
-  activity?: { lastActive: number | null; toolCalls: number | null; ended: boolean };
+  activity?: { lastActive: number | null; toolCalls: number | null; apiCalls?: number | null; ended: boolean };
   /** seconds (event timestamp), null when unknown */
   startedAt: number | null;
   duration: number | null;

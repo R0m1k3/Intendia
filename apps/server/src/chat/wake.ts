@@ -23,6 +23,12 @@ export const MAX_WAKES = 5;
 export const WAKE_TEXT = `${WAKE_PREFIX} : tes sous-agents ont terminé, leurs résultats sont ci-dessus. Poursuis ton travail.`;
 /** When a unit was given up (no delivery): the agent is told that part of the results never came. */
 export const WAKE_TEXT_PARTIAL = `${WAKE_PREFIX} : une partie de tes sous-agents a livré ses résultats (ci-dessus) ; les autres n’ont rien livré. Poursuis ton travail.`;
+/** Past the longest wait with nothing delivered: the agent goes on without them (and is told not to start them again). */
+export const waitTextExpired = (minutes: number): string =>
+  `${WAKE_PREFIX} : tes sous-agents n’ont rien livré après ${minutes} min, Intendia ne les attend plus (un résultat tardif te sera transmis). Poursuis ton travail sans relancer les mêmes sous-agents.`;
+/** Default longest wait of a unit, delivery or not (INTENDIA_SUBAGENT_MAX_WAIT_MIN). */
+export const MAX_WAIT_S = 3600;
+const EXPIRED_PREFIX = 'expired:';
 /** Messages read per decision (the watcher's and the page's summary use the same window). */
 export const WAKE_WINDOW = 200;
 const EVERY_MS = 15_000;
@@ -75,6 +81,8 @@ export interface SubagentsSummary {
   wakePending: boolean;
   /** a unit given up less than 24 h ago: the page keeps re-reading (a late delivery is shown) */
   lostRecent: boolean;
+  /** seconds: the agent goes on without the open units at the latest then (newest ticket + longest wait); null = no cap */
+  waitUntil: number | null;
 }
 
 export interface WorkingSubagents {
@@ -124,12 +132,14 @@ export function wakeDecision(
 type WakeRow = typeof delegationWakes.$inferSelect;
 
 /** Pure: the summary served with the messages; null = nothing open, nothing expected. */
-export function summarize(d: WakeDecision, row: WakeRow | null, nowSec: number): SubagentsSummary | null {
+export function summarize(d: WakeDecision, row: WakeRow | null, nowSec: number, maxWaitS = MAX_WAIT_S): SubagentsSummary | null {
   // a delivery not answered yet: pending only while recent (a session the watcher does not read, as a copy, never waits)
   const pending = d.kind === 'wake' && (row ? row.state === 'starting' : d.deliveredAt !== null && nowSec - d.deliveredAt < PENDING_FOR_S);
   const capped = d.kind === 'capped';
   if (d.openTasks === 0 && !pending && !capped && !d.lostRecent) return null;
-  return { openTasks: d.openTasks, since: d.since, capped, wakePending: pending, lostRecent: d.lostRecent };
+  const newest = d.openUnits.reduce<number | null>((m, u) => (u.ts === null ? m : Math.max(m ?? u.ts, u.ts)), null);
+  const waitUntil = maxWaitS > 0 && newest !== null ? newest + maxWaitS : null;
+  return { openTasks: d.openTasks, since: d.since, capped, wakePending: pending, lostRecent: d.lostRecent, waitUntil };
 }
 
 /**
@@ -253,6 +263,8 @@ export interface WatcherOptions {
   idleS?: number;
   /** ms between two reads of a session's children (default: min(60 s, grace)) */
   checkEveryMs?: number;
+  /** seconds a unit is waited for at most, children alive or not (default 3600; 0 = until 24 h) */
+  maxWaitS?: number;
 }
 
 export class DelegationWatcher {
@@ -265,6 +277,8 @@ export class DelegationWatcher {
   private readonly graceS: number;
   private readonly idleS: number;
   private readonly checkEveryMs: number;
+  /** seconds a unit is waited for at most (0 = until 24 h) */
+  readonly maxWaitS: number;
   /** children checks in flight (one per session) and the time of the last one */
   private readonly checks = new Map<string, Promise<void>>();
   private readonly checkedAt = new Map<string, number>();
@@ -279,6 +293,7 @@ export class DelegationWatcher {
     this.graceS = opts.graceS ?? LOST_GRACE_S;
     this.idleS = opts.idleS ?? IDLE_S;
     this.checkEveryMs = opts.checkEveryMs ?? Math.min(SLOW_MS, this.graceS * 1000);
+    this.maxWaitS = opts.maxWaitS ?? MAX_WAIT_S;
   }
 
   /** Tests only: waits for the children checks in flight. */
@@ -387,18 +402,42 @@ export class DelegationWatcher {
       return d.kind;
     }
     if (d.kind === 'wait') {
-      this.maybeCheck(key, ctx, d, now);
-      later(d.since !== null && now / 1000 - d.since < FAST_FOR_S ? EVERY_MS : SLOW_MS);
-      return 'wait';
+      const expired = this.maxWaitS > 0 ? d.openUnits.filter((u) => u.ts !== null && now / 1000 - u.ts >= this.maxWaitS) : [];
+      if (!expired.length || expired.length < d.openUnits.length) {
+        // a younger unit is still waited for: the old ones go with it (its wait ends at most maxWait after its ticket)
+        this.maybeCheck(key, ctx, d, now);
+        later(d.since !== null && now / 1000 - d.since < FAST_FOR_S ? EVERY_MS : SLOW_MS);
+        return 'wait';
+      }
+      // every open unit waited for longer than maxWait: no longer waited for, the agent goes on
+      const ids = expired.map((u) => u.id);
+      const n = wakes.lose(r.instanceId, r.sessionId, ids);
+      if (n) this.log(`[intendia] sous-agents ${key} : ${n} unité(s) attendue(s) plus de ${Math.round(this.maxWaitS / 60)} min, plus attendue(s)`);
+      w.open = null;
+      const d2 = wakeDecision(h.messages, now / 1000, prev, wakes.lostUnits(r.instanceId, r.sessionId), wakes.lastWakeAt(r.instanceId, r.sessionId));
+      // a delivery in the queue: the usual wake (partial text); none: one wake per expiry, its own key
+      if (d2.kind === 'wake' || d2.kind === 'capped') return this.wake(r, ctx, w, d2.key!, d2.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, prev, now, d2.kind === 'capped');
+      return this.wake(r, ctx, w, EXPIRED_PREFIX + [...ids].sort().join(','), waitTextExpired(Math.round(this.maxWaitS / 60)), prev, now, prev >= MAX_WAKES);
     }
-    const dk = d.key!;
+    return this.wake(r, ctx, w, d.key!, d.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, prev, now, false);
+  }
+
+  /** Starts the wake of one delivery (or one expiry), once: `dk` is its dedup key in delegation_wakes. */
+  private async wake(r: RecentRun, ctx: SessionContext, w: Watch, dk: string, text: string, prev: number, now: number, capped: boolean): Promise<WakeKind | 'running'> {
+    const key = `${r.instanceId}/${r.sessionId}`;
+    const { wakes } = this.deps;
+    const later = (ms: number) => { w.nextAt = now + ms - 1_000; };
+    if (capped) {
+      w.calm = true;
+      return 'capped';
+    }
     if (wakes.get(r.instanceId, r.sessionId, dk) || !wakes.reserve(r.instanceId, r.sessionId, dk, prev + 1, now)) {
       // already answered (a wake run that failed at Hermes leaves the same delivery in the queue)
       w.calm = true;
       return 'quiet';
     }
     try {
-      const res = await this.startFn(this.deps, ctx, d.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, 'wake-' + hashKey([r.instanceId, r.sessionId, dk]));
+      const res = await this.startFn(this.deps, ctx, text, 'wake-' + hashKey([r.instanceId, r.sessionId, dk]));
       wakes.started(r.instanceId, r.sessionId, dk, res.runId);
       this.log(`[intendia] reprise ${key} : run ${res.runId} (${prev + 1}/${MAX_WAKES})`);
       this.watches.set(key, { run: { ...r, runId: res.runId }, lastRunId: res.runId, calm: false, nextAt: 0, open: null, tries: 0 });

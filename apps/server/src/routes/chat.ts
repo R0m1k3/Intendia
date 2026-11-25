@@ -166,7 +166,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     await settle(ctx, { known: h });
     // background sub-agents: the server's decision (chat/wake.ts), same window as its watcher
     const d = decide(ctx, h.messages);
-    const subagents = summarize(d, d.key ? deps.services.wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, Date.now() / 1000);
+    const subagents = summarize(d, d.key ? deps.services.wakes.get(ctx.instance.id, ctx.session.id, d.key) : null, Date.now() / 1000, deps.services.watcher.maxWaitS);
     return c.json({
       messages: h.messages, hasMore, nextOffset, runs: workspaces.runStats(ctx.instance.id, ctx.session.id).map(publicRun), subagents,
       openUnits: d.openUnits.map((u) => u.id),

@@ -1,10 +1,17 @@
 import { GitBranch } from 'lucide-react';
 import type { SubagentsSummary } from '../api';
-import { plural, t } from '../i18n';
+import { locale, plural, t } from '../i18n';
 
 /** « 2 sous-agents travaillent · l’agent reprendra à leur fin » */
 export function subagentsLine(n: number): string {
   return plural(n, '{n} sous-agent travaille · l’agent reprendra à sa fin', '{n} sous-agents travaillent · l’agent reprendra à leur fin');
+}
+
+/** « 15:26 », or « demain 09:10 » past midnight (seconds). */
+export function untilText(sec: number, now = Date.now()): string {
+  const at = new Date(sec * 1000);
+  const time = at.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  return at.toDateString() === new Date(now).toDateString() ? time : t('demain {time}', { time });
 }
 
 /**
@@ -17,7 +24,10 @@ export function SubagentsBar({ summary, onStop }: { summary: SubagentsSummary; o
       <div className="flex items-center gap-2 rounded-xl border border-line bg-sheet px-3 py-1.5 text-[13px] text-ink-soft">
         <GitBranch className="size-4 shrink-0 text-accent-ink" strokeWidth={1.75} />
         <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-accent" />
-        <span className="min-w-0 truncate" data-subagents-count={summary.openTasks}>{subagentsLine(summary.openTasks)}</span>
+        <span className="min-w-0 truncate" data-subagents-count={summary.openTasks}>
+          {subagentsLine(summary.openTasks)}
+          {summary.waitUntil ? <span data-subagents-until> · {t('au plus tard à {time}', { time: untilText(summary.waitUntil) })}</span> : null}
+        </span>
         {onStop && (
           <button type="button" onClick={onStop} data-subagents-stop
             className="ml-auto shrink-0 rounded-md px-2 py-0.5 text-[12px] text-ink-soft hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-ink">

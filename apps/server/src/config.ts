@@ -43,6 +43,8 @@ const EnvSchema = z.object({
   INTENDIA_PUBLIC_URL: z.url().optional(),
   /** test bench: seconds without a delivery after the sub-agents' last sign before they are no longer waited for (300) */
   INTENDIA_SUBAGENT_GRACE_S: z.coerce.number().int().min(5).optional(),
+  /** Minutes a background sub-agent is waited for at most, delivery or not (0 = until 24 h). */
+  INTENDIA_SUBAGENT_MAX_WAIT_MIN: z.coerce.number().min(0).max(1440).default(60),
   INTENDIA_SECRET: z.string().min(32, 'INTENDIA_SECRET must be at least 32 characters (openssl rand -hex 32)'),
   INTENDIA_PASSWORD_HASH: z.string().startsWith('$argon2').optional(),
   INTENDIA_INSTANCES: z.string().optional(),
@@ -65,6 +67,8 @@ export interface AppConfig {
   publicUrl: string | undefined;
   /** INTENDIA_SUBAGENT_GRACE_S (chat/wake.ts), undefined = 300 s */
   subagentGraceS?: number;
+  /** INTENDIA_SUBAGENT_MAX_WAIT_MIN (chat/wake.ts), default 60; 0 = no cap but the 24 h one */
+  subagentMaxWaitMin?: number;
   secret: string;
   passwordHash: string | undefined;
   envInstances: InstanceConfig[] | null;
@@ -107,6 +111,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     publicUrl: e.INTENDIA_PUBLIC_URL?.replace(/\/$/, ''),
     subagentGraceS: e.INTENDIA_SUBAGENT_GRACE_S,
+    subagentMaxWaitMin: e.INTENDIA_SUBAGENT_MAX_WAIT_MIN,
     secret: e.INTENDIA_SECRET,
     passwordHash: e.INTENDIA_PASSWORD_HASH,
     envInstances: e.INTENDIA_INSTANCES ? parseInstances(e.INTENDIA_INSTANCES) : null,
