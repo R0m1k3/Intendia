@@ -1,9 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { InstanceConfigSchema, type AppConfig, type InstanceConfig } from '../config.js';
 import { decrypt, encrypt } from '../crypto.js';
 import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
-import { instances } from '../db/schema.js';
+import { instances, profileKeys } from '../db/schema.js';
+
+const KEY_PURPOSE = 'profile-keys-v1';
 
 export interface PublicInstance {
   id: string;
@@ -130,11 +132,49 @@ export class InstanceStore {
 
   /** The returned array and objects are shared: never modify them (copy, as `mergeInstance` does). */
   list(): InstanceConfig[] {
+    this.cache ??= this.withMadeKeys(this.configured());
+    return this.cache;
+  }
+
+  /** Instances as configured (INTENDIA_INSTANCES or saved), without the keys made by Intendia. */
+  private configured(): InstanceConfig[] {
     if (this.config.envInstances) return this.config.envInstances;
-    this.cache ??= this.db.select().from(instances).all().map((row) => {
+    return this.db.select().from(instances).all().map((row) => {
       return InstanceConfigSchema.parse(JSON.parse(decrypt(this.config.secret, row.configEnc)));
     });
-    return this.cache;
+  }
+
+  /** Keys made by Intendia fill in the profiles without one; a key of the configuration wins. */
+  private withMadeKeys(list: InstanceConfig[]): InstanceConfig[] {
+    const made = new Map<string, Record<string, string>>();
+    for (const row of this.db.select().from(profileKeys).all()) {
+      try {
+        made.set(row.instanceId, { ...made.get(row.instanceId), [row.profile]: decrypt(this.config.secret, row.keyEnc, KEY_PURPOSE) });
+      } catch {
+        // INTENDIA_SECRET changed: the agent has to be connected again
+      }
+    }
+    return list.map((i) => (made.has(i.id) ? { ...i, profileKeys: { ...made.get(i.id), ...i.profileKeys } } : i));
+  }
+
+  /** The profile's key comes from the configuration: Intendia never replaces it. */
+  declaredProfileKey(instanceId: string, profile: string): boolean {
+    return Boolean(this.configured().find((i) => i.id === instanceId)?.profileKeys[profile]);
+  }
+
+  /** A key Intendia wrote in a profile's .env (instances of INTENDIA_INSTANCES too). */
+  setProfileKey(instanceId: string, profile: string, key: string): void {
+    const keyEnc = encrypt(this.config.secret, key, KEY_PURPOSE);
+    this.db.insert(profileKeys).values({ instanceId, profile, keyEnc, createdAt: Date.now() })
+      .onConflictDoUpdate({ target: [profileKeys.instanceId, profileKeys.profile], set: { keyEnc } }).run();
+    this.cache = null;
+  }
+
+  /** Forgets the keys Intendia made for an instance (one profile, or all). */
+  removeProfileKeys(instanceId: string, profile?: string): void {
+    const where = profile === undefined ? eq(profileKeys.instanceId, instanceId) : and(eq(profileKeys.instanceId, instanceId), eq(profileKeys.profile, profile));
+    this.db.delete(profileKeys).where(where).run();
+    this.cache = null;
   }
 
   get(id: string): InstanceConfig | undefined {
@@ -143,7 +183,17 @@ export class InstanceStore {
 
   save(input: InstanceConfig): InstanceConfig {
     if (this.declarative) throw new DeclarativeError();
-    const value = InstanceConfigSchema.parse(input);
+    const parsed = InstanceConfigSchema.parse(input);
+    const before = this.configured().find((i) => i.id === parsed.id);
+    // a key made by Intendia stays in profile_keys (read back by list()), never copied into the saved config
+    const made = this.withMadeKeys([{ ...parsed, profileKeys: {} }])[0]!.profileKeys;
+    const value = { ...parsed, profileKeys: Object.fromEntries(Object.entries(parsed.profileKeys).filter(([p, k]) => made[p] !== k)) };
+    if (before && origin(before.api) !== origin(value.api)) {
+      this.removeProfileKeys(value.id); // keys never go to a new API server
+    } else {
+      // a made key left out (or replaced) by the new config is forgotten: the config says which keys stay
+      for (const [p, k] of Object.entries(made)) if (parsed.profileKeys[p] !== k) this.removeProfileKeys(value.id, p);
+    }
     const configEnc = encrypt(this.config.secret, JSON.stringify(value));
     this.db.insert(instances).values({ id: value.id, configEnc, createdAt: Date.now() })
       .onConflictDoUpdate({ target: instances.id, set: { configEnc } }).run();
@@ -162,7 +212,7 @@ export class InstanceStore {
   remove(id: string): void {
     if (this.declarative) throw new DeclarativeError();
     this.db.delete(instances).where(eq(instances.id, id)).run();
-    this.cache = null;
+    this.removeProfileKeys(id);
   }
 
   static toPublic(i: InstanceConfig, source: 'env' | 'db', files: PublicInstance['files'] = null): PublicInstance {

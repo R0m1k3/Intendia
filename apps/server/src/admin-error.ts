@@ -1,11 +1,13 @@
 /** Refusals of the admin screens (lot 8): code + HTTP status, rendered by `app.onError` with `extra`. */
 export type AdminCode =
   | 'refused' | 'multiplexed' | 'protected' | 'in_use' | 'too_long' | 'stale' | 'over_budget'
-  | 'busy' | 'already_installed' | 'no_public_url' | 'invalid_field' | 'unsupported' | 'partial_create';
+  | 'busy' | 'already_installed' | 'no_public_url' | 'invalid_field' | 'unsupported' | 'partial_create'
+  | 'key_exists' | 'not_served';
 
 const STATUS: Record<AdminCode, 400 | 409> = {
   refused: 409, multiplexed: 409, protected: 409, in_use: 409, too_long: 409, stale: 409, over_budget: 400,
   busy: 409, already_installed: 409, no_public_url: 409, invalid_field: 400, unsupported: 409, partial_create: 409,
+  key_exists: 409, not_served: 409,
 };
 
 export class AdminError extends Error {

@@ -92,6 +92,8 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
 
   r.post('/workspaces', async (c) => {
     const body = CreateWorkspace.parse(await c.req.json());
+    // an agent without a key in Intendia is connected first ("Connecter à Intendia")
+    if (body.profile && body.profile !== 'default') await deps.services.agents.connect(body.instanceId, body.profile);
     return c.json({ workspace: await workspaces.createWorkspace(body) }, 201);
   });
 
@@ -173,7 +175,8 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
       if (ctx.session.lastRunId || ctx.session.copiedFrom) {
         return c.json({ error: msg('Cette session a déjà des messages : copiez-la vers l’autre agent'), code: 'has_history' }, 409);
       }
-      if (body.profile && body.profile !== 'default' && !ctx.instance.profileKeys[body.profile]) {
+      if (body.profile && body.profile !== 'default') await deps.services.agents.connect(inst, body.profile);
+      if (body.profile && body.profile !== 'default' && !deps.store.get(inst)?.profileKeys[body.profile]) {
         return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile: body.profile }), code: 'no_key' }, 400);
       }
     }

@@ -21,6 +21,7 @@ describe('agents', () => {
     const t = await testApp({ profileKeys: { recherche: 'recherche-key-0000000000' } });
     await t.request('POST', BASE, { name: 'recherche' });
     await t.request('POST', BASE, { name: 'redaction' });
+    t.store.removeProfileKeys('fake', 'redaction'); // as an agent made outside Intendia
     await worker(t, 'recherche');
     const res = await t.request('GET', BASE);
     expect(res.status).toBe(200);
@@ -42,7 +43,7 @@ describe('agents', () => {
     const t = await testApp();
     const res = await t.request('POST', BASE, { name: 'veille', description: 'Suit la presse', cloneFrom: 'default' });
     expect(res.status).toBe(201);
-    expect(res.json).toEqual({ name: 'veille', keySource: 'env', modelError: null });
+    expect(res.json).toEqual({ name: 'veille', keySource: 'env', modelError: null, connectError: null });
     expect(dash(t, 'POST', '/api/profiles').at(-1)?.body).toEqual({ name: 'veille', description: 'Suit la presse', clone_from: 'default' });
     expect((await t.request('GET', BASE)).json.agents.map((a: any) => a.name)).toContain('veille');
   });
@@ -219,10 +220,85 @@ describe('agents: model list of any agent', () => {
   it('chat-models?for=agent reads the models of a profile without chat key', async () => {
     const t = await testApp();
     await t.request('POST', BASE, { name: 'veille' });
+    t.store.removeProfileKeys('fake', 'veille');
     expect((await t.request('GET', '/x/i/fake/chat-models?profile=veille')).status).toBe(400);
     const res = await t.request('GET', '/x/i/fake/chat-models?profile=veille&for=agent');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.json.groups)).toBe(true);
     expect((await t.request('GET', '/x/i/fake/chat-models?profile=..%2Fx&for=agent')).status).toBe(400);
+  });
+});
+
+describe('agents: Connecter à Intendia', () => {
+  const env = (t: T) => t.fake.requests.filter((r) => r.via === 'dash' && r.path === '/api/env');
+
+  it('writes a new API server key in the profile and keeps it out of the instance config', async () => {
+    const t = await testApp();
+    expect((await t.request('POST', BASE, { name: 'collection' })).json.connectError).toBeNull();
+    const put = env(t).find((r) => r.method === 'PUT')!;
+    expect(put.query).toEqual({ profile: 'collection' });
+    const key = (put.body as { key: string; value: string });
+    expect(key.key).toBe('API_SERVER_KEY');
+    expect(key.value.length).toBeGreaterThanOrEqual(32);
+    expect(t.store.get('fake')!.profileKeys.collection).toBe(key.value);
+    expect(t.store.declaredProfileKey('fake', 'collection')).toBe(false);
+    // the chat reaches the profile under /p/collection/ with that key
+    expect((await t.request('GET', '/x/i/fake/chat-models?profile=collection')).status).toBe(200);
+    // already connected: nothing written again
+    expect((await t.request('POST', `${BASE}/collection/connect`)).json).toEqual({ hasKey: true, made: false, verified: true });
+    expect(env(t).filter((r) => r.method === 'PUT')).toHaveLength(1);
+    // deleting the agent forgets its key
+    expect((await t.request('DELETE', `${BASE}/collection`)).json.keyLeft).toBe(false);
+    expect(t.store.get('fake')!.profileKeys.collection).toBeUndefined();
+  });
+
+  it('asks before replacing a key the profile already has', async () => {
+    const t = await testApp();
+    await t.request('POST', BASE, { name: 'autre' });
+    // the profile has a key in Hermes, unknown to Intendia (another client uses it)
+    t.store.removeProfileKeys('fake', 'autre');
+    t.fake.profileKeys.autre = 'autre-client-key-000000';
+    const puts = () => env(t).filter((r) => r.method === 'PUT' && r.query.profile === 'autre').length;
+    const before = puts();
+    const asked = await t.request('POST', `${BASE}/autre/connect`);
+    expect(asked.status).toBe(409);
+    expect(asked.json.code).toBe('key_exists');
+    expect(puts()).toBe(before);
+    const done = await t.request('POST', `${BASE}/autre/connect`, { replace: true });
+    expect(done.json).toEqual({ hasKey: true, made: true, verified: true });
+    expect(t.store.get('fake')!.profileKeys.autre).not.toBe('autre-client-key-000000');
+  });
+
+  it('connects the agent of a new folder, and says when Hermes does not serve its profile', async () => {
+    const t = await testApp();
+    await t.request('POST', BASE, { name: 'dossier' });
+    t.store.removeProfileKeys('fake', 'dossier');
+    delete t.fake.profileKeys.dossier;
+    const ws = await t.request('POST', '/x/workspaces', { slug: 'collec', name: 'Collec', instanceId: 'fake', profile: 'dossier' });
+    expect(ws.status).toBe(201);
+    expect(t.store.get('fake')!.profileKeys.dossier).toBeTruthy();
+
+    await t.request('POST', BASE, { name: 'seul' });
+    t.store.removeProfileKeys('fake', 'seul');
+    delete t.fake.profileKeys.seul;
+    await t.fake.api.request('/_fake/breaks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'api GET /v1/capabilities', status: 404 }),
+    });
+    const res = await t.request('POST', `${BASE}/seul/connect`);
+    expect(res.status).toBe(409);
+    expect(res.json.code).toBe('not_served');
+    expect(t.store.get('fake')!.profileKeys.seul).toBeUndefined();
+  });
+
+  it('a made key survives an edit of the instance and goes away with a new API address', async () => {
+    const t = await testApp({ dbInstances: true });
+    t.store.setProfileKey('fake', 'veille', 'made-key-000000000000000');
+    const inst = t.store.get('fake')!;
+    t.store.save({ ...inst, label: 'Renommée' });
+    expect(t.store.declaredProfileKey('fake', 'veille')).toBe(false);
+    expect(t.store.get('fake')!.profileKeys.veille).toBe('made-key-000000000000000');
+    t.store.save({ ...t.store.get('fake')!, api: 'http://autre-hote:8642' });
+    expect(t.store.get('fake')!.profileKeys.veille).toBeUndefined();
   });
 });

@@ -79,7 +79,8 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const ctx = workspaces.getSession(inst, id);
     const { session: s, workspace } = ctx;
     if (profile === ctx.profile) return c.json({ error: msg('La session est déjà sur cet agent'), code: 'same_profile' }, 400);
-    if (profile !== 'default' && !ctx.instance.profileKeys[profile]) {
+    if (profile !== 'default') await deps.services.agents.connect(inst, profile);
+    if (profile !== 'default' && !deps.store.get(inst)?.profileKeys[profile]) {
       return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile }), code: 'no_key' }, 400);
     }
     const newId = copyId(inst, workspace.slug, `${key}:${profile}`);

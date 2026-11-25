@@ -29,7 +29,7 @@ const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 
 export function NewAgent({ inst, agents, onClose, onCreated }: {
-  inst: string; agents: Agent[]; onClose: () => void; onCreated: (name: string, source: 'env' | 'db', modelError: string | null) => void;
+  inst: string; agents: Agent[]; onClose: () => void; onCreated: (name: string, source: 'env' | 'db', modelError: string | null, connectError: string | null) => void;
 }) {
   const qc = useQueryClient();
   const [name, setName] = useState('');
@@ -53,7 +53,7 @@ export function NewAgent({ inst, agents, onClose, onCreated }: {
       if (color !== null) await looks.set(r.name, color).catch(() => {});
       await qc.invalidateQueries({ queryKey: ['agents', inst] });
       await qc.invalidateQueries({ queryKey: ['profiles', inst] });
-      onCreated(r.name, r.keySource, r.modelError);
+      onCreated(r.name, r.keySource, r.modelError, r.connectError ?? null);
     },
   });
   const guard = useDirtyGuard(Boolean(name || description || soul));
@@ -119,7 +119,7 @@ export function AgentsPage() {
   const a = useModuleAvailability(inst, 'agents', REQUIRED, OPTIONAL);
   const agents = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst).then((r) => r.agents), enabled: a.available });
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<{ name: string; source: 'env' | 'db'; modelError: string | null } | null>(null);
+  const [created, setCreated] = useState<{ name: string; source: 'env' | 'db'; modelError: string | null; connectError: string | null } | null>(null);
 
   const current = instances.data?.instances.find((i) => i.id === inst);
   const items = agents.data ?? [];
@@ -140,7 +140,8 @@ export function AgentsPage() {
           <div className="min-w-0 flex-1 space-y-1">
             <p><T k="Agent {name} créé." vars={{ name: <span className="font-medium">{created.name}</span> }} /></p>
             {created.modelError && <p className="text-warn">{t('Modèle non appliqué : {error}', { error: created.modelError })}</p>}
-            <p className="text-ink-soft">{keyHint(created.name, created.source)}</p>
+            {created.connectError && <p className="text-warn">{t('Pas encore connecté à Intendia : {error}', { error: created.connectError })}</p>}
+            {created.connectError && <p className="text-ink-soft">{keyHint(created.name, created.source)}</p>}
           </div>
           <button type="button" className="text-ink-faint hover:text-ink" aria-label={t('Masquer')} onClick={() => setCreated(null)}>
             <X className="size-3.5" strokeWidth={1.5} />
@@ -162,8 +163,8 @@ export function AgentsPage() {
                 sub={x.description || (x.model ? <span className="font-mono text-xs">{x.model}</span> : t('Pas de description'))}
                 tag={(
                   <Tag className={cx(x.name === shown && 'bg-sheet', !x.hasKey && 'text-warn')}
-                    title={x.hasKey ? undefined : t('Ajoutez sa clé API server dans profileKeys de l’instance')}>
-                    {x.hasKey ? t('prêt') : t('clé manquante')}
+                    title={x.hasKey ? undefined : t('Ouvrez sa fiche puis « Connecter à Intendia »')}>
+                    {x.hasKey ? t('prêt') : t('non connecté')}
                   </Tag>
                 )}
               />
@@ -188,7 +189,7 @@ export function AgentsPage() {
       </SplitView>
       {creating && (
         <NewAgent inst={inst} agents={items} onClose={() => setCreating(false)}
-          onCreated={(n, source, modelError) => { setCreating(false); setCreated({ name: n, source, modelError }); }} />
+          onCreated={(n, source, modelError, connectError) => { setCreating(false); setCreated({ name: n, source, modelError, connectError }); }} />
       )}
     </>
   );

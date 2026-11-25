@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { connectAgent } from '../agents/connect';
 import { Link, useNavigate, useRouterState, useSearch } from '@tanstack/react-router';
 import { Brain, Brush, ChevronRight, KeyRound, Layers, Ellipsis, Folder, FolderPlus, Hash, Inbox, MessageSquareText, PenLine, Plus, Search, SlidersHorizontal, UserRound } from 'lucide-react';
 import { NewChannel } from '../channels/NewChannel';
@@ -66,7 +67,7 @@ function agentLine(a: AgentNode): { text: string; tone: 'bad' | 'accent' | 'fain
   if (a.state === 'running') return { text: t('Travaille'), tone: 'accent' };
   if (a.state === 'subagents') return { text: t('Ses sous-agents travaillent'), tone: 'accent' };
   if (!a.known) return { text: t('Agent introuvable chez Hermes'), tone: 'faint' };
-  if (!a.hasKey) return { text: t('Sans clé : lecture seule'), tone: 'faint' };
+  if (!a.hasKey) return { text: t('Pas encore connecté à Intendia'), tone: 'faint' };
   return { text: a.description || a.model || t('Prêt'), tone: 'faint' };
 }
 
@@ -188,6 +189,15 @@ export function AgentsPane({ openId, onBeside }: {
   };
   /** A new session with an agent: in its most recent own folder, else in a new one. */
   const newWith = async (a: AgentNode) => {
+    if (!a.hasKey && inst) {
+      setError(null);
+      try {
+        if (!(await connectAgent(qc, inst, a.name))) return;
+      } catch (err) {
+        setError(err);
+        return;
+      }
+    }
     const own = a.folders.find((f) => (f.workspace.profile ?? 'default') === a.name);
     const slug = own?.workspace.slug ?? await newFolder(a.name);
     if (slug) await newIn(slug, a.name);
@@ -275,7 +285,7 @@ export function AgentsPane({ openId, onBeside }: {
             triggerClass="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-raised hover:text-ink aria-expanded:bg-raised md:invisible md:group-hover/a:visible md:group-focus-within/a:visible md:aria-expanded:visible"
             trigger={<><Ellipsis className="size-4" strokeWidth={1.5} /><span className="sr-only">{t('Actions de l’agent {name}', { name: a.name })}</span></>}
             items={[
-              ...(a.hasKey ? [{ label: t('Nouvelle session'), icon: <PenLine className="size-4" strokeWidth={1.5} />, onSelect: () => void newWith(a) }] : []),
+              ...(a.hasKey || a.known ? [{ label: t('Nouvelle session'), icon: <PenLine className="size-4" strokeWidth={1.5} />, onSelect: () => void newWith(a) }] : []),
               { label: t('Nouveau dossier'), icon: <FolderPlus className="size-4" strokeWidth={1.5} />, onSelect: () => void newFolder(a.name) },
               ...(a.known && inst ? [{ label: t('Fiche de l’agent'), icon: <UserRound className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/i/$inst/agents/$name', params: { inst, name: a.name } }) }] : []),
               ...(a.known && inst ? [{ label: t('Réglages de l’agent'), icon: <SlidersHorizontal className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: a.isDefault ? undefined : a.name } } as never) }] : []),

@@ -43,8 +43,15 @@ Do not publish 8642 or 9119 on the host nor in your reverse proxy: these keys co
 
 **Multi-profile routing**: each `/p/<profile>/` prefix has its own API key; add them to the instance as `profileKeys`.
 
-**Chatting with a new agent**: an agent created from the Agents page (a Hermes profile) has no key in Intendia yet;
-its page says "clé manquante". Give its profile an API server key in Hermes, then add it to the instance:
+**Chatting with an agent**: Intendia talks to a profile other than `default` under `/p/<profile>/` with that profile's
+own API server key. An agent created from the Agents page is connected right away; for an agent made elsewhere, its
+page shows "non connecté" and a **Connecter à Intendia** button (a new folder or a new session with it does the same):
+Intendia writes a new `API_SERVER_KEY` in the profile's `.env` through the dashboard (`PUT /api/env?profile=<name>`,
+read by Hermes at the next request) and keeps it in its database, encrypted with `INTENDIA_SECRET`. A profile that
+already has its own key is only replaced after a confirmation (other clients use it). Hermes must serve the profiles
+under `/p/` (`gateway.multiplex_profiles`, on by default); otherwise the button says so.
+
+Keys can still be given by hand, and then win over the ones Intendia made:
 - instance declared in `INTENDIA_INSTANCES`: add `"profileKeys": {"<name>": "<key>"}` to that instance, restart
   Intendia;
 - instance added from the setup page: `PATCH /x/instances/<id>` with `{"profileKeys": {"<name>": "<key>"}}`; the other

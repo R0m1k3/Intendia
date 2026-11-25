@@ -45,9 +45,10 @@ describe('profile per session', () => {
     expect((await t.request('PATCH', base, { profile: 'dev' })).status).toBe(200);
   });
 
-  it('PATCH: a copy (copiedFrom) has a history; a profile without key → 400', async () => {
+  it('PATCH: a copy (copiedFrom) has a history; an unknown profile → 404', async () => {
     const { t, base, s } = await setup();
-    expect((await t.request('PATCH', base, { profile: 'nokey' })).json.code).toBe('no_key');
+    // a known profile without key is connected first (agents.connect); one Hermes does not have is refused
+    expect((await t.request('PATCH', base, { profile: 'nokey' })).status).toBe(404);
     await send(t, base, 'Bonjour');
     const dup = (await t.request('POST', `${base}/duplicate`, { key: 'cle-dupl-0001' })).json.session;
     expect(dup.copiedFrom).toBe(s.id);
@@ -59,7 +60,7 @@ describe('profile per session', () => {
     await t.request('PATCH', base, { title: 'Promo', autoApprove: true, effort: 'low' });
     await send(t, base, 'Prépare la promo');
     expect((await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'default' })).json.code).toBe('same_profile');
-    expect((await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'nokey' })).json.code).toBe('no_key');
+    expect((await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'nokey' })).status).toBe(404);
     const res = await t.request('POST', `${base}/to-profile`, { key: 'cle-prof-0001', profile: 'dev' });
     expect(res.status).toBe(201);
     const copy = res.json.session;

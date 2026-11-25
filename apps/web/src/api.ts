@@ -1110,7 +1110,10 @@ export const api = {
   agents: (inst: string) => call<{ agents: Agent[] }>('GET', instPath(inst, 'agents')),
   agent: (inst: string, name: string) => call<{ agent: AgentDetail }>('GET', instPath(inst, `agents/${enc(name)}/detail`)),
   createAgent: (inst: string, a: CreateAgentInput) =>
-    call<{ name: string; keySource: 'env' | 'db'; modelError: string | null }>('POST', instPath(inst, 'agents'), a),
+    call<{ name: string; keySource: 'env' | 'db'; modelError: string | null; connectError?: string | null }>('POST', instPath(inst, 'agents'), a),
+  /** "Connecter à Intendia": 409 `key_exists` (the profile has its own key: `replace`) or `not_served` (no /p/<name>/) */
+  connectAgent: (inst: string, name: string, replace = false) =>
+    call<{ hasKey: true; made: boolean; verified: boolean }>('POST', instPath(inst, `agents/${enc(name)}/connect`), replace ? { replace } : {}),
   /** 409 `protected` (default) or `in_use` (+ workspaces, sessions); `keyLeft`: its key stays in INTENDIA_INSTANCES */
   deleteAgent: (inst: string, name: string) => call<{ ok: true; keyLeft: boolean; pending: boolean }>('DELETE', instPath(inst, `agents/${enc(name)}`)),
   /** draft of the masked SOUL.md: placeholders get their value back on the server (400 secret_moved / secret_placeholder) */
