@@ -371,6 +371,26 @@ describe('DelegationWatcher: lost deliveries (fake)', () => {
     expect(MAX_WAIT_S).toBe(3600);
   });
 
+  it('longest wait: a start that fails is retried by the next pass (units still open meanwhile)', async () => {
+    const { t, s, base } = await setup(60_000);
+    let fail = true;
+    const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, {
+      log: () => {}, graceS: 3000, maxWaitS: 600, children: async () => [],
+      start: async (deps, ctx, input, keySuffix) => {
+        if (fail) { fail = false; throw new Error('Hermes injoignable'); }
+        const { startRun } = await import('../src/chat/start-run.js');
+        return startRun(deps, ctx, input, { keySuffix });
+      },
+    });
+    expect(await waitRun(t, base, (await t.request('POST', `${base}/runs`, { input: 'fond-oublie' })).json.runId)).toBe('completed');
+    const key = `fake/${s.id}`;
+    expect((await watcher.pass(Date.now() + 700_000)).has(key)).toBe(false); // the error is logged, nothing written
+    expect(t.services.wakes.lostUnits('fake', s.id).size).toBe(0);
+    expect((await watcher.pass(Date.now() + 720_000)).get(key)).toBe('wake');
+    expect(t.services.wakes.lostUnits('fake', s.id).size).toBe(1);
+    expect(inputs(t).at(-1)).toBe(waitTextExpired(10));
+  });
+
   it('a delivery after the unit was given up still wakes the agent (plain text)', async () => {
     const { t, s, base } = await setup(1_500);
     const watcher = new DelegationWatcher({ ...t.services.runDeps, wakes: t.services.wakes }, { log: () => {}, graceS: 5, children: async () => [] });

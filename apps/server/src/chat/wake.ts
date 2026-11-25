@@ -409,15 +409,22 @@ export class DelegationWatcher {
         later(d.since !== null && now / 1000 - d.since < FAST_FOR_S ? EVERY_MS : SLOW_MS);
         return 'wait';
       }
-      // every open unit waited for longer than maxWait: no longer waited for, the agent goes on
+      // every open unit waited for longer than maxWait: the agent goes on without them. The units are written lost only
+      // once the wake is settled (started, already answered, capped, a send first): a start that fails is retried by the next pass,
+      // which still sees them open (a restart too)
       const ids = expired.map((u) => u.id);
+      const lost = new Set([...wakes.lostUnits(r.instanceId, r.sessionId), ...ids]);
+      const d2 = wakeDecision(h.messages, now / 1000, prev, lost, wakes.lastWakeAt(r.instanceId, r.sessionId));
+      // a delivery in the queue: the usual wake (partial text); none: one wake per expiry, its own key
+      const res = d2.kind === 'wake' || d2.kind === 'capped'
+        ? await this.wake(r, ctx, w, d2.key!, d2.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, prev, now, d2.kind === 'capped')
+        : await this.wake(r, ctx, w, EXPIRED_PREFIX + [...ids].sort().join(','), waitTextExpired(Math.round(this.maxWaitS / 60)), prev, now, prev >= MAX_WAKES);
+      // (`running`: a send got there first and takes the turn: the units are not waited for either)
       const n = wakes.lose(r.instanceId, r.sessionId, ids);
       if (n) this.log(`[intendia] sous-agents ${key} : ${n} unité(s) attendue(s) plus de ${Math.round(this.maxWaitS / 60)} min, plus attendue(s)`);
-      w.open = null;
-      const d2 = wakeDecision(h.messages, now / 1000, prev, wakes.lostUnits(r.instanceId, r.sessionId), wakes.lastWakeAt(r.instanceId, r.sessionId));
-      // a delivery in the queue: the usual wake (partial text); none: one wake per expiry, its own key
-      if (d2.kind === 'wake' || d2.kind === 'capped') return this.wake(r, ctx, w, d2.key!, d2.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, prev, now, d2.kind === 'capped');
-      return this.wake(r, ctx, w, EXPIRED_PREFIX + [...ids].sort().join(','), waitTextExpired(Math.round(this.maxWaitS / 60)), prev, now, prev >= MAX_WAKES);
+      const cur = this.watches.get(key);
+      if (cur) cur.open = null;
+      return res;
     }
     return this.wake(r, ctx, w, d.key!, d.lostUsed ? WAKE_TEXT_PARTIAL : WAKE_TEXT, prev, now, false);
   }
