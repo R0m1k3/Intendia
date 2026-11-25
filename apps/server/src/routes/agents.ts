@@ -18,6 +18,7 @@ const CreateBody = z.object({
 const SoulBody = z.object({ content: z.string().max(SOUL_MAX) });
 const ModelBody = z.object({ provider: z.string().min(1).max(200), model: z.string().min(1).max(200) });
 const DescriptionBody = z.object({ description: z.string().max(1000) });
+const ConnectBody = z.object({ replace: z.boolean().optional() });
 
 function nameOf(c: Context): string {
   const name = c.req.param('name') ?? '';
@@ -44,6 +45,10 @@ export function agentRoutes(agents: AgentService): Hono {
   r.put('/i/:inst/agents/:name/model', async (c) => {
     const body = ModelBody.parse(await c.req.json());
     return c.json(await agents.setModel(inst(c), nameOf(c), body.provider, body.model));
+  });
+  r.post('/i/:inst/agents/:name/connect', async (c) => {
+    const body = ConnectBody.parse(await c.req.json().catch(() => ({})));
+    return c.json(await agents.connect(inst(c), nameOf(c), body.replace === true));
   });
   r.post('/i/:inst/agents/:name/describe', async (c) => c.json(await agents.describeAuto(inst(c), nameOf(c))));
   r.delete('/i/:inst/agents/:name', async (c) => c.json(await agents.remove(inst(c), nameOf(c))));

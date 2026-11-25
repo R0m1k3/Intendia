@@ -320,6 +320,8 @@ export default {
   'Le dossier {slug} existe déjà chez Hermes': 'The folder {slug} already exists in Hermes',
   'AGENTS.md dépasse {n} Kio': 'AGENTS.md exceeds {n} KiB',
   'Workspace inconnu : {slug}': 'Unknown workspace: {slug}',
+  'L’agent {name} a déjà sa propre clé API server : la remplacer coupe les autres clients qui l’utilisent': 'Agent {name} already has its own API server key: replacing it cuts off the other clients that use it',
+  'Hermes ne sert pas l’agent {name} sous /p/{name}/ : activez gateway.multiplex_profiles dans la configuration de l’agent principal, puis redémarrez sa passerelle': 'Hermes does not serve agent {name} under /p/{name}/: turn on gateway.multiplex_profiles in the main agent’s configuration, then restart its gateway',
   'Profil sans clé sur cette instance : {profile}': 'Profile without a key on this instance: {profile}',
   'Le workspace {slug} existe déjà': 'The workspace {slug} already exists',
   'Session inconnue : {id}': 'Unknown session: {id}',

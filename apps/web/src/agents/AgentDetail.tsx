@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronDown, Cpu, Pencil, Puzzle, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, Cpu, Link2, Pencil, Puzzle, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { api, ApiError, type AgentDetail as AgentData, type PublicInstance } from '../api';
 import { ask, askText } from '../components/Dialog';
@@ -8,6 +8,7 @@ import { DetailBody, DetailHeader, Facts } from '../components/Panes';
 import { Button, cx, ErrorText, Mark, timeAgo, SkeletonLines } from '../components/ui';
 import { AgentModelPicker } from './AgentModel';
 import { Gateway } from './Gateway';
+import { connectAgent } from './connect';
 import { keyHint } from './keyHint';
 import { plural, t } from '../i18n';
 
@@ -192,6 +193,8 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
     },
   });
   const x = agent.data;
+  const canConnect = has('config', 'env') && has('config', 'putEnv');
+  const connect = useMutation({ mutationFn: () => connectAgent(qc, inst, name) });
   const canRemove = has('agents', 'remove') && x !== undefined && !x.isDefault;
 
   const askRemove = async () => {
@@ -226,7 +229,20 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
         {x && !removed && (
           <>
             {!x.hasKey && instance && (
-              <p className="rounded-[10px] bg-warn-soft px-4 py-3 text-[13.5px] text-warn">{keyHint(name, instance.source)}</p>
+              <div className="flex flex-wrap items-center gap-3 rounded-[10px] bg-warn-soft px-4 py-3 text-[13.5px] text-warn">
+                <p className="min-w-0 flex-1">{canConnect
+                  ? t('Intendia n’a pas encore de clé pour parler à cet agent. Il peut lui en créer une dans Hermes.')
+                  : keyHint(name, instance.source)}</p>
+                {canConnect && (
+                  <Button variant="primary" disabled={connect.isPending} onClick={() => connect.mutate()}>
+                    <Link2 className={ICON} strokeWidth={1.5} />{connect.isPending ? t('Connexion…') : t('Connecter à Intendia')}
+                  </Button>
+                )}
+              </div>
+            )}
+            <ErrorText error={connect.error} />
+            {connect.data?.verified === false && (
+              <p role="status" className="rounded-[10px] bg-warn-soft px-4 py-3 text-[13.5px] text-warn">{t('Clé écrite, mais la passerelle de l’agent ne répond pas encore : démarrez-la ou redémarrez-la ci-dessous.')}</p>
             )}
             <Facts items={[
               { label: t('Modèle'), mono: true, value: <AgentModel inst={inst} name={name} x={x} editable={has('agents', 'setModel')} /> },
@@ -235,7 +251,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
               { label: t('Skills'), value: x.skillCount ?? '—' },
               {
                 label: t('Chat depuis Intendia'),
-                value: <span className={cx('inline-flex items-center gap-2', x.hasKey ? 'text-ink' : 'text-warn')}><Mark state={x.hasKey ? 'full' : 'unavailable'} />{x.hasKey ? t('prêt') : t('clé manquante')}</span>,
+                value: <span className={cx('inline-flex items-center gap-2', x.hasKey ? 'text-ink' : 'text-warn')}><Mark state={x.hasKey ? 'full' : 'unavailable'} />{x.hasKey ? t('prêt') : t('non connecté')}</span>,
               },
             ]} />
 

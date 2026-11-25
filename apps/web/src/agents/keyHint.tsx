@@ -1,7 +1,7 @@
 import type { PublicInstance } from '../api';
 import { T } from '../i18n/T';
 
-/** What to do so that Intendia can chat with a new agent: its API server key goes in profileKeys. */
+/** By hand, when the button cannot (no dashboard): its API server key goes in profileKeys. */
 export function keyHint(name: string, source: PublicInstance['source']) {
   return source === 'env'
     ? <T k="Pour discuter avec {name} depuis Intendia, ajoutez sa clé API server dans {keys} de l’instance (variable {env}), puis redémarrez Intendia."

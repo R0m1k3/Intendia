@@ -9,6 +9,8 @@ import type { InstanceStore } from '../instances/store.js';
 import type { KanbanService, PublicWorker } from '../kanban/service.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { EnvListSchema } from '../connectors/config/index.js';
+import { randomToken } from '../crypto.js';
 
 export const SOUL_MAX = 64 * 1024;
 const DESCRIPTION_MAX = 1000;
@@ -73,6 +75,8 @@ export class AgentService {
     private readonly kanban: KanbanService,
     private readonly workspaces: WorkspaceService,
     private readonly db: Db,
+    /** Pause between two tries of a new profile key (tests: 0). */
+    private readonly retryMs = 750,
   ) {
     this.mask = new Masker(secret);
   }
@@ -149,7 +153,7 @@ export class AgentService {
    * Creates a profile. Hermes validates the name (format, reserved names) and its message is shown as is. Never sent:
    * `clone_channels` (two agents would fight over one bot), `mcp_servers`, `hub_skills`, `keep_skills`, `api_key`.
    */
-  async create(instanceId: string, input: CreateAgentInput): Promise<{ name: string; keySource: 'env' | 'db'; modelError: string | null }> {
+  async create(instanceId: string, input: CreateAgentInput): Promise<{ name: string; keySource: 'env' | 'db'; modelError: string | null; connectError: string | null }> {
     this.instance(instanceId);
     const name = input.name.trim();
     if (!name || name.length > 64) throw new ValidationError(msg('Nom d’agent manquant ou trop long (64 caractères au plus)'));
@@ -171,7 +175,57 @@ export class AgentService {
       body.model = input.model;
     }
     const res = ProfileCreatedSchema.parse(await this.call(instanceId, 'create', { body, timeoutMs: 60_000 }));
-    return { name, keySource: this.store.declarative ? 'env' : 'db', modelError: res.model_error ? this.mask.text(res.model_error) : null };
+    // a new agent is reachable from Intendia right away; without it, its page offers the button
+    let connectError: string | null = null;
+    try {
+      await this.connect(instanceId, name);
+    } catch (err) {
+      connectError = err instanceof Error ? this.mask.text(err.message) : String(err);
+    }
+    return { name, keySource: this.store.declarative ? 'env' : 'db', modelError: res.model_error ? this.mask.text(res.model_error) : null, connectError };
+  }
+
+  /**
+   * "Connecter à Intendia": a new API server key for the profile, written in its .env through the dashboard (Hermes
+   * reads it at the next request, no restart) and kept by Intendia. A profile that already has its own key is only
+   * replaced with `replace` (another client may use it: 409 `key_exists`). `verified: false` = written, but the API
+   * server did not accept it yet (gateway of the agent stopped).
+   */
+  async connect(instanceId: string, name: string, replace = false): Promise<{ hasKey: true; made: boolean; verified: boolean }> {
+    const inst = this.instance(instanceId);
+    if (name === 'default' || inst.profileKeys[name]) return { hasKey: true, made: false, verified: true };
+    if (!(await this.profiles(instanceId)).includes(name)) throw new NotFoundError(msg('Agent introuvable : {name}', { name }));
+    const cfg = (op: string, opts: CallOptions = {}) => callOp<unknown>(this.compat.http(instanceId), this.compat.get(instanceId), 'config', op, { profile: name, ...opts });
+    const env = EnvListSchema.parse(await cfg('env'));
+    if (env.API_SERVER_KEY?.is_set && !replace) {
+      throw new AdminError('key_exists', msg('L’agent {name} a déjà sa propre clé API server : la remplacer coupe les autres clients qui l’utilisent', { name }));
+    }
+    const key = randomToken(48);
+    await cfg('putEnv', { body: { key: 'API_SERVER_KEY', value: key } });
+    this.store.setProfileKey(instanceId, name, key);
+    const status = await this.tryKey(instanceId, name);
+    if (status === 404) {
+      this.store.removeProfileKeys(instanceId, name);
+      throw new AdminError('not_served', msg('Hermes ne sert pas l’agent {name} sous /p/{name}/ : activez gateway.multiplex_profiles dans la configuration de l’agent principal, puis redémarrez sa passerelle', { name }));
+    }
+    return { hasKey: true, made: true, verified: status === 200 };
+  }
+
+  /** Status of `/p/<name>/v1/capabilities` with the new key, tried for a few seconds (0 = no answer). */
+  private async tryKey(instanceId: string, name: string): Promise<number> {
+    let status = 0;
+    for (let i = 0; i < 4; i += 1) {
+      try {
+        const res = await this.compat.quietHttp(instanceId).request('api', 'GET', '/v1/capabilities', { profile: name, timeoutMs: 5000 });
+        status = res.status;
+        await res.body?.cancel().catch(() => undefined);
+      } catch {
+        status = 0;
+      }
+      if (status === 200 || status === 404) return status;
+      await new Promise((r) => setTimeout(r, this.retryMs));
+    }
+    return status;
   }
 
   /**
@@ -208,7 +262,7 @@ export class AgentService {
    * Intendia settings of the profile go with it. `keyLeft`: its API key stays in INTENDIA_INSTANCES (environment).
    */
   async remove(instanceId: string, name: string): Promise<{ ok: true; keyLeft: boolean; pending: boolean }> {
-    const inst = this.instance(instanceId);
+    this.instance(instanceId);
     if (name === 'default') throw new AdminError('protected', msg('Le profil principal ne peut pas être supprimé'));
     const uses = this.workspaces.usesProfile(instanceId, name);
     if (uses.workspaces.length || uses.sessions) {
@@ -216,7 +270,8 @@ export class AgentService {
     }
     const res = ProfileDeletedSchema.parse(await this.call(instanceId, 'remove', { params: { name }, query: { profile: name }, timeoutMs: 30_000 }));
     presets.dropProfile(this.db, instanceId, name);
-    return { ok: true, keyLeft: Boolean(inst.profileKeys[name]), pending: res.settlement_pending === true };
+    this.store.removeProfileKeys(instanceId, name);
+    return { ok: true, keyLeft: this.store.declaredProfileKey(instanceId, name), pending: res.settlement_pending === true };
   }
 
   async setDescription(instanceId: string, name: string, description: string): Promise<{ description: string }> {

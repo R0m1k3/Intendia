@@ -103,9 +103,9 @@ describe('workspaces', () => {
     expect(readdirSync(t.root)).toEqual([]);
   });
 
-  it('only accepts profiles that have a key', async () => {
+  it('only accepts profiles that have a key (a known agent without one is connected first)', async () => {
     const t = await testApp({ profileKeys: { dev: 'dev-profile-key-0000000' } });
-    expect((await t.request('POST', '/x/workspaces', { slug: 'a', name: 'a', instanceId: 'fake', profile: 'autre' })).status).toBe(400);
+    expect((await t.request('POST', '/x/workspaces', { slug: 'a', name: 'a', instanceId: 'fake', profile: 'autre' })).status).toBe(404);
     expect((await t.request('POST', '/x/workspaces', { slug: 'b', name: 'b', instanceId: 'fake', profile: 'dev' })).status).toBe(201);
   });
 

@@ -125,6 +125,13 @@ export class CompatService {
     return new HermesHttp(inst, this.fetchImpl, this.observer(instanceId));
   }
 
+  /** Same client without the observer: its refusals never mark the instance (a new profile key being tried). */
+  quietHttp(instanceId: string): HermesHttp {
+    const inst = this.store.get(instanceId);
+    if (!inst) throw new Error(`Unknown instance "${instanceId}"`);
+    return new HermesHttp(inst, this.fetchImpl);
+  }
+
   get(instanceId: string): CompatReport | undefined {
     return this.reports.get(instanceId);
   }

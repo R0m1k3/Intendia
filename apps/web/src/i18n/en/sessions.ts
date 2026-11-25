@@ -219,7 +219,7 @@ export default {
   "Travaille": "Working",
   "Ses sous-agents travaillent": "Its sub-agents are working",
   "Agent introuvable chez Hermes": "Agent not found in Hermes",
-  "Sans clé : lecture seule": "No key: read only",
+  "Pas encore connecté à Intendia": "Not connected to Intendia yet",
   "Prêt": "Ready",
   "Nouveau dossier de {agent}": "New folder for {agent}",
   "Nom du dossier": "Folder name",

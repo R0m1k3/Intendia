@@ -982,6 +982,21 @@ function makeApp(via: Via, opts: FakeOptions, sim: Simulator, stores: Stores, lo
       const token = via === 'dash' ? auth.dashToken : profile === 'default' ? FAKE_API_KEY : opts.profileKeys?.[profile];
       if (!token || c.req.header('authorization') !== `Bearer ${token}`) return c.json({ error: 'unauthorized' }, 401);
     }
+    // like Hermes: API_SERVER_KEY written in a profile's .env is that profile's key at the next request (/p/<profile>/)
+    if (via === 'dash' && path === '/api/env' && (c.req.query('profile') ?? 'default') !== 'default') {
+      const prof = c.req.query('profile')!;
+      const keys = (opts.profileKeys ??= {});
+      const b = (body ?? {}) as { key?: unknown; value?: unknown };
+      if (method === 'PUT' && b.key === 'API_SERVER_KEY' && typeof b.value === 'string') {
+        keys[prof] = b.value;
+        return c.json({ ok: true, key: 'API_SERVER_KEY', config_updates: [] });
+      }
+      if (method === 'GET') {
+        const conf = config.handle(via, method, path, c.req.query(), body, profile);
+        const list = conf ? ((await conf.json()) as Record<string, unknown>) : {};
+        return c.json({ ...list, API_SERVER_KEY: { is_set: Boolean(keys[prof]), redacted_value: keys[prof] ? '***' : null, is_password: true, category: 'messaging' } });
+      }
+    }
     // a stopped gateway takes its API server down: only the dashboard answers
     if (via === 'api' && profiles.stopped.has(profile)) return c.json({ error: 'gateway stopped (fake-hermes)' }, 503);
 
@@ -1362,6 +1377,7 @@ async function handleRuns(req: Request, method: string, path: string, body: unkn
 }
 
 export function createFakeHermes(opts: FakeOptions) {
+  opts.profileKeys ??= {};
   const files = new FilesStore(opts.filesRoot ?? mkdtempSync(join(tmpdir(), 'fake-hermes-files-')));
   files.delayMs = opts.filesDelayMs ?? 0;
   const sim = new Simulator(opts.stepMs ?? 5, files.root);
@@ -1392,6 +1408,8 @@ export function createFakeHermes(opts: FakeOptions) {
   return {
     api: makeApp('api', opts, sim, stores, requests, auth), dash: makeApp('dash', opts, sim, stores, requests, auth),
     requests, sim, crons, skills, config, profiles, kanban, files, git, monitor, memory, vault,
+    /** API server keys of the profiles (/p/<profile>/), written by PUT /api/env?profile=: tests may remove one. */
+    profileKeys: opts.profileKeys,
     /** The next creation of this kind is done and its answer lost (502, or no answer for the vault): see LoseOp. */
     get loseNext(): LoseOp | null { return lose.next; },
     set loseNext(op: LoseOp | null) { lose.next = op; },

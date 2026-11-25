@@ -13,6 +13,18 @@ export const instances = sqliteTable('instances', {
   createdAt: integer('created_at').notNull(),
 });
 
+export const profileKeys = sqliteTable(
+  'profile_keys',
+  {
+    instanceId: text('instance_id').notNull(),
+    profile: text('profile').notNull(),
+    keyEnc: text('key_enc').notNull(),
+    apiOrigin: text('api_origin').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.instanceId, t.profile] })],
+);
+
 export const authSessions = sqliteTable('auth_sessions', {
   id: text('id').primaryKey(),
   createdAt: integer('created_at').notNull(),
