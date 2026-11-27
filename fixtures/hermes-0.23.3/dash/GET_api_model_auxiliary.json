@@ -1,0 +1,99 @@
+{
+  "status": 200,
+  "body": {
+    "tasks": [
+      {
+        "task": "vision",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "compression",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "approval",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "mcp",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "title_generation",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "review",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "voice_chat",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": "none",
+        "local_endpoint": false
+      },
+      {
+        "task": "triage_specifier",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "kanban_decomposer",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "profile_describer",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      },
+      {
+        "task": "curator",
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "reasoning_effort": null,
+        "local_endpoint": false
+      }
+    ],
+    "main": {
+      "provider": "auto",
+      "model": "anthropic/claude-opus-4.6"
+    }
+  }
+}

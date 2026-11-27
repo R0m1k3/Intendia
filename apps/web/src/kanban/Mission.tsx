@@ -136,9 +136,9 @@ export function MissionSheet({ inst, board, missionId, assignees, onClose, onCre
   const m = mission.data?.mission;
   // the list of the page and the board follow the state seen here (split over, children parked)
   const seen = m?.state;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (seen && seen !== 'decomposing') void after();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seen]);
 
   if (!missionId) {

@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "body": {
+    "path": "/opt/data/workspace",
+    "parent": null,
+    "entries": [],
+    "root": "/opt/data/workspace",
+    "locked_root": "/opt/data/workspace",
+    "can_change_path": false
+  }
+}

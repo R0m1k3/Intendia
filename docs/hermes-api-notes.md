@@ -2,6 +2,14 @@
 
 Observed on a reference install (official installer, isolated `HERMES_HOME`), recorded in `fixtures/hermes-0.23.0/`.
 
+## Hermes 0.23.3 (weekly CI recording, 2026-11-23)
+
+`fixtures/hermes-0.23.3/` is the recording of the weekly check (`hermes-compat.yml`, official image `latest`): every
+module is complete and the smoke checks pass. Gone from the configuration: `agent.verbose` and `display.copy_shortcut`
+(Intendia reads neither). New in the dashboard, not used by Intendia: `/api/cloud/agents`, `/api/ops/backup/chunk`,
+`/api/ops/transfer/*`, `/api/skills/hub/updates`; config key `agent.codex_request_compression`. This recording is also
+the first one with the read-only answers of files, git, memory, logs, usage and the MCP catalog.
+
 ## Hermes 0.23.1 (weekly CI recording, 2026-11-10)
 
 `fixtures/hermes-0.23.1/` comes from the official image in an empty container: every module is complete,

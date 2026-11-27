@@ -50,7 +50,7 @@ function useFolded(inst: string | null): [ReadonlySet<string>, (key: string, fol
     try { return new Set<string>(JSON.parse(localStorage.getItem(storeKey) ?? '[]') as string[]); } catch { return new Set<string>(); }
   };
   const [set, setSet] = useState<ReadonlySet<string>>(read);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => setSet(read()), [storeKey]);
   const toggle = (key: string, folded: boolean) => setSet((prev) => {
     const next = new Set(prev);

@@ -1,0 +1,16 @@
+{
+  "status": 422,
+  "body": {
+    "detail": [
+      {
+        "type": "missing",
+        "loc": [
+          "query",
+          "id"
+        ],
+        "msg": "Field required",
+        "input": null
+      }
+    ]
+  }
+}

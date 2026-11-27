@@ -103,13 +103,13 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
   });
   const stale = codeOf(content.error) === 'stale';
   // the entry changed between the list and its opening: read the list again, its new id replaces the old one
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (!stale) return;
     void reload().then((fresh) => {
       const id = fresh.entries.find((e) => slotOf(e.id) === slotOf(entry.id))?.id;
       if (id && id !== entry.id) onSaved(id);
     }, () => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stale, entry.id]);
   const busy = save.isPending || remove.isPending;
 

@@ -1,0 +1,112 @@
+{
+  "status": 200,
+  "body": {
+    "columns": [
+      {
+        "key": "triage",
+        "label": "Triage",
+        "icon": "◇",
+        "drag_target": true
+      },
+      {
+        "key": "todo",
+        "label": "Todo",
+        "icon": "◻",
+        "drag_target": true
+      },
+      {
+        "key": "scheduled",
+        "label": "Scheduled",
+        "icon": "⏱",
+        "drag_target": false
+      },
+      {
+        "key": "ready",
+        "label": "Ready",
+        "icon": "▶",
+        "drag_target": true
+      },
+      {
+        "key": "running",
+        "label": "Running",
+        "icon": "●",
+        "drag_target": false
+      },
+      {
+        "key": "blocked",
+        "label": "Blocked",
+        "icon": "⊘",
+        "drag_target": true
+      },
+      {
+        "key": "review",
+        "label": "Review",
+        "icon": "◎",
+        "drag_target": false
+      },
+      {
+        "key": "done",
+        "label": "Done",
+        "icon": "✓",
+        "drag_target": true
+      }
+    ],
+    "manual": {
+      "triage": [
+        "ready",
+        "todo"
+      ],
+      "todo": [
+        "ready",
+        "scheduled",
+        "triage"
+      ],
+      "scheduled": [
+        "ready",
+        "todo",
+        "triage"
+      ],
+      "ready": [
+        "blocked",
+        "done",
+        "review",
+        "scheduled",
+        "todo",
+        "triage"
+      ],
+      "running": [
+        "blocked",
+        "done",
+        "ready",
+        "review",
+        "scheduled",
+        "todo",
+        "triage"
+      ],
+      "blocked": [
+        "done",
+        "ready",
+        "scheduled",
+        "todo",
+        "triage"
+      ],
+      "review": [
+        "done",
+        "ready",
+        "todo",
+        "triage"
+      ],
+      "done": [
+        "ready",
+        "todo",
+        "triage"
+      ],
+      "archived": [
+        "ready",
+        "todo",
+        "triage"
+      ]
+    },
+    "archived": "archived"
+  }
+}

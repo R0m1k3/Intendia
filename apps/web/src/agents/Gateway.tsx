@@ -50,6 +50,7 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (startedAt === null || action === null) return;
     let cancelled = false;
@@ -62,7 +63,7 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
       if (Date.now() - startedAt > POLL_MAX_MS) { setTimedOut(true); setStartedAt(null); }
     }, POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [startedAt, action, inst, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [startedAt, action, inst, profile]);
 
   const go = async (a: GatewayAction) => {
     setNotice(null);

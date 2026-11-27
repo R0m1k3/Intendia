@@ -21,6 +21,7 @@ export function useRestart(inst: string, profile: string, onDone: () => void): R
     mutationFn: () => api.restartGateway(inst, profile),
     onSuccess: () => { setStatus(null); setDone(false); setTimedOut(false); setPollError(null); setStartedAt(Date.now()); },
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (startedAt === null) return;
     let cancelled = false;
@@ -38,7 +39,7 @@ export function useRestart(inst: string, profile: string, onDone: () => void): R
       if (Date.now() - startedAt > POLL_MAX_MS) { setTimedOut(true); setStartedAt(null); }
     }, POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [startedAt, inst, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [startedAt, inst, profile]);
   return {
     running: begin.isPending || startedAt !== null, done, status, error: begin.error ?? pollError, timedOut,
     start: () => begin.mutate(), dismiss: () => { setDone(false); setTimedOut(false); setStatus(null); begin.reset(); setPollError(null); },

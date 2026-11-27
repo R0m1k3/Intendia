@@ -60,6 +60,7 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
 
   // first opening for this instance (or its stored session's workspace is gone): a new session
   const ready = workspaces.length > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (!ready) return;
     const stored = sideSession(inst);
@@ -75,7 +76,6 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
       },
     );
     return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inst, ready]);
 
   // closed, expanded or another instance: the frame's draft is saved before React removes it (layout cleanup runs

@@ -49,6 +49,7 @@ export function AsideQuestion({ inst, slug, parentId, profile }: { inst: string;
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     const s = stored(parentId);
     if (!s) { void startNew(); return; }
@@ -61,7 +62,6 @@ export function AsideQuestion({ inst, slug, parentId, profile }: { inst: string;
       },
     );
     return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inst, parentId]);
 
   useLayoutEffect(() => () => flushFrame(frame.current), []);

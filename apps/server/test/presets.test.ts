@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+
 import { describe, expect, it } from 'vitest';
 import { settings } from '../src/db/schema.js';
 import { presets } from '../src/chat/presets.js';

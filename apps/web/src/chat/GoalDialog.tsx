@@ -22,6 +22,7 @@ export function GoalDialog({ initial, editing, autoApprove, onSubmit, onClose }:
   const [error, setError] = useState<unknown>(null);
   const area = useRef<HTMLTextAreaElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     const root = document.getElementById('root');
     root?.setAttribute('inert', '');
@@ -29,7 +30,6 @@ export function GoalDialog({ initial, editing, autoApprove, onSubmit, onClose }:
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); } };
     window.addEventListener('keydown', key, true);
     return () => { window.removeEventListener('keydown', key, true); root?.removeAttribute('inert'); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const maxN = Number(max);

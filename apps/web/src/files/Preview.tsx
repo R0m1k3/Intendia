@@ -78,6 +78,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
   const [saving, setSaving] = useState(false);
   useEffect(() => { setEditing(false); setDraft(null); setBase(null); setSource(false); setError(null); }, [path]);
   const canEdit = Boolean(slug && isText && entry && !tooBig);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (!startEditing || !entry) return;
     if (canEdit && text.data !== undefined) {
@@ -86,7 +87,6 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
       setEditing(true);
       onEditingStarted?.();
     } else if (!canEdit) onEditingStarted?.(); // not editable here: the normal preview
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startEditing, canEdit, entry, text.data]);
 
   const save = async () => {

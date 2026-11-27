@@ -173,9 +173,6 @@ export function reduceEvent(state: RunState, ev: RunEvent): RunState {
           choices: Array.isArray(ev.choices) ? ev.choices.map(String) : ['once', 'deny'],
         },
       };
-    // Hermes says only that it took a reorientation: the page shows its text (intendia.steer, see useRun)
-    case 'run.steered':
-      return s;
     case 'intendia.steer':
       return {
         ...s, entries: [...closeStreaming(s.entries), { kind: 'user', key: key('steer', ev.seq), text: str(ev.text), ts, steer: true }],

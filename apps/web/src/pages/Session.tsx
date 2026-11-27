@@ -56,7 +56,7 @@ import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/hist
 import { COMMANDS, type Command, type CommandName } from '../chat/commands';
 import { formatTokens } from '../chat/format';
 import { Menu, Picker } from '../components/Menu';
-import { Button, copyText, cx, ErrorText, SkeletonThread } from '../components/ui';
+import { copyText, cx, ErrorText, SkeletonThread } from '../components/ui';
 import { ask, askText } from '../components/Dialog';
 import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
 import { SubagentsBar } from '../chat/SubagentsBar';
@@ -369,6 +369,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   };
 
   // the head of the queue leaves once the run is over (and not paused); a refused send puts it back and pauses
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (active || drain === null || !inst) return;
     setDrain(null);
@@ -383,7 +384,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
       const reason = err instanceof ApiError && err.status === 409 ? t('un autre onglet a lancé un travail') : t('l’envoi a échoué');
       setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills, head.key), reason));
     });
-  }, [active, drain]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, drain]);
 
   /** the waiting message being given to the agent (« Envoyer maintenant »), until Hermes answered */
   const [sendingNow, setSendingNow] = useState<string | null>(null);
@@ -901,6 +902,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     if (follow.current.pinned) toEnd(main);
   };
   const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     const main = box();
     const thread = bottom.current?.parentElement;
@@ -911,8 +913,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     grow.observe(thread);
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(followIfPinned, [tail, approval, clarify]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
+  useEffect(followIfPinned, [tail, approval, clarify]);
 
   // « Afficher les heures » (time of each step) and « Plan » / ↑ ↓ (jump between the user's questions)
   const [times, setTimes] = useStoredFlag('intendia-thread-times');

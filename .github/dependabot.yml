@@ -1,0 +1,18 @@
+# One grouped pull request a week for the npm packages (the whole workspace), one for the GitHub Actions.
+# CI (typecheck, tests, Docker build, real Hermes, e2e) decides whether it can be merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday, time: '06:00', timezone: Europe/Paris }
+    open-pull-requests-limit: 3
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, time: '06:00', timezone: Europe/Paris }
+    groups:
+      actions:
+        patterns: ['*']

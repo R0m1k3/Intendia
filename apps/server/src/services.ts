@@ -31,7 +31,6 @@ import { GoalStore } from './chat/goal.js';
 import { DelegationWatcher, WakeStore } from './chat/wake.js';
 import { GoalRunner } from './chat/goal-runner.js';
 import type { StartRunDeps } from './chat/start-run.js';
-import { PromptService } from './prompts/service.js';
 import { ChannelService } from './channels/service.js';
 import { ChannelRunner } from './channels/runner.js';
 

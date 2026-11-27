@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api';

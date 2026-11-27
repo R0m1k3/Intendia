@@ -34,7 +34,8 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
 
   // reading the options may write discovered models into the file: other tabs must reread
   const invalidateOthers = useInvalidateOthers(inst, profile);
-  useEffect(() => { if (models.dataUpdatedAt) void invalidateOthers(); }, [models.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
+  useEffect(() => { if (models.dataUpdatedAt) void invalidateOthers(); }, [models.dataUpdatedAt]);
 
   if (models.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des modèles…')}</p>;
   if (models.isError || !models.data) return <ErrorText error={models.error} />;
