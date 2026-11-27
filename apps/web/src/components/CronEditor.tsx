@@ -117,6 +117,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
   const profile = cron?.profile ?? ws?.profile ?? 'default';
 
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => {
       const schedule = toSchedule(form);
       const input: CronInput = {

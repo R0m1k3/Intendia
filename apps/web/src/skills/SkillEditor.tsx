@@ -71,6 +71,7 @@ export function SkillContent({ inst, profile, name, editable }: { inst: string; 
   /** Revision of the text the edit started from: a newer one in Hermes gives 409 `stale`. */
   const [base, setBase] = useState('');
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (d: string) => api.putSkillContent(inst, profile, name, d, base),
     onError: async (err) => {
       if (!isStale(err) || !(await askReload(draft))) return;

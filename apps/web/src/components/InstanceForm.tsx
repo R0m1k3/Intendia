@@ -3,6 +3,7 @@ import { api, type CompatReport, type InstanceInput, type InstancePatch, type Pu
 import { Button, ErrorText, Field, Input, moduleLabel, StateMark } from './ui';
 import { t } from '../i18n';
 import { T } from '../i18n/T';
+import { Hint } from './Hint';
 
 const EMPTY: InstanceInput = { id: '', label: '', api: 'http://hermes:8642', apiKey: '', dashboard: '', dashboardToken: '', dashboardLink: '' };
 
@@ -84,13 +85,13 @@ export function InstanceForm({ onSaved, edit }: { onSaved: (r: CompatReport) => 
         <Field label={t('Nom affiché')}>
           <Input value={v.label} onChange={set('label')} required placeholder={t('Hermes principal')} />
         </Field>
-        <Field label={t('URL de l’API server')} hint={t('Port 8642, dans le réseau Docker')}>
+        <Field label={t('URL de l’API server')} hint={<>{t('Port 8642, dans le réseau Docker')} <Hint id="api-server" /></>}>
           <Input value={v.api} onChange={set('api')} required type="url" />
         </Field>
         <Field label={t('Clé de l’API server')} hint={edit ? keyHelp : t('API_SERVER_KEY, 16 caractères minimum')}>
           <Input value={v.apiKey} onChange={set('apiKey')} required={!edit} minLength={16} type="password" autoComplete="off" name="apiKey" />
         </Field>
-        <Field label={t('URL du dashboard')} hint={t('Port 9119 ; requis pour les fichiers des dossiers')}>
+        <Field label={t('URL du dashboard')} hint={<>{t('Port 9119 ; requis pour les fichiers des dossiers')} <Hint id="dashboard" /></>}>
           <Input value={v.dashboard} onChange={set('dashboard')} type="url" placeholder="http://hermes:9119" />
         </Field>
         <Field label={t('Jeton du dashboard')} hint={edit ? keyHelp : 'HERMES_DASHBOARD_SESSION_TOKEN'}>

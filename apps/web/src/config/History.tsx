@@ -25,13 +25,14 @@ export function ConfigHistory({ inst, profile, can, onSaved }: TabProps) {
   });
   const invalidate = useInvalidateConfig(inst, profile);
   const restore = useMutation({
+    meta: { done: t('Restauré') },
     mutationFn: () => api.restoreConfig(inst, profile, selected!, current.data!.version),
     onSuccess: async () => { setSelected(null); await invalidate(); onSaved(true); },
     onError: async (err) => { if (errorCode(err) === 'config_changed') await current.refetch(); },
   });
 
   if (versions.isPending) return <p className="text-sm text-ink-soft">{t('Lecture de l’historique…')}</p>;
-  if (versions.isError) return <ErrorText error={versions.error} />;
+  if (versions.isError) return <ErrorText error={versions.error} onRetry={() => void versions.refetch()} />;
   const list = versions.data ?? [];
 
   return (
@@ -67,7 +68,7 @@ export function ConfigHistory({ inst, profile, can, onSaved }: TabProps) {
             <DiffView before={current.data.yaml} after={copy.data.yaml} empty={t('Cette copie est identique au fichier actuel.')} />
           </>
         )}
-        {copy.isError && <ErrorText error={copy.error} />}
+        {copy.isError && <ErrorText error={copy.error} onRetry={() => void copy.refetch()} />}
       </div>
     </div>
   );

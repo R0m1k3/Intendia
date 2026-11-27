@@ -58,7 +58,7 @@ export function ConfigPlugins({ inst, can, onVariable, onRestart }: {
       {jobId && <JobStrip job={job.data ?? null} error={job.error} onVariable={onVariable} onClose={running ? undefined : () => { setJobId(null); qc.setQueryData(['plugin-jobs', inst], null); }} />}
       <Panel title={t('Installés')} bodyClassName="divide-y divide-line/70 border-t border-line/70">
         {installed.isPending && <p className="p-5 text-sm text-ink-soft">{t('Lecture des plugins…')}</p>}
-        <div className="empty:hidden"><ErrorText error={installed.error} /></div>
+        <div className="empty:hidden"><ErrorText error={installed.error} onRetry={() => void installed.refetch()} /></div>
         {installed.isSuccess && own.length === 0 && <p className="p-5 text-sm text-ink-soft">{t('Aucun plugin ajouté : ceux du catalogue s’installent plus bas.')}</p>}
         {own.map((p) => <PluginRow key={p.name} p={p} inst={inst} can={can} update={updates.has(p.name)} onRestart={onRestart} />)}
         {bundled.length > 0 && (
@@ -126,7 +126,7 @@ function PluginRow({ p, inst, can, update, onRestart }: { p: Plugin; inst: strin
     onRestart();
   };
   const toggle = useMutation({ mutationFn: () => api.setPluginEnabled(inst, p.name, !isOn(p)), onSuccess: done });
-  const remove = useMutation({ mutationFn: () => api.removePlugin(inst, p.name), onSuccess: done });
+  const remove = useMutation({ meta: { done: t('Désinstallé') }, mutationFn: () => api.removePlugin(inst, p.name), onSuccess: done });
   const busy = toggle.isPending || remove.isPending;
   return (
     <div className="space-y-1.5 px-5 py-3.5" data-plugin={p.name}>

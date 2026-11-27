@@ -34,6 +34,7 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
   const data = form.data;
   const changes = useMemo(() => (data ? changeList(data.values, pending) : []), [data, pending]);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => api.saveConfig(inst, profile, Object.fromEntries(changes.map((c) => [c.path, c.after])), (baseVersion ?? data!.version)!),
     onSuccess: async () => {
       setPending({}); setTexts({}); setReview(false); setConflict(false); setBaseVersion(null);
@@ -45,7 +46,7 @@ export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & {
 
   useDirtyGuard(changes.length > 0 || Object.keys(bad).length > 0);
   if (form.isPending) return <p className="text-sm text-ink-soft">{t('Lecture de la configuration…')}</p>;
-  if (form.isError || !data) return <ErrorText error={form.error} />;
+  if (form.isError || !data) return <ErrorText error={form.error} onRetry={() => void form.refetch()} />;
 
   const cat = category ?? data.categories[0] ?? 'general';
   const needle = q.trim().toLowerCase();

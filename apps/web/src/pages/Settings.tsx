@@ -5,7 +5,7 @@ import { api, type McpState, type McpTest, type ModuleId, type ModuleState } fro
 import { InstanceForm } from '../components/InstanceForm';
 import { Narrow, PageHeader } from '../components/Layout';
 import { useModuleAvailability } from '../components/ModuleNotice';
-import { Button, Chips, copyText, cx, ErrorText, Mark, worst } from '../components/ui';
+import { Button, Chips, copyText, cx, ErrorText, Mark, SkeletonLines, worst } from '../components/ui';
 import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask, askText } from '../components/Dialog';
 import { langSetting, locale, setLangSetting, t, type LangSetting } from '../i18n';
@@ -76,7 +76,7 @@ function ShareFileTool({ instanceId, label, many }: { instanceId: string; label:
   const [copied, setCopied] = useState(false);
   const [shown, setShown] = useState(false);
   const d = info.data;
-  if (!d) return <ErrorText error={info.error} />;
+  if (!d) return info.error ? <ErrorText error={info.error} onRetry={() => void info.refetch()} /> : <SkeletonLines rows={3} className="px-4 py-3" />;
   const auto = ops.available;
   const st = MCP_STATE[d.state];
   const block = mcpBlock(d.url, d.token);
@@ -237,10 +237,12 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<Theme>((localStorage.getItem('intendia-theme') as Theme) ?? 'system');
   const [lang, setLang] = useState<LangSetting>(langSetting);
   const remove = useMutation({
+    meta: { done: t('Retiré') },
     mutationFn: api.removeInstance,
     onSuccess: () => qc.invalidateQueries(),
   });
   const rename = useMutation({
+    meta: { done: t('Renommé') },
     mutationFn: ({ id, label }: { id: string; label: string }) => api.renameInstance(id, label),
     onSuccess: () => qc.invalidateQueries(),
   });
@@ -275,6 +277,8 @@ export function SettingsPage() {
               <Button variant="primary" onClick={() => setAdding(true)}><Plus className="size-4" strokeWidth={1.5} />{t('Ajouter une instance')}</Button>
             )}
           </div>
+          {instances.isPending && <SkeletonLines rows={3} className="px-4 pb-3" />}
+          {instances.error && <div className="px-4 pb-3"><ErrorText error={instances.error} onRetry={() => void instances.refetch()} /></div>}
           {(remove.error || rename.error) && <div className="px-4 pb-3"><ErrorText error={remove.error ?? rename.error} /></div>}
           {list.map((i) => {
             const r = reports.find((x) => x.instanceId === i.id);

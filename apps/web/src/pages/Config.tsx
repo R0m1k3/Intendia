@@ -22,6 +22,7 @@ import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask } from '../components/Dialog';
 import { t } from '../i18n';
 import { T } from '../i18n/T';
+import { term, type TermId } from '../help/glossary';
 
 const REQUIRED: OpRef[] = [['config', 'get']];
 const OPTIONAL: OptionalOp[] = [
@@ -58,6 +59,10 @@ const TAB: Record<Exclude<ConfigTab, 'plugins'>, { label: string; op: string | s
   historique: { label: t('Historique'), op: 'raw' },
 };
 
+/** The sentence under the tabs: what this section is, in plain words (help/glossary.ts). */
+const TAB_TERM: Partial<Record<ConfigTab, TermId>> = {
+  modeles: 'fournisseur', fournisseurs: 'fournisseur', 'garde-fous': 'garde-fous', yaml: 'yaml', variables: 'variables', mcp: 'mcp', plateformes: 'passerelle',
+};
 
 export function ConfigPage() {
   const { inst } = useParams({ strict: false }) as { inst: string };
@@ -121,6 +126,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         {a.available && tab && (
           <>
             <Chips role="tab" label={t('Sections')} value={tab} items={tabs.map((k) => ({ key: k, label: k === 'plugins' ? t('Plugins') : TAB[k].label }))} onChange={(k) => go({ tab: k, key: undefined })} />
+            {TAB_TERM[tab] && <p className="-mt-1 max-w-3xl text-sm text-ink-faint" data-tab-help>{term(TAB_TERM[tab]).text}</p>}
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
             {tab === 'reglages' && <ConfigForm {...props} />}

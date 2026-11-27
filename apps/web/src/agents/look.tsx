@@ -16,6 +16,7 @@ export function useAgentLooks(inst: string | null): { color: (name: string) => s
   const qc = useQueryClient();
   const looks = useQuery({ queryKey: ['agent-looks', inst], queryFn: () => api.agentLooks(inst!).then((r) => r.looks), enabled: Boolean(inst), staleTime: 60_000, retry: false });
   const save = useMutation({
+    meta: { fail: true },
     mutationFn: (next: Record<string, number>) => api.setAgentLooks(inst!, next),
     onSuccess: (r) => qc.setQueryData(['agent-looks', inst], r.looks),
   });

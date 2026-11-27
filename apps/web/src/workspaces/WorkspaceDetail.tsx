@@ -46,6 +46,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
     },
   });
   const saveAgents = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (body: string) => api.saveAgentsMd(slug, body, agentsBase),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents-md', slug] }).then(() => setText(null)),
     onError: async (err) => {
@@ -117,7 +118,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
         )}
       />
       <DetailBody>
-        <ErrorText error={ws.error} />
+        <ErrorText error={ws.error} onRetry={() => void ws.refetch()} />
         <div className="empty:hidden"><ChatNotice instanceId={w?.instanceId} /></div>
         <ErrorText error={create.error} />
         <ErrorText error={saveName.error} />
@@ -139,6 +140,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
               placeholder={t('Ex. Réponds en français, envoie les fichiers sur Telegram')}
               className="w-full resize-y rounded-[10px] border border-line bg-sheet p-3 font-mono text-[13px] leading-relaxed placeholder:font-sans placeholder:text-ink-faint focus:border-ink focus:outline-none"
             />
+            <ErrorText error={agents.error} onRetry={() => void agents.refetch()} />
             <ErrorText error={saveAgents.error} />
             {text !== null && text !== agents.data?.text && <Button variant="dark" disabled={saveAgents.isPending}>{t('Enregistrer')}</Button>}
           </form>
@@ -173,6 +175,8 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
             <h3 id="ws-sessions" className="flex-1 text-[15px] font-semibold">{archived ? t('Sessions archivées') : t('Sessions')}</h3>
             <Button variant="ghost" className="h-8 text-xs" onClick={() => setArchived(!archived)}>{archived ? t('Sessions en cours') : t('Archivées')}</Button>
           </div>
+          {sessions.isPending && <div className="border-t border-line/70"><SkeletonList rows={3} className="py-1" /></div>}
+          {sessions.error && <div className="border-t border-line/70 p-3"><ErrorText error={sessions.error} onRetry={() => void sessions.refetch()} /></div>}
           {sessions.isSuccess && list.length === 0 && (
             <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{archived ? t('Aucune session archivée') : t('Aucune session : ouvrez-en une pour écrire à l’agent')}</p>
           )}

@@ -51,7 +51,7 @@ export function LinkRow({ l }: { l: ShareLink }) {
   const [copied, setCopied] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['links'] });
   const setPublic = useMutation({ mutationFn: (until: number | null) => api.setLinkPublic(l.token, until), onSuccess: () => { setChoosing(false); return refresh(); } });
-  const revoke = useMutation({ mutationFn: () => api.revokeLink(l.token), onSuccess: refresh });
+  const revoke = useMutation({ meta: { done: t('Lien révoqué') }, mutationFn: () => api.revokeLink(l.token), onSuccess: refresh });
   const s = state(l);
   const name = l.path.slice(l.path.lastIndexOf('/') + 1);
   const inWs = l.workspace ? l.path.slice(l.workspace.length + 1) : null;

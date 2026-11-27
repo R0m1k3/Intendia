@@ -18,7 +18,7 @@ export function ConfigMcp({ inst, profile, can, onSaved }: TabProps) {
   const [left, setLeft] = useState<string | null>(null);
   const [catalog, setCatalog] = useState(false);
   if (servers.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des serveurs MCP…')}</p>;
-  if (servers.isError) return <ErrorText error={servers.error} />;
+  if (servers.isError) return <ErrorText error={servers.error} onRetry={() => void servers.refetch()} />;
   const list = servers.data ?? [];
   return (
     <div className="space-y-4">
@@ -51,6 +51,7 @@ function McpRow({ s, inst, profile, can, onSaved, onTokenLeft }: {
     onSuccess: async () => { await invalidate(); onSaved(); },
   });
   const remove = useMutation({
+    meta: { done: t('Retiré') },
     mutationFn: () => api.removeMcp(inst, profile, s.name),
     onSuccess: async (res) => { onTokenLeft(res.tokenLeft ?? null); await invalidate(); onSaved(); },
   });
@@ -97,6 +98,7 @@ function AddMcp({ inst, profile, existing, onSaved }: { inst: string; profile: s
   const [args, setArgs] = useState('');
   const invalidate = useInvalidateConfig(inst, profile);
   const add = useMutation({
+    meta: { done: t('Ajouté') },
     mutationFn: () => {
       const input: McpInput = kind === 'url'
         ? { name: name.trim(), url: url.trim(), ...(token ? { token } : {}) }

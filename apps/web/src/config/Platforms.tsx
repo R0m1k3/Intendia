@@ -23,7 +23,7 @@ export function platformMark(p: Platform): ModuleState {
 export function ConfigPlatforms({ inst, profile }: TabProps) {
   const platforms = useQuery({ queryKey: configKey(inst, profile, 'platforms'), queryFn: () => api.platforms(inst, profile).then((r) => r.platforms) });
   if (platforms.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des plateformes…')}</p>;
-  if (platforms.isError) return <ErrorText error={platforms.error} />;
+  if (platforms.isError) return <ErrorText error={platforms.error} onRetry={() => void platforms.refetch()} />;
   const list = platforms.data ?? [];
   return (
     <Panel title={t('Plateformes de messagerie')} bodyClassName="divide-y divide-line/70 border-t border-line/70">

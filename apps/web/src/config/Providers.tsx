@@ -21,7 +21,7 @@ export function ConfigProviders({ inst, profile, can, onVariable, onSaved }: Tab
   const refresh = useRefreshProviders(inst, profile);
   const custom = useQuery({ queryKey: configKey(inst, profile, 'custom-providers'), queryFn: () => api.customProviders(inst, profile) });
   if (info.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des fournisseurs…')}</p>;
-  if (info.isError) return <ErrorText error={info.error} />;
+  if (info.isError) return <ErrorText error={info.error} onRetry={() => void info.refetch()} />;
   return (
     <div className="space-y-6">
       <p className="text-sm text-ink-soft">
@@ -174,6 +174,7 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
   const [token, setToken] = useState('');
   const [left, setLeft] = useState<string[]>([]);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: async () => {
       try {
         return await api.setAnthropicToken(inst, profile, token);
@@ -196,6 +197,7 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
     },
   });
   const remove = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: () => api.removeAnthropicToken(inst, profile),
     onSuccess: (r) => { setLeft(r.left); if (r.restartNeeded) onRestart(); void refresh(); },
   });
@@ -387,7 +389,7 @@ function KeyRow({ inst, profile, k, name, canRemove, canDeleteEnv, endpoints, re
   refresh: Refresh; onVariable?: (key: string) => void;
 }) {
   const qc = useQueryClient();
-  const remove = useMutation({ mutationFn: () => api.removeProviderKey(inst, profile, k.provider, k.id), onSuccess: () => refresh() });
+  const remove = useMutation({ meta: { done: t('Supprimé') }, mutationFn: () => api.removeProviderKey(inst, profile, k.provider, k.id), onSuccess: () => refresh() });
   const variable = k.source.startsWith('env:') ? k.source.slice(4) : null;
   // the variable is deleted from Hermes's .env; still listed after a reload = set outside Hermes (container env)
   const [tried, setTried] = useState(false);
@@ -448,6 +450,7 @@ function AddKey({ inst, profile, providers, refresh }: { inst: string; profile: 
   const [label, setLabel] = useState('');
   const [key, setKey] = useState('');
   const add = useMutation({
+    meta: { done: t('Ajouté') },
     mutationFn: () => api.addProviderKey(inst, profile, { provider, apiKey: key.trim(), label: label.trim() || undefined }),
     // the key field is emptied after a success as after a failure: the value is never kept on screen
     onSettled: () => setKey(''),
@@ -485,6 +488,7 @@ function CustomEndpoints({ inst, profile, data, error, refresh }: {
 }) {
   const [left, setLeft] = useState<string | null>(null);
   const remove = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: (slug: string) => api.removeCustomProvider(inst, profile, slug),
     onSuccess: async (r) => { setLeft(r.keyLeft ?? null); await refresh(); },
   });
@@ -543,6 +547,7 @@ function AddEndpoint({ inst, profile, refresh }: { inst: string; profile: string
   const [key, setKey] = useState('');
   const [model, setModel] = useState('');
   const add = useMutation({
+    meta: { done: t('Ajouté') },
     mutationFn: () => api.addCustomProvider(inst, profile, {
       name: name.trim(), baseUrl: baseUrl.trim(), ...(key.trim() ? { apiKey: key.trim() } : {}), ...(model.trim() ? { model: model.trim() } : {}),
     }),

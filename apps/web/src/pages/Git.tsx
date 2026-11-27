@@ -6,7 +6,7 @@ import { PageHeader } from '../components/Layout';
 import { ask } from '../components/Dialog';
 import { Picker } from '../components/Menu';
 import { ModuleNotice, useModuleAvailability } from '../components/ModuleNotice';
-import { Button, cx, ErrorText, Panel } from '../components/ui';
+import { Button, cx, ErrorText, Panel, SkeletonLines } from '../components/ui';
 import DiffView from '../files/viewers/DiffView';
 import { CommitBox } from '../git/CommitBox';
 import { GIT_REQUIRED, GitFiles } from '../git/GitFiles';
@@ -165,7 +165,8 @@ export function GitPage() {
             </span>
           ) : undefined}
         >
-          <div className="px-4 pt-3 empty:hidden"><ErrorText error={status.error ?? actionError} /></div>
+          <div className="px-4 pt-3 empty:hidden"><ErrorText error={status.error ?? actionError} onRetry={status.error && !actionError ? () => void status.refetch() : undefined} /></div>
+          {status.isPending && <SkeletonLines rows={5} className="px-4 py-3" />}
           {note && (
             <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
               <span className="flex-1">{note}</span>

@@ -8,7 +8,7 @@ import { PageHeader } from '../components/Layout';
 import { Menu } from '../components/Menu';
 import { useModuleAvailability } from '../components/ModuleNotice';
 import { GIT_REQUIRED } from '../git/GitFiles';
-import { Button, cx, ErrorText, Input, Panel } from '../components/ui';
+import { Button, cx, Empty, ErrorText, Input, Panel, SkeletonLines } from '../components/ui';
 import { DropZone } from '../files/DropZone';
 import { FileRows, isDirEntry } from '../files/FileRows';
 import { Preview } from '../files/Preview';
@@ -159,7 +159,7 @@ export function FilesPage() {
               </div>
             }
           >
-            <div className="px-4 pt-3 empty:hidden"><ErrorText error={error ?? treeError} /></div>
+            <div className="px-4 pt-3 empty:hidden"><ErrorText error={error ?? treeError} onRetry={error ? undefined : () => void tree.refetch()} /></div>
             {notice && (
               <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
                 <span className="flex-1">{notice}</span>
@@ -170,11 +170,11 @@ export function FilesPage() {
             {entries.length > 0 ? (
               <FileRows scope={workspaceScope(slug)} entries={entries} selected={open} onOpen={onOpen} actions onError={setError} onNotice={setNotice} agentRoot={tree.data?.agentRoot} />
             ) : (tree.isSuccess && !debounced) ? (
-              <div className="px-4 py-12 text-center">
-                <p className="text-sm font-medium">{t('Aucun fichier ici')}</p>
-                <p className="mt-1 text-sm text-ink-faint">{t('Glissez-en un dans cette zone, ou utilisez Déposer')}</p>
-              </div>
-            ) : null}
+              <Empty icon={<Folder strokeWidth={1.5} />} title={t('Aucun fichier ici')}
+                actions={<Button onClick={() => input.current?.click()} disabled={uploading}><Upload className="size-4" strokeWidth={1.5} />{t('Déposer')}</Button>}>
+                {t('Glissez-en un dans cette zone, ou utilisez Déposer')}
+              </Empty>
+            ) : (tree.isPending && !debounced) ? <SkeletonLines rows={6} className="px-4 py-3" /> : null}
             {tree.data?.truncated && !debounced && <p className="border-t border-line/70 px-4 py-2 text-xs text-ink-faint">{t('Dossier coupé à 2 000 éléments : utilisez la recherche')}</p>}
           </Panel>
         </DropZone>

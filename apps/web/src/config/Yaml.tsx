@@ -40,7 +40,7 @@ export function ConfigYaml({ inst, profile, can, onSaved }: TabProps) {
 
   useDirtyGuard(draft !== null && draft !== against?.yaml);
   if (raw.isPending) return <p className="text-sm text-ink-soft">{t('Lecture du fichier…')}</p>;
-  if (raw.isError || !shown) return <ErrorText error={raw.error} />;
+  if (raw.isError || !shown) return <ErrorText error={raw.error} onRetry={() => void raw.refetch()} />;
 
   const dirty = draft !== null && draft !== against!.yaml;
   const writable = can('putRaw') && raw.data?.managed !== true;

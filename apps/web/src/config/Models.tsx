@@ -38,7 +38,7 @@ export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProvider
   useEffect(() => { if (models.dataUpdatedAt) void invalidateOthers(); }, [models.dataUpdatedAt]);
 
   if (models.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des modèles…')}</p>;
-  if (models.isError || !models.data) return <ErrorText error={models.error} />;
+  if (models.isError || !models.data) return <ErrorText error={models.error} onRetry={() => void models.refetch()} />;
   const m = models.data;
   const writable = can('setModel') && m.version !== null;
   const submit = (input: Omit<ModelInput, 'version'>, confirm = false) => set.mutate({ ...input, version: m.version!, ...(confirm ? { confirm } : {}) });
@@ -139,6 +139,7 @@ function AuxModels({ inst, profile, data, writable, busy, onReset, onSaved }: {
   const [confirmMsg, setConfirmMsg] = useState<{ task: string | null; message: string } | null>(null);
   const changes = changesOf(draft, data.auxiliary);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (confirm: boolean) => api.setAuxiliary(inst, profile, { version: data.version!, changes, ...(confirm ? { confirm } : {}) }),
     onSuccess: async (res) => {
       setDraft({});

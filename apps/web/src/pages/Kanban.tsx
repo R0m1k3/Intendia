@@ -258,6 +258,7 @@ function Orchestration({ inst, assignees, onClose }: { inst: string; assignees: 
     if (o.data && !f) setF({ orchestrator: o.data.orchestratorProfile ?? '', assignee: o.data.defaultAssignee ?? '', decompose: o.data.autoDecompose, promote: o.data.autoPromoteChildren });
   }, [o.data, f]);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => api.setKanbanOrchestration(inst, { orchestrator_profile: f!.orchestrator, default_assignee: f!.assignee, auto_decompose: f!.decompose, auto_promote_children: f!.promote }),
     onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['kanban-orchestration', inst] }); onClose(); },
   });

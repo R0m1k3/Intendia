@@ -35,7 +35,7 @@ export function ConfigEnv({ inst, profile, can, onSaved, focusKey }: TabProps & 
   }, [list, q, onlySet, advanced]);
 
   if (env.isPending) return <p className="text-sm text-ink-soft">{t('Lecture des variables…')}</p>;
-  if (env.isError) return <ErrorText error={env.error} />;
+  if (env.isError) return <ErrorText error={env.error} onRetry={() => void env.refetch()} />;
   const writable = can('putEnv');
 
   return (
@@ -69,10 +69,12 @@ function EnvRow({ v, inst, profile, writable, open, onOpen, onSaved }: {
   const [value, setValue] = useState('');
   const invalidate = useInvalidateConfig(inst, profile);
   const set = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => api.setEnv(inst, profile, v.key, value),
     onSuccess: async () => { setValue(''); onOpen(false); await invalidate(); onSaved(); },
   });
   const del = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: () => api.deleteEnv(inst, profile, v.key),
     onSuccess: async () => { await invalidate(); onSaved(); },
   });
@@ -113,6 +115,7 @@ function AddVar({ inst, profile, existing, onSaved }: { inst: string; profile: s
   const [value, setValue] = useState('');
   const invalidate = useInvalidateConfig(inst, profile);
   const add = useMutation({
+    meta: { done: t('Ajouté') },
     mutationFn: () => api.setEnv(inst, profile, key.trim(), value),
     onSuccess: async () => { setKey(''); setValue(''); setOpen(false); await invalidate(); onSaved(); },
   });

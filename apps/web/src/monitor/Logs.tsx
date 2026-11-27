@@ -79,7 +79,7 @@ export function Logs({ inst, profile, file, onFile }: { inst: string; profile: s
       {data?.unredacted && (
         <p className="text-xs text-ink-faint">{t('Journal non filtré par Hermes : Intendia masque ce qui ressemble à un secret, sans garantie pour un secret de forme inconnue.')}</p>
       )}
-      <ErrorText error={q.error} />
+      <ErrorText error={q.error} onRetry={() => void q.refetch()} />
       <pre ref={box} data-log-lines
         onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
         className="max-h-[calc(var(--content-h)-14rem)] min-h-48 overflow-auto rounded-xl border border-line bg-paper p-3 font-mono text-[12px] leading-relaxed text-ink-soft">
