@@ -6,6 +6,7 @@ import { SLUG_RE } from '../workspaces/fs.js';
 import { PROFILE_RE } from './params.js';
 import { ValidationError } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -47,7 +48,7 @@ export function cronRoutes(crons: CronService): Hono {
 
   r.get('/i/:inst/crons', async (c) => c.json({ crons: await crons.list(c.req.param('inst')) }));
   r.post('/i/:inst/crons', async (c) => {
-    const body = CreateBody.parse(await c.req.json());
+    const body = CreateBody.parse(await readJson(c));
     return c.json({ cron: await crons.create(c.req.param('inst'), body) }, 201);
   });
   // before /:id, which would match "targets"
@@ -62,7 +63,7 @@ export function cronRoutes(crons: CronService): Hono {
     const key = c.req.param('key');
     if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide ou absent'));
     if (!BLUEPRINT_RE.test(key)) throw new ValidationError(msg('modèle invalide'));
-    const body = InstantiateBody.parse(await c.req.json());
+    const body = InstantiateBody.parse(await readJson(c));
     return c.json(await crons.instantiate(c.req.param('inst'), profile, key, body.values, body.workspace), 201);
   });
 
@@ -72,7 +73,7 @@ export function cronRoutes(crons: CronService): Hono {
   });
   r.put('/i/:inst/crons/:id', async (c) => {
     const { inst, id, profile } = ids(c);
-    const body = UpdateBody.parse(await c.req.json());
+    const body = UpdateBody.parse(await readJson(c));
     return c.json({ cron: await crons.update(inst, id, profile, body) });
   });
   r.delete('/i/:inst/crons/:id', async (c) => {

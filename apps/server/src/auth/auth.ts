@@ -1,9 +1,11 @@
 import { hash, verify } from '@node-rs/argon2';
+import { createHash } from 'node:crypto';
 import { eq, lt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { AppConfig } from '../config.js';
 import { randomToken, safeEqual, sign } from '../crypto.js';
+import { RateLimiter } from './limiter.js';
 import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
 import { authSessions, settings } from '../db/schema.js';
@@ -16,15 +18,31 @@ const DAY_MS = 86_400_000;
 const EPOCH_KEY = 'password_epoch';
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60_000;
+/** sha256 of the cookie's value is what the database keeps: a copy of the database opens no session */
+const HASHED_KEY = 'session_ids';
+export const sessionKey = (id: string) => createHash('sha256').update(id).digest('hex');
 
 export class Auth {
   /** One-time code required to choose the first password (printed in the logs). */
   readonly setupCode: string | null;
-  private readonly attempts = new Map<string, number[]>();
+  private readonly attempts = new RateLimiter(MAX_ATTEMPTS, WINDOW_MS);
 
   constructor(private readonly db: Db, private readonly config: AppConfig) {
     this.setupCode = this.passwordHash() ? null : randomToken(8);
+    this.hashSessionIds();
     this.syncPasswordEpoch();
+  }
+
+  /** Once: the sessions written before 0.1.12 kept the cookie's value itself; they are hashed in place (nobody is signed out). */
+  private hashSessionIds(): void {
+    if (this.db.select().from(settings).where(eq(settings.key, HASHED_KEY)).get()?.value === 'sha256') return;
+    this.db.transaction((tx) => {
+      for (const row of tx.select().from(authSessions).all()) {
+        tx.update(authSessions).set({ id: sessionKey(row.id) }).where(eq(authSessions.id, row.id)).run();
+      }
+      tx.insert(settings).values({ key: HASHED_KEY, value: 'sha256' })
+        .onConflictDoUpdate({ target: settings.key, set: { value: 'sha256' } }).run();
+    });
   }
 
   /**
@@ -60,11 +78,7 @@ export class Auth {
 
   /** 5 attempts per minute and per IP. */
   rateLimit(ip: string): void {
-    const now = Date.now();
-    const recent = (this.attempts.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-    if (recent.length >= MAX_ATTEMPTS) throw new AuthError(429, msg('Trop d’essais, réessayez dans une minute'));
-    recent.push(now);
-    this.attempts.set(ip, recent);
+    if (!this.attempts.hit(ip)) throw new AuthError(429, msg('Trop d’essais, réessayez dans une minute'));
   }
 
   async checkPassword(password: string): Promise<boolean> {
@@ -81,9 +95,14 @@ export class Auth {
     const id = randomToken(32);
     const now = Date.now();
     const expiresAt = now + SESSION_DAYS * DAY_MS;
-    this.db.insert(authSessions).values({ id, createdAt: now, expiresAt }).run();
-    this.db.delete(authSessions).where(lt(authSessions.expiresAt, now)).run();
+    this.db.insert(authSessions).values({ id: sessionKey(id), createdAt: now, expiresAt }).run();
+    this.purgeExpired(now);
     setCookie(c, COOKIE, id, this.cookieOptions(c, SESSION_DAYS * 86_400));
+  }
+
+  /** Sessions past their end (also swept by the retention job). */
+  purgeExpired(now = Date.now()): number {
+    return this.db.delete(authSessions).where(lt(authSessions.expiresAt, now)).run().changes;
   }
 
   /** Signs out every browser (all rows deleted), then gives the caller a fresh session. */
@@ -92,12 +111,12 @@ export class Auth {
     this.createSession(c);
   }
 
-  /** The valid session row of the request's cookie, or null. */
+  /** The valid session row of the request's cookie, or null (`id`: the cookie's value, the database keeps its hash). */
   session(c: Context): { id: string; createdAt: number; expiresAt: number } | null {
     const id = getCookie(c, COOKIE);
     if (!id) return null;
-    const row = this.db.select().from(authSessions).where(eq(authSessions.id, id)).get();
-    return row && row.expiresAt > Date.now() ? row : null;
+    const row = this.db.select().from(authSessions).where(eq(authSessions.id, sessionKey(id))).get();
+    return row && row.expiresAt > Date.now() ? { ...row, id } : null;
   }
 
   /** Sliding session: pushes the end to min(now + 30 d, sign-in + 90 d), only when that gains a day or more. */
@@ -105,7 +124,7 @@ export class Auth {
     const now = Date.now();
     const next = Math.min(now + SESSION_DAYS * DAY_MS, row.createdAt + MAX_DAYS * DAY_MS);
     if (next - row.expiresAt < DAY_MS) return;
-    this.db.update(authSessions).set({ expiresAt: next }).where(eq(authSessions.id, row.id)).run();
+    this.db.update(authSessions).set({ expiresAt: next }).where(eq(authSessions.id, sessionKey(row.id))).run();
     setCookie(c, COOKIE, row.id, this.cookieOptions(c, Math.floor((next - now) / 1000)));
   }
 
@@ -115,7 +134,7 @@ export class Auth {
 
   destroySession(c: Context): void {
     const id = getCookie(c, COOKIE);
-    if (id) this.db.delete(authSessions).where(eq(authSessions.id, id)).run();
+    if (id) this.db.delete(authSessions).where(eq(authSessions.id, sessionKey(id))).run();
     deleteCookie(c, COOKIE, { path: '/' });
   }
 
@@ -127,7 +146,7 @@ export class Auth {
    * `Secure` only when this request really came over https: a browser drops a Secure cookie set over http
    * (LAN address `http://192.168.x.x:3000` next to an https public address), and the login screen came back.
    */
-  private isSecure(c: Context): boolean {
+  isSecure(c: Context): boolean {
     const proto = this.config.trustProxy ? c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() : undefined;
     if (proto) return proto === 'https';
     const url = new URL(c.req.url);
@@ -138,9 +157,15 @@ export class Auth {
     return Boolean(pub && pub.protocol === 'https:' && pub.host === host);
   }
 
+  /**
+   * The address the login limit counts. Behind a proxy, X-Forwarded-For is « what the client sent, then what each proxy
+   * saw »: only the last `trustedHops` entries were written by a proxy of ours, so the client is the first of those.
+   * The leftmost entry is the client's own text (one new value per request would get around the limit).
+   */
   clientIp(c: Context): string {
     if (this.config.trustProxy) {
-      const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+      const list = (c.req.header('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const fwd = list[Math.max(0, list.length - (this.config.trustedHops ?? 1))];
       if (fwd) return fwd;
     }
     const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;

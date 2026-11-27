@@ -49,7 +49,7 @@ export function sendZip(body: ReadableStream<Uint8Array>, name: string): Respons
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** Small static error page for /f/* (no script, no external resource). */
-export function errorPage(c: Context, status: 404 | 410 | 502, titleFr: string, detailFr?: string): Response {
+export function errorPage(c: Context, status: 404 | 410 | 429 | 502, titleFr: string, detailFr?: string): Response {
   const lang = requestLang(c);
   const title = toLang(titleFr, lang);
   const detail = detailFr ? toLang(detailFr, lang) : detailFr;

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { ChannelRunner } from '../channels/runner.js';
 import type { ChannelService } from '../channels/service.js';
 import type { InstanceStore } from '../instances/store.js';
+import { readJson } from './body.js';
 
 const Create = z.object({
   name: z.string().trim().min(1).max(60),
@@ -36,7 +37,7 @@ export function channelRoutes(deps: { channels: ChannelService; runner: ChannelR
   }));
 
   r.post('/channels', async (c) => {
-    const ch = await channels.create(Create.parse(await c.req.json()));
+    const ch = await channels.create(Create.parse(await readJson(c)));
     return c.json({ channel: { id: ch.id, name: ch.name } }, 201);
   });
 
@@ -52,7 +53,7 @@ export function channelRoutes(deps: { channels: ChannelService; runner: ChannelR
   });
 
   r.patch('/channels/:id', async (c) => {
-    const ch = channels.update(c.req.param('id'), Patch.parse(await c.req.json()));
+    const ch = channels.update(c.req.param('id'), Patch.parse(await readJson(c)));
     return c.json({ channel: { id: ch.id, name: ch.name, instructions: ch.instructions, lead: ch.lead } });
   });
 
@@ -62,13 +63,13 @@ export function channelRoutes(deps: { channels: ChannelService; runner: ChannelR
   });
 
   r.post('/channels/:id/messages', async (c) => {
-    const row = channels.post(c.req.param('id'), Post.parse(await c.req.json()).text);
+    const row = channels.post(c.req.param('id'), Post.parse(await readJson(c)).text);
     kick();
     return c.json({ message: { seq: row.seq } }, 201);
   });
 
   r.post('/channels/:id/turns/:turn', async (c) => {
-    const body = Decide.parse(await c.req.json());
+    const body = Decide.parse(await readJson(c));
     const turn = Number(c.req.param('turn'));
     channels.resolve(c.req.param('id'), turn, body.action === 'reassign' ? { kind: 'reassign', handle: body.handle } : { kind: body.action });
     kick();

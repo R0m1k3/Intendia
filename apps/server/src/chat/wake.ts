@@ -505,4 +505,9 @@ export class DelegationWatcher {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
+
+  /** No pass under way (the shutdown waits for it before it closes the database). */
+  get idle(): boolean {
+    return !this.busy;
+  }
 }

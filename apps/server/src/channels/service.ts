@@ -3,7 +3,7 @@
 // approvals show in « Vous attend » with the channel's name). Messages and turns live in the database; the runner
 // (channels/runner.ts) plays the turns one at a time per channel.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, max } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { channelMembers, channelMessages, channels, channelTurns } from '../db/schema.js';
 import { msg } from '../i18n/index.js';
@@ -45,8 +45,8 @@ export class ChannelService {
   }
 
   messages(id: string, after = 0): MessageRow[] {
-    return this.db.select().from(channelMessages).where(eq(channelMessages.channelId, id)).orderBy(asc(channelMessages.seq)).all()
-      .filter((m) => m.seq > after);
+    return this.db.select().from(channelMessages)
+      .where(and(eq(channelMessages.channelId, id), gt(channelMessages.seq, after))).orderBy(asc(channelMessages.seq)).all();
   }
 
   turns(id: string, limit = 50): TurnRow[] {

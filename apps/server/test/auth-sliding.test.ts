@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { Auth, requireAuth } from '../src/auth/auth.js';
+import { Auth, requireAuth, sessionKey } from '../src/auth/auth.js';
 import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db/index.js';
 import { authSessions } from '../src/db/schema.js';
@@ -29,7 +29,7 @@ function setup() {
     if (set) cookie = set.split(';')[0]!;
     return { status: res.status, json: (await res.json().catch(() => null)) as any, setCookie: set };
   };
-  const row = () => db.select().from(authSessions).where(eq(authSessions.id, cookie.split('=')[1]!)).get();
+  const row = () => db.select().from(authSessions).where(eq(authSessions.id, sessionKey(cookie.split('=')[1]!))).get();
   return { req, row, db };
 }
 

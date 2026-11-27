@@ -14,6 +14,7 @@ import { SLUG_RE } from '../workspaces/fs.js';
 import { NotFoundError, ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { RUN_ACTIVE, SESSION_ID_RE, sessionParams } from './workspaces.js';
 import { PROFILE_RE } from './params.js';
+import { readJson } from './body.js';
 
 /** Created by the browser once per action: the same key again gives the same copy. */
 const Key = z.string().regex(/^[A-Za-z0-9-]{8,64}$/, msg('clé invalide'));
@@ -44,7 +45,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
 
   r.post('/sessions/:inst/:id/duplicate', async (c) => {
     const { inst, id } = sessionParams(c);
-    const { key } = DuplicateBody.parse(await c.req.json());
+    const { key } = DuplicateBody.parse(await readJson(c));
     const ctx = workspaces.getSession(inst, id);
     const { session: s, workspace } = ctx;
     const newId = copyId(inst, workspace.slug, key);
@@ -75,7 +76,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
   // the original stays
   r.post('/sessions/:inst/:id/to-profile', async (c) => {
     const { inst, id } = sessionParams(c);
-    const { key, profile } = ToProfileBody.parse(await c.req.json());
+    const { key, profile } = ToProfileBody.parse(await readJson(c));
     const ctx = workspaces.getSession(inst, id);
     const { session: s, workspace } = ctx;
     if (profile === ctx.profile) return c.json({ error: msg('La session est déjà sur cet agent'), code: 'same_profile' }, 400);
@@ -104,7 +105,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
   // edit, retry, undo, clear (replace) and branch: a truncated copy
   r.post('/sessions/:inst/:id/rewrite', async (c) => {
     const { inst, id } = sessionParams(c);
-    const body = RewriteBody.parse(await c.req.json());
+    const body = RewriteBody.parse(await readJson(c));
     try {
       const res = await rewriteSession(deps, inst, id, body);
       const { created, ...out } = res;
@@ -135,7 +136,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const inst = c.req.param('inst');
     const id = c.req.param('id');
     if (!SLUG_RE.test(inst) || !SESSION_ID_RE.test(id)) throw new ValidationError(msg('identifiant invalide'));
-    const body = ContinueBody.parse(await c.req.json());
+    const body = ContinueBody.parse(await readJson(c));
     const instance = deps.store.get(inst);
     if (!instance) throw new NotFoundError(msg('Instance inconnue : {id}', { id: inst }));
     if (body.profile !== 'default' && !instance.profileKeys[body.profile]) throw new ValidationError(msg('Profil inconnu : {profile}', { profile: body.profile }));
@@ -158,7 +159,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     onError: (c) => c.json({ error: msg('Fichier trop gros (10 Mo au plus)'), code: 'too_large' }, 413),
   }), async (c) => {
     const ws = workspaces.getWorkspace(c.req.param('slug'));
-    const { key, file } = ImportBody.parse(await c.req.json());
+    const { key, file } = ImportBody.parse(await readJson(c));
     const exported = exportedFromFile(file);
     const newId = copyId(ws.instanceId, ws.slug, key);
     const done = workspaces.existingCopy(ws.slug, newId);

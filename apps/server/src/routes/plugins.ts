@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { PluginService } from '../plugins/service.js';
+import { readJson } from './body.js';
 
 const InstallBody = z.object({ name: z.string().max(100) });
 
@@ -11,7 +12,7 @@ export function pluginRoutes(plugins: PluginService): Hono {
   const name = (c: Context) => c.req.param('name') ?? '';
   r.get('/i/:inst/plugins', async (c) => c.json(await plugins.list(inst(c))));
   r.get('/i/:inst/plugins/catalog', async (c) => c.json(await plugins.catalog(inst(c))));
-  r.post('/i/:inst/plugins/install', async (c) => c.json(await plugins.install(inst(c), InstallBody.parse(await c.req.json()).name), 202));
+  r.post('/i/:inst/plugins/install', async (c) => c.json(await plugins.install(inst(c), InstallBody.parse(await readJson(c)).name), 202));
   r.get('/i/:inst/plugins/jobs', (c) => c.json(plugins.current(inst(c))));
   r.get('/i/:inst/plugins/jobs/:job', (c) => c.json(plugins.job(inst(c), c.req.param('job'))));
   r.post('/i/:inst/plugins/:name/enable', async (c) => c.json(await plugins.setEnabled(inst(c), name(c), true)));

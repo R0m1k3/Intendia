@@ -25,6 +25,7 @@ import {
 import { isReservedText } from '../chat/goal.js';
 import { summarize, wakeDecision } from '../chat/wake.js';
 import { profileOf } from './skills.js';
+import { readJson } from './body.js';
 
 export { toChatMessages, type ChatMessage } from '../chat/history.js';
 export { controlBody } from '../chat/approve.js';
@@ -114,21 +115,21 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.get('/i/:inst/model-pins', (c) => c.json({ pins: presets.pins(deps.db, instOf(c), profileOf(c)) }));
   r.put('/i/:inst/model-pins', async (c) => {
     const inst = instOf(c);
-    const pins = Pins.parse((await c.req.json()).pins);
+    const { pins } = z.object({ pins: Pins }).parse(await readJson(c));
     presets.setPins(deps.db, inst, profileOf(c), pins);
     return c.json({ pins });
   });
   r.get('/i/:inst/agent-looks', (c) => c.json({ looks: presets.looks(deps.db, instOf(c)) }));
   r.put('/i/:inst/agent-looks', async (c) => {
     const inst = instOf(c);
-    const looks = Looks.parse((await c.req.json()).looks);
+    const { looks } = z.object({ looks: Looks }).parse(await readJson(c));
     presets.setLooks(deps.db, inst, looks);
     return c.json({ looks });
   });
   r.get('/i/:inst/modes', (c) => c.json({ modes: presets.modes(deps.db, instOf(c), profileOf(c)) }));
   r.put('/i/:inst/modes', async (c) => {
     const inst = instOf(c);
-    const modes = Modes.parse((await c.req.json()).modes);
+    const { modes } = z.object({ modes: Modes }).parse(await readJson(c));
     presets.setModes(deps.db, inst, profileOf(c), modes);
     return c.json({ modes });
   });
@@ -191,7 +192,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   // « Ne plus attendre »: the units the page showed open are given up (a later delivery is still shown and wakes)
   r.post('/sessions/:inst/:id/subagents/stop-waiting', async (c) => {
     const ctx = ctxOf(c);
-    const { units } = StopWaitingBody.parse(await c.req.json());
+    const { units } = StopWaitingBody.parse(await readJson(c));
     let lost = 0;
     // session reserved meanwhile: no send starts between the reading and the writing
     const idle = await whenIdle(compat, ctx, async () => {
@@ -210,7 +211,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   // one run creation at a time per session (chat/start-run.ts)
   r.post('/sessions/:inst/:id/runs', async (c) => {
     const ctx = ctxOf(c);
-    const { input, skills, clientKey } = SendBody.parse(await c.req.json());
+    const { input, skills, clientKey } = SendBody.parse(await readJson(c));
     if (isReservedText(input)) return c.json({ error: RESERVED, code: 'reserved_prefix' }, 400);
     // the user writes: an active goal pauses first, so this run goes without the goal's block
     goals.pauseIfActive(ctx.instance.id, ctx.session.id, 'user');
@@ -282,7 +283,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.post('/sessions/:inst/:id/runs/:runId/approval', async (c) => {
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
-    const { choice, requestId } = ApprovalBody.parse(await c.req.json());
+    const { choice, requestId } = ApprovalBody.parse(await readJson(c));
     try {
       return c.json(await answerApproval(compat, ctx, runId, choice, requestId ?? null));
     } catch (err) {
@@ -295,7 +296,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.post('/sessions/:inst/:id/runs/:runId/clarify', async (c) => {
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
-    const { answer, requestId } = ClarifyBody.parse(await c.req.json());
+    const { answer, requestId } = ClarifyBody.parse(await readJson(c));
     const unavailable = () => c.json({ error: msg('Hermes ne permet pas de répondre à cette question depuis Intendia'), code: 'clarify_unavailable' }, 409);
     const s = await status(ctx, runId);
     if (s.status === 'unknown') return c.json({ error: msg('Ce run est terminé'), code: 'run_gone' }, 409);
@@ -330,7 +331,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
   r.post('/sessions/:inst/:id/runs/:runId/steer', async (c) => {
     const ctx = ctxOf(c);
     const runId = runOf(ctx, c.req.param('runId'));
-    const { input } = SteerBody.parse(await c.req.json());
+    const { input } = SteerBody.parse(await readJson(c));
     if (isReservedText(input)) return c.json({ error: RESERVED, code: 'reserved_prefix' }, 400);
     try {
       const res = await callOp(http(ctx), report(ctx), 'chat', 'steer', { params: { run_id: runId }, profile: ctx.profile, body: { input } });

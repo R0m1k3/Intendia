@@ -139,6 +139,10 @@ Sending a message can wait for Hermes up to 80 s (Intendia retries a slow admiss
 Idempotency-Key): keep the proxy's read timeout at 90 s or more (`proxy_read_timeout`; Nginx's default is 60 s). A
 502 meanwhile is harmless: sending the same text again finds the same run.
 
+The sign-in limit (5 tries per minute) counts the address your proxy saw, read from `X-Forwarded-For`. With one
+proxy in front of Intendia there is nothing to set. With two (a CDN, then Nginx), set `INTENDIA_TRUSTED_HOPS=2`,
+otherwise every visitor shares the CDN's address. Over https, Intendia also sends `Strict-Transport-Security` (30 days).
+
 Run **one Intendia per data volume**: two processes on the same database would both run the goal loop and the wake
 of sub-agents.
 

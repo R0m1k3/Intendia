@@ -10,6 +10,7 @@ import { KanbanError, LIMITS, START_STATES, type KanbanService } from '../kanban
 import { msg, requestLang, toLang } from '../i18n/index.js';
 import { ValidationError } from '../workspaces/service.js';
 import { BOARD_RE, intParam, PROFILE_RE, TASK_RE } from './params.js';
+import { readJson } from './body.js';
 
 /** `?board=` (required): Intendia never relies on Hermes' global "current board". */
 export function boardOf(c: Context): string {
@@ -77,37 +78,37 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
   const P = '/i/:inst/kanban';
 
   r.get(`${P}/boards`, async (c) => c.json({ boards: await kanban.boards(inst(c)) }));
-  r.post(`${P}/boards`, async (c) => c.json({ board: await kanban.createBoard(inst(c), CreateBoard.parse(await c.req.json())) }, 201));
+  r.post(`${P}/boards`, async (c) => c.json({ board: await kanban.createBoard(inst(c), CreateBoard.parse(await readJson(c))) }, 201));
   r.get(`${P}/board`, async (c) => c.json(await kanban.board(inst(c), boardOf(c))));
   r.get(`${P}/workflow`, async (c) => c.json(await kanban.workflow(inst(c))));
   r.get(`${P}/assignees`, async (c) => c.json({ assignees: await kanban.assignees(inst(c)) }));
   r.get(`${P}/orchestration`, async (c) => c.json(await kanban.orchestration(inst(c))));
   r.put(`${P}/orchestration`, async (c) => {
-    const body = Orchestration.parse(await c.req.json());
+    const body = Orchestration.parse(await readJson(c));
     return c.json(await deps.config.setOrchestration(inst(c), body));
   });
 
   r.post(`${P}/tasks`, async (c) => {
     const board = boardOf(c);
-    return c.json({ task: await kanban.createTask(inst(c), board, CreateTask.parse(await c.req.json())) }, 201);
+    return c.json({ task: await kanban.createTask(inst(c), board, CreateTask.parse(await readJson(c))) }, 201);
   });
   r.get(`${P}/tasks/:id`, async (c) => c.json(await kanban.task(inst(c), boardOf(c), taskOf(c))));
   r.patch(`${P}/tasks/:id`, async (c) => {
     const board = boardOf(c);
     const id = taskOf(c);
-    return c.json({ task: await kanban.updateTask(inst(c), board, id, UpdateTask.parse(await c.req.json())) });
+    return c.json({ task: await kanban.updateTask(inst(c), board, id, UpdateTask.parse(await readJson(c))) });
   });
   r.get(`${P}/tasks/:id/log`, async (c) => c.json(await kanban.log(inst(c), boardOf(c), taskOf(c))));
   r.post(`${P}/tasks/:id/comments`, async (c) => {
     const board = boardOf(c);
     const id = taskOf(c);
-    return c.json(await kanban.comment(inst(c), board, id, Comment.parse(await c.req.json()).body));
+    return c.json(await kanban.comment(inst(c), board, id, Comment.parse(await readJson(c)).body));
   });
   r.post(`${P}/tasks/:id/specify`, async (c) => c.json(await kanban.aux(inst(c), boardOf(c), taskOf(c), 'specify')));
   r.post(`${P}/tasks/:id/decompose`, async (c) => c.json(await kanban.aux(inst(c), boardOf(c), taskOf(c), 'decompose')));
   r.post(`${P}/links`, async (c) => {
     const board = boardOf(c);
-    const l = Link.parse(await c.req.json());
+    const l = Link.parse(await readJson(c));
     return c.json(await kanban.link(inst(c), board, l.parent, l.child));
   });
   r.delete(`${P}/links`, async (c) => {
@@ -123,7 +124,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
   const { missions } = deps;
   r.post(`${P}/missions`, async (c) => {
     const board = boardOf(c);
-    return c.json({ mission: missions.create(inst(c), board, Mission.parse(await c.req.json())) }, 202);
+    return c.json({ mission: missions.create(inst(c), board, Mission.parse(await readJson(c))) }, 202);
   });
   r.get(`${P}/missions`, (c) => c.json({ missions: missions.list(inst(c), boardOf(c)) }));
   r.get(`${P}/missions/:mid`, async (c) => c.json({ mission: await missions.get(inst(c), missionOf(c)) }));

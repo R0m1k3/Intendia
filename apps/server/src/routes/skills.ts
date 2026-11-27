@@ -5,6 +5,7 @@ import type { SkillService } from '../skills/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { PROFILE_RE } from './params.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 const NAME = z.string().regex(/^[A-Za-z0-9_.:/-]{1,160}$/, msg('nom de skill invalide'));
 const IDENTIFIER = z.string().max(300).refine(
@@ -39,7 +40,7 @@ export function skillRoutes(skills: SkillService): Hono {
 
   r.get('/i/:inst/skills', async (c) => c.json({ skills: await skills.list(inst(c), profileOf(c)) }));
   r.put('/i/:inst/skills/enabled', async (c) => {
-    const body = EnabledBody.parse(await c.req.json());
+    const body = EnabledBody.parse(await readJson(c));
     return c.json({ skill: await skills.setEnabled(inst(c), profileOf(c), body.name, body.enabled) });
   });
   r.get('/i/:inst/skills/content', async (c) => {
@@ -47,15 +48,15 @@ export function skillRoutes(skills: SkillService): Hono {
     return c.json(await skills.content(inst(c), profileOf(c), name));
   });
   r.post('/i/:inst/skills', async (c) => {
-    const body = CreateBody.parse(await c.req.json());
+    const body = CreateBody.parse(await readJson(c));
     return c.json({ skill: await skills.create(inst(c), profileOf(c), body) }, 201);
   });
   r.put('/i/:inst/skills/content', async (c) => {
-    const body = ContentBody.parse(await c.req.json());
+    const body = ContentBody.parse(await readJson(c));
     return c.json(await skills.putContent(inst(c), profileOf(c), body.name, body.content, body.base));
   });
   r.put('/i/:inst/skills/lock', async (c) => {
-    const body = LockBody.parse(await c.req.json());
+    const body = LockBody.parse(await readJson(c));
     return c.json({ skill: await skills.lock(inst(c), profileOf(c), body.name, body.locked) });
   });
   r.delete('/i/:inst/skills/:name', async (c) => {
@@ -74,11 +75,11 @@ export function skillRoutes(skills: SkillService): Hono {
     return c.json({ scan: await skills.scan(inst(c), profileOf(c), identifier) });
   });
   r.post('/i/:inst/skills/hub/install', async (c) => {
-    const body = InstallBody.parse(await c.req.json());
+    const body = InstallBody.parse(await readJson(c));
     return c.json(await skills.install(inst(c), profileOf(c), body.identifier, body.acknowledged), 202);
   });
   r.post('/i/:inst/skills/hub/uninstall', async (c) => {
-    const body = UninstallBody.parse(await c.req.json());
+    const body = UninstallBody.parse(await readJson(c));
     return c.json(await skills.uninstall(inst(c), profileOf(c), body.name), 202);
   });
   r.post('/i/:inst/skills/hub/update', async (c) => c.json(await skills.update(inst(c), profileOf(c)), 202));

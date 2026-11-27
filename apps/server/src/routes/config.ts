@@ -6,6 +6,7 @@ import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
 import { GATEWAY_ACTIONS, type GatewayAction } from '../hermes-config/gateway.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 const VERSION = z.string().regex(/^[0-9a-f]{16}$/, msg('version invalide'));
 const PATH = z.string().regex(/^[A-Za-z0-9_.-]{1,200}$/);
@@ -105,19 +106,19 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
 
   r.get('/i/:inst/config', async (c) => c.json(await config.form(inst(c), profileOf(c))));
   r.put('/i/:inst/config', async (c) => {
-    const body = FormBody.parse(await c.req.json());
+    const body = FormBody.parse(await readJson(c));
     return c.json(await config.saveForm(inst(c), profileOf(c), body.changes, body.version));
   });
   r.get('/i/:inst/config/raw', async (c) => c.json(await config.raw(inst(c), profileOf(c))));
   r.put('/i/:inst/config/raw', async (c) => {
-    const body = RawBody.parse(await c.req.json());
+    const body = RawBody.parse(await readJson(c));
     return c.json(await config.saveRaw(inst(c), profileOf(c), body.yaml, body.version));
   });
 
   r.get('/i/:inst/config/versions', (c) => c.json({ versions: config.versions(inst(c), profileOf(c)) }));
   r.get('/i/:inst/config/versions/:id', (c) => c.json(config.version(inst(c), profileOf(c), id(c))));
   r.post('/i/:inst/config/versions/:id/restore', async (c) => {
-    const body = RestoreBody.parse(await c.req.json());
+    const body = RestoreBody.parse(await readJson(c));
     return c.json(await config.restore(inst(c), profileOf(c), id(c), body.version));
   });
 
@@ -137,20 +138,20 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   r.delete('/i/:inst/config/providers/:provider/account', async (c) =>
     c.json(await providers.disconnect(inst(c), profileOf(c), param(c, 'provider', PROVIDER_RE))));
   r.post('/i/:inst/config/provider-keys', async (c) => {
-    const body = ProviderKeyBody.parse(await c.req.json());
+    const body = ProviderKeyBody.parse(await readJson(c));
     return c.json(await providers.addKey(inst(c), profileOf(c), body));
   });
   r.delete('/i/:inst/config/provider-keys/:provider/:id', async (c) =>
     c.json(await providers.removeKey(inst(c), profileOf(c), { provider: param(c, 'provider', PROVIDER_RE), id: param(c, 'id', KEY_ID_RE) })));
 
   r.post('/i/:inst/config/providers/anthropic/token', async (c) => {
-    const body = AnthropicTokenBody.parse(await c.req.json());
+    const body = AnthropicTokenBody.parse(await readJson(c));
     return c.json(await config.setAnthropicToken(inst(c), profileOf(c), body.token, body.replaceApiKey === true));
   });
   r.delete('/i/:inst/config/providers/anthropic/token', async (c) => c.json(await config.removeAnthropicToken(inst(c), profileOf(c))));
   r.get('/i/:inst/config/custom-providers', async (c) => c.json(await config.customProviders(inst(c), profileOf(c))));
   r.post('/i/:inst/config/custom-providers', async (c) => {
-    const body = CustomProviderBody.parse(await c.req.json());
+    const body = CustomProviderBody.parse(await readJson(c));
     // built-in providers of Hermes (catalogue), read outside the config lock
     const known = await providers.list(inst(c), profileOf(c));
     return c.json(await config.addCustomProvider(inst(c), profileOf(c), body, new Set(known.keyProviders.map((p) => p.slug))), 201);
@@ -166,7 +167,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   });
   r.get('/i/:inst/config/models', async (c) => c.json(await config.models(inst(c), profileOf(c))));
   r.post('/i/:inst/config/models', async (c) => {
-    const body = ModelBody.parse(await c.req.json());
+    const body = ModelBody.parse(await readJson(c));
     if ((body.scope === 'auxiliary') !== (body.task !== undefined)) {
       throw new ConfigInputError('invalid_task', msg('Une tâche est obligatoire pour un modèle auxiliaire, et seulement pour lui'));
     }
@@ -175,12 +176,12 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
 
   // several auxiliary models in one write, all or nothing
   r.post('/i/:inst/config/auxiliary', async (c) => {
-    const body = AuxBody.parse(await c.req.json());
+    const body = AuxBody.parse(await readJson(c));
     return c.json(await config.setAuxiliary(inst(c), profileOf(c), body));
   });
 
   r.post('/i/:inst/config/provider-models', async (c) => {
-    const body = ProviderModelsBody.parse(await c.req.json());
+    const body = ProviderModelsBody.parse(await readJson(c));
     if ((body.add === undefined) === (body.remove === undefined)) {
       throw new ConfigInputError('invalid_change', msg('Donner un modèle à ajouter ou à retirer (un seul)'));
     }
@@ -190,7 +191,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
 
   r.get('/i/:inst/config/env', async (c) => c.json({ env: await config.env(inst(c), profileOf(c)) }));
   r.put('/i/:inst/config/env', async (c) => {
-    const body = EnvBody.parse(await c.req.json());
+    const body = EnvBody.parse(await readJson(c));
     checkKey(body.key);
     if (!body.value || body.value.includes('«') || body.value.length > 16_384) {
       throw new ConfigInputError('invalid_value', msg('Valeur vide, masquée ou trop longue'));
@@ -201,7 +202,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
 
   r.get('/i/:inst/config/mcp', async (c) => c.json({ servers: await config.mcp(inst(c), profileOf(c)) }));
   r.post('/i/:inst/config/mcp', async (c) => {
-    const body = McpBody.parse(await c.req.json());
+    const body = McpBody.parse(await readJson(c));
     checkName(body.name);
     const byUrl = body.url !== undefined && body.url !== '';
     const byCommand = body.command !== undefined && body.command !== '';
@@ -214,7 +215,7 @@ export function configRoutes(config: ConfigService, providers: ProvidersService)
   });
   r.post('/i/:inst/config/mcp/:name/test', async (c) => c.json(await config.testMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));
   r.put('/i/:inst/config/mcp/:name/enabled', async (c) => {
-    const body = EnabledBody.parse(await c.req.json());
+    const body = EnabledBody.parse(await readJson(c));
     return c.json(await config.enableMcp(inst(c), profileOf(c), checkName(c.req.param('name')), body.enabled));
   });
   r.delete('/i/:inst/config/mcp/:name', async (c) => c.json(await config.removeMcp(inst(c), profileOf(c), checkName(c.req.param('name')))));
