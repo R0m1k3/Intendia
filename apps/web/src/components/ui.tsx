@@ -1,7 +1,9 @@
-import { useId, type ComponentProps, type ReactNode } from 'react';
-import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, RotateCw, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { useId, useState, type ComponentProps, type ReactNode } from 'react';
+import { Bot, Brain, CalendarClock, GitBranch, HeartPulse, KanbanSquare, LineChart, type LucideIcon, MessagesSquare, Puzzle, RotateCw, ScrollText, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import type { ModuleId, ModuleState } from '../api';
 import { showCopy } from './Dialog';
+import { toast } from './Toast';
+import { explain } from '../errors/explain';
 import { locale, t } from '../i18n';
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -174,17 +176,74 @@ export function moduleLabel(m: { id: string; label: string }): string {
   return (MODULE_META as Record<string, { label: string } | undefined>)[m.id]?.label ?? m.label;
 }
 
-/** An error message; `onRetry` (reads only) adds a « Réessayer » button on its right. */
+/** The folded technical text of an error (original message, HTTP status, code). */
+function ErrorDetail({ detail }: { detail?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!detail) return null;
+  return (
+    <>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="underline decoration-dotted underline-offset-2 opacity-80 hover:opacity-100">
+        {open ? t('Masquer le détail') : t('Détail technique')}
+      </button>
+      {open && <span className="block w-full select-text break-words font-mono text-xs opacity-90" data-error-detail>{detail}</span>}
+    </>
+  );
+}
+
+/**
+ * An error, explained (errors/explain.ts): what happened, what to do, a page that helps, the technical text folded.
+ * `onRetry` (reads only) adds a « Réessayer » button on its right.
+ */
 export function ErrorText({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   if (!error) return null;
-  const text = (error as Error).message;
-  if (!onRetry) return <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{text}</p>;
+  const e = explain(error);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-bad-soft py-1 pl-3 pr-1 text-sm text-bad" data-error-text>
-      <p className="min-w-0 flex-1 py-1">{text}</p>
-      <Button type="button" variant="ghost" className="h-7 shrink-0 px-2 text-bad" onClick={onRetry}>
-        <RotateCw className="size-3.5" strokeWidth={1.5} />{t('Réessayer')}
-      </Button>
+    <div role="alert" className={cx('flex items-start gap-2 rounded-lg bg-bad-soft text-sm text-bad', onRetry ? 'py-1 pl-3 pr-1' : 'px-3 py-2')} data-error-text>
+      <div className={cx('min-w-0 flex-1', onRetry && 'py-1')}>
+        <p>{e.text}</p>
+        {(e.todo || e.link || e.detail) && (
+          <p className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px]">
+            {e.todo && <span className="opacity-90">{e.todo}</span>}
+            {e.link && <a href={e.link.to} className="font-medium underline underline-offset-2">{e.link.label}</a>}
+            <ErrorDetail detail={e.detail} />
+          </p>
+        )}
+      </div>
+      {onRetry && (
+        <Button type="button" variant="ghost" className="h-7 shrink-0 px-2 text-bad" onClick={onRetry}>
+          <RotateCw className="size-3.5" strokeWidth={1.5} />{t('Réessayer')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Empty state of a detail or a full page: icon tile on orange-pale, title, text, actions. */
+export function Empty({ icon, title, children, actions }: { icon: ReactNode; title: string; children?: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2.5 px-6 py-16 text-center">
+      <span aria-hidden className="grid size-11 place-items-center rounded-xl bg-accent-soft text-ink [&>svg]:size-5">{icon}</span>
+      <h2 className="text-base font-semibold">{title}</h2>
+      {children && <p className="max-w-[46ch] text-ink-faint">{children}</p>}
+      {actions && <div className="mt-2 flex flex-wrap justify-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** A page or a panel that could not load: the explained error in the middle, with « Réessayer ». */
+export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  if (!error) return null;
+  const e = explain(error);
+  return (
+    <div role="alert" className="flex flex-col items-center gap-2.5 px-6 py-16 text-center" data-error-state>
+      <span aria-hidden className="grid size-11 place-items-center rounded-xl bg-bad-soft text-bad"><TriangleAlert className="size-5" strokeWidth={1.5} /></span>
+      <h2 className="text-base font-semibold">{e.text}</h2>
+      {e.todo && <p className="max-w-[52ch] text-ink-soft">{e.todo}</p>}
+      <div className="mt-1 flex flex-wrap justify-center gap-2">
+        {onRetry && <Button type="button" onClick={onRetry}><RotateCw className="size-4" strokeWidth={1.5} />{t('Réessayer')}</Button>}
+        {e.link && <a href={e.link.to} className="inline-flex h-9 items-center rounded-lg border border-line px-3 text-sm font-medium hover:bg-raised">{e.link.label}</a>}
+      </div>
+      {e.detail && <p className="flex max-w-[64ch] flex-col items-center gap-1 text-[13px] text-ink-faint"><ErrorDetail detail={e.detail} /></p>}
     </div>
   );
 }
@@ -282,6 +341,7 @@ export async function copyText(text: string, label: string): Promise<void> {
   try {
     if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
     await navigator.clipboard.writeText(text);
+    toast(t('Copié'));
   } catch {
     await showCopy(label, text);
   }

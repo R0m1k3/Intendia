@@ -128,10 +128,12 @@ function PromptEditor({ prompt }: { prompt: Prompt }) {
   const changed = title.trim() !== prompt.title || body !== prompt.body;
   useDirtyGuard(changed);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => api.updatePrompt(prompt.id, { title, body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
   const remove = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: () => api.deletePrompt(prompt.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });

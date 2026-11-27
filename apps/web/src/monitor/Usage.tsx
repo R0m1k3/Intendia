@@ -105,7 +105,7 @@ export function Usage({ inst, profile, days, onDays }: { inst: string; profile: 
     <div className="space-y-4">
       <Chips label={t('Période')} value={String(days) as `${Period}`} onChange={(d) => onDays(Number(d) as Period)}
         items={PERIODS.map((p) => ({ key: String(p) as `${Period}`, label: t('{n} jours', { n: p }) }))} />
-      <ErrorText error={q.error} />
+      <ErrorText error={q.error} onRetry={() => void q.refetch()} />
       {q.isPending && <SkeletonLines rows={4} />}
       {q.data && <UsageBody u={q.data} />}
     </div>

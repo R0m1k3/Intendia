@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, Brain, CalendarClock, Columns3, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, Brain, CalendarClock, Columns3, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LifeBuoy, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,7 @@ import { useTabStatus } from './tabStatus';
 import { isEditable, overlayOpen, shortcutOf } from './shortcuts';
 import { ShortcutsSheet } from './ShortcutsSheet';
 import { getActivePage } from './activePage';
-import { DirtyBlocker } from './dirty';
+import { DirtyBlocker, useAnyDirty } from './dirty';
 import { cx, LogoMark } from './ui';
 import { Popover } from './Menu';
 import { plural, t } from '../i18n';
@@ -49,6 +49,7 @@ const NAV: readonly NavEntry[] = [
   { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'more', page: 'config', words: 'yaml modèles fournisseurs' },
   { key: 'status', to: '/etat', label: t('État'), icon: Server, group: 'foot', words: 'santé compat' },
   { key: 'settings', to: '/reglages', label: t('Réglages'), icon: Settings2, group: 'foot' },
+  { key: 'help', to: '/aide', label: t('Aide'), icon: LifeBuoy, group: 'foot', words: 'help glossaire mots premiers pas' },
 ];
 
 /** Which entry the address belongs to: sessions, folders and the chat all live in « Sessions ». */
@@ -306,8 +307,22 @@ function FullLayout() {
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
       {help && <ShortcutsSheet onClose={() => setHelp(false)} />}
       <Approvals />
+      <UnsavedMark />
       <MobileNav version={version} inst={inst} onLogout={logout} onSearch={() => openPalette()} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
+  );
+}
+
+/** A discreet reminder while a form holds text that is not saved yet (the dirty registry of components/dirty). */
+function UnsavedMark() {
+  const dirty = useAnyDirty();
+  if (!dirty) return null;
+  return createPortal(
+    <p role="status" data-unsaved className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-[60] flex items-center gap-2 rounded-full border border-line bg-sheet px-3 py-1.5 text-[13px] text-ink-soft shadow-[var(--shadow-card)] md:bottom-4 md:right-4">
+      <span aria-hidden className="size-2 rounded-full bg-accent" />
+      {t('Modifications non enregistrées')}
+    </p>,
+    document.body,
   );
 }
 

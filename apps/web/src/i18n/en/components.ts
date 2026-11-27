@@ -265,4 +265,12 @@ export default {
   "Dossiers": "Folders",
   "Gérer les agents": "Manage agents",
   "Barre latérale": "Sidebar",
+  'Enregistré': 'Saved',
+  'Supprimé': 'Deleted',
+  'Renommé': 'Renamed',
+  'Retiré': 'Removed',
+  'Installé': 'Installed',
+  'Désinstallé': 'Uninstalled',
+  'Restauré': 'Restored',
+  'Lien révoqué': 'Link revoked',
 } satisfies Record<string, string>;

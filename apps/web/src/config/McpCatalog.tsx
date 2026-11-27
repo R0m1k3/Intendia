@@ -33,7 +33,7 @@ export function McpCatalog({ inst, profile, can, onClose, onSaved }: {
         )}
       </div>
       {catalog.isPending && <p className="px-4 pb-4 text-sm text-ink-soft">{t('Lecture du catalogue…')}</p>}
-      <div className="px-4 empty:hidden"><ErrorText error={catalog.error} /></div>
+      <div className="px-4 empty:hidden"><ErrorText error={catalog.error} onRetry={() => void catalog.refetch()} /></div>
       <ul className="max-h-[560px] divide-y divide-line/70 overflow-y-auto border-t border-line/70" aria-label={t('Serveurs du catalogue')}>
         {list.map((e) => <CatalogEntry key={e.name} e={e} inst={inst} profile={profile} can={can} onSaved={onSaved} />)}
       </ul>
@@ -53,6 +53,7 @@ function CatalogEntry({ e, inst, profile, can, onSaved }: { e: McpCatalogEntry; 
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<Record<string, string>>({});
   const install = useMutation({
+    meta: { done: t('Installé') },
     mutationFn: () => api.installMcpCatalog(inst, profile, e.name, env),
     onSuccess: async () => { setOpen(false); setEnv({}); await invalidate(); onSaved(); },
   });

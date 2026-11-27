@@ -143,14 +143,5 @@ export function Facts({ items }: { items: { label: string; value: ReactNode; mon
   );
 }
 
-/** Empty state of a detail or a full page: icon tile on orange-pale, title, text, actions. */
-export function Empty({ icon, title, children, actions }: { icon: ReactNode; title: string; children?: ReactNode; actions?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-2.5 px-6 py-16 text-center">
-      <span aria-hidden className="grid size-11 place-items-center rounded-xl bg-accent-soft text-ink [&>svg]:size-5">{icon}</span>
-      <h2 className="text-base font-semibold">{title}</h2>
-      {children && <p className="max-w-[46ch] text-ink-faint">{children}</p>}
-      {actions && <div className="mt-2 flex flex-wrap justify-center gap-2">{actions}</div>}
-    </div>
-  );
-}
+// `Empty` lives in ui.tsx with the other states (ErrorState, SkeletonLines); kept exported here for the inbox panes.
+export { Empty } from './ui';

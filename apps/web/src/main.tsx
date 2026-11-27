@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createRootRoute, createRoute, createRouter, Outlet, redirect, RouterProvider,
 } from '@tanstack/react-router';
@@ -9,6 +9,7 @@ import { api, isTransient, SESSION_SOURCES, type SessionSource } from './api';
 import { initConnection } from './connection/connection';
 import { currentTab, resolveCurrent, type InstancePage } from './instance/current';
 import { DialogHost } from './components/Dialog';
+import { toast, toastError, Toasts } from './components/Toast';
 import { Boundary, RouteError } from './components/ErrorScreen';
 import { pruneDrafts } from './chat/draft';
 import { UndoHost } from './sessions/UndoBar';
@@ -23,6 +24,7 @@ import { ProviderStep } from './setup/ProviderStep';
 import { WorkspaceStep } from './setup/WorkspaceStep';
 import { SetupPage } from './pages/Setup';
 import { StatusPage } from './pages/Status';
+import { HelpPage } from './pages/Help';
 import { CentrePage } from './pages/Centre';
 import { AgentPage } from './pages/Agent';
 import { AgentsPage } from './pages/Agents';
@@ -56,7 +58,17 @@ const savedTheme = localStorage.getItem('intendia-theme');
 if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.classList.add(savedTheme);
 document.documentElement.lang = getLang();
 
+declare module '@tanstack/react-query' {
+  interface Register { mutationMeta: { done?: string; fail?: boolean } }
+}
+
 const queryClient = new QueryClient({
+  // a mutation asks for its toast with `meta`: { done: 'Enregistré' } on success, { fail: true } when it has no
+  // place of its own to show the error
+  mutationCache: new MutationCache({
+    onSuccess: (_data, _vars, _ctx, m) => { if (typeof m.meta?.done === 'string') toast(m.meta.done); },
+    onError: (err, _vars, _ctx, m) => { if (m.meta?.fail === true) toastError(err); },
+  }),
   defaultOptions: {
     queries: {
       // only passing failures (Intendia unreachable): a JSON answer of Intendia is final (403, 404, 409…)
@@ -119,6 +131,7 @@ const sessionsRoute = createRoute({
 });
 const statusRoute = createRoute({ getParentRoute: () => appRoute, path: '/etat', component: StatusPage });
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: '/reglages', component: SettingsPage });
+const helpRoute = createRoute({ getParentRoute: () => appRoute, path: '/aide', component: HelpPage });
 const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: '/w', component: WorkspacesPage });
 const workspaceRoute = createRoute({ getParentRoute: () => appRoute, path: '/w/$slug', component: WorkspacePage });
 const filesRoute = createRoute({
@@ -295,7 +308,7 @@ const externalRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/i/
 const channelRoute = createRoute({ getParentRoute: () => inboxRoute, path: '/canaux/$channelId', component: ChannelPage });
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute, channelRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
+  routeTree: rootRoute.addChildren([loginRoute, setupRoute, providerStepRoute, modelStepRoute, workspaceStepRoute, appRoute.addChildren([inboxRoute.addChildren([homeRoute, sessionRoute, externalRoute, channelRoute]), chatRoute, newChatRoute, sessionsRoute, statusRoute, settingsRoute, helpRoute, workspacesRoute, workspaceRoute, filesRoute, gitRoute, linksRoute, instanceFilesIndexRoute, instanceFilesRoute, cronsIndexRoute, cronsRoute, skillsIndexRoute, skillsRoute, configIndexRoute, configRoute, monitorIndexRoute, monitorRoute, memoryIndexRoute, memoryRoute, accessIndexRoute, accessRoute, agentsIndexRoute, agentsRoute, agentRoute, activityRoute, kanbanIndexRoute, kanbanRoute])]),
   defaultPreload: 'intent',
   defaultErrorComponent: RouteError,
 });
@@ -315,6 +328,7 @@ createRoot(document.getElementById('root')!).render(
       <Boundary>
         <RouterProvider router={router} />
         <DialogHost />
+        <Toasts />
         <UndoHost />
       </Boundary>
     </QueryClientProvider>

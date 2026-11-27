@@ -436,10 +436,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   };
 
   const rename = useMutation({
+    meta: { fail: true },
     mutationFn: (title: string) => api.updateSession(inst!, sessionId, { title }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }).then(() => invalidateSessionLists(qc)),
   });
   const archive = useMutation({
+    meta: { fail: true },
     mutationFn: (archived: boolean) => api.updateSession(inst!, sessionId, { archived }),
     onSuccess: async (_res, archived) => {
       await invalidateSessionLists(qc);
@@ -449,6 +451,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     },
   });
   const pin = useMutation({
+    meta: { fail: true },
     mutationFn: (pinned: boolean) => api.updateSession(inst!, sessionId, { pinned }),
     onSuccess: (res) => {
       qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });

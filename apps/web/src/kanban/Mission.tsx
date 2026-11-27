@@ -22,6 +22,7 @@ function ChildRow({ inst, board, child, all, editable, assignees, onSaved, onRem
   const [draft, setDraft] = useState<{ title: string; body: string; assignee: string; base: string } | null>(null);
   const f = draft ?? { title: child.title, body: child.body, assignee: child.assignee ?? '', base: child.revision };
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: () => {
       const text = f.title !== child.title || f.body !== child.body;
       return api.updateKanbanTask(inst, board, child.id, {
@@ -78,6 +79,7 @@ function Review({ inst, board, mission, assignees }: { inst: string; board: stri
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ['kanban-mission', inst, mission.id] });
   const remove = useMutation({
+    meta: { done: t('Retiré') },
     mutationFn: (child: string) => api.removeKanbanMissionChild(inst, mission.id, child),
     onSuccess: (r) => qc.setQueryData(['kanban-mission', inst, mission.id], r),
     onSettled: () => qc.invalidateQueries({ queryKey: ['kanban-board', inst, board] }),

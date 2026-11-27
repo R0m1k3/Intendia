@@ -8,6 +8,7 @@ import { Gateway } from '../agents/Gateway';
 import { PageHeader } from '../components/Layout';
 import { Button, cx, ErrorText, host, MODULE_META, moduleLabel, Panel, Tag, timeAgo } from '../components/ui';
 import { locale, plural, t } from '../i18n';
+import { Hint } from '../components/Hint';
 
 const STATE_TAG: Record<ModuleReport['state'], { label: string; tag: string; icon: string }> = {
   full: { label: t('complet'), tag: '', icon: 'text-dot-ok' },
@@ -191,7 +192,7 @@ export function StatusPage() {
     <>
       <PageHeader
         title={t('État des instances')}
-        subtitle={t('Chaque module est testé contre Hermes au démarrage, à chaque nouvelle version et chaque jour. Ouvrez un module pour voir les routes qu’il utilise.')}
+        subtitle={<>{t('Chaque module est testé contre Hermes au démarrage, à chaque nouvelle version et chaque jour. Ouvrez un module pour voir les routes qu’il utilise.')} <Hint id="compatibilite" /></>}
         action={(
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => recheck.mutate()} disabled={recheck.isPending || !instance}>
@@ -206,6 +207,7 @@ export function StatusPage() {
       />
       <div className="max-w-[1060px] space-y-5 px-4 pb-14 md:px-8">
         <ErrorText error={recheck.error} />
+        {!compat.data && <ErrorText error={compat.error} onRetry={() => void compat.refetch()} />}
         {instances.length > 1 && (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-3">
             {instances.map((i) => <InstanceCard key={i.id} instance={i} report={report(i.id)} current={i.id === instance?.id} onPick={() => select(i.id)} />)}

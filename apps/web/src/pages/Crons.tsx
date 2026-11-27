@@ -90,6 +90,7 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
     onSuccess: refresh,
   });
   const remove = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: () => api.deleteCron(cron.instanceId, cron.id, cron.profile),
     onSuccess: async () => { onRemoved(); await refresh(); },
   });

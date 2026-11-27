@@ -57,7 +57,7 @@ export function System({ inst }: { inst: string }) {
   const q = useQuery({ queryKey: ['monitor', inst, 'system'], queryFn: () => api.monitorSystem(inst), refetchInterval: POLL_MS, refetchIntervalInBackground: false });
   return (
     <div className="space-y-4">
-      <ErrorText error={q.error} />
+      <ErrorText error={q.error} onRetry={() => void q.refetch()} />
       {q.isPending && <SkeletonLines rows={4} />}
       {q.data && <Body s={q.data} />}
     </div>

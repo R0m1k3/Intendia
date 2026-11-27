@@ -88,6 +88,7 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
     await reload();
   };
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (d: string) => api.putMemoryEntry(inst, profile, entry.id, d),
     onSuccess: async () => {
       setDraft(null);
@@ -97,6 +98,7 @@ export function EntryDetail({ inst, profile, entry, canEdit, canDelete, onSaved,
     onError,
   });
   const remove = useMutation({
+    meta: { done: t('Supprimé') },
     mutationFn: () => api.deleteMemoryEntry(inst, profile, entry.id),
     onSuccess: async () => { await reload(); onDeleted(); },
     onError,

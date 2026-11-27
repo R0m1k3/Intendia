@@ -11,6 +11,7 @@ import { Gateway } from './Gateway';
 import { connectAgent } from './connect';
 import { keyHint } from './keyHint';
 import { plural, t } from '../i18n';
+import { Hint } from '../components/Hint';
 
 const CodeView = lazy(() => import('../files/CodeView'));
 const ICON = 'size-4';
@@ -33,6 +34,7 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
     },
   });
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (d: string) => api.setAgentDescription(inst, name, d),
     onSuccess: async () => {
       setDraft(null);
@@ -91,6 +93,7 @@ function Soul({ inst, name, x, editable }: { inst: string; name: string; x: Agen
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const save = useMutation({
+    meta: { done: t('Enregistré') },
     mutationFn: (d: string) => api.setAgentSoul(inst, name, d),
     onSuccess: async () => { setDraft(null); await qc.invalidateQueries({ queryKey: ['agent', inst, name] }); },
   });
@@ -223,7 +226,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
         ) : undefined}
       />
       <DetailBody>
-        <ErrorText error={agent.error} />
+        <ErrorText error={agent.error} onRetry={() => void agent.refetch()} />
         {removed && <p role="status" className="rounded-[10px] bg-ok-soft px-4 py-3 text-[13.5px]">{removed}</p>}
         {!x && !agent.error && <SkeletonLines rows={4} />}
         {x && !removed && (
@@ -257,7 +260,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
 
             {(has('config', 'gatewayStart') || has('config', 'gatewayStop') || has('config', 'restartGateway')) && (
               <section aria-labelledby="ag-gw">
-                <h3 id="ag-gw" className="text-[15px] font-semibold">{t('Passerelle')}</h3>
+                <h3 id="ag-gw" className="flex items-center gap-1.5 text-[15px] font-semibold">{t('Passerelle')}<Hint id="passerelle" /></h3>
                 <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Elle porte le chat, les runs et les planifications de cet agent')}</p>
                 <Gateway inst={inst} profile={name} running={x.gatewayRunning}
                   can={{ start: has('config', 'gatewayStart'), stop: has('config', 'gatewayStop'), restart: has('config', 'restartGateway') }} />
