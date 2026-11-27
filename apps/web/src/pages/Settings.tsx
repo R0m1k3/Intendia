@@ -335,7 +335,7 @@ export function SettingsPage() {
             <div className={BOX_HEAD}>
               <div className="min-w-0">
                 <h2 id="rg-s" className="text-[15px] font-semibold">{t('Partage de fichiers')}</h2>
-                <p className="mt-0.5 text-[13px] text-ink-faint"><T k="L’outil {tool} donne un lien privé vers chaque fichier livré, y compris depuis Telegram et les crons" vars={{ tool: <code className="font-mono text-xs">share_file</code> }} /></p>
+                <p className="mt-0.5 text-[13px] text-ink-faint"><T k="L’outil {tool} donne un lien privé vers chaque fichier livré, y compris depuis Telegram et les planifications" vars={{ tool: <code className="font-mono text-xs">share_file</code> }} /></p>
               </div>
             </div>
             {list.map((i) => (

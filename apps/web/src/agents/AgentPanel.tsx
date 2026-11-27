@@ -90,8 +90,8 @@ export function AgentPanel({ inst, profile, autoApprove, onAutoApprove, onClose 
 
       <Group icon={<Wrench className="size-4" strokeWidth={1.5} />} title={t('Fait')}>
         <Row label={t('Planning')} value={mine.length
-          ? (next ? t('{count}, prochain {when}', { count: plural(mine.length, '{n} cron', '{n} crons'), when: new Date(next).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }) : plural(mine.length, '{n} cron', '{n} crons'))
-          : t('Aucun cron')} link={page('crons')} />
+          ? (next ? t('{count}, prochain {when}', { count: plural(mine.length, '{n} planification', '{n} planifications'), when: new Date(next).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }) : plural(mine.length, '{n} planification', '{n} planifications'))
+          : t('Aucune planification')} link={page('crons')} />
         <Row label={t('Tâches')} value={a?.workers == null ? '—' : plural(a.workers, '{n} en cours', '{n} en cours')} link={page('kanban')} />
         <Row label={t('Messageries')} value={a?.gatewayRunning == null ? '—' : a.gatewayRunning ? t('Passerelle active') : t('Passerelle arrêtée')} link={{ to: '/i/$inst/agents/$name', params: { inst, name: profile } }} />
         <Row label="MCP" value={t('Serveurs et outils')} link={page('config', { tab: 'mcp' })} />

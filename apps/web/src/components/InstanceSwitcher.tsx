@@ -21,7 +21,7 @@ export function useAlerts(): (id: string) => { failed: number; approvals: number
 function alertLabel({ failed, approvals }: { failed: number; approvals: number }): string | null {
   const parts = [
     approvals ? plural(approvals, '{n} approbation en attente', '{n} approbations en attente') : '',
-    failed ? plural(failed, '{n} cron en échec', '{n} crons en échec') : '',
+    failed ? plural(failed, '{n} planification en échec', '{n} planifications en échec') : '',
   ].filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }

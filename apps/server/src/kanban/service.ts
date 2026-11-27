@@ -356,7 +356,7 @@ export class KanbanService {
     let text = input.body ?? '';
     if (input.workspace) {
       const ws = this.workspaces.getWorkspace(input.workspace);
-      if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le workspace {ws} appartient à une autre instance', { ws: ws.slug }));
+      if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le dossier {ws} appartient à une autre instance', { ws: ws.slug }));
       const key = `${folderKey(title, [], 'tache')}-${randomBytes(2).toString('hex')}`;
       const path = `${this.workspaces.agentPath(ws)}/kanban/${key}`;
       text = frame(text, blockLines(ws, 'kanban', key, this.workspaces.framingLines(ws, `kanban/${key}`), this.workspaces.agentPath(ws)));

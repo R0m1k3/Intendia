@@ -76,7 +76,7 @@ describe('vault: list, add, remove', () => {
     expect((await t.request('POST', `${V}?profile=recherche`, login())).status).toBe(201);
     expect((await t.request('GET', V)).json.items).toEqual([]);
     expect((await t.request('GET', `${V}?profile=recherche`)).json.items).toHaveLength(1);
-    expect(await t.request('GET', `${V}?profile=inconnu`)).toMatchObject({ status: 404, json: { error: 'Profil inconnu' } });
+    expect(await t.request('GET', `${V}?profile=inconnu`)).toMatchObject({ status: 404, json: { error: 'Agent inconnu' } });
   });
 
   it('lists only the local vault and counts the items of an external manager', async () => {

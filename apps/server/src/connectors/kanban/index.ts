@@ -78,7 +78,7 @@ const K = '/api/plugins/kanban';
 
 export const kanbanModule: ModuleDef = {
   id: 'kanban',
-  label: 'Kanban',
+  label: 'Tâches',
   dashboardPage: '/kanban',
   ops: {
     board: { kind: 'read', required: true, probe: true, schema: BoardSchema, routes: [{ via: 'dash', method: 'GET', path: `${K}/board` }] },

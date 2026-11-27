@@ -22,7 +22,7 @@ export function OtherSessions({ inst }: { inst: PublicInstance }) {
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h3 id="other-sessions" className="text-[15px] font-semibold">{t('Autres sessions')} <span className="ml-1 text-xs font-normal text-ink-faint">{inst.label}</span></h3>
-          <p className="mt-0.5 text-[13px] text-ink-faint">{t('Venues de Telegram, du CLI ou des crons, en lecture seule')}</p>
+          <p className="mt-0.5 text-[13px] text-ink-faint">{t('Venues de Telegram, du CLI ou des planifications, en lecture seule')}</p>
         </div>
         {inst.profiles.length > 0 && (
           <select value={profile} onChange={(e) => setProfile(e.target.value)} aria-label={t('Agent')}

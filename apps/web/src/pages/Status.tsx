@@ -167,7 +167,7 @@ function StoppedGateways({ report }: { report: CompatReport }) {
         {stopped.map((a) => (
           <li key={a.name} className="flex flex-wrap items-start gap-3 border-t border-line/70 px-4 py-3">
             <Link to="/i/$inst/agents/$name" params={{ inst, name: a.name }} className="pt-2 font-mono text-[13.5px] hover:underline">{a.name}</Link>
-            <span className="pt-2 text-[13px] text-ink-faint">{t('chat, runs et crons de cet agent arrêtés')}</span>
+            <span className="pt-2 text-[13px] text-ink-faint">{t('chat, runs et planifications de cet agent arrêtés')}</span>
             <div className="ml-auto min-w-[12rem] flex-1">
               <Gateway inst={inst} profile={a.name} running={false} compact can={{ start: true, stop: false, restart: false }} />
             </div>

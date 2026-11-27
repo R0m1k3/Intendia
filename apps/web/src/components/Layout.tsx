@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bot, Brain, CalendarClock, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Activity, Bot, Brain, CalendarClock, Columns3, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
 import { failedCount } from '../home/summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,33 +21,37 @@ import { ShortcutsSheet } from './ShortcutsSheet';
 import { getActivePage } from './activePage';
 import { DirtyBlocker } from './dirty';
 import { cx, LogoMark } from './ui';
+import { Popover } from './Menu';
 import { plural, t } from '../i18n';
 
-/** rail: the page rail (OpenBot-like); foot: its bottom; more: only in the palette, the agent's menu and « Plus » */
+/** rail: the page rail (OpenBot-like); more and foot: in the « Plus » menu at its bottom (and the palette) */
 type NavGroup = 'rail' | 'foot' | 'more';
 
-interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage; short?: string }
+interface NavEntry { key: string; to: string; label: string; icon: typeof House; group: NavGroup; page?: InstancePage; short?: string; words?: string }
 
-/** In display order; `group` places each entry; `page`: per instance; `short`: the rail's label under the icon. */
+/**
+ * In display order; `group` places each entry; `page`: per instance; `short`: the rail's label under the icon;
+ * `words`: older and technical names the palette also finds the page by (never shown).
+ */
 const NAV: readonly NavEntry[] = [
-  { key: 'home', to: '/', label: t('Agents'), icon: Bot, group: 'rail' },
-  { key: 'kanban', to: '/kanban', label: t('Tâches'), icon: KanbanSquare, group: 'rail', page: 'kanban' },
-  { key: 'crons', to: '/crons', label: t('Planning'), icon: CalendarClock, group: 'rail', page: 'crons' },
+  { key: 'home', to: '/', label: t('Sessions'), icon: MessagesSquare, group: 'rail' },
+  { key: 'kanban', to: '/kanban', label: t('Tâches'), icon: KanbanSquare, group: 'rail', page: 'kanban', words: 'kanban missions' },
+  { key: 'crons', to: '/crons', label: t('Planning'), icon: CalendarClock, group: 'rail', page: 'crons', words: 'crons cron planifications schedules' },
   { key: 'files', to: '/files', label: t('Fichiers'), icon: Files, group: 'rail', page: 'files' },
-  { key: 'monitor', to: '/suivi', label: t('Usage'), icon: LineChart, group: 'rail', page: 'suivi' },
-  { key: 'activity', to: '/activite', label: t('Centre'), icon: Activity, group: 'rail' },
-  { key: 'chat', to: '/chat', label: t('Chat'), icon: MessagesSquare, group: 'more' },
-  { key: 'workspaces', to: '/w', label: t('Dossiers'), icon: Folder, group: 'more' },
+  { key: 'monitor', to: '/suivi', label: t('Coûts et journaux'), icon: LineChart, group: 'rail', page: 'suivi', short: t('Coûts'), words: 'suivi usage monitor logs' },
+  { key: 'activity', to: '/activite', label: t('Activité'), icon: Activity, group: 'rail', words: 'centre' },
+  { key: 'chat', to: '/chat', label: t('Vue en colonnes'), icon: Columns3, group: 'more', words: 'chat' },
+  { key: 'workspaces', to: '/w', label: t('Dossiers'), icon: Folder, group: 'more', words: 'workspaces' },
   { key: 'skills', to: '/skills', label: t('Skills'), icon: Layers, group: 'more', page: 'skills' },
   { key: 'memory', to: '/memoire', label: t('Mémoire'), icon: Brain, group: 'more', page: 'memoire' },
-  { key: 'access', to: '/acces', label: t('Accès'), icon: KeyRound, group: 'more', page: 'acces' },
-  { key: 'agents', to: '/agents', label: t('Gérer les agents'), icon: Bot, group: 'more', page: 'agents', short: t('Agents') },
-  { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'more', page: 'config' },
-  { key: 'status', to: '/etat', label: t('État'), icon: Server, group: 'foot' },
+  { key: 'access', to: '/acces', label: t('Accès aux sites'), icon: KeyRound, group: 'more', page: 'acces', words: 'coffre vault' },
+  { key: 'agents', to: '/agents', label: t('Agents'), icon: Bot, group: 'more', page: 'agents', words: 'profils profiles' },
+  { key: 'config', to: '/config', label: t('Configuration'), icon: SlidersHorizontal, group: 'more', page: 'config', words: 'yaml modèles fournisseurs' },
+  { key: 'status', to: '/etat', label: t('État'), icon: Server, group: 'foot', words: 'santé compat' },
   { key: 'settings', to: '/reglages', label: t('Réglages'), icon: Settings2, group: 'foot' },
 ];
 
-/** Which entry the address belongs to: sessions, folders and the chat all live in « Agents ». */
+/** Which entry the address belongs to: sessions, folders and the chat all live in « Sessions ». */
 export function activeKey(pathname: string): string | null {
   if (/^\/w\/[^/]+\/s\//.test(pathname) || pathname === '/chat' || pathname.startsWith('/chat/')) return 'home';
   if (pathname === '/' || pathname === '/sessions' || /^\/i\/[^/]+\/p\//.test(pathname)) return 'home';
@@ -64,8 +68,8 @@ export function activeKey(pathname: string): string | null {
 const RAIL_ITEM = 'flex w-full flex-col items-center gap-1 rounded-[12px] px-1 pb-1.5 pt-2 text-ink-soft transition-colors hover:bg-raised hover:text-ink';
 /** Selected page: a white tile with a hairline ring (the ! classes win over the hover). */
 const RAIL_ON = '!bg-sheet !text-ink font-medium shadow-[0_0_0_1px_var(--color-line)]';
-/** An icon-only button of the rail's foot. */
-const RAIL_ICON = 'flex size-9 items-center justify-center rounded-[10px] text-ink-faint transition-colors hover:bg-raised hover:text-ink';
+/** A line of the « Plus » menu. */
+const MORE_ITEM = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-ink hover:bg-raised focus:bg-raised focus:outline-none';
 
 export function Layout() {
   return <>{EMBEDDED ? <EmbeddedLayout /> : <FullLayout />}<DirtyBlocker /></>;
@@ -123,7 +127,7 @@ function FullLayout() {
   useEffect(() => {
     if (inst && currentTab() === null) setTab(inst);
   }, [inst]);
-  const paletteNav = NAV.map((n) => ({ key: n.key, label: n.label, target: navTarget(n, inst) }));
+  const paletteNav = NAV.map((n) => ({ key: n.key, label: n.label, words: n.words, target: navTarget(n, inst) }));
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = activeKey(pathname);
   useTabStatus(NAV.find((n) => n.key === current)?.label ?? null);
@@ -222,6 +226,21 @@ function FullLayout() {
     );
   };
 
+  // the pages behind « Plus »: the button carries the mark of the current one
+  const inMore = NAV.some((n) => n.group !== 'rail' && n.key === current);
+  const moreLink = (n: NavEntry, close: () => void) => {
+    const c = counts[n.key] ?? {};
+    return (
+      <Link key={n.key} {...(navTarget(n, inst) as { to: string })} role="menuitem" onClick={close}
+        className={cx(MORE_ITEM, current === n.key && 'bg-raised font-medium')}
+        {...(current === n.key ? { 'aria-current': 'page' as const } : {})}>
+        <n.icon className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+        <span className="min-w-0 flex-1 truncate">{n.label}</span>
+        {c.n ? <span className="font-mono text-[11px] text-ink-faint" title={c.label}>{c.n}</span> : null}
+      </Link>
+    );
+  };
+
   return (
     <div className="flex h-full flex-col md:flex-row">
       <aside className="hidden w-[76px] shrink-0 flex-col items-center gap-1 bg-paper pb-3 pt-3.5 md:flex" aria-label={t('Barre latérale')}>
@@ -236,31 +255,43 @@ function FullLayout() {
             className="mb-1 flex size-10 items-center justify-center rounded-[12px] border border-accent-strong bg-accent text-on-accent transition-colors hover:bg-accent-strong">
             <PenLine className="size-[18px]" strokeWidth={1.75} />
           </Link>
-          <button type="button" onClick={() => openPalette()} aria-haspopup="dialog" aria-label={t('Rechercher')}
+          <button type="button" onClick={() => openPalette()} aria-haspopup="dialog"
             title={t('Rechercher ({key}) ; un fichier : {fileKey}', { key: shortcutLabel(), fileKey: shortcutLabel().replace('K', 'P') })}
-            className={RAIL_ICON}>
-            <Search className="size-[18px]" strokeWidth={1.5} />
+            className={RAIL_ITEM}>
+            <Search className="size-[19px]" strokeWidth={1.5} />
+            <span className="max-w-full truncate text-[10.5px] leading-none">{t('Rechercher')}</span>
           </button>
-          {!onSession && inst && (
-            <button type="button" onClick={side ? closeSide : openSide} aria-expanded={side}
-              aria-label={t('Chat latéral')} title={t('Chat latéral ({key})', { key: shortcutLabel().replace('K', 'J') })}
-              className={cx(RAIL_ICON, side && 'bg-raised text-ink')}>
-              <MessageSquareText className="size-[18px]" strokeWidth={1.5} />
-            </button>
-          )}
-          {NAV.filter((n) => n.group === 'foot').map((n) => (
-            <Link key={n.key} {...(navTarget(n, inst) as { to: string })} title={n.label} aria-label={n.label}
-              className={cx(RAIL_ICON, current === n.key && 'bg-sheet text-ink shadow-[0_0_0_1px_var(--color-line)]')}
-              {...(current === n.key ? { 'aria-current': 'page' as const } : {})}>
-              <n.icon className="size-[18px]" strokeWidth={1.5} />
-            </Link>
-          ))}
-          <button type="button" onClick={() => setHelp(true)} aria-haspopup="dialog" aria-label={t('Raccourcis')} title={t('Raccourcis clavier')} className={RAIL_ICON}>
-            <Keyboard className="size-[18px]" strokeWidth={1.5} />
-          </button>
-          <button type="button" onClick={logout} aria-label={t('Se déconnecter')} title={version ? `${t('Se déconnecter')} · Intendia v${version}` : t('Se déconnecter')} className={RAIL_ICON}>
-            <LogOut className="size-[18px]" strokeWidth={1.5} />
-          </button>
+          <Popover
+            title={t('Plus')} placement="above" align="start" width={248}
+            triggerClass={cx(RAIL_ITEM, inMore && RAIL_ON)}
+            trigger={<><Ellipsis className="size-[19px]" strokeWidth={1.5} /><span className="max-w-full truncate text-[10.5px] leading-none">{t('Plus')}</span></>}
+          >
+            {(close) => (
+              <>
+                {NAV.filter((n) => n.group === 'more').map((n) => moreLink(n, close))}
+                <hr className="my-1 border-line" />
+                {!onSession && inst && (
+                  <button type="button" role="menuitem" className={MORE_ITEM} onClick={() => { close(); if (side) closeSide(); else openSide(); }}>
+                    <MessageSquareText className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+                    <span className="min-w-0 flex-1 truncate">{t('Chat latéral')}</span>
+                    <kbd className="font-mono text-[11px] text-ink-faint">{shortcutLabel().replace('K', 'J')}</kbd>
+                  </button>
+                )}
+                {NAV.filter((n) => n.group === 'foot').map((n) => moreLink(n, close))}
+                <button type="button" role="menuitem" aria-haspopup="dialog" className={MORE_ITEM} onClick={() => { close(); setHelp(true); }}>
+                  <Keyboard className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+                  <span className="min-w-0 flex-1 truncate">{t('Raccourcis clavier')}</span>
+                  <kbd className="font-mono text-[11px] text-ink-faint">?</kbd>
+                </button>
+                <hr className="my-1 border-line" />
+                <button type="button" role="menuitem" className={MORE_ITEM} onClick={() => { close(); void logout(); }}>
+                  <LogOut className="size-4 shrink-0 text-ink-faint" strokeWidth={1.5} />
+                  <span className="min-w-0 flex-1 truncate">{t('Se déconnecter')}</span>
+                </button>
+                {version && <p className="px-2.5 pb-0.5 pt-1.5 font-mono text-[11px] text-ink-faint">Intendia v{version}</p>}
+              </>
+            )}
+          </Popover>
         </div>
       </aside>
 
@@ -275,7 +306,7 @@ function FullLayout() {
       {palette && <CommandPalette nav={paletteNav} onClose={closePalette} mode={palette} />}
       {help && <ShortcutsSheet onClose={() => setHelp(false)} />}
       <Approvals />
-      <MobileNav version={version} inst={inst} onSearch={() => openPalette()} onChat={!onSession && inst ? openSide : undefined} current={current} />
+      <MobileNav version={version} inst={inst} onLogout={logout} onSearch={() => openPalette()} onChat={!onSession && inst ? openSide : undefined} current={current} />
     </div>
   );
 }
@@ -283,7 +314,7 @@ function FullLayout() {
 /** Bottom bar on phones: the first entries, the others behind "Plus". */
 const MOBILE_MAIN: string[] = ['home', 'activity', 'kanban', 'crons'];
 
-function MobileNav({ current, onSearch, onChat, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; version?: string; inst: string | null }) {
+function MobileNav({ current, onSearch, onChat, onLogout, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; onLogout: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => setMore(false), [pathname]);
@@ -316,6 +347,10 @@ function MobileNav({ current, onSearch, onChat, version, inst }: { current: stri
                 {n.label}
               </Link>
             ))}
+            <button type="button" onClick={() => { setMore(false); onLogout(); }} className={`${item} rounded-lg text-ink-soft`}>
+              <LogOut className="size-5" strokeWidth={1.5} />
+              {t('Se déconnecter')}
+            </button>
             {version && <p className="col-span-3 pt-2 text-center font-mono text-[11px] text-ink-faint">Intendia v{version}</p>}
           </nav>
         </div>,

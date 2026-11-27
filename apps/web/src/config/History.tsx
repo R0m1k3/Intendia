@@ -10,7 +10,7 @@ import { ask } from '../components/Dialog';
 import { locale, t } from '../i18n';
 
 const SOURCE: Record<string, string> = {
-  form: t('Formulaire'), yaml: t('Éditeur YAML'), restore: t('Restauration'), model: t('Modèle'), env: t('Variable'), mcp: t('Serveur MCP'), orchestration: t('Orchestration du kanban'),
+  form: t('Formulaire'), yaml: t('Éditeur YAML'), restore: t('Restauration'), model: t('Modèle'), env: t('Variable'), mcp: t('Serveur MCP'), orchestration: t('Orchestration des tâches'),
   'provider-models': t('Modèles du chat'), 'provider-login': t('Connexion à un fournisseur'), 'custom-providers': t('Endpoints personnalisés'),
 };
 

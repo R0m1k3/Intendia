@@ -76,7 +76,7 @@ export function NewAgent({ inst, agents, onClose, onCreated }: {
               <ColorChoice value={color} onPick={setColor} />
             </div>
           </Field>
-          <Field label={t('Description')} hint={t('Ce que fait cet agent ; le kanban s’en sert pour lui confier des tâches')}>
+          <Field label={t('Description')} hint={t('Ce que fait cet agent ; la page Tâches s’en sert pour lui confier du travail')}>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} rows={4}
               className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm transition-colors placeholder:text-ink-faint hover:border-ink-faint/60 focus:border-ink focus:outline-none"
               placeholder={t('Cherche et résume les sources sur un sujet.')} />
@@ -150,16 +150,16 @@ export function AgentsPage() {
       )}
       <ErrorText error={agents.error} onRetry={() => void agents.refetch()} />
       {a.available && items.length === 0 && (agents.isSuccess
-        ? <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun profil')}</p>
+        ? <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun agent')}</p>
         : agents.isPending && <SkeletonList rows={6} />)}
-      <ul className="flex flex-col gap-0.5" aria-label={t('Profils')}>
+      <ul className="flex flex-col gap-0.5" aria-label={t('Agents')}>
         {items.map((x) => (
           <li key={x.name} data-agent={x.name}>
             <ListLink link={{ to: '/i/$inst/agents/$name', params: { inst, name: x.name } }} selected={x.name === shown}>
               <ListItemBody
                 mono
                 title={x.name}
-                meta={x.workers ? <span title={t('Workers du kanban en cours')}>{plural(x.workers, '{n} worker', '{n} workers', { n: x.workers })}</span> : x.isDefault ? t('par défaut') : undefined}
+                meta={x.workers ? <span title={t('Tâches que cet agent exécute en ce moment')}>{plural(x.workers, '{n} worker', '{n} workers', { n: x.workers })}</span> : x.isDefault ? t('par défaut') : undefined}
                 sub={x.description || (x.model ? <span className="font-mono text-xs">{x.model}</span> : t('Pas de description'))}
                 tag={(
                   <Tag className={cx(x.name === shown && 'bg-sheet', !x.hasKey && 'text-warn')}
@@ -183,7 +183,7 @@ export function AgentsPage() {
             has={a.has} back={Boolean(name)} />
         ) : (
           <Empty icon={<Bot strokeWidth={1.5} />} title={a.available ? t('Aucun agent') : a.onlyPending ? t('Vérification de cette instance en cours') : t('Agents indisponibles')}>
-            {a.available ? t('Les profils Hermes de l’instance apparaissent ici') : t('Voir la colonne de gauche')}
+            {a.available ? t('Les agents de l’instance apparaissent ici') : t('Voir la colonne de gauche')}
           </Empty>
         )}
       </SplitView>

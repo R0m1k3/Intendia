@@ -9,5 +9,5 @@ export function failedCount(crons: Pick<OverviewCron, 'lastStatus'>[]): number {
 }
 
 export function failureLabel(n: number): string {
-  return plural(n, '{n} cron en échec', '{n} crons en échec');
+  return plural(n, '{n} planification en échec', '{n} planifications en échec');
 }

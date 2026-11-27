@@ -10,8 +10,8 @@ export const AUX_LABELS: Record<string, string> = {
   review: t('Relecture'),
   voice_chat: t('Chat vocal'),
   triage_specifier: t('Tri des demandes'),
-  kanban_decomposer: t('Découpage Kanban'),
-  profile_describer: t('Description de profil'),
+  kanban_decomposer: t('Découpage des missions'),
+  profile_describer: t('Description d’agent'),
   curator: t('Curateur'),
 };
 

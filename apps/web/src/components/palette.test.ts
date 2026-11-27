@@ -5,7 +5,7 @@ import { fileItems, fileTarget, flatItems, moveIndex, paletteGroups, type Palett
 const nav = [
   { key: 'home', label: 'Accueil', target: { to: '/' } },
   { key: 'sessions', label: 'Sessions', target: { to: '/sessions' } },
-  { key: 'crons', label: 'Crons', target: { to: '/i/$inst/crons', params: { inst: 'a' } } },
+  { key: 'crons', label: 'Planning', words: 'crons', target: { to: '/i/$inst/crons', params: { inst: 'a' } } },
   { key: 'config', label: 'Configuration', target: { to: '/i/$inst/config', params: { inst: 'a' } } },
 ];
 const session = (id: string, title: string): RecentSession => ({
@@ -30,9 +30,9 @@ describe('paletteGroups', () => {
     expect(g.map((x) => x.id)).toEqual(['actions', 'pages', 'sessions']);
     expect(g[2]!.items).toHaveLength(5);
   });
-  it('"cro" finds the Crons page and a cron', () => {
+  it('"cro" finds the Planning page by its older name and a schedule', () => {
     const g = paletteGroups('cro', src());
-    expect(g.find((x) => x.id === 'pages')!.items.map((i) => i.label)).toEqual(['Crons']);
+    expect(g.find((x) => x.id === 'pages')!.items.map((i) => i.label)).toEqual(['Planning']);
     expect(g.find((x) => x.id === 'crons')!.items.map((i) => i.label)).toEqual(['Rapport croissance']);
     expect(g.find((x) => x.id === 'crons')!.items[0]!.target).toEqual({ to: '/i/$inst/crons', params: { inst: 'a' } });
     expect(g.find((x) => x.id === 'crons')!.items[0]!.hint).toBeUndefined();

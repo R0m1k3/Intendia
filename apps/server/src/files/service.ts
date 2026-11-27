@@ -156,7 +156,7 @@ export class FileService {
   async create(slug: string, relIn: string, kind: 'file' | 'dir'): Promise<{ path: string }> {
     const c = this.ctx(slug);
     const rel = normalizeRel(relIn);
-    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du workspace', { path: rel }));
+    if (PROTECTED.has(rel)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du dossier', { path: rel }));
     checkName(nameOf(rel));
     const parent = parentOf(rel);
     if (parent) {
@@ -305,7 +305,7 @@ export class FileService {
     const from = normalizeRel(fromIn);
     const to = normalizeRel(toIn);
     if (PROTECTED.has(from)) throw new WorkspaceFsError('invalid', msg('{path} ne peut pas être déplacé', { path: from }));
-    if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du workspace', { path: to }));
+    if (PROTECTED.has(to)) throw new WorkspaceFsError('invalid', msg('{path} est un nom réservé à la racine du dossier', { path: to }));
     if (to === from || to.startsWith(`${from}/`)) throw new WorkspaceFsError('invalid', msg('Un dossier ne peut pas aller dans lui-même'));
     checkName(nameOf(to));
     // Hermes does not list these names: the check below would not see an existing one

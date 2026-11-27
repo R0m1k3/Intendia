@@ -42,7 +42,7 @@ export function NewSkill({ inst, profile, onClose, onCreated }: {
         <Button type="submit" variant="primary" disabled={!ok || create.isPending}>{create.isPending ? t('Création…') : t('Créer le skill')}</Button>
       </>}
     >
-          <p className="text-xs text-ink-faint">{t('Profil')} <span className="ml-1 font-mono">{profile}</span></p>
+          <p className="text-xs text-ink-faint">{t('Agent')} <span className="ml-1 font-mono">{profile}</span></p>
           <Field label={t('Nom')} hint={name && !nameOk ? <span className="text-bad">{t('Minuscules, chiffres, . _ - ; 64 caractères au plus')}</span> : t('Minuscules, chiffres, . _ - ; c’est le dossier du skill')}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={64} placeholder={t('rapport-hebdo')} autoFocus className="font-mono" />
           </Field>

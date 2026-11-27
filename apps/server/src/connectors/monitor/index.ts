@@ -48,7 +48,7 @@ export type HermesSystemStats = z.infer<typeof SystemStatsSchema>;
 /** Usage stats, logs and host metrics of the dashboard (lot 8 A: options 46, 47, 59). Read only. */
 export const monitorModule: ModuleDef = {
   id: 'monitor',
-  label: 'Suivi',
+  label: 'Coûts et journaux',
   dashboardPage: '/analytics',
   ops: {
     usage: {

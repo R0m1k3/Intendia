@@ -19,7 +19,7 @@ const Extract = z.object({ path: z.string().max(1024) });
 
 export function slugOf(c: { req: { param: (k: string) => string } }): string {
   const slug = c.req.param('slug');
-  if (!SLUG_RE.test(slug)) throw new ValidationError(msg('workspace invalide'));
+  if (!SLUG_RE.test(slug)) throw new ValidationError(msg('dossier invalide'));
   return slug;
 }
 

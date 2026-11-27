@@ -7,10 +7,10 @@ test('create, run now, pause, delete a cron', async ({ page }) => {
   await autoConfirm(page);
   await page.goto('/i/fake/crons');
   await page.click('button:has-text("Nouveau")');
-  const form = page.locator('form[aria-label="Nouveau cron"]');
+  const form = page.locator('form[aria-label="Nouvelle planification"]');
   await form.locator('input').first().fill(name);
   await form.locator('textarea').fill('Résume la journée');
-  await form.getByRole('button', { name: 'Créer le cron' }).click();
+  await form.getByRole('button', { name: 'Créer la planification' }).click();
 
   const card = page.locator(`article[aria-label="${name}"]`);
   await expect(card).toBeVisible();
@@ -24,5 +24,5 @@ test('create, run now, pause, delete a cron', async ({ page }) => {
 
   await card.locator('[aria-label="Supprimer"]').click();
   await expect(card).toHaveCount(0);
-  await expect(page.locator(`ul[aria-label="Tâches planifiées"] >> text=${name}`)).toHaveCount(0);
+  await expect(page.locator(`ul[aria-label="Planifications"] >> text=${name}`)).toHaveCount(0);
 });

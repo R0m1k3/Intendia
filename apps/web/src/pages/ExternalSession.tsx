@@ -90,7 +90,7 @@ export function ExternalSessionPage() {
         </div>
       </header>
       <div className="mx-auto w-full max-w-[748px] px-4 py-7 md:px-6">
-        <p className="mb-7 rounded-lg bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft">{t('Lecture seule : cette session vient de Telegram, du CLI, de l’API, d’un cron ou du kanban')}</p>
+        <p className="mb-7 rounded-lg bg-paper px-3.5 py-2.5 text-[13px] text-ink-soft">{t('Lecture seule : cette session vient de Telegram, du CLI, de l’API, d’une planification ou d’une tâche')}</p>
         <ErrorText error={messages.error} />
         <ErrorText error={carryOn.error} />
         <ErrorText error={remove.error} />

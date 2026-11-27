@@ -18,7 +18,7 @@ const LABEL: Record<GatewayAction, { running: string; done: string; failed: stri
 };
 
 const codeOf = (e: unknown) => (e instanceof ApiError ? (e.data as { code?: string } | undefined)?.code : undefined);
-const MULTIPLEXED = t('Cet agent est servi par la passerelle commune : arrêtez-la ou démarrez-la depuis le profil principal.');
+const MULTIPLEXED = t('Cet agent est servi par la passerelle commune : arrêtez-la ou démarrez-la depuis l’agent principal.');
 
 /**
  * Start, stop and restart of an agent's gateway, then the action's log until it ends. Start stays reachable when the
@@ -72,8 +72,8 @@ export function Gateway({ inst, profile, running, can, compact = false }: {
       const ok = await ask({
         title: t('Arrêter la passerelle de {profile} ?', { profile }), danger: true, confirmLabel: t('Arrêter'),
         message: profile === 'default'
-          ? t('Le chat, les runs et les crons de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur. Si elle sert aussi d’autres agents (multiplexeur), ils s’arrêtent tous.')
-          : t('Le chat, les runs et les crons de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur.'),
+          ? t('Le chat, les runs et les planifications de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur. Si elle sert aussi d’autres agents (multiplexeur), ils s’arrêtent tous.')
+          : t('Le chat, les runs et les planifications de cet agent s’arrêtent jusqu’au redémarrage. En conteneur, elle reste arrêtée même après un redémarrage du conteneur.'),
       });
       if (!ok) return;
     }

@@ -83,7 +83,7 @@ function BlueprintForm({ instanceId, profile, bp, onBack, onCreated }: {
       </div>
       <footer className="flex max-w-[720px] justify-end gap-2 px-4 pb-8 md:px-6">
         <Button type="button" onClick={onBack}>{t('Retour')}</Button>
-        <Button type="submit" variant="primary" disabled={create.isPending || missing.length > 0}>{create.isPending ? t('Création…') : t('Créer le cron')}</Button>
+        <Button type="submit" variant="primary" disabled={create.isPending || missing.length > 0}>{create.isPending ? t('Création…') : t('Créer la planification')}</Button>
       </footer>
     </form>
   );
@@ -118,7 +118,7 @@ export function Blueprints({ instanceId, onClose, onCreated }: {
           <ErrorText error={list.error} />
           {list.isPending && <SkeletonList rows={4} className="-mx-3.5" />}
           {list.isSuccess && list.data.length === 0 && <p className="text-sm text-ink-faint">{t('Hermes ne propose aucun modèle pour cet agent')}</p>}
-          <ul className="grid gap-2 sm:grid-cols-2" aria-label={t('Modèles|cron')}>
+          <ul className="grid gap-2 sm:grid-cols-2" aria-label={t('Modèles|planification')}>
             {list.data?.map((b) => (
               <li key={b.key} data-blueprint={b.key}>
                 <button type="button" onClick={() => setPicked(b.key)}

@@ -200,7 +200,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
   const askRemove = async () => {
     const typed = await askText({
       title: t('Supprimer l’agent {name} ?', { name }), confirmLabel: t('Supprimer'), label: t('Tapez {name} pour confirmer', { name }),
-      message: t('Hermes efface tout son dossier : configuration, skills, mémoire, sessions et clés de ce profil. Rien n’est gardé.'),
+      message: t('Hermes efface tout son dossier : configuration, skills, mémoire, sessions et clés de cet agent. Rien n’est gardé.'),
     });
     if (typed === null) return;
     if (typed !== name) { await ask({ title: t('Nom différent'), message: t('« {typed} » n’est pas {name} : rien n’a été supprimé.', { typed, name }), confirmLabel: t('Fermer') }); return; }
@@ -213,7 +213,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
       <DetailHeader
         mono
         title={name}
-        sub={x?.isDefault ? t('Profil par défaut de l’instance') : t('Profil Hermes')}
+        sub={x?.isDefault ? t('Agent principal de l’instance') : t('Agent (profil Hermes)')}
         back={back ? { to: '/i/$inst/agents', params: { inst } } : undefined}
         actions={x ? (
           <>
@@ -258,7 +258,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
             {(has('config', 'gatewayStart') || has('config', 'gatewayStop') || has('config', 'restartGateway')) && (
               <section aria-labelledby="ag-gw">
                 <h3 id="ag-gw" className="text-[15px] font-semibold">{t('Passerelle')}</h3>
-                <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Elle porte le chat, les runs et les crons de cet agent')}</p>
+                <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Elle porte le chat, les runs et les planifications de cet agent')}</p>
                 <Gateway inst={inst} profile={name} running={x.gatewayRunning}
                   can={{ start: has('config', 'gatewayStart'), stop: has('config', 'gatewayStop'), restart: has('config', 'restartGateway') }} />
               </section>
@@ -266,7 +266,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
 
             <section aria-labelledby="ag-desc">
               <h3 id="ag-desc" className="text-[15px] font-semibold">{t('Description')}</h3>
-              <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('Le kanban s’en sert pour confier des tâches à cet agent')}</p>
+              <p className="mb-2 mt-0.5 text-[13px] text-ink-faint">{t('La page Tâches s’en sert pour confier du travail à cet agent')}</p>
               <Description inst={inst} name={name} text={x.description} editable={has('agents', 'setDescription')} canPropose={has('agents', 'describeAuto')} />
             </section>
 
@@ -289,7 +289,7 @@ export function AgentDetail({ inst, name, instance, has, available, back }: {
                   ))}
                 </ul>
               ) : (
-                <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{t('Aucune tâche du kanban en cours pour cet agent')}</p>
+                <p className="border-t border-line/70 px-4 py-3 text-sm text-ink-faint">{t('Aucune tâche en cours pour cet agent')}</p>
               )}
             </section>
 

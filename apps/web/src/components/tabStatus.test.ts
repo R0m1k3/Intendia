@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BADGES, badgeKind, tabTitle } from './tabStatus';
 
 describe('tabTitle', () => {
-  it('counts what waits', () => expect(tabTitle({ base: 'Crons', waiting: 2, running: false })).toBe('(2) Crons · Intendia'));
+  it('counts what waits', () => expect(tabTitle({ base: 'Planning', waiting: 2, running: false })).toBe('(2) Planning · Intendia'));
   it('marks a run going on', () => expect(tabTitle({ base: 'Rapport', waiting: 0, running: true })).toBe('• Rapport · Intendia'));
   it('a wait wins over a run', () => expect(tabTitle({ base: 'Rapport', waiting: 1, running: true })).toBe('(1) Rapport · Intendia'));
   it('Intendia alone without base', () => {

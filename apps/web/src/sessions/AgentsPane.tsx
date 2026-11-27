@@ -289,7 +289,7 @@ export function AgentsPane({ openId, onBeside }: {
               { label: t('Nouveau dossier'), icon: <FolderPlus className="size-4" strokeWidth={1.5} />, onSelect: () => void newFolder(a.name) },
               ...(a.known && inst ? [{ label: t('Fiche de l’agent'), icon: <UserRound className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/i/$inst/agents/$name', params: { inst, name: a.name } }) }] : []),
               ...(a.known && inst ? [{ label: t('Réglages de l’agent'), icon: <SlidersHorizontal className="size-4" strokeWidth={1.5} />, onSelect: () => void navigate({ to: '/i/$inst/config', params: { inst }, search: { profile: a.isDefault ? undefined : a.name } } as never) }] : []),
-              ...(a.known && inst ? ([['skills', t('Skills'), Layers], ['memoire', t('Mémoire'), Brain], ['acces', t('Accès'), KeyRound]] as const).map(([page, label, Icon]) => ({
+              ...(a.known && inst ? ([['skills', t('Skills'), Layers], ['memoire', t('Mémoire'), Brain], ['acces', t('Accès aux sites'), KeyRound]] as const).map(([page, label, Icon]) => ({
                 label, icon: <Icon className="size-4" strokeWidth={1.5} />,
                 onSelect: () => void navigate({ to: `/i/$inst/${page}`, params: { inst }, search: { profile: a.isDefault ? undefined : a.name } } as never),
               })) : []),

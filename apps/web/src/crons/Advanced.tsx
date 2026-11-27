@@ -44,7 +44,7 @@ export function Advanced({ instanceId, profile, cron, form, onChange, error }: {
       </button>
       {open && (
         <div className="space-y-5 border-t border-line/70 px-4 py-4">
-          <Field label={t('Répétition')} hint={cron?.repeat ? t('Déjà {done} sur {total} ; Hermes supprime le cron après le dernier run', { done: cron.repeatCompleted, total: cron.repeat }) : t('Vide : toujours ; un nombre : Hermes supprime le cron après autant de runs')}>
+          <Field label={t('Répétition')} hint={cron?.repeat ? t('Déjà {done} sur {total} ; Hermes supprime la planification après le dernier run', { done: cron.repeatCompleted, total: cron.repeat }) : t('Vide : toujours ; un nombre : Hermes supprime la planification après autant de runs')}>
             <span className="flex items-center gap-2 text-sm">
               <Input type="number" min={1} max={100000} value={form.repeat} onChange={(e) => set({ repeat: e.target.value })} className="w-28" placeholder={t('toujours')} aria-label={t('Nombre de runs')} />
               {t('fois')}
@@ -100,9 +100,9 @@ export function Advanced({ instanceId, profile, cron, form, onChange, error }: {
           </div>
 
           <div>
-            <span className="mb-1.5 block text-[13px] font-medium">{t('Contexte d’autres crons')}</span>
+            <span className="mb-1.5 block text-[13px] font-medium">{t('Contexte d’autres planifications')}</span>
             {others.length || unknown.length ? (
-              <ul className="space-y-1.5" aria-label={t('Contexte d’autres crons')}>
+              <ul className="space-y-1.5" aria-label={t('Contexte d’autres planifications')}>
                 {others.map((c) => (
                   <li key={c.id}>
                     <label className="flex items-start gap-2 text-sm">
@@ -120,8 +120,8 @@ export function Advanced({ instanceId, profile, cron, form, onChange, error }: {
                   </li>
                 ))}
               </ul>
-            ) : crons.isPending ? <SkeletonLines rows={2} /> : <p className="text-sm text-ink-faint">{t('Aucun autre cron de l’agent {profile}', { profile })}</p>}
-            <span className="mt-1 block text-xs text-ink-faint">{t('Le dernier résultat des crons cochés est donné à l’agent avant la consigne')}</span>
+            ) : crons.isPending ? <SkeletonLines rows={2} /> : <p className="text-sm text-ink-faint">{t('Aucune autre planification de l’agent {profile}', { profile })}</p>}
+            <span className="mt-1 block text-xs text-ink-faint">{t('Le dernier résultat des planifications cochées est donné à l’agent avant la consigne')}</span>
           </div>
 
           {error && <p className="text-xs text-bad">{error}</p>}

@@ -12,8 +12,8 @@ export function ProfileSelect({ inst, value, onChange, className }: { inst: stri
   const options = names.includes(value) ? names : [...names, value];
   return (
     <label className="flex items-center gap-2 text-[13px] text-ink-faint">
-      {t('Profil')}
-      <select className={cx(PROFILE_SELECT, className)} value={value} aria-label={t('Profil')} onChange={(e) => onChange(e.target.value)}>
+      {t('Agent')}
+      <select className={cx(PROFILE_SELECT, className)} value={value} aria-label={t('Agent')} onChange={(e) => onChange(e.target.value)}>
         {options.map((p) => <option key={p} value={p}>{p}</option>)}
       </select>
     </label>

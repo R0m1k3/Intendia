@@ -65,7 +65,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
 
   const list = (
     <ListPane
-      title={t('Accès')}
+      title={t('Accès aux sites')}
       action={
         <>
           <ProfileSelect inst={inst} value={profile} onChange={(x) => void navigate({ to: '/i/$inst/acces', params: { inst }, search: { profile: x === 'default' ? undefined : x } })} />
@@ -78,7 +78,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
       }
       footer={available === true ? (
         <p className="sticky bottom-0 border-t border-line/70 bg-sheet px-4 py-3 text-xs text-ink-faint">
-          {t('Chaque profil a son propre coffre : l’agent d’un autre profil ne voit pas ces accès.')}
+          {t('Chaque agent a son propre coffre : un autre agent ne voit pas ces accès.')}
         </p>
       ) : undefined}
     >
@@ -88,7 +88,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
           <ErrorText error={q.error} onRetry={() => void q.refetch()} />
         </div>
       )}
-      {q.data && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun accès enregistré pour ce profil.')}</p>}
+      {q.data && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun accès enregistré pour cet agent.')}</p>}
       {ACCESS_KINDS.map((k) => {
         const group = items.filter((i) => i.kind === k);
         if (!group.length) return null;
@@ -201,7 +201,7 @@ function AccessView({ inst, profile, search }: { inst: string; profile: string; 
   }
 
   return (
-    <SplitView label={t('Accès')} list={list} selected={Boolean(search.item || search.add)}>
+    <SplitView label={t('Accès aux sites')} list={list} selected={Boolean(search.item || search.add)}>
       {banner}
       {detail}
     </SplitView>
