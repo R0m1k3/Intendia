@@ -1,6 +1,7 @@
 import { callOp, HermesError } from '../connectors/runtime.js';
 import type { CompatService } from '../compat/service.js';
 import { UNDO_MS, type WorkspaceService } from '../workspaces/service.js';
+import { log as journal } from '../log.js';
 
 export { UNDO_MS };
 
@@ -19,7 +20,7 @@ export class SessionPurger {
   constructor(
     private readonly workspaces: WorkspaceService,
     private readonly compat: CompatService,
-    private readonly log: (line: string) => void = (l) => console.error(l),
+    private readonly log: (line: string) => void = (l) => journal.error(l),
   ) {}
 
   async sweep(now = Date.now()): Promise<{ purged: string[]; failed: string[] }> {

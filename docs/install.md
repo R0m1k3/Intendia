@@ -219,3 +219,33 @@ and give the returned link in your answer. Never paste the file's content instea
   follow the major tag (`:1`) to receive fixes and compatible additions only.
 - **Database**: before each migration Intendia copies it with `VACUUM INTO` into `/data/backups/` (last five kept).
   Migrations only add tables or columns, so going back one version works without a restore.
+
+## 5. Environment variables
+
+Every variable Intendia reads. Only `INTENDIA_SECRET` is required; an empty value counts as unset. A test
+(`apps/server/test/env-docs.test.ts`) keeps this table and the server's configuration in step.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `INTENDIA_SECRET` | required | At least 32 characters (`openssl rand -hex 32`). Encrypts the instance keys kept in the database. Changing it makes them unreadable. |
+| `INTENDIA_PUBLIC_URL` | none | The address you open Intendia at (`https://intendia.example.com`): share links, OAuth callbacks, and whether the session cookie is marked `Secure`. |
+| `INTENDIA_PASSWORD_HASH` | none | An argon2 hash of the password (`node dist/cli/hash-password.js`). Without it, the first start prints an installation code in the logs and the password is chosen in the browser. |
+| `INTENDIA_INSTANCES` | none | JSON list of Hermes instances declared in the environment (see `.env.example`). Without it, instances are added from the interface and kept encrypted in the database. |
+| `INTENDIA_DATA_DIR` | `/data` | Folder of the database and its backups. Must be writable by the user Intendia runs as. |
+| `INTENDIA_PORT` | `3000` | Port of the interface and its API inside the container. |
+| `INTENDIA_MCP_PORT` | `3001` | Port of the `share_file` MCP endpoint for the agents. Reachable on the Docker network only: never publish it. |
+| `INTENDIA_MCP_URL` | `http://intendia:<INTENDIA_MCP_PORT>` | Address Hermes uses to reach that MCP port, when the container is not named `intendia`. |
+| `INTENDIA_WEB_DIR` | `/app/web` in the image | Folder of the built interface. Unset outside the image: the server answers the API only. |
+| `INTENDIA_TRUST_PROXY` | `true` | Reads `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-For` written by your reverse proxy. Set `false` only when Intendia is reached directly, with no proxy in front. |
+| `INTENDIA_TRUSTED_HOPS` | `1` | Reverse proxies in front of Intendia (1 = your proxy alone; 2 = a CDN, then your proxy). Used to read the visitor's address for the sign-in limit. |
+| `INTENDIA_WEBHOOK_URL` | none | Called (JSON POST with a `text` field) when a module changes state after a Hermes update. |
+| `INTENDIA_VERSION_CHECK_MINUTES` | `5` | Minutes between two checks of each instance's Hermes version (a change starts a full re-test of the modules). |
+| `INTENDIA_UPLOAD_MAX_MB` | `100` | Largest file accepted by an upload, 100 at most (Hermes' limit; the reverse proxy must accept it too). |
+| `INTENDIA_SUBAGENT_MAX_WAIT_MIN` | `60` | Minutes a background sub-agent is waited for at most (0 = until 24 h). Past it the agent goes on with what was delivered. |
+| `INTENDIA_SUBAGENT_GRACE_S` | `300` | Test benches only: seconds without a delivery after the sub-agents' last sign before they are no longer waited for. |
+| `INTENDIA_LOG_LEVEL` | `info` | What `docker logs intendia` keeps: `debug`, `info`, `warn` or `error`. `debug` adds one line per request served (method, path, status, time). |
+| `INTENDIA_VERSION` | set by the image | Version shown in the interface and the logs. Outside the image, the one of `package.json`. |
+
+Each line of the logs starts with its time and level; a line written while a request is served ends with `req=<id>`.
+When the interface shows « Intendia a rencontré une erreur », its technical detail gives that reference: search the
+logs for it (`docker logs intendia 2>&1 | grep <id>`) to find the error and its cause.

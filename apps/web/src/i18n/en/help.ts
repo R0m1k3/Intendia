@@ -55,6 +55,8 @@ export default {
   'Rechargez la page, puis réessayez.': 'Reload the page, then try again.',
   'Run': 'Run',
   'Réessayez. Si cela continue, les journaux du serveur Intendia donnent le détail.': 'Try again. If it keeps happening, the logs of the Intendia server give the detail.',
+  'Réessayez. Si cela continue, cherchez la référence du détail dans les journaux du serveur Intendia.': 'Try again. If it keeps happening, look for the reference of the detail in the logs of the Intendia server.',
+  'Référence : {id}': 'Reference: {id}',
   'Réessayez. Si cela continue, les journaux d’Hermes (page Coûts et journaux) disent pourquoi.': 'Try again. If it keeps happening, the Hermes logs (Costs and logs page) say why.',
   'Répondez quand l’agent vous attend': 'Answer when the agent is waiting for you',
   'Se repérer': 'Finding your way',

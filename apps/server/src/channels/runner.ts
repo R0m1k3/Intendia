@@ -11,6 +11,7 @@ import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError } from '../workspaces/service.js';
 import type { ChannelRow, ChannelService, TurnRow } from './service.js';
 import { MAX_CHAIN, mentions, turnInput } from './text.js';
+import { log as journal } from '../log.js';
 
 const EVERY_MS = 3_000;
 const START_TRIES = 3;
@@ -22,7 +23,7 @@ export class ChannelRunner {
 
   constructor(
     private readonly deps: StartRunDeps & { channels: ChannelService; store: InstanceStore },
-    private readonly log: (line: string) => void = (l) => console.error(l),
+    private readonly log: (line: string) => void = (l) => journal.error(l),
   ) {}
 
   async pass(): Promise<void> {

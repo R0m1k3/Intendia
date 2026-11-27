@@ -55,6 +55,7 @@ import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
 import { BodyError, jsonBodyLimit, readJson } from './routes/body.js';
+import { log, newRequestId, requestId, withRequest } from './log.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -95,7 +96,15 @@ export function createApp(deps: AppDeps) {
     i.apiKey, ...(i.dashboardToken ? [i.dashboardToken] : []), ...Object.values(i.profileKeys ?? {}),
   ]));
 
-  // first: sees the final answer of every route and of onError
+  // every request gets an identifier: on its journal lines, in `X-Request-Id`, and in a 500 answer
+  app.use('*', (c, next) => withRequest(newRequestId(), async () => {
+    const start = Date.now();
+    await next();
+    c.header('X-Request-Id', requestId() ?? '');
+    // the path without its query string, which may carry a token
+    log.debug(`${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - start} ms`);
+  }));
+  // sees the final answer of every route and of onError
   app.use('*', translateResponses());
   app.use('*', async (c, next) => {
     await next();
@@ -146,8 +155,9 @@ export function createApp(deps: AppDeps) {
       for (const [k, v] of Object.entries(r.headers ?? {})) c.header(k, v);
       return c.json(r.body, r.status);
     }
-    console.error(err);
-    return c.json({ error: msg('Erreur interne du serveur Intendia (voir ses journaux)') }, 500);
+    // the method and the path only: a query string may carry a token
+    log.error(`${c.req.method} ${c.req.path}: unexpected error`, err);
+    return c.json({ error: msg('Erreur interne du serveur Intendia (voir ses journaux)'), requestId: requestId() }, 500);
   });
 
   const x = new Hono();
@@ -232,7 +242,7 @@ export function createApp(deps: AppDeps) {
     try {
       if (await link.state(id) === 'missing') await link.connect(id, { test: false });
     } catch (err) {
-      console.warn(`[intendia] MCP entry not written for ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(`[intendia] MCP entry not written for ${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

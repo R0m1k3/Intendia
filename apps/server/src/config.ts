@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { log, LOG_LEVELS, type LogLevel } from './log.js';
 
 /**
  * Instance declared in INTENDIA_INSTANCES (declarative install) or through the setup wizard.
@@ -19,7 +20,7 @@ function dropLegacy(raw: unknown): unknown {
   const id = String(obj.id ?? '?');
   if (!warnedLegacy.has(id)) {
     warnedLegacy.add(id);
-    console.warn(`[intendia] instance "${id}": mount/agentMount ignorés : les workspaces sont lus dans la racine de fichiers d'Hermes`);
+    log.warn(`[intendia] instance "${id}": mount/agentMount ignorés : les workspaces sont lus dans la racine de fichiers d'Hermes`);
   }
   const { mount: _m, agentMount: _a, ...rest } = obj;
   return rest;
@@ -61,6 +62,8 @@ const EnvSchema = z.object({
   INTENDIA_WEBHOOK_URL: z.url().optional(),
   /** Minutes between two cheap version checks of each instance. */
   INTENDIA_VERSION_CHECK_MINUTES: z.coerce.number().int().min(1).default(5),
+  /** What the journal keeps: `debug` adds one line per request served. */
+  INTENDIA_LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   /** Largest file accepted by an upload, in MB (Hermes refuses more than 100). */
   INTENDIA_UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(100).default(100),
 });
@@ -85,6 +88,7 @@ export interface AppConfig {
   webhookUrl: string | undefined;
   versionCheckMinutes: number;
   uploadMaxBytes: number;
+  logLevel: LogLevel;
 }
 
 export function parseInstances(raw: string): InstanceConfig[] {
@@ -102,6 +106,9 @@ export function parseInstances(raw: string): InstanceConfig[] {
   }
   return list;
 }
+
+/** Every environment variable the configuration reads (docs/install.md lists them: test/env-docs.test.ts). */
+export const ENV_KEYS: string[] = Object.keys(EnvSchema.shape);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   // Compose passes `KEY=` lines of an env file as empty strings: treat them as unset
@@ -129,5 +136,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webhookUrl: e.INTENDIA_WEBHOOK_URL,
     versionCheckMinutes: e.INTENDIA_VERSION_CHECK_MINUTES,
     uploadMaxBytes: e.INTENDIA_UPLOAD_MAX_MB * 1024 * 1024,
+    logLevel: e.INTENDIA_LOG_LEVEL,
   };
 }

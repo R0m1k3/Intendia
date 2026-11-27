@@ -10,6 +10,7 @@ import { MODULES } from '../connectors/index.js';
 import { checkInstance, stateChanges } from './engine.js';
 import { withFilesRoot } from './files-root.js';
 import type { Notifier } from './notify.js';
+import { log } from '../log.js';
 
 const KEEP_REPORTS = 20;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -106,7 +107,7 @@ export class CompatService {
         report = JSON.parse(row.reportJson) as CompatReport;
         if (!report || typeof report !== 'object' || !Array.isArray(report.modules)) throw new Error('not a report');
       } catch {
-        console.warn(`[intendia] stored compat report of "${inst.id}" unreadable, ignored`);
+        log.warn(`[intendia] stored compat report of "${inst.id}" unreadable, ignored`);
         continue;
       }
       delete report.checkError;
@@ -168,7 +169,7 @@ export class CompatService {
         return report;
       } catch (err) {
         const message = String((err as Error)?.message ?? err).slice(0, 200);
-        console.warn(`[intendia] compat check of instance "${instanceId}" failed: ${message}`);
+        log.warn(`[intendia] compat check of instance "${instanceId}" failed: ${message}`);
         const prev = this.reports.get(instanceId);
         if (prev) prev.checkError = message;
         this.failed.add(instanceId);
@@ -197,7 +198,7 @@ export class CompatService {
     if (report.outage && prev?.outage) report.outage.since = prev.outage.since;
     const before = prev?.files?.workspaceRoot;
     if (prev?.files && before !== report.files?.workspaceRoot) {
-      console.warn(`[intendia] instance "${instanceId}": workspace root ${before ?? '(none)'} -> ${report.files?.workspaceRoot ?? '(none)'}`);
+      log.warn(`[intendia] instance "${instanceId}": workspace root ${before ?? '(none)'} -> ${report.files?.workspaceRoot ?? '(none)'}`);
     }
     this.reports.set(instanceId, report);
     this.persist(report);
@@ -246,7 +247,7 @@ export class CompatService {
     if (at !== undefined && now - at < DEBOUNCE_MS[group]) return;
     last[group] = now;
     this.lastRequest.set(instanceId, last);
-    console.warn(`[intendia] instance "${instanceId}": recheck (${group})`);
+    log.warn(`[intendia] instance "${instanceId}": recheck (${group})`);
     void this.check(instanceId).catch(noop);
   }
 

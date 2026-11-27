@@ -23,7 +23,7 @@ describe('tolerantArray', () => {
       expect(s.parse([{ id: 'a' }, { id: 42 }, { id: 'b' }])).toEqual([{ id: 'a' }, { id: 'b' }]);
       expect(s.parse([{ id: 'a' }, null])).toEqual([{ id: 'a' }]);
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]![0]).toBe('[intendia] test.items: 1 élément(s) ignoré(s) sur 3');
+      expect(warn.mock.calls[0]![0]).toMatch(/ WARN {2}\[intendia\] test\.items: 1 élément\(s\) ignoré\(s\) sur 3$/);
       // another label logs on its own
       tolerantArray(Item, 'test.other').parse([{ id: 'a' }, 1]);
       expect(warn).toHaveBeenCalledTimes(2);
@@ -74,7 +74,7 @@ describe('tolerant lists, end to end', () => {
     expect(res.status).toBe(200);
     expect(res.json.crons).toHaveLength(1);
     expect(res.json.crons[0]).toMatchObject({ name: (job as { name: string }).name });
-    expect(warn.mock.calls.some((c) => String(c[0]).startsWith('[intendia] crons.jobs: 1 élément(s) ignoré(s) sur 2'))).toBe(true);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes(' WARN  [intendia] crons.jobs: 1 élément(s) ignoré(s) sur 2'))).toBe(true);
   });
 
   it('a cron list with no valid job fails the probe (never ok)', async () => {
@@ -123,7 +123,7 @@ describe('lists made tolerant after B3', () => {
     const parsed = schema.parse(wrap([good, bad])) as Record<string, unknown[]>;
     expect(parsed[key]).toHaveLength(1);
     expect(rawLength(parsed[key]!)).toBe(2);
-    expect(warn.mock.calls.some((c) => String(c[0]).startsWith(`[intendia] ${label}: 1 élément(s) ignoré(s) sur 2`))).toBe(true);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes(` WARN  [intendia] ${label}: 1 élément(s) ignoré(s) sur 2`))).toBe(true);
     expect(schema.safeParse(wrap([bad])).success).toBe(false);
   });
 

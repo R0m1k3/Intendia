@@ -1,4 +1,5 @@
 import type { Db } from './index.js';
+import { log as journal } from '../log.js';
 
 const DAY_MS = 86_400_000;
 const EVERY_MS = 6 * 3_600_000;
@@ -21,7 +22,7 @@ export class Retention {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
-  constructor(private readonly db: Db, private readonly log: (line: string) => void = (l) => console.error(l)) {}
+  constructor(private readonly db: Db, private readonly log: (line: string) => void = (l) => journal.error(l)) {}
 
   sweep(now = Date.now()): RetentionResult {
     const run = (sql: string, ...args: (number | string)[]) => this.db.$client.prepare(sql).run(...args).changes;

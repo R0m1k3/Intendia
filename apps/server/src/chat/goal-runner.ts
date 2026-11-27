@@ -7,6 +7,7 @@ import { NotFoundError, type SessionContext } from '../workspaces/service.js';
 import { readRunStatus } from './history.js';
 import { goalKeySuffix, readMarker, relaunchInput, type Goal, type PauseReason } from './goal.js';
 import { AlreadySentError, GoalInactiveError, IdempotencyConflictError, RunBusyError, settle, startRun, type StartRunDeps } from './start-run.js';
+import { log as journal } from '../log.js';
 
 const EVERY_MS = 3_000;
 /** start errors in a row (other than "a run goes on") before the goal pauses with `start_failed` */
@@ -23,7 +24,7 @@ export class GoalRunner {
   private busy = false;
   private readonly failures = new Map<string, number>();
 
-  constructor(private readonly deps: StartRunDeps, private readonly log: (line: string) => void = (l) => console.error(l)) {}
+  constructor(private readonly deps: StartRunDeps, private readonly log: (line: string) => void = (l) => journal.error(l)) {}
 
   /** One pass; returns what was decided per goal (`<instance>/<session>` → decision), for the tests. */
   async pass(): Promise<Map<string, GoalDecision>> {

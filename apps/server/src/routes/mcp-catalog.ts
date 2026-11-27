@@ -5,6 +5,7 @@ import { CALLBACK_PARAM_MAX, ENV_VALUE_MAX, MCP_NAME_RE, type McpCatalogService 
 import { ValidationError } from '../workspaces/service.js';
 import { profileOf } from './skills.js';
 import { msg, requestLang, toLang, type Lang } from '../i18n/index.js';
+import { log } from '../log.js';
 
 const InstallBody = z.object({ env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/), z.string().max(ENV_VALUE_MAX)).default({}) });
 const FLOW_ID = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/);
@@ -66,7 +67,7 @@ export function mcpOauthRoutes(mcp: McpCatalogService, limiter: RateLimiter, cli
     const ok = (v: string | undefined) => v === undefined || v.length <= CALLBACK_PARAM_MAX;
     if (!MCP_NAME_RE.test(n) || !q.state || !(q.code || q.error) || ![q.code, q.state, q.error, q.iss].every(ok)) return send(c, 'invalid');
     const out = await mcp.relay(c.req.param('inst'), n, { code: q.code, state: q.state, error: q.error, iss: q.iss });
-    console.log(`[mcp-oauth] callback ${n}: ${out}`);
+    log.info(`[mcp-oauth] callback ${n}: ${out}`);
     return send(c, out);
   });
   return r;

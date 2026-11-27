@@ -10,7 +10,7 @@ const MAX_BODY = 16 * 1024;
 
 /**
  * The body as JSON. `c.req.json()` would throw a SyntaxError quoting part of the text (a password) into the generic
- * `console.error` of `app.onError`: any failure here gives a fixed error.
+ * journal line of `app.onError`: any failure here gives a fixed error.
  */
 async function bodyOf(c: Context): Promise<unknown> {
   try {

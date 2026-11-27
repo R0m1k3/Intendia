@@ -10,6 +10,7 @@ import { InstanceStore } from './instances/store.js';
 import { createMcpApp } from './mcp/server.js';
 import { createServices } from './services.js';
 import { appVersion, readPkgVersion } from './version.js';
+import { log, setLogLevel } from './log.js';
 
 const VERSION = appVersion(process.env.INTENDIA_VERSION, readPkgVersion());
 
@@ -25,6 +26,7 @@ function checkWritable(dir: string, what: string): void {
 
 function main() {
   const config = loadConfig();
+  setLogLevel(config.logLevel);
   const db = openDb(config.dataDir);
   checkWritable(config.dataDir, 'Data directory');
 
@@ -47,6 +49,7 @@ function main() {
   const mcpApp = createMcpApp({ db, store, links: services.links, roots: services.roots, config, version: VERSION });
 
   if (auth.setupCode) {
+    // not a journal line: always shown, whatever the level (the first sign-in needs it)
     console.log('');
     console.log(`  Intendia: first start. Installation code: ${auth.setupCode}`);
     console.log('  Open the web UI and enter it to choose a password.');
@@ -54,11 +57,11 @@ function main() {
   }
 
   const server = serve({ fetch: app.fetch, port: config.port, hostname: '0.0.0.0' }, (info) => {
-    console.log(`[intendia] ${VERSION} listening on :${info.port}${config.publicUrl ? ` (${config.publicUrl})` : ''}`);
+    log.info(`[intendia] ${VERSION} listening on :${info.port}${config.publicUrl ? ` (${config.publicUrl})` : ''}`);
   });
   // MCP for the agents: reachable on the Docker network only, never published
   const mcpServer = serve({ fetch: mcpApp.fetch, port: config.mcpPort, hostname: '0.0.0.0' }, (info) => {
-    console.log(`[intendia] MCP (share_file) on :${info.port}`);
+    log.info(`[intendia] MCP (share_file) on :${info.port}`);
   });
   compat.start(config.versionCheckMinutes);
 
@@ -89,6 +92,6 @@ function main() {
 try {
   main();
 } catch (err) {
-  console.error(`[intendia] ${(err as Error).message}`);
+  log.error(`[intendia] ${(err as Error).message}`);
   process.exit(1);
 }
