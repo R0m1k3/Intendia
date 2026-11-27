@@ -10,7 +10,8 @@ export type PaletteMode = 'all' | 'files';
  * `target`: where it leads; an item with `mode` switches the palette instead (« Ouvrir un fichier… »); an item with
  * `run` (the open session's actions) closes the palette and runs it.
  */
-export interface PaletteItem { id: string; label: string; hint?: string; target?: Target; mode?: PaletteMode; run?: () => void }
+/** `words`: other names the search accepts (older or technical names), never shown. */
+export interface PaletteItem { id: string; label: string; hint?: string; words?: string; target?: Target; mode?: PaletteMode; run?: () => void }
 export interface PaletteGroup { id: PaletteGroupId; label: string; items: PaletteItem[] }
 
 export const PER_GROUP = 5;
@@ -18,7 +19,7 @@ export const PER_GROUP = 5;
 export const SEARCH_MIN = 2;
 
 const GROUP_LABEL: Record<PaletteGroupId, string> = {
-  page: t('Session ouverte'), actions: t('Actions'), pages: t('Pages'), agents: t('Agents'), workspaces: t('Dossiers'), crons: t('Crons'), sessions: t('Sessions'), files: t('Fichiers'),
+  page: t('Session ouverte'), actions: t('Actions'), pages: t('Pages'), agents: t('Agents'), workspaces: t('Dossiers'), crons: t('Planning'), sessions: t('Sessions'), files: t('Fichiers'),
 };
 
 export const ACTIONS: PaletteItem[] = [
@@ -62,7 +63,7 @@ export function sessionTarget(s: RecentSession): Target {
 
 export interface PaletteSources {
   /** Pages, their target already resolved for the current instance. */
-  nav: readonly { key: string; label: string; target: Target }[];
+  nav: readonly { key: string; label: string; target: Target; words?: string }[];
   workspaces: readonly { slug: string; name: string; profile?: string | null }[];
   /** The agents (Hermes profiles) of the current instance: found by name or description; `inst` for their card. */
   agents?: { inst: string; list: readonly { name: string; description?: string }[] };
@@ -81,8 +82,8 @@ export interface PaletteSources {
  */
 export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
   const words = wordsOf(q);
-  const keep = (items: PaletteItem[]) => (words.length ? items.filter((i) => matchesAll(words, `${i.label} ${i.hint ?? ''}`)) : items);
-  const pages: PaletteItem[] = src.nav.map((n) => ({ id: `p:${n.key}`, label: n.label, target: n.target }));
+  const keep = (items: PaletteItem[]) => (words.length ? items.filter((i) => matchesAll(words, `${i.label} ${i.hint ?? ''} ${i.words ?? ''}`)) : items);
+  const pages: PaletteItem[] = src.nav.map((n) => ({ id: `p:${n.key}`, label: n.label, words: n.words, target: n.target }));
   // the agent and the folder are in the hint: « veille » finds that agent's sessions, « magasins » that folder's
   const folderName = (slug: string | null | undefined) => (slug ? src.workspaces.find((w) => w.slug === slug)?.name ?? slug : null);
   const toSession = (s: RecentSession): PaletteItem => ({

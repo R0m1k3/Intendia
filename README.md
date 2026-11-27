@@ -2,7 +2,7 @@
 
 Intendia is a web interface for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It runs as a single
 container next to your Hermes instances and lets you work with the agent (chat, agents, folders, files) and administer it
-(crons, skills, models, providers, profiles, kanban, memory) from one place, in English or French.
+(schedules, skills, models, providers, agents, tasks, memory) from one place, in English or French.
 
 Intendia talks to Hermes only through its HTTP APIs: the API server (port 8642) and the dashboard (port 9119). It never
 imports the agent's code and never reads or writes its files, so Hermes can keep updating itself on its `latest` tag.
@@ -11,7 +11,7 @@ imports the agent's code and never reads or writes its files, so Hermes can keep
 |---|---|
 | ![Home: the agents, their folders and sessions](docs/screenshots/home.png) | ![Chat](docs/screenshots/chat.png) |
 | ![The agent's card beside the session: brain, knows, does, rules](docs/screenshots/agent.png) | ![File produced by the agent](docs/screenshots/session-files.png) |
-| ![Kanban](docs/screenshots/kanban.png) | ![Crons](docs/screenshots/crons.png) |
+| ![Tasks](docs/screenshots/kanban.png) | ![Schedule](docs/screenshots/crons.png) |
 | ![Skills](docs/screenshots/skills.png) | ![Hermes settings](docs/screenshots/settings.png) |
 | ![State of each module](docs/screenshots/state.png) | |
 
@@ -33,24 +33,24 @@ hand on a reference Hermes 0.23. Intendia has not yet been run for long on a pro
 - Give a session a goal (`/goal`): Intendia keeps the agent working until it reports the goal reached or blocked,
   within a budget you set.
 - Open up to four sessions side by side on the Chat page, and keep a side chat next to any page.
-- Browse every session of an instance, whatever started it (Intendia, CLI, Telegram, Discord, crons, kanban): search,
+- Browse every session of an instance, whatever started it (Intendia, CLI, Telegram, Discord, schedules, tasks): search,
   pin, rename, copy, move to another folder, export (Markdown, HTML, JSON) or delete.
 - Group sessions in folders under their agent. A folder is a real directory that the agent works in; its files can be browsed,
   previewed (code, Markdown, PDF, images, CSV, Office documents, Excalidraw), uploaded, renamed, moved and
   downloaded as zip.
 - Use git in a folder: status, diff, stage, and commit with a message written by the agent.
-- Get links to the files the agent delivers. Intendia gives Hermes a `share_file` MCP tool, so a cron or a Telegram
+- Get links to the files the agent delivers. Intendia gives Hermes a `share_file` MCP tool, so a schedule or a Telegram
   conversation can answer with a private link to a file.
 
 ### Administer Hermes
 
-- Crons: create, edit, pause, run now, follow their runs, start from templates.
+- Schedule (Hermes crons): create, edit, pause, run now, follow their runs, start from templates.
 - Skills: browse the hub, install (after Hermes' security scan), update, edit or archive skills the agent wrote.
 - Configuration: main and auxiliary models, providers (subscriptions by device code, API keys, key pools, custom
   OpenAI-compatible endpoints, Anthropic setup-token), Hermes settings as a form or as YAML with history and diff,
   environment variables, MCP servers (with a catalog and OAuth), messaging platforms, plugins, and guardrails.
 - Agents: Hermes profiles with their own model, keys and gateway; the Activity page lists what runs on every instance.
-- Kanban: boards, tasks, live updates, and missions (Hermes splits a goal into tasks that you review before they run).
+- Tasks (Hermes kanban): boards, tasks, live updates, and missions (Hermes splits a goal into tasks that you review before they run).
 - Monitor: usage and cost per day, logs, and server metrics.
 - Memory: the agent's built-in memory and what it has learned.
 - Site access: logins, cards and addresses kept in the Hermes credential vault, for the browser tool.

@@ -48,11 +48,11 @@ const BulkBody = z.object({
   ids: Ids,
   action: z.enum(['archive', 'unarchive', 'pin', 'unpin', 'delete', 'move']),
   workspace: z.string().regex(SLUG_RE).optional(),
-}).refine((b) => b.action !== 'move' || b.workspace, { message: msg('workspace requis pour déplacer'), path: ['workspace'] });
+}).refine((b) => b.action !== 'move' || b.workspace, { message: msg('dossier requis pour déplacer'), path: ['workspace'] });
 const RestoreBody = z.object({ ids: Ids });
 
 export const RUN_ACTIVE = msg('Un travail est en cours');
-const MOVE_FILES = msg("Ses fichiers resteraient dans l'ancien workspace");
+const MOVE_FILES = msg("Ses fichiers resteraient dans l'ancien dossier");
 
 export function sessionParams(c: { req: { param: (k: string) => string } }): { inst: string; id: string } {
   const inst = c.req.param('inst');
@@ -188,7 +188,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
         if (after) return after;
       }
       if (body.profile && body.profile !== 'default' && !deps.store.get(inst)?.profileKeys[body.profile]) {
-        return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile: body.profile }), code: 'no_key' }, 400);
+        return c.json({ error: msg('Agent sans clé sur cette instance : {profile}', { profile: body.profile }), code: 'no_key' }, 400);
       }
     }
     if (body.autoApprove === true) {

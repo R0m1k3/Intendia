@@ -8,7 +8,7 @@ import { plural, t } from '../i18n';
 export const PERIODS = [7, 30, 90] as const;
 export type Period = (typeof PERIODS)[number];
 
-const SOURCE_LABEL: Record<string, string> = { api_server: t('API (Intendia, applis)'), cli: t('Terminal'), cron: t('Crons'), telegram: 'Telegram', discord: 'Discord', slack: 'Slack', kanban: 'Kanban' };
+const SOURCE_LABEL: Record<string, string> = { api_server: t('API (Intendia, applis)'), cli: t('Terminal'), cron: t('Planifications'), telegram: 'Telegram', discord: 'Discord', slack: 'Slack', kanban: t('Tâches') };
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -61,7 +61,7 @@ function UsageBody({ u }: { u: PublicUsage }) {
           </table>
         </details>
         <p className="mt-3 text-xs text-ink-faint">
-          {t('Coûts parfois écrits en différé, 0 si le prix du modèle est inconnu. Une session compte entière le jour de son début. Toutes les sources sont comptées (terminal, crons, messageries), pas seulement Intendia.')}
+          {t('Coûts parfois écrits en différé, 0 si le prix du modèle est inconnu. Une session compte entière le jour de son début. Toutes les sources sont comptées (terminal, planifications, messageries), pas seulement Intendia.')}
         </p>
       </Panel>
       <Panel title={t('Par modèle')} bodyClassName="border-t border-line/70 overflow-x-auto">

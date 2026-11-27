@@ -44,7 +44,7 @@ export function StatusBars() {
       ? t('Serveur Intendia injoignable, nouvel essai toutes les 5 s')
       : bar === 'hermes'
         ? t('Hermes ({instance}) injoignable depuis {time}', { instance: label, time })
-        : t("Dashboard d'Hermes ({instance}) injoignable depuis {time} : fichiers, crons, skills et configuration en pause", { instance: label, time });
+        : t("Dashboard d'Hermes ({instance}) injoignable depuis {time} : fichiers, planifications, skills et configuration en pause", { instance: label, time });
   const hard = bar === 'offline' || bar === 'server';
   return createPortal(
     <div

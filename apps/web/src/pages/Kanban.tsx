@@ -357,7 +357,7 @@ export function KanbanPage() {
       setDragging(from ? from.slice('text/x-from-'.length) : null);
     }} onDragEnd={() => setDragging(null)} onDrop={() => setDragging(null)}>
       <PageHeader
-        title="Kanban"
+        title={t('Tâches')}
         subtitle={<><T k="Le tableau de tâches de {inst}, commun à tous ses agents." vars={{ inst: current ? <span className="text-ink">{current.label}</span> : t('l’instance') }} />{live.polling ? ` ${t('Mise à jour toutes les 5 s.')}` : ''}</>}
         action={a.available && board ? (
           <div className="flex flex-wrap gap-2">
@@ -371,7 +371,7 @@ export function KanbanPage() {
       <div className="space-y-5 pb-10">
         <div className="space-y-4 px-4 md:px-8">
           <div className="empty:hidden">
-            <ModuleNotice instanceId={inst} module="kanban" title={t('Le kanban')} required={REQUIRED} optional={OPTIONAL} />
+            <ModuleNotice instanceId={inst} module="kanban" title={t('Le tableau des tâches')} required={REQUIRED} optional={OPTIONAL} />
           </div>
           {a.available && (
             <div className="flex flex-wrap items-center gap-2">

@@ -30,7 +30,7 @@ const LockBody = z.object({ name: NAME, locked: z.boolean() });
 /** `?profile=`, `default` when absent. */
 export function profileOf(c: Context): string {
   const profile = c.req.query('profile') ?? 'default';
-  if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('profil invalide'));
+  if (!PROFILE_RE.test(profile)) throw new ValidationError(msg('agent invalide'));
   return profile;
 }
 

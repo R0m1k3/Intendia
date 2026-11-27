@@ -164,7 +164,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
   r.get(`${P}/events`, (c) => {
     const id = inst(c);
     const board = boardOf(c);
-    if (!kanban.can(id, 'board')) throw new KanbanError('hermes_conflict', msg('Kanban indisponible sur cette instance'));
+    if (!kanban.can(id, 'board')) throw new KanbanError('hermes_conflict', msg('Tâches indisponibles sur cette instance'));
     const instance = deps.compat.http(id).instance;
     const lang = requestLang(c);
     const enc = new TextEncoder();
@@ -183,7 +183,7 @@ export function kanbanRoutes(deps: { kanban: KanbanService; missions: MissionSer
         };
         const ping = setInterval(() => send(': ping\n\n'), PING_MS);
         const recycle = setTimeout(() => {
-          send(`event: closed\ndata: ${JSON.stringify({ reason: toLang(msg('Flux du kanban renouvelé'), lang), code: 'recycle' })}\n\n`);
+          send(`event: closed\ndata: ${JSON.stringify({ reason: toLang(msg('Flux des tâches renouvelé'), lang), code: 'recycle' })}\n\n`);
           finish();
         }, deps.kanbanRelayMaxMs ?? RELAY_MAX_MS);
         const conn = openKanbanEvents(instance, board, {

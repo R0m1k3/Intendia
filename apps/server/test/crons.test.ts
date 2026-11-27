@@ -126,7 +126,7 @@ describe('crons', () => {
     const plain = (await t.request('POST', BASE, input())).json.cron;
     const res = await putCron(t, plain.id, input({ workspace: 'labo' }));
     expect(res.status).toBe(400);
-    expect(res.json.error).toContain('profil recherche');
+    expect(res.json.error).toContain('l’agent recherche');
     // wrong profile for the job: Hermes answers 404
     expect((await t.request('POST', `${BASE}/${cron.id}/pause?profile=default`)).status).toBe(404);
     expect((await t.request('POST', `${BASE}/${cron.id}/pause?profile=recherche`)).json.cron.enabled).toBe(false);

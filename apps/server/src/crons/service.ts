@@ -221,7 +221,7 @@ export function advancedFields(input: CronInput, reset: boolean): Record<string,
 // ---------------------------------------------------------------- service
 
 /** Hermes 400 → CronInputError, 404 → NotFoundError; anything else is rethrown. */
-async function translate<T>(fn: () => Promise<T>, what = msg('Cron introuvable')): Promise<T> {
+async function translate<T>(fn: () => Promise<T>, what = msg('Planification introuvable')): Promise<T> {
   try {
     return await fn();
   } catch (err) {
@@ -285,7 +285,7 @@ export class CronService {
   /** Workspace of the same instance, or a 400. */
   private workspaceFor(instanceId: string, slug: string): Workspace {
     const ws = this.workspaces.getWorkspace(slug);
-    if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le workspace {slug} appartient à une autre instance', { slug }));
+    if (ws.instanceId !== instanceId) throw new ValidationError(msg('Le dossier {slug} appartient à une autre instance', { slug }));
     return ws;
   }
 
@@ -374,7 +374,7 @@ export class CronService {
   private async checkContext(instanceId: string, profile: string, ids: string[], self?: string): Promise<void> {
     const known = new Set((await this.rawList(instanceId)).filter((j) => (j.profile ?? 'default') === profile && j.id !== self).map((j) => j.id));
     const unknown = ids.filter((id) => !known.has(id));
-    if (unknown.length) throw new ValidationError(msg('Cron de contexte inconnu pour cet agent : {ids}', { ids: unknown.join(', ') }));
+    if (unknown.length) throw new ValidationError(msg('Planification de contexte inconnue pour cet agent : {ids}', { ids: unknown.join(', ') }));
   }
 
   async update(instanceId: string, id: string, profile: string, input: CronInput): Promise<PublicCron> {
@@ -390,7 +390,7 @@ export class CronService {
     const { http, report } = this.ctx(instanceId);
     const job = await this.rawGet(instanceId, id, profile);
     if (this.revisionOf(cronRevisionText(job)) !== input.base) {
-      throw new AdminError('stale', msg('Ce cron a changé dans Hermes depuis l’ouverture : rechargez'));
+      throw new AdminError('stale', msg('Cette planification a changé dans Hermes depuis l’ouverture : rechargez'));
     }
     const current = unframe(job.prompt ?? '');
     const fields: Record<string, unknown> = {
@@ -403,7 +403,7 @@ export class CronService {
       const wsProfile = ws.profile ?? 'default';
       const jobProfile = job.profile ?? profile;
       if (wsProfile !== jobProfile) {
-        throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, ce cron le profil {jobProfile}', { wsProfile, jobProfile }));
+        throw new ValidationError(msg('Ce dossier utilise l’agent {wsProfile}, cette planification l’agent {jobProfile}', { wsProfile, jobProfile }));
       }
       // same workspace: the folder never changes. Another workspace: keep the key only if it is free there
       // (a folder left by a deleted cron must not be reused), else allocate one against the destination
@@ -454,12 +454,12 @@ export class CronService {
   async instantiate(instanceId: string, profile: string, key: string, values: Record<string, string>, workspace: string | null): Promise<{ cron: PublicCron; attached: boolean }> {
     const { http, report } = this.ctx(instanceId);
     const bp = (await this.blueprints(instanceId, profile)).find((b) => b.key === key);
-    if (!bp) throw new NotFoundError(msg('Modèle de cron inconnu : {key}', { key }));
+    if (!bp) throw new NotFoundError(msg('Modèle de planification inconnu : {key}', { key }));
     const names = new Set(bp.fields.map((f) => f.name));
     const extra = Object.keys(values).filter((k) => !names.has(k));
     if (extra.length) throw new ValidationError(msg('Champ inconnu pour ce modèle : {fields}', { fields: extra.join(', ') }));
     const ws = workspace ? this.workspaceFor(instanceId, workspace) : null;
-    if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(msg('Ce workspace utilise le profil {wsProfile}, pas {profile}', { wsProfile: ws.profile ?? 'default', profile }));
+    if (ws && (ws.profile ?? 'default') !== profile) throw new ValidationError(msg('Ce dossier utilise l’agent {wsProfile}, pas {profile}', { wsProfile: ws.profile ?? 'default', profile }));
     // no recovery after an uncertain answer: name and prompt come from the template, so nothing ties a new job
     // to this request (another client may have created it), and attaching it would move someone else's cron
     const job = asJob(await translate(() => callOp(http, report, 'crons', 'instantiate', { profile, body: { blueprint: key, values } })));

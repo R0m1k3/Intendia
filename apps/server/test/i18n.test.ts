@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { join } from 'node:path';
 // @ts-expect-error plain JS helper shared with the web test
 import { listSources, placeholders, scanFiles } from '../../../scripts/i18n-scan.mjs';
+// @ts-expect-error plain JS helper shared with the web test
+import { bannedWords } from '../../../scripts/i18n-glossary.mjs';
 import en from '../src/i18n/en.js';
 import { makeTranslator, requestLang, toLang, translateJson, translateResponses } from '../src/i18n/index.js';
 import { createApp } from '../src/app.js';
@@ -108,6 +110,10 @@ describe('completeness of the English dictionary', () => {
       if (/^\s*\{\w+\}\s*$/.test(k)) problems.push(`placeholder-only key: ${JSON.stringify(k)} (${where})`);
     }
     expect(problems).toEqual([]);
+  });
+  it('one word per notion: no technical name in a text shown to the user', () => {
+    const found = [...used].flatMap(([k, where]) => bannedWords(k).map((w: string) => `${w} : ${JSON.stringify(k)} (${where})`));
+    expect(found).toEqual([]);
   });
   it('no unused English text', () => {
     expect(Object.keys(dict).filter((k) => !used.has(k))).toEqual([]);

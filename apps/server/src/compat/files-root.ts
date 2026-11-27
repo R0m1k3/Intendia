@@ -21,7 +21,7 @@ function containsOrEquals(a: string, b: string): boolean {
 
 export async function readFilesRoot(http: HermesHttp, report: CompatReport): Promise<NonNullable<CompatReport['files']>> {
   const no = (reason: string) => ({ workspaceRoot: null, reason });
-  if (!http.hasDashboard()) return no(msg('Fichiers des workspaces indisponibles : dashboard non configuré pour cette instance.'));
+  if (!http.hasDashboard()) return no(msg('Fichiers des dossiers indisponibles : dashboard non configuré pour cette instance.'));
   try {
     const list = await callOp<HermesFilesList>(http, report, 'files', 'list');
     if (!list.locked_root) {

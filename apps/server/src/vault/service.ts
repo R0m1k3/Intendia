@@ -51,7 +51,7 @@ function convert(err: unknown, op: Op): Error {
   if (err instanceof AdminError || err instanceof NotFoundError) return err;
   if (!(err instanceof GatewaySocketError)) return new HermesError('schema', msg("Erreur d'Hermes"));
   if (err.code === -32601) return new AdminError('unsupported', msg("Cette version d'Hermes ne permet pas de gérer le coffre"));
-  if (err.code === 4064) return new NotFoundError(msg('Profil inconnu'));
+  if (err.code === 4064) return new NotFoundError(msg('Agent inconnu'));
   if (err.code === 5095) return op === 'add' ? addRefusal(err.message) : new HermesError('http', FAILED[op]);
   if (err.code !== null) return new HermesError('http', msg("Erreur d'Hermes (code {code})", { code: err.code }));
   if (err.message === 'Dashboard non configuré') return new HermesError('unconfigured', msg('Dashboard non configuré'));

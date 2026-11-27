@@ -135,7 +135,7 @@ function CronDetail({ cron, all, instanceLabel, can, follow, result, onFollow, o
             )}
             {can('remove') && (
               <Button variant="ghost" className="w-[34px] px-0 hover:text-bad" title={t('Supprimer')} aria-label={t('Supprimer')} disabled={remove.isPending}
-                onClick={async () => { if (await ask({ title: t('Supprimer le cron « {name} » ?', { name: cron.name }), message: t('Hermes l’oublie définitivement ; les fichiers déjà produits restent.'), confirmLabel: t('Supprimer'), danger: true })) remove.mutate(); }}>
+                onClick={async () => { if (await ask({ title: t('Supprimer la planification « {name} » ?', { name: cron.name }), message: t('Hermes l’oublie définitivement ; les fichiers déjà produits restent.'), confirmLabel: t('Supprimer'), danger: true })) remove.mutate(); }}>
                 <Trash2 className={ICON} strokeWidth={1.5} />
               </Button>
             )}
@@ -211,7 +211,7 @@ export function CronsPage() {
 
   const list = (
     <ListPane
-      title={t('Crons')}
+      title={t('Planning')}
       action={a.available && (can('create') || canBlueprints) ? (
         <span className="flex gap-1.5">
           {canBlueprints && (
@@ -229,7 +229,7 @@ export function CronsPage() {
       head={items.length > 0 ? (
         <label className="flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-ink-faint focus-within:border-ink">
           <Search className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-          <span className="sr-only">{t('Rechercher un cron')}</span>
+          <span className="sr-only">{t('Rechercher une planification')}</span>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Rechercher')}
             className="w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint" />
         </label>
@@ -237,9 +237,9 @@ export function CronsPage() {
     >
       <ErrorText error={crons.error} onRetry={() => void crons.refetch()} />
       {a.available && crons.isPending && <SkeletonList rows={6} />}
-      {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron sur cette instance')}</p>}
-      {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucun cron ne correspond')}</p>}
-      <ul className="flex flex-col gap-0.5" aria-label={t('Tâches planifiées')}>
+      {crons.isSuccess && items.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucune planification sur cette instance')}</p>}
+      {needle && items.length > 0 && shown.length === 0 && <p className="px-3.5 py-6 text-sm text-ink-faint">{t('Aucune planification ne correspond')}</p>}
+      <ul className="flex flex-col gap-0.5" aria-label={t('Planifications')}>
         {shown.map((c) => {
           const k = cronKey(c);
           const on = editing === null && selected !== null && cronKey(selected) === k;
@@ -262,12 +262,12 @@ export function CronsPage() {
 
   const notice = (
     <div className="px-4 pt-5 empty:hidden md:px-6">
-      <ModuleNotice instanceId={inst} module="crons" title={t('La console des crons')} required={REQUIRED} optional={OPTIONAL} explainMissing />
+      <ModuleNotice instanceId={inst} module="crons" title={t('Le planning')} required={REQUIRED} optional={OPTIONAL} explainMissing />
     </div>
   );
 
   return (
-    <SplitView label={t('Crons')} list={list} selected={Boolean(search.cron) || editing !== null}>
+    <SplitView label={t('Planning')} list={list} selected={Boolean(search.cron) || editing !== null}>
       {Object.entries(follows).map(([k, f]) => (
         <CronFollower key={k} cron={f.cron} follow={f.snap} canRuns={can('runs')}
           onEnd={(r) => {
@@ -290,7 +290,7 @@ export function CronsPage() {
           {selected && unattached?.key === cronKey(selected) && (
             <div className="px-4 pt-4 md:px-6">
               <p role="alert" className="flex items-start gap-3 rounded-[10px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
-                <span className="flex-1">{t('Cron créé, mais pas rattaché au dossier « {workspace} » : modifiez-le pour le rattacher.', { workspace: unattached.workspace })}</span>
+                <span className="flex-1">{t('Planification créée, mais pas rattachée au dossier « {workspace} » : modifiez-la pour la rattacher.', { workspace: unattached.workspace })}</span>
                 <button type="button" aria-label={t('Masquer')} onClick={() => setUnattached(null)}><X className="size-3.5" strokeWidth={1.5} /></button>
               </p>
             </div>
@@ -310,15 +310,15 @@ export function CronsPage() {
           ) : crons.isSuccess && items.length === 0 ? (
             <Empty
               icon={<CalendarClock strokeWidth={1.5} />}
-              title={t('Aucun cron pour l’instant')}
+              title={t('Aucune planification pour l’instant')}
               actions={can('create') || canBlueprints ? (
                 <>
-                  {can('create') && <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />{t('Créer un cron')}</Button>}
+                  {can('create') && <Button variant="primary" onClick={() => setEditing('new')}><Plus className={ICON} strokeWidth={1.5} />{t('Créer une planification')}</Button>}
                   {canBlueprints && <Button onClick={() => setEditing('blueprint')}><LayoutTemplate className={ICON} strokeWidth={1.5} />{t('Depuis un modèle')}</Button>}
                 </>
               ) : undefined}
             >
-              {offset ? t('Une tâche planifiée envoie une consigne à l’agent à heure fixe (heure d’Hermes, {offset}), et livre le résultat où vous voulez.', { offset }) : t('Une tâche planifiée envoie une consigne à l’agent à heure fixe, et livre le résultat où vous voulez.')}
+              {offset ? t('Une planification envoie une consigne à l’agent à heure fixe (heure d’Hermes, {offset}), et livre le résultat où vous voulez.', { offset }) : t('Une planification envoie une consigne à l’agent à heure fixe, et livre le résultat où vous voulez.')}
             </Empty>
           ) : null}
         </>

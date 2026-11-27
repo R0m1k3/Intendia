@@ -145,7 +145,7 @@ export function chatRoutes(deps: AppDeps & { workspaces: WorkspaceService }): Ho
     const inst = deps.store.get(instanceId);
     if (!inst) throw new NotFoundError(msg('Instance inconnue : {id}', { id: instanceId }));
     const p = profile || 'default';
-    if (p !== 'default' && !inst.profileKeys[p]) throw new ValidationError(msg('Profil inconnu : {profile}', { profile: p }));
+    if (p !== 'default' && !inst.profileKeys[p]) throw new ValidationError(msg('Agent inconnu : {profile}', { profile: p }));
     return p;
   };
 

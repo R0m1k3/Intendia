@@ -151,11 +151,11 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
     <form
       onSubmit={(e) => { e.preventDefault(); if (!scheduleError && !optionsError) save.mutate(); }}
       className="flex flex-col"
-      aria-label={cron ? t('Modifier le cron') : t('Nouveau cron')}
+      aria-label={cron ? t('Modifier la planification') : t('Nouvelle planification')}
     >
         <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-line/70 px-4 py-3 md:px-6">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold">{cron ? t('Modifier le cron') : t('Nouveau cron')}</h2>
+            <h2 className="truncate text-lg font-semibold">{cron ? t('Modifier la planification') : t('Nouvelle planification')}</h2>
             {cron && <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">{cron.name}</p>}
           </div>
           <Button type="button" variant="ghost" className="w-[34px] px-0" onClick={close} aria-label={t('Fermer')}>
@@ -193,8 +193,8 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
           </Row>
 
           <Field label={t('Dossier')} hint={ws
-            ? t('Le prompt reçoit le bloc de cadrage : l’agent lit AGENTS.md et range ses fichiers dans crons/{folder}/ ; profil {profile}', { folder: cron?.workspace?.folder ?? t('nom-du-cron'), profile: ws.profile ?? 'default' })
-            : t('Facultatif : rattache le cron à un dossier')}>
+            ? t('Le prompt reçoit le bloc de cadrage : l’agent lit AGENTS.md et range ses fichiers dans crons/{folder}/ ; agent {profile}', { folder: cron?.workspace?.folder ?? t('nom-de-la-planification'), profile: ws.profile ?? 'default' })
+            : t('Facultatif : rattache la planification à un dossier')}>
             <select value={workspace} onChange={(e) => setWorkspace(e.target.value)} className={cx(SELECT, 'w-full')}>
               <option value="">{t('Aucun')}</option>
               {mine.map((w) => <option key={w.slug} value={w.slug}>{w.name} ({w.slug})</option>)}
@@ -238,7 +238,7 @@ export function CronEditor({ instanceId, cron, offset, onClose, onSaved }: {
         <footer className="flex max-w-[720px] justify-end gap-2 px-4 pb-8 md:px-6">
           <Button type="button" onClick={close}>{t('Annuler')}</Button>
           <Button type="submit" variant="primary" disabled={save.isPending || Boolean(scheduleError) || Boolean(optionsError) || !name.trim() || !prompt.trim()}>
-            {save.isPending ? t('Enregistrement…') : cron ? t('Enregistrer') : t('Créer le cron')}
+            {save.isPending ? t('Enregistrement…') : cron ? t('Enregistrer') : t('Créer la planification')}
           </Button>
         </footer>
     </form>

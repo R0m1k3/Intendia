@@ -105,7 +105,7 @@ export function updateBody(via: Via, fields: Record<string, unknown>): unknown {
 // (/api/jobs, not announced in /v1/capabilities: `jobs_admin: false` in 0.23.0). Dashboard first.
 export const cronsModule: ModuleDef = {
   id: 'crons',
-  label: 'Crons',
+  label: 'Planning',
   dashboardPage: '/cron',
   ops: {
     list: {

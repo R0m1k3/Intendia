@@ -167,16 +167,16 @@ export class WorkspaceService {
 
   getWorkspace(slug: string): Workspace {
     const ws = this.db.select().from(workspaces).where(eq(workspaces.slug, slug)).get();
-    if (!ws) throw new NotFoundError(msg('Workspace inconnu : {slug}', { slug }));
+    if (!ws) throw new NotFoundError(msg('Dossier inconnu : {slug}', { slug }));
     return ws;
   }
 
   async createWorkspace(input: { slug: string; name: string; instanceId: string; profile?: string | null }): Promise<Workspace> {
     const inst = this.instance(input.instanceId);
     const profile = input.profile && input.profile !== 'default' ? input.profile : null;
-    if (profile && !inst.profileKeys[profile]) throw new ValidationError(msg('Profil sans clé sur cette instance : {profile}', { profile }));
+    if (profile && !inst.profileKeys[profile]) throw new ValidationError(msg('Agent sans clé sur cette instance : {profile}', { profile }));
     if (this.creating.has(input.slug) || this.db.select().from(workspaces).where(eq(workspaces.slug, input.slug)).get()) {
-      throw new WorkspaceFsError('exists', msg('Le workspace {slug} existe déjà', { slug: input.slug }));
+      throw new WorkspaceFsError('exists', msg('Le dossier {slug} existe déjà', { slug: input.slug }));
     }
     this.creating.add(input.slug);
     try {

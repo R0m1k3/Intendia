@@ -25,11 +25,11 @@ export interface Preset {
 export const APPLIES_TEXT: Record<Applies, string> = {
   now: t('S’applique tout de suite.'),
   sessions: t('S’applique aux nouvelles sessions, et aux autres après 1 h sans activité.'),
-  dispatcher: t('S’applique au prochain passage du kanban (toutes les 60 s par défaut).'),
+  dispatcher: t('S’applique au prochain passage du tableau des tâches (toutes les 60 s par défaut).'),
 };
 
 export const GUARDRAILS: Preset = {
-  intro: t('Hermes ne peut pas mettre un run en pause ni le limiter en jetons ou en dollars. Le budget de temps demande à l’agent de conclure, il ne l’arrête pas. L’arrêt après des échecs répétés est coupé par défaut pour les chats d’Intendia (Hermes les compte comme surveillés) et actif pour les crons et le kanban.'),
+  intro: t('Hermes ne peut pas mettre un run en pause ni le limiter en jetons ou en dollars. Le budget de temps demande à l’agent de conclure, il ne l’arrête pas. L’arrêt après des échecs répétés est coupé par défaut pour les chats d’Intendia (Hermes les compte comme surveillés) et actif pour les planifications et les tâches.'),
   items: [
     { path: 'agent.run_budget_seconds', label: t('Budget de temps par run (secondes)'), applies: 'sessions', numeric: true, nullable: true,
       help: t('À 80 % du temps, Hermes demande à l’agent de conclure. Vide : pas de budget.') },
@@ -41,7 +41,7 @@ export const GUARDRAILS: Preset = {
       help: t('Un avertissement est ajouté au résultat de l’outil après des échecs ou des appels sans progrès.') },
     { path: 'tool_loop_guardrails.hard_stop_enabled', label: t('Arrêter les boucles dans les chats'), applies: 'sessions',
       help: t('Bloque l’outil, puis le tour, après les seuils ci-dessous, aussi pour les sessions surveillées (chats d’Intendia).') },
-    { path: 'tool_loop_guardrails.non_interactive_hard_stop_enabled', label: t('Arrêter les boucles des crons et du kanban'), applies: 'sessions',
+    { path: 'tool_loop_guardrails.non_interactive_hard_stop_enabled', label: t('Arrêter les boucles des planifications et des tâches'), applies: 'sessions',
       help: t('Même arrêt pour les sessions sans personne derrière (actif par défaut).') },
     { path: 'tool_loop_guardrails.hard_stop_after.exact_failure', label: t('Arrêt après N échecs identiques'), applies: 'sessions',
       help: t('Même outil, mêmes arguments, même erreur.') },
@@ -57,9 +57,9 @@ export const GUARDRAILS: Preset = {
       help: t('Un lot plus grand est refusé ; une délégation en fond au-delà se fait en attendant.') },
     { path: 'delegation.max_spawn_depth', label: t('Profondeur de délégation'), applies: 'now',
       help: t('1 : un sous-agent ne peut pas déléguer à son tour.') },
-    { path: 'kanban.max_in_progress', label: t('Tâches kanban en cours au plus'), applies: 'dispatcher', numeric: true, nullable: true,
+    { path: 'kanban.max_in_progress', label: t('Tâches en cours au plus'), applies: 'dispatcher', numeric: true, nullable: true,
       help: t('Pour toute l’instance. Vide : Hermes choisit selon la mémoire du serveur (2 à 8).') },
-    { path: 'kanban.max_in_progress_per_profile', label: t('Tâches kanban en cours au plus par agent'), applies: 'dispatcher', numeric: true, nullable: true,
+    { path: 'kanban.max_in_progress_per_profile', label: t('Tâches en cours au plus par agent'), applies: 'dispatcher', numeric: true, nullable: true,
       help: t('Vide : pas de limite par agent.') },
   ],
 };

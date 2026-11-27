@@ -8,7 +8,7 @@ describe('cron summary', () => {
   });
 
   it('writes the failure line in French, singular and plural', () => {
-    expect(failureLabel(1)).toBe('1 cron en échec');
-    expect(failureLabel(3)).toBe('3 crons en échec');
+    expect(failureLabel(1)).toBe('1 planification en échec');
+    expect(failureLabel(3)).toBe('3 planifications en échec');
   });
 });

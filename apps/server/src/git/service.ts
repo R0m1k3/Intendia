@@ -170,7 +170,7 @@ export class GitService {
     const rel = normalizeRel(repo, { allowRoot: true });
     const abs = under(p.wsAbs, rel);
     if (await this.gitRoot(p, abs) !== abs) {
-      throw new WorkspaceFsError('outside', msg("{path} : ce dossier n'est pas la racine d'un dépôt git du workspace", { path: rel || slug }));
+      throw new WorkspaceFsError('outside', msg("{path} : ce n'est pas la racine d'un dépôt git du dossier", { path: rel || slug }));
     }
     const dotGit = await this.roots.fs(this.workspaces.getWorkspace(slug).instanceId).entry(under(slug, rel ? `${rel}/.git` : '.git'));
     if (!dotGit || !dotGit.isDir || dotGit.isLink) {

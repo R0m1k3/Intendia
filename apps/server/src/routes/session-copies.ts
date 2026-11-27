@@ -82,7 +82,7 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     if (profile === ctx.profile) return c.json({ error: msg('La session est déjà sur cet agent'), code: 'same_profile' }, 400);
     if (profile !== 'default') await deps.services.agents.connect(inst, profile);
     if (profile !== 'default' && !deps.store.get(inst)?.profileKeys[profile]) {
-      return c.json({ error: msg('Profil sans clé sur cette instance : {profile}', { profile }), code: 'no_key' }, 400);
+      return c.json({ error: msg('Agent sans clé sur cette instance : {profile}', { profile }), code: 'no_key' }, 400);
     }
     const newId = copyId(inst, workspace.slug, `${key}:${profile}`);
     const done = workspaces.existingCopy(workspace.slug, newId);
@@ -139,11 +139,11 @@ export function sessionCopyRoutes(deps: AppDeps & { workspaces: WorkspaceService
     const body = ContinueBody.parse(await readJson(c));
     const instance = deps.store.get(inst);
     if (!instance) throw new NotFoundError(msg('Instance inconnue : {id}', { id: inst }));
-    if (body.profile !== 'default' && !instance.profileKeys[body.profile]) throw new ValidationError(msg('Profil inconnu : {profile}', { profile: body.profile }));
+    if (body.profile !== 'default' && !instance.profileKeys[body.profile]) throw new ValidationError(msg('Agent inconnu : {profile}', { profile: body.profile }));
     const ws = workspaces.getWorkspace(body.workspace);
-    if (ws.instanceId !== inst) throw new ValidationError(msg('Workspace d’une autre instance'));
+    if (ws.instanceId !== inst) throw new ValidationError(msg('Dossier d’une autre instance'));
     // the history stays with its profile: a copy is only made in a workspace of that profile
-    if ((ws.profile ?? 'default') !== body.profile) return c.json({ error: msg('Workspace d’un autre agent'), code: 'other_profile' }, 400);
+    if ((ws.profile ?? 'default') !== body.profile) return c.json({ error: msg('Dossier d’un autre agent'), code: 'other_profile' }, 400);
     const newId = copyId(inst, ws.slug, body.key);
     const done = workspaces.existingCopy(ws.slug, newId);
     if (done) return c.json({ session: done });

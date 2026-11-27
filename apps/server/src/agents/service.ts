@@ -263,7 +263,7 @@ export class AgentService {
    */
   async remove(instanceId: string, name: string): Promise<{ ok: true; keyLeft: boolean; pending: boolean }> {
     this.instance(instanceId);
-    if (name === 'default') throw new AdminError('protected', msg('Le profil principal ne peut pas être supprimé'));
+    if (name === 'default') throw new AdminError('protected', msg('L’agent principal ne peut pas être supprimé'));
     const uses = this.workspaces.usesProfile(instanceId, name);
     if (uses.workspaces.length || uses.sessions) {
       throw new AdminError('in_use', msg('Agent encore utilisé par Intendia'), { workspaces: uses.workspaces, sessions: uses.sessions });

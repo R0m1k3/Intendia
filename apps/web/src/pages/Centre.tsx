@@ -52,11 +52,11 @@ export function CentrePage() {
   // background sub-agents of a session with no run going on (a run of the same session is listed above)
   const subagents = (data?.subagents ?? []).filter((x) => !data?.runs.some((r) => r.instance === x.instance && r.sessionId === x.sessionId));
   const waiting = (approvals.data?.approvals ?? []).filter((a) => (all || a.instanceId === inst) && !answered.has(a.key));
-  const subtitle = all ? t('Toutes les instances.') : `${instance && instances.length > 1 ? `${instance.label}. ` : ''}${t('Runs lancés depuis Intendia et tâches du kanban.')}`;
+  const subtitle = all ? t('Toutes les instances.') : `${instance && instances.length > 1 ? `${instance.label}. ` : ''}${t('Runs lancés depuis Intendia et tâches en cours.')}`;
 
   return (
     <div>
-      <PageHeader title={t('Centre')} subtitle={subtitle} action={instances.length > 1 ? (
+      <PageHeader title={t('Activité')} subtitle={subtitle} action={instances.length > 1 ? (
         <label className="flex items-center gap-2 text-sm text-ink-soft">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4 accent-[var(--color-ink)]" />
           {t('Toutes les instances')}
@@ -111,7 +111,7 @@ export function CentrePage() {
           {finished.data?.runs.length ? <FinishedList runs={finished.data.runs} instanceLabel={label} />
             : empty(Boolean(finished.data), t('Aucun run terminé'))}
           <p className="border-t border-line/70 px-4 py-2.5 text-[12px] text-ink-faint">
-            {t('Dernières 24 h, runs lancés depuis Intendia (pas ceux de Telegram, des crons ni du kanban).')}
+            {t('Dernières 24 h, runs lancés depuis Intendia (pas ceux de Telegram, des planifications ni des tâches).')}
           </p>
         </Panel>
       </div>

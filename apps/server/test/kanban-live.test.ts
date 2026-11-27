@@ -75,7 +75,7 @@ describe('kanban live events', () => {
     const { text, ended } = await read(res, (s) => s.includes('event: closed'), 2000);
     expect(text).toContain('event: closed');
     expect(text).toContain('"code":"recycle"');
-    expect(text).toContain('Flux du kanban renouvelé');
+    expect(text).toContain('Flux des tâches renouvelé');
     await sleep(20);
     expect(ended || text.includes('event: closed')).toBe(true);
     expect(listeners(t)).toBe(0);
@@ -114,7 +114,7 @@ describe('kanban live events', () => {
     const reasons: string[] = [];
     openKanbanEvents(fakeInstance(), 'default', { onEvents: () => {}, onClose: (r) => reasons.push(r) }, silent, 50);
     await sleep(120);
-    expect(reasons).toEqual(['Flux du kanban sans réponse']);
+    expect(reasons).toEqual(['Flux des tâches sans réponse']);
     expect(closedWith).toBe(1000);
   });
 

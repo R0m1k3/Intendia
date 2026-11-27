@@ -28,12 +28,12 @@ export function MonitorPage() {
   return (
     <div className="pb-14">
       <PageHeader
-        title={t('Suivi')}
+        title={t('Coûts et journaux')}
         subtitle={t('Utilisation, journaux et métriques du serveur Hermes')}
         action={tab !== 'server' ? <ProfileSelect inst={inst} value={profile} onChange={(p) => go({ profile: p === 'default' ? undefined : p })} /> : undefined}
       />
       <div className="space-y-4 px-4 md:px-8">
-        <ModuleNotice instanceId={inst} module="monitor" title={t('Le suivi')} required={REQUIRED}
+        <ModuleNotice instanceId={inst} module="monitor" title={t('La page Coûts et journaux')} required={REQUIRED}
           optional={[['monitor', 'logs', t('Journaux')], ['monitor', 'system', t('Métriques du serveur')], ['monitor', 'sessionStats', t('Sessions par source')]]} />
         {tab && (
           <>

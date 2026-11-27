@@ -215,7 +215,7 @@ describe('sessions', () => {
     const mv = await t.request('POST', '/x/i/fake/sessions/bulk', { ids: [a.id, b.id, 'iw-dev-inconnu'], action: 'move', workspace: 'autre' });
     expect(mv.json.results).toEqual([
       { id: a.id, ok: true },
-      { id: b.id, ok: false, error: "Ses fichiers resteraient dans l'ancien workspace" },
+      { id: b.id, ok: false, error: "Ses fichiers resteraient dans l'ancien dossier" },
       { id: 'iw-dev-inconnu', ok: false, error: 'Introuvable' },
     ]);
     expect((await t.request('GET', `/x/sessions/fake/${a.id}`)).json.session.workspace).toBe('autre');

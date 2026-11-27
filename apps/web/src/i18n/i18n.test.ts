@@ -4,6 +4,8 @@ import { createElement } from 'react';
 import { join } from 'node:path';
 // @ts-expect-error plain JS helper shared with the server test
 import { listSources, placeholders, scanFiles } from '../../../../scripts/i18n-scan.mjs';
+// @ts-expect-error plain JS helper shared with the server test
+import { bannedWords } from '../../../../scripts/i18n-glossary.mjs';
 import { __en, __setLangForTest, getLang, plural, t } from './index';
 import { pickLang } from './detect';
 import { T } from './T';
@@ -72,6 +74,10 @@ describe('completeness of the English dictionary', () => {
       if (/^\s*\{\w+\}\s*$/.test(k)) problems.push(`placeholder-only key: ${JSON.stringify(k)} (${where})`);
     }
     expect(problems).toEqual([]);
+  });
+  it('one word per notion: no technical name in a text shown to the user', () => {
+    const found = [...used].flatMap(([k, where]) => bannedWords(k).map((w: string) => `${w} : ${JSON.stringify(k)} (${where})`));
+    expect(found).toEqual([]);
   });
   it('no unused English text', () => {
     const own = new Set((scanFiles([__filename], ['t']) as Scan[])[0]!.keys.map((k) => k.key));

@@ -8,7 +8,7 @@ const rs = (id: string, source: string | null): RecentSession => ({ kind: 'herme
 describe('recent sessions', () => {
   it('labels sources', () => {
     expect([sourceLabel('intendia'), sourceLabel('telegram'), sourceLabel('cron'), sourceLabel('api_server'), sourceLabel('discord'), sourceLabel(null)])
-      .toEqual(['Intendia', 'Telegram', 'Cron', 'API', 'Discord', 'Hermes']);
+      .toEqual(['Intendia', 'Telegram', 'Planification', 'API', 'Discord', 'Hermes']);
   });
   it('filters by source and keeps 7 lines', () => {
     const list = [rs('a', 'intendia'), rs('b', 'telegram'), rs('c', 'cron'), ...Array.from({ length: 8 }, (_, i) => rs(`t${i}`, 'telegram'))];

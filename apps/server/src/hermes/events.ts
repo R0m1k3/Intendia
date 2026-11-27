@@ -60,11 +60,11 @@ export function openKanbanEvents(
   try {
     ws = factory(kanbanEventsUrl(instance, board));
   } catch {
-    queueMicrotask(() => end(msg('Connexion au flux du kanban impossible')));
+    queueMicrotask(() => end(msg('Connexion au flux des tâches impossible')));
     return { close: () => { closed = true; } };
   }
   timer = setTimeout(() => {
-    end(msg('Flux du kanban sans réponse'));
+    end(msg('Flux des tâches sans réponse'));
     try { ws.close(1000); } catch { /* not open */ }
   }, openTimeoutMs);
   ws.addEventListener('open', () => {
@@ -81,8 +81,8 @@ export function openKanbanEvents(
       // not JSON: ignored
     }
   });
-  ws.addEventListener('error', () => end(msg('Flux du kanban interrompu')));
-  ws.addEventListener('close', (ev) => end(ev.code === 1008 ? msg('Flux du kanban refusé par Hermes') : msg('Flux du kanban fermé')));
+  ws.addEventListener('error', () => end(msg('Flux des tâches interrompu')));
+  ws.addEventListener('close', (ev) => end(ev.code === 1008 ? msg('Flux des tâches refusé par Hermes') : msg('Flux des tâches fermé')));
   return {
     close: () => {
       clearTimeout(timer);
