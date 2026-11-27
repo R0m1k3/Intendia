@@ -3,6 +3,7 @@ import { Copy, ExternalLink, KeyRound, Plus, Server, Trash2 } from 'lucide-react
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, type ConnectPoll, type CustomProvider, type ProviderAccount, type ProviderKey, type ProvidersInfo } from '../api';
 import { ask } from '../components/Dialog';
+import { toast } from '../components/Toast';
 import { Button, copyText, cx, ErrorText, Input, Mark, Panel } from '../components/ui';
 import { configKey, ICON, SELECT, type TabProps } from './common';
 import { loadConnect, nextPollDelay, resumable, saveConnect, type PendingConnect } from './connect-state';
@@ -174,7 +175,6 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
   const [token, setToken] = useState('');
   const [left, setLeft] = useState<string[]>([]);
   const save = useMutation({
-    meta: { done: t('Enregistré') },
     mutationFn: async () => {
       try {
         return await api.setAnthropicToken(inst, profile, token);
@@ -190,7 +190,9 @@ function AnthropicToken({ inst, profile, account, canWrite, canRemove, refresh, 
       }
     },
     onSuccess: (r) => {
+      // null: the replacement of the API key was declined, nothing was saved
       if (r === null) return;
+      toast(t('Enregistré'));
       setToken(''); setOpen(false); setLeft([]);
       if (r.restartNeeded) onRestart();
       void refresh();
