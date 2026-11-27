@@ -9,3 +9,5 @@ export const BASE_URL = `http://127.0.0.1:${PORT}`;
 /** Session cookie written by the globalSetup (playwright.config.ts `storageState`), and the bench's temporary folder. */
 export const STATE = resolve(import.meta.dirname, '.state.json');
 export const TMP_PATH = resolve(import.meta.dirname, '.tmp-path');
+/** Password chosen by the globalSetup (specs that sign in use it). */
+export const PASSWORD = 'test-password-e2e-123';

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "e2e": "playwright test",
+    "shots": "FAKE_LANG=en playwright test -c playwright.shots.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {

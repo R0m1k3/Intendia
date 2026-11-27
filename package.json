@@ -19,7 +19,8 @@
     "release": "node scripts/release.mjs",
     "test": "pnpm -r test",
     "probe": "pnpm --filter @intendia/server probe",
-    "e2e": "pnpm --filter @intendia/e2e e2e"
+    "e2e": "pnpm --filter @intendia/e2e e2e",
+    "shots": "pnpm --filter @intendia/e2e shots"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.9"

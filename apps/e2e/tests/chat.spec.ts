@@ -6,7 +6,10 @@ test('workspace, session, answer, approval, resume after reload', async ({ page 
   const n = Date.now() % 100000;
   const slug = `e2e-chat-${n}`;
   await page.goto('/w');
+  // the form is open on an empty bench, behind « Nouveau dossier » once folders exist: wait for whichever shows
   const add = page.getByRole('button', { name: 'Nouveau dossier' });
+  const form = page.locator('input[placeholder="Magasins"]');
+  await expect(add.or(form).first()).toBeVisible();
   if (await add.isVisible()) await add.click();
   await page.fill('input[placeholder="Magasins"]', `E2E Chat ${n}`);
   await page.click('text=Créer le dossier');
