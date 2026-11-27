@@ -65,7 +65,13 @@ jobs:
               [ "$(wc -c < /tmp/diff.txt)" -gt 50000 ] && echo "Diff cut at 50 kB: full text in the run's artifact (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."; \
               echo '### Smoke against latest'; \
               if [ "$SMOKE" = success ]; then echo 'passed'; else echo '```'; tail -60 /tmp/smoke.txt 2>/dev/null; echo '```'; fi; } > /tmp/body.md
-            gh issue create --title "$title" --body-file /tmp/body.md
+            new=$(gh issue create --title "$title" --body-file /tmp/body.md)
+            # one open issue at a time: the newest release holds the whole diff against the fixtures
+            gh issue list --state open --search "API changes detected in:title" --json number,url --jq '.[] | "\(.number) \(.url)"' | while read -r n url; do
+              [ "$url" = "$new" ] && continue
+              gh issue comment "$n" --body "Replaced by $new (newer Hermes release, same comparison against the fixtures)."
+              gh issue close "$n"
+            done
           fi
       - name: Close stale issues
         if: steps.probe.outputs.changed != 'true' && steps.smoke.outcome == 'success'

@@ -195,7 +195,7 @@ export function updateChat(f: (c: Chat) => Chat): Chat {
   const [own, shared] = storages();
   try { own?.setItem(KEY, raw); } catch { /* kept in memory for this page */ }
   try { shared?.setItem(KEY, raw); } catch { /* new tabs start empty */ }
-  listeners.forEach((l) => l());
+  for (const l of listeners) l();
   return next;
 }
 

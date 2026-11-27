@@ -1,0 +1,1448 @@
+{
+  "instanceId": "probe",
+  "checkedAt": 0,
+  "hermesVersion": "0.23.3",
+  "api": {
+    "reachable": true,
+    "auth": "ok"
+  },
+  "dash": {
+    "configured": true,
+    "reachable": true,
+    "openapi": true,
+    "auth": "ok"
+  },
+  "modules": [
+    {
+      "id": "health",
+      "label": "Santé",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "detailed": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/health/detailed"
+          },
+          "notes": []
+        },
+        "dashboardStatus": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/status"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "chat",
+      "label": "Chat",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "createRun": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/v1/runs"
+          },
+          "notes": []
+        },
+        "runStatus": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/v1/runs/{run_id}"
+          },
+          "notes": []
+        },
+        "runEvents": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/v1/runs/{run_id}/events"
+          },
+          "notes": []
+        },
+        "stopRun": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/v1/runs/{run_id}/stop"
+          },
+          "notes": []
+        },
+        "approval": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/v1/runs/{run_id}/approval"
+          },
+          "notes": []
+        },
+        "clarify": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/v1/runs/{run_id}/clarify"
+          },
+          "notes": []
+        },
+        "steer": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/v1/runs/{run_id}/steer"
+          },
+          "notes": []
+        },
+        "modelOptions": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/api/model/options"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "sessions",
+      "label": "Sessions",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/api/sessions"
+          },
+          "notes": []
+        },
+        "search": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/sessions/search"
+          },
+          "notes": []
+        },
+        "get": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/api/sessions/{session_id}"
+          },
+          "notes": []
+        },
+        "messages": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "GET",
+            "path": "/api/sessions/{session_id}/messages"
+          },
+          "notes": []
+        },
+        "create": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "POST",
+            "path": "/api/sessions"
+          },
+          "notes": []
+        },
+        "update": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "PATCH",
+            "path": "/api/sessions/{session_id}"
+          },
+          "notes": []
+        },
+        "remove": {
+          "ok": true,
+          "route": {
+            "via": "api",
+            "method": "DELETE",
+            "path": "/api/sessions/{session_id}"
+          },
+          "notes": []
+        },
+        "export": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/sessions/{session_id}/export"
+          },
+          "notes": []
+        },
+        "import": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/sessions/import"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "crons",
+      "label": "Crons",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/cron/jobs"
+          },
+          "notes": []
+        },
+        "get": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/cron/jobs/{job_id}"
+          },
+          "notes": []
+        },
+        "targets": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/cron/delivery-targets"
+          },
+          "notes": []
+        },
+        "runs": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/cron/jobs/{job_id}/runs"
+          },
+          "notes": []
+        },
+        "create": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/jobs"
+          },
+          "notes": []
+        },
+        "update": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/cron/jobs/{job_id}"
+          },
+          "notes": []
+        },
+        "remove": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/cron/jobs/{job_id}"
+          },
+          "notes": []
+        },
+        "pause": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/jobs/{job_id}/pause"
+          },
+          "notes": []
+        },
+        "resume": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/jobs/{job_id}/resume"
+          },
+          "notes": []
+        },
+        "trigger": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/jobs/{job_id}/trigger"
+          },
+          "notes": []
+        },
+        "cancel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/jobs/{job_id}/cancel"
+          },
+          "notes": []
+        },
+        "blueprints": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/cron/blueprints"
+          },
+          "notes": []
+        },
+        "instantiate": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/cron/blueprints/instantiate"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/skills"
+          },
+          "notes": []
+        },
+        "toolsets": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/tools/toolsets"
+          },
+          "notes": []
+        },
+        "content": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/skills/content"
+          },
+          "notes": []
+        },
+        "hubOfficial": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/skills/hub/official"
+          },
+          "notes": []
+        },
+        "hubSearch": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/skills/hub/search"
+          },
+          "notes": []
+        },
+        "hubScan": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/skills/hub/scan"
+          },
+          "notes": []
+        },
+        "actionStatus": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/actions/{name}/status"
+          },
+          "notes": []
+        },
+        "toggle": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/skills/toggle"
+          },
+          "notes": []
+        },
+        "install": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/skills/hub/install"
+          },
+          "notes": []
+        },
+        "uninstall": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/skills/hub/uninstall"
+          },
+          "notes": []
+        },
+        "update": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/skills/hub/update"
+          },
+          "notes": []
+        },
+        "create": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/skills"
+          },
+          "notes": []
+        },
+        "putContent": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/skills/content"
+          },
+          "notes": []
+        },
+        "lock": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/skills/lock"
+          },
+          "notes": []
+        },
+        "archive": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/learning/node"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "config",
+      "label": "Configuration",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "get": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/config"
+          },
+          "notes": []
+        },
+        "schema": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/config/schema"
+          },
+          "notes": []
+        },
+        "defaults": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/config/defaults"
+          },
+          "notes": []
+        },
+        "env": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/env"
+          },
+          "notes": []
+        },
+        "mcpServers": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/mcp/servers"
+          },
+          "notes": []
+        },
+        "raw": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/config/raw"
+          },
+          "notes": []
+        },
+        "managed": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/shared-metrics/consent"
+          },
+          "notes": []
+        },
+        "modelInfo": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/model/info"
+          },
+          "notes": []
+        },
+        "modelOptions": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/model/options"
+          },
+          "notes": []
+        },
+        "recommendedModel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/model/recommended-default"
+          },
+          "notes": []
+        },
+        "auxiliary": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/model/auxiliary"
+          },
+          "notes": []
+        },
+        "platforms": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/messaging/platforms"
+          },
+          "notes": []
+        },
+        "actionStatus": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/actions/{name}/status"
+          },
+          "notes": []
+        },
+        "put": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/config"
+          },
+          "notes": []
+        },
+        "putRaw": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/config/raw"
+          },
+          "notes": []
+        },
+        "setModel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/model/set"
+          },
+          "notes": []
+        },
+        "putEnv": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/env"
+          },
+          "notes": []
+        },
+        "deleteEnv": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/env"
+          },
+          "notes": []
+        },
+        "addMcp": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/mcp/servers"
+          },
+          "notes": []
+        },
+        "testMcp": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/mcp/servers/{name}/test"
+          },
+          "notes": []
+        },
+        "enableMcp": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/mcp/servers/{name}/enabled"
+          },
+          "notes": []
+        },
+        "removeMcp": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/mcp/servers/{name}"
+          },
+          "notes": []
+        },
+        "mcpCatalog": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/mcp/catalog"
+          },
+          "notes": []
+        },
+        "mcpInstall": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/mcp/catalog/install"
+          },
+          "notes": []
+        },
+        "mcpAuth": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/mcp/servers/{name}/auth"
+          },
+          "notes": []
+        },
+        "mcpFlow": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/mcp/oauth/flows/{flow_id}"
+          },
+          "notes": []
+        },
+        "mcpFlowCancel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/mcp/oauth/flows/{flow_id}"
+          },
+          "notes": []
+        },
+        "mcpCallback": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/mcp/oauth/callback/{server_name}"
+          },
+          "notes": []
+        },
+        "restartGateway": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/gateway/restart"
+          },
+          "notes": []
+        },
+        "gatewayStart": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/gateway/start"
+          },
+          "notes": []
+        },
+        "gatewayStop": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/gateway/stop"
+          },
+          "notes": []
+        },
+        "oauthList": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/providers/oauth"
+          },
+          "notes": []
+        },
+        "poolList": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/credentials/pool"
+          },
+          "notes": []
+        },
+        "oauthPoll": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/providers/oauth/{provider}/poll/{session}"
+          },
+          "notes": []
+        },
+        "oauthStart": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/providers/oauth/{provider}/start"
+          },
+          "notes": []
+        },
+        "oauthCancel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/providers/oauth/sessions/{session}"
+          },
+          "notes": []
+        },
+        "oauthDisconnect": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/providers/oauth/{provider}"
+          },
+          "notes": []
+        },
+        "poolAdd": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/credentials/pool"
+          },
+          "notes": []
+        },
+        "poolRemove": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/credentials/pool/{provider}/{index}"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "agents",
+      "label": "Agents",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/profiles"
+          },
+          "notes": []
+        },
+        "soul": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/profiles/{name}/soul"
+          },
+          "notes": []
+        },
+        "create": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/profiles"
+          },
+          "notes": []
+        },
+        "remove": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/profiles/{name}"
+          },
+          "notes": []
+        },
+        "setSoul": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/profiles/{name}/soul"
+          },
+          "notes": []
+        },
+        "setModel": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/profiles/{name}/model"
+          },
+          "notes": []
+        },
+        "describeAuto": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/profiles/{name}/describe-auto"
+          },
+          "notes": []
+        },
+        "setDescription": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/profiles/{name}/description"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "kanban",
+      "label": "Kanban",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "board": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/board"
+          },
+          "notes": []
+        },
+        "boards": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/boards"
+          },
+          "notes": []
+        },
+        "workflow": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/workflow"
+          },
+          "notes": []
+        },
+        "assignees": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/assignees"
+          },
+          "notes": []
+        },
+        "workers": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/workers/active"
+          },
+          "notes": []
+        },
+        "orchestration": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/orchestration"
+          },
+          "notes": []
+        },
+        "task": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/tasks/{task_id}"
+          },
+          "notes": []
+        },
+        "log": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/tasks/{task_id}/log"
+          },
+          "notes": []
+        },
+        "attachment": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/plugins/kanban/attachments/{attachment_id}"
+          },
+          "notes": []
+        },
+        "createBoard": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/boards"
+          },
+          "notes": []
+        },
+        "createTask": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/tasks"
+          },
+          "notes": []
+        },
+        "updateTask": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PATCH",
+            "path": "/api/plugins/kanban/tasks/{task_id}"
+          },
+          "notes": []
+        },
+        "comment": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/tasks/{task_id}/comments"
+          },
+          "notes": []
+        },
+        "specify": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/tasks/{task_id}/specify"
+          },
+          "notes": []
+        },
+        "decompose": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/tasks/{task_id}/decompose"
+          },
+          "notes": []
+        },
+        "link": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/links"
+          },
+          "notes": []
+        },
+        "unlink": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/plugins/kanban/links"
+          },
+          "notes": []
+        },
+        "dispatch": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/dispatch"
+          },
+          "notes": []
+        },
+        "setOrchestration": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/plugins/kanban/orchestration"
+          },
+          "notes": []
+        },
+        "terminate": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/plugins/kanban/runs/{run_id}/terminate"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "files",
+      "label": "Fichiers",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/files"
+          },
+          "notes": []
+        },
+        "download": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/files/download"
+          },
+          "notes": []
+        },
+        "upload": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/files/upload-stream"
+          },
+          "notes": []
+        },
+        "mkdir": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/files/mkdir"
+          },
+          "notes": []
+        },
+        "remove": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/files"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "git",
+      "label": "Git",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "root": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/fs/git-root"
+          },
+          "notes": []
+        },
+        "status": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/status"
+          },
+          "notes": []
+        },
+        "list": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/review/list"
+          },
+          "notes": []
+        },
+        "diff": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/review/diff"
+          },
+          "notes": []
+        },
+        "fileDiff": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/file-diff"
+          },
+          "notes": []
+        },
+        "branches": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/branches"
+          },
+          "notes": []
+        },
+        "context": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/git/review/commit-context"
+          },
+          "notes": []
+        },
+        "stage": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/review/stage"
+          },
+          "notes": []
+        },
+        "unstage": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/review/unstage"
+          },
+          "notes": []
+        },
+        "revert": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/review/revert"
+          },
+          "notes": []
+        },
+        "commit": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/review/commit"
+          },
+          "notes": []
+        },
+        "push": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/review/push"
+          },
+          "notes": []
+        },
+        "switch": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/git/branch/switch"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "monitor",
+      "label": "Suivi",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "usage": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/analytics/usage"
+          },
+          "notes": []
+        },
+        "sessionStats": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/sessions/stats"
+          },
+          "notes": []
+        },
+        "logs": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/logs"
+          },
+          "notes": []
+        },
+        "system": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/system/stats"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "label": "Mémoire",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "graph": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/learning/graph"
+          },
+          "notes": []
+        },
+        "status": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/memory"
+          },
+          "notes": []
+        },
+        "node": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/learning/node"
+          },
+          "notes": []
+        },
+        "putNode": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "PUT",
+            "path": "/api/learning/node"
+          },
+          "notes": []
+        },
+        "deleteNode": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/learning/node"
+          },
+          "notes": []
+        }
+      }
+    },
+    {
+      "id": "plugins",
+      "label": "Plugins",
+      "state": "full",
+      "reasons": [],
+      "ops": {
+        "installed": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/dashboard/plugins/hub"
+          },
+          "notes": []
+        },
+        "catalog": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "GET",
+            "path": "/api/dashboard/plugins/catalog"
+          },
+          "notes": []
+        },
+        "install": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/dashboard/agent-plugins/install"
+          },
+          "notes": []
+        },
+        "enable": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/dashboard/agent-plugins/{name}/enable"
+          },
+          "notes": []
+        },
+        "disable": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "POST",
+            "path": "/api/dashboard/agent-plugins/{name}/disable"
+          },
+          "notes": []
+        },
+        "remove": {
+          "ok": true,
+          "route": {
+            "via": "dash",
+            "method": "DELETE",
+            "path": "/api/dashboard/agent-plugins/{name}"
+          },
+          "notes": []
+        }
+      }
+    }
+  ],
+  "runs": {
+    "idempotency": true,
+    "durable": true
+  }
+}

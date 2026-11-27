@@ -1,0 +1,25 @@
+{
+  "status": 422,
+  "body": {
+    "detail": [
+      {
+        "type": "missing",
+        "loc": [
+          "query",
+          "path"
+        ],
+        "msg": "Field required",
+        "input": null
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "query",
+          "file"
+        ],
+        "msg": "Field required",
+        "input": null
+      }
+    ]
+  }
+}

@@ -76,12 +76,13 @@ export function CronFollower({ cron, follow, canRuns, onEnd }: {
     return () => clearInterval(timer);
   }, []);
   const state = followState(follow, live.data, runs.data);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (state.state === 'running') return;
     void qc.invalidateQueries({ queryKey: ['crons', cron.instanceId] });
     void qc.invalidateQueries({ queryKey: ['crons-overview'] });
     onEnd({ cron: live.data ?? cron, timeout: state.state === 'timeout' });
-  }, [state.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.state]);
   return null;
 }
 

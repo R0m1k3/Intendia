@@ -58,6 +58,7 @@ export default function CodeView({ name, value, editable, onChange }: {
   const changed = useRef(onChange);
   changed.current = onChange;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     const lang = language(name);
     const v = new EditorView({
@@ -75,7 +76,6 @@ export default function CodeView({ name, value, editable, onChange }: {
     view.current = v;
     return () => v.destroy();
     // the document is set once per file; edits stay in the editor
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, value]);
 
   useEffect(() => {

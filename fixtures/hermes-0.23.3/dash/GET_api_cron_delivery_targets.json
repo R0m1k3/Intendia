@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "targets": [
+      {
+        "id": "local",
+        "name": "Local (save only)",
+        "home_target_set": true,
+        "home_env_var": null
+      },
+      {
+        "id": "bot-chat:default",
+        "name": "Bot Chat (default)",
+        "home_target_set": true,
+        "home_env_var": null
+      }
+    ]
+  }
+}

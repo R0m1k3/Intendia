@@ -6,7 +6,7 @@ const BLOCKED = /^\/(connexion|installation)(\/|$|\?|#)/;
 export function retourOf(raw: string | null, origin: string): string | null {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return null;
   // backslash (read as `/` by browsers), spaces and control characters
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused here
   if (/[\\\s\u0000-\u001f\u007f]/.test(raw)) return null;
   let url: URL;
   try { url = new URL(raw, origin); } catch { return null; }

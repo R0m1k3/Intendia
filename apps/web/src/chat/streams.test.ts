@@ -13,7 +13,7 @@ describe('acquireStream', () => {
     expect(again).not.toBeNull();
     expect(acquireStream()).toBeNull();
     again!();
-    held.slice(1).forEach((r) => r!());
+    for (const r of held.slice(1)) r!();
     expect(freeStreams()).toBe(MAX_STREAMS);
   });
 });

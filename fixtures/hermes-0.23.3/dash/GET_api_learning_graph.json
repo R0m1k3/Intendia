@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "body": {
+    "nodes": [],
+    "edges": [],
+    "clusters": [],
+    "memory": [],
+    "stats": {
+      "nodes": 0,
+      "related_edges": 0,
+      "edges_per_node": 0,
+      "linked_nodes": 0,
+      "isolated_pct": 100,
+      "categories": 0,
+      "agent_created": 0,
+      "used": 0,
+      "top_categories": [],
+      "memory_nodes": 0,
+      "memory_skill_edges": 0,
+      "learned_skills": 0
+    }
+  }
+}

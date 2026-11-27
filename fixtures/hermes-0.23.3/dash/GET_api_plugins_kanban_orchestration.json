@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "body": {
+    "orchestrator_profile": "",
+    "default_assignee": "",
+    "auto_decompose": true,
+    "auto_promote_children": true,
+    "resolved_orchestrator_profile": "default",
+    "resolved_default_assignee": "default",
+    "active_profile": "default"
+  }
+}

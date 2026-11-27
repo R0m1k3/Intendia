@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Archive, Download, Layers, Lock, LockOpen, Plus, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Trash2, Wrench, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, type ActionStatus, type HubResult, type Scan, type Skill } from '../api';

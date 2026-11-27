@@ -1,0 +1,33 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
+	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+	"files": { "ignoreUnknown": true, "includes": ["apps/**", "scripts/**", "!**/dist", "!fixtures", "!docs"] },
+	"formatter": { "enabled": false },
+	"assist": { "enabled": false },
+	"css": { "parser": { "tailwindDirectives": true } },
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"a11y": "warn",
+			"correctness": { "useExhaustiveDependencies": "warn" },
+			"style": { "noNonNullAssertion": "off", "noDescendingSpecificity": "off", "useTemplate": "off", "useImportType": "off" },
+			"complexity": { "useOptionalChain": "off", "noUselessFragments": "off", "noUselessContinue": "off" },
+			"suspicious": {
+				"noArrayIndexKey": "warn",
+				"noImplicitAnyLet": "off",
+				"noAssignInExpressions": "off",
+				"noShadowRestrictedNames": "off",
+				"noTemplateCurlyInString": "off",
+				"noDocumentCookie": "off",
+				"noConfusingVoidType": "off"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/test/**", "**/*.test.ts", "**/*.test.tsx", "apps/e2e/**", "apps/fake-hermes/**"],
+			"linter": { "rules": { "suspicious": { "noExplicitAny": "off" }, "correctness": { "noUnsafeOptionalChaining": "off", "noPrecisionLoss": "off", "noChildrenProp": "off" } } }
+		}
+	]
+}

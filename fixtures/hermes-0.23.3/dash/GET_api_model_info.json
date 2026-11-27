@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "body": {
+    "model": "anthropic/claude-opus-4.6",
+    "provider": "auto",
+    "auto_context_length": 1000000,
+    "config_context_length": 0,
+    "effective_context_length": 1000000,
+    "capabilities": {}
+  }
+}

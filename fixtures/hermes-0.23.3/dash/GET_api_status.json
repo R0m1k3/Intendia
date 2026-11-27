@@ -1,0 +1,79 @@
+{
+  "status": 200,
+  "body": {
+    "version": "0.23.3",
+    "release_date": "2026.9.24",
+    "import_keep_host": 1,
+    "config_version": 54,
+    "latest_config_version": 54,
+    "can_update_hermes": false,
+    "gateway_running": false,
+    "gateway_state": "stopped",
+    "gateway_platforms": {},
+    "gateway_exit_reason": null,
+    "gateway_updated_at": "2026-11-23T15:57:27.687636+00:00",
+    "gateway_heartbeat_stale_s": null,
+    "gateway_shared_with": null,
+    "active_agents": 0,
+    "gateway_busy": false,
+    "gateway_drainable": false,
+    "restart_drain_timeout": 0,
+    "active_sessions": 0,
+    "auth_required": true,
+    "auth_providers": [
+      "session-token"
+    ],
+    "auth_flows": [
+      "cookie"
+    ],
+    "peer_access": 0,
+    "nous_session_valid": "unknown",
+    "install_id": "8bcf90a5c510445cb579ec1dd084208c",
+    "shared_profile_warning": false,
+    "components": {
+      "gateway": {
+        "status": "degraded",
+        "state": "stopped"
+      },
+      "dashboard": {
+        "status": "ok",
+        "recent_unhandled_errors": 0,
+        "last_error_at": null,
+        "selftest": "unknown"
+      },
+      "storage": {
+        "status": "ok"
+      },
+      "platforms": {
+        "status": "ok",
+        "configured": 0,
+        "connected": 0
+      }
+    },
+    "overall": "degraded",
+    "memory": {
+      "pressure": "ok",
+      "gateway_rss_mb": 198,
+      "system_total_mb": 15700,
+      "system_available_mb": 13926,
+      "swap_used_mb": 0,
+      "sampled_at": "2026-11-23T15:57:26.346007+00:00",
+      "last_boot_unclean": false,
+      "last_boot_suspected_oom": false,
+      "boot_id": "2026-11-23T15:57:25.360733+00:00"
+    },
+    "disk": {
+      "pressure": "ok",
+      "total_mb": 147813,
+      "free_mb": 87764,
+      "used_percent": 40.6
+    },
+    "profiles": [
+      "default"
+    ],
+    "parked_profiles": [],
+    "isolated_profile": null,
+    "gateway_mode": "none",
+    "multiplex_standalone_reason": null
+  }
+}

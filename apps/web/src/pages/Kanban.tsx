@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { AlertTriangle, FolderOpen, GitBranch, KanbanSquare, MessageSquare, Play, Plus, Settings2, Split } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type KanbanBoardView, type KanbanColumn, type KanbanStart, type KanbanTask, type KanbanWorkflow } from '../api';

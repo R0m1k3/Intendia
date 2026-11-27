@@ -75,6 +75,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
     setTimeout(() => (before.current as HTMLElement | null)?.focus?.(), 0);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     // the page behind is inert (no Tab, no click) while the dialog is open; the dialog is portalled outside #root
     const root = document.getElementById('root');
@@ -88,7 +89,6 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
     };
     window.addEventListener('keydown', key, true);
     return () => { window.removeEventListener('keydown', key, true); root?.removeAttribute('inert'); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const { title, message } = req.opts;

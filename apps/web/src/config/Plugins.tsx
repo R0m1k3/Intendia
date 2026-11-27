@@ -32,12 +32,12 @@ export function ConfigPlugins({ inst, can, onVariable, onRestart }: {
     refetchInterval: (q) => (q.state.data?.state === 'running' ? POLL_MS : false),
   });
   const finished = job.data && job.data.state !== 'running' ? job.data.id : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(() => {
     if (!finished) return;
     void qc.invalidateQueries({ queryKey: ['plugins', inst] });
     void qc.invalidateQueries({ queryKey: ['plugin-catalog', inst] });
     if (job.data?.result?.restartRequired) onRestart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
   const running = job.data?.state === 'running';
   const install = useMutation({

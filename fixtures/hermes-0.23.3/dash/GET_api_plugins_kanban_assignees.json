@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "body": {
+    "assignees": [
+      {
+        "name": "default",
+        "on_disk": true,
+        "counts": {}
+      }
+    ]
+  }
+}

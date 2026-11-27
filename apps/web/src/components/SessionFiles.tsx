@@ -9,7 +9,7 @@ import { baseName } from '../files/paths';
 import { absoluteUrl } from '../files/Preview';
 import { clock } from '../chat/Thread';
 import type { Written } from '../chat/written';
-import { chipClass, copyText, cx } from './ui';
+import { chipClass, copyText, } from './ui';
 import { workspaceScope } from '../files/scope';
 import { t } from '../i18n';
 
