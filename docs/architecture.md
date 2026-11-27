@@ -870,7 +870,7 @@ leave a half-done state or a duplicate silently.
   (time, level, text; `INTENDIA_LOG_LEVEL`, default `info`). Each HTTP request gets an identifier, kept for the
   whole request by an `AsyncLocalStorage`: its lines end with `req=<id>`, the answer carries `X-Request-Id`, and an
   unexpected error (500) returns `requestId`, which the web shows in the technical detail of the error
-  (`errors/explain.ts`). `debug` adds one line per request (method, path without its query string, status, time).
+  (`errors/explain.ts`). `debug` adds one line per request (method, path without its query string nor the token of a share link, status, time).
   Only the installation code of a first start and the command-line tools (`src/cli/`) write to the console directly.
   Never pass a body, a key or a token to the journal.
 - **Release** (`scripts/release.mjs`, logic in `release-lib.mjs`): `pnpm release bump` on the pull request writes

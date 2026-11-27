@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatLine, log, logLevel, setLogLevel, setLogSink, withRequest, type LogLevel } from '../src/log.js';
+import { formatLine, log, logLevel, safePath, setLogLevel, setLogSink, withRequest, type LogLevel } from '../src/log.js';
 import { testApp } from './helpers.js';
 
 describe('the journal', () => {
@@ -73,6 +73,20 @@ describe('the journal', () => {
     expect(failed[0]!.line.split('\n')[0]).toMatch(new RegExp(` ERROR GET /x/workspaces: unexpected error req=${res.json.requestId}$`));
     expect(failed[0]!.line).toContain('Error: disk full');
     expect(failed[0]!.line).not.toContain('secret-in-the-query');
+  });
+
+  it('never writes the token of a share link, which is in the path', async () => {
+    expect(safePath('/f/AbC123-secret_token')).toBe('/f/…');
+    expect(safePath('/f/AbC123-secret_token/report.pdf')).toBe('/f/…/report.pdf');
+    expect(safePath('/x/i/fake/files')).toBe('/x/i/fake/files');
+    const t = await testApp();
+    setLogLevel('debug');
+    lines.length = 0;
+    await t.app.request('/f/AbC123-secret_token');
+    const served = lines.filter((l) => l.line.includes('GET /f/'));
+    expect(served).toHaveLength(1);
+    expect(served[0]!.line).toContain('GET /f/… ');
+    expect(lines.some((l) => l.line.includes('AbC123-secret_token'))).toBe(false);
   });
 
   it('ends: the lines go back to the standard outputs', () => { setLogSink(prev); });

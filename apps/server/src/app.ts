@@ -55,7 +55,7 @@ import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
 import { BodyError, jsonBodyLimit, readJson } from './routes/body.js';
-import { log, newRequestId, requestId, withRequest } from './log.js';
+import { log, newRequestId, requestId, safePath, withRequest } from './log.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -101,8 +101,7 @@ export function createApp(deps: AppDeps) {
     const start = Date.now();
     await next();
     c.header('X-Request-Id', requestId() ?? '');
-    // the path without its query string, which may carry a token
-    log.debug(`${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - start} ms`);
+    log.debug(`${c.req.method} ${safePath(c.req.path)} ${c.res.status} ${Date.now() - start} ms`);
   }));
   // sees the final answer of every route and of onError
   app.use('*', translateResponses());
@@ -155,8 +154,7 @@ export function createApp(deps: AppDeps) {
       for (const [k, v] of Object.entries(r.headers ?? {})) c.header(k, v);
       return c.json(r.body, r.status);
     }
-    // the method and the path only: a query string may carry a token
-    log.error(`${c.req.method} ${c.req.path}: unexpected error`, err);
+    log.error(`${c.req.method} ${safePath(c.req.path)}: unexpected error`, err);
     return c.json({ error: msg('Erreur interne du serveur Intendia (voir ses journaux)'), requestId: requestId() }, 500);
   });
 
