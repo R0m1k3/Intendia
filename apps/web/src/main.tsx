@@ -221,10 +221,14 @@ const instanceFilesRoute = createRoute({
 });
 /** /crons: the current instance */
 const cronsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/crons', beforeLoad: () => toCurrent('crons') });
-export interface CronsSearch { cron?: string }
+export interface CronsSearch { cron?: string; nouveau?: 1 }
 const cronsRoute = createRoute({
   getParentRoute: () => appRoute, path: '/i/$inst/crons', component: CronsPage,
-  validateSearch: (s: Record<string, unknown>): CronsSearch => (typeof s.cron === 'string' && parseCronKey(s.cron) ? { cron: s.cron } : {}),
+  validateSearch: (s: Record<string, unknown>): CronsSearch => ({
+    ...(typeof s.cron === 'string' && parseCronKey(s.cron) ? { cron: s.cron } : {}),
+    // ?nouveau=1 (the palette's « Créer une planification »): the page opens the editor, then drops it
+    ...(s.nouveau === 1 || s.nouveau === '1' ? { nouveau: 1 as const } : {}),
+  }),
 });
 /** /skills: the current instance */
 const skillsIndexRoute = createRoute({ getParentRoute: () => appRoute, path: '/skills', beforeLoad: () => toCurrent('skills') });

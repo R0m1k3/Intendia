@@ -6,7 +6,7 @@ import { t } from '../i18n';
 
 const POLL_MS = 1500;
 const POLL_MAX_MS = 5 * 60_000;
-export const RESTART_CONFIRM = { title: t('Redémarrer la passerelle ?'), message: t('Les runs en cours seront interrompus. Si la passerelle sert plusieurs agents, tous sont concernés.'), confirmLabel: t('Redémarrer'), danger: true };
+export const RESTART_CONFIRM = { title: t('Redémarrer la passerelle ?'), message: t('La passerelle est le programme d’Hermes qui fait vivre l’agent : chat, planifications, messageries. Elle s’arrête quelques secondes et les runs en cours sont interrompus. Si elle sert plusieurs agents, tous sont concernés.'), confirmLabel: t('Redémarrer'), danger: true };
 
 export interface RestartState { running: boolean; done: boolean; status: RestartStatus | null; error: unknown; timedOut: boolean; start: () => void; dismiss: () => void }
 

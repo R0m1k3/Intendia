@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { CalendarClock, FolderOpen, LayoutTemplate, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type Cron } from '../api';
 import { CronEditor } from '../components/CronEditor';
 import { CronFollower, CronRuns, type FollowResult } from '../components/CronRuns';
@@ -190,6 +190,14 @@ export function CronsPage() {
   const a = useModuleAvailability(inst, 'crons', REQUIRED, OPTIONAL);
   const crons = useQuery({ queryKey: ['crons', inst], queryFn: () => api.crons(inst).then((r) => r.crons), enabled: a.available });
   const [editing, setEditing] = useState<Cron | 'new' | 'blueprint' | null>(null);
+  // ?nouveau=1 (the palette's « Créer une planification »): open the editor once, then clean the address
+  const wantsNew = search.nouveau === 1;
+  const canCreate = a.available && a.has('crons', 'create');
+  useEffect(() => {
+    if (!wantsNew || !canCreate) return;
+    setEditing('new');
+    void navigate({ to: '/i/$inst/crons', params: { inst }, search: {}, replace: true });
+  }, [wantsNew, canCreate, inst, navigate]);
   // a template cron whose workspace framing failed: said above its detail
   const [unattached, setUnattached] = useState<{ key: string; workspace: string } | null>(null);
   // another instance chosen while editing: the form belonged to the previous one, close it

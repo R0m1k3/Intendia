@@ -114,7 +114,6 @@ export default {
   "Commencez par un dossier": "Start with a folder",
   "Un dossier partagé avec l’agent, ses consignes et ses sessions de travail": "A folder shared with the agent, its instructions and its work sessions",
   "Créer un dossier": "Create a folder",
-  "Nouvelle session sur {label}": "New session on {label}",
   "Nouveau dossier": "New folder",
   "Un dossier partagé avec l’agent": "A folder shared with the agent",
   "Sessions en cours": "Current sessions",
