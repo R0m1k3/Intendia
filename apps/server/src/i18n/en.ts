@@ -60,6 +60,8 @@ export default {
   'Code d\'installation incorrect': 'Wrong setup code',
   'Le mot de passe doit faire au moins 12 caractères': 'The password must be at least 12 characters long',
   'Trop d’essais, réessayez dans une minute': 'Too many attempts, try again in a minute',
+  'Trop de demandes': 'Too many requests',
+  'Réessayez dans une minute.': 'Try again in a minute.',
   'API server injoignable : {error}': 'API server unreachable: {error}',
   'Instance inconnue : {id}': 'Unknown instance: {id}',
   'instance inconnue': 'unknown instance',

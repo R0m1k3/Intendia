@@ -54,6 +54,7 @@ import { ConfigConflictError, ConfigInputError, ConfigNotAppliedError, ConfirmRe
 import { ActionBusyError, ScanRefusedError } from './skills/service.js';
 import { CronInputError } from './crons/service.js';
 import { NotFoundError, ValidationError } from './workspaces/service.js';
+import { BodyError, jsonBodyLimit, readJson } from './routes/body.js';
 
 export interface AppDeps {
   config: AppConfig;
@@ -100,12 +101,15 @@ export function createApp(deps: AppDeps) {
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'same-origin');
+    // only over https (the proxy's X-Forwarded-Proto): a browser ignores it over http, and a LAN address stays usable
+    if (auth.isSecure(c)) c.header('Strict-Transport-Security', 'max-age=2592000');
     // file routes allow framing by Intendia itself (preview); every other response stays DENY
     if (!c.res.headers.has('X-Frame-Options')) c.header('X-Frame-Options', 'DENY');
   });
 
   app.onError((err, c) => {
     if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
+    if (err instanceof BodyError) return c.json({ error: err.message, code: err.code }, 400);
     if (err instanceof z.ZodError) return c.json({ error: msg('Requête invalide'), issues: err.issues }, 400);
     if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
     if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
@@ -149,7 +153,17 @@ export function createApp(deps: AppDeps) {
   const x = new Hono();
 
   // ---- public: health, first-run state, login
-  x.get('/health', (c) => c.json({ ok: true, version: deps.version }));
+  // the database answers too: a server that listens with a broken or locked database is not healthy
+  x.get('/health', (c) => {
+    try {
+      deps.db.$client.prepare('SELECT 1').get();
+    } catch {
+      return c.json({ ok: false, version: deps.version }, 503);
+    }
+    return c.json({ ok: true, version: deps.version });
+  });
+  // bodies are JSON and small; a file goes through its own route, with its own limit
+  x.use('*', jsonBodyLimit((path) => path.endsWith('/upload') || path.endsWith('/sessions/import')));
 
   x.get('/setup', (c) => c.json({
     needsPassword: auth.needsPassword(),
@@ -161,7 +175,7 @@ export function createApp(deps: AppDeps) {
 
   x.post('/setup/password', async (c) => {
     auth.rateLimit(auth.clientIp(c));
-    const body = SetupBody.parse(await c.req.json());
+    const body = SetupBody.parse(await readJson(c));
     await auth.setInitialPassword(body.code, body.password);
     auth.createSession(c);
     return c.json({ ok: true });
@@ -169,7 +183,7 @@ export function createApp(deps: AppDeps) {
 
   x.post('/login', async (c) => {
     auth.rateLimit(auth.clientIp(c));
-    const { password } = PasswordBody.parse(await c.req.json());
+    const { password } = PasswordBody.parse(await readJson(c));
     if (!(await auth.checkPassword(password))) return c.json({ error: msg('Mot de passe incorrect') }, 401);
     auth.createSession(c);
     return c.json({ ok: true });
@@ -197,7 +211,7 @@ export function createApp(deps: AppDeps) {
   }));
 
   /** Tests a connection without saving: full compatibility check against the given settings. */
-  priv.post('/instances/test', async (c) => c.json(await testConfig(InstanceConfigSchema.parse(await c.req.json()))));
+  priv.post('/instances/test', async (c) => c.json(await testConfig(InstanceConfigSchema.parse(await readJson(c)))));
 
   /** Runs a full check of a config that is not saved (no observer: the report is the answer). */
   const testConfig = async (inst: InstanceConfig) => {
@@ -229,7 +243,7 @@ export function createApp(deps: AppDeps) {
   const instanceWrites = new KeyedLock();
 
   priv.post('/instances', async (c) => {
-    const inst = InstanceConfigSchema.parse(await c.req.json());
+    const inst = InstanceConfigSchema.parse(await readJson(c));
     if (store.declarative) throw new DeclarativeError();
     return instanceWrites.run(inst.id, async () => {
       // a saved instance is changed with PATCH: an overwrite would silently drop a secret left out
@@ -256,7 +270,7 @@ export function createApp(deps: AppDeps) {
   /** Tests the saved instance with the changes of a PATCH body, without saving (the browser has no secret). */
   priv.post('/instances/:id/test', async (c) => {
     const id = c.req.param('id');
-    const next = merged(id, PatchBody.parse(await c.req.json()));
+    const next = merged(id, PatchBody.parse(await readJson(c)));
     if (!next) return c.json(unknownInstance(id), 404);
     return c.json(await testConfig(next));
   });
@@ -268,7 +282,7 @@ export function createApp(deps: AppDeps) {
    */
   priv.patch('/instances/:id', async (c) => {
     const id = c.req.param('id');
-    const body = PatchBody.parse(await c.req.json());
+    const body = PatchBody.parse(await readJson(c));
     if (store.declarative) throw new DeclarativeError();
     return instanceWrites.run(id, async () => {
       const current = store.get(id);
@@ -376,7 +390,8 @@ export function createApp(deps: AppDeps) {
       // the app's pages may be framed by the app itself (side chat, ⌘J); API and file responses keep their own rules.
       // frame-src: a frame of the app (an artefact's scripts) can never navigate itself to another site
       c.header('X-Frame-Options', 'SAMEORIGIN');
-      c.header('Content-Security-Policy', "frame-ancestors 'self'; frame-src 'self'");
+      // script-src: only the app's own files run (no inline script, no other site); blob: for the viewers' workers
+      c.header('Content-Security-Policy', "frame-ancestors 'self'; frame-src 'self'; script-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'");
       return c.html(indexHtml);
     });
   }

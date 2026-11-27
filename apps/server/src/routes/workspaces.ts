@@ -12,6 +12,7 @@ import { createSessionDir, WorkspaceFsError } from '../workspaces/fs.js';
 import { runKey, startingRuns, whenIdle } from '../chat/history.js';
 import type { HermesFs } from '../files/hermes-fs.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 /** Session ids: Intendia's own (iw-…) and external ones (Telegram, CLI) whose format is not documented. */
 export const SESSION_ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
@@ -91,7 +92,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   });
 
   r.post('/workspaces', async (c) => {
-    const body = CreateWorkspace.parse(await c.req.json());
+    const body = CreateWorkspace.parse(await readJson(c));
     // an agent without a key in Intendia is connected first ("Connecter à Intendia")
     if (body.profile && body.profile !== 'default') await deps.services.agents.connect(body.instanceId, body.profile);
     return c.json({ workspace: await workspaces.createWorkspace(body) }, 201);
@@ -100,14 +101,14 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
   r.get('/workspaces/:slug', (c) => c.json({ workspace: workspaces.getWorkspace(c.req.param('slug')) }));
 
   r.patch('/workspaces/:slug', async (c) => {
-    const body = PatchWorkspace.parse(await c.req.json());
+    const body = PatchWorkspace.parse(await readJson(c));
     return c.json({ workspace: workspaces.updateWorkspace(c.req.param('slug'), body) });
   });
 
   r.get('/workspaces/:slug/agents-md', async (c) => c.json(await workspaces.agentsMdFile(c.req.param('slug'))));
 
   r.put('/workspaces/:slug/agents-md', async (c) => {
-    const { text, base } = AgentsMd.parse(await c.req.json());
+    const { text, base } = AgentsMd.parse(await readJson(c));
     await workspaces.writeAgentsMd(c.req.param('slug'), text, base);
     return c.json({ ok: true });
   });
@@ -166,7 +167,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
 
   r.patch('/sessions/:inst/:id', async (c) => {
     const { inst, id } = sessionParams(c);
-    const body = PatchSession.parse(await c.req.json());
+    const body = PatchSession.parse(await readJson(c));
     if (body.profile !== undefined) {
       // a session with a history at Hermes changes agent by a copy (POST …/to-profile)
       // a first message on its way keeps the profile it was sent with
@@ -215,7 +216,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
 
   r.post('/i/:inst/sessions/restore', async (c) => {
     const inst = c.req.param('inst');
-    const { ids } = RestoreBody.parse(await c.req.json());
+    const { ids } = RestoreBody.parse(await readJson(c));
     const restored = workspaces.restore(inst, ids);
     if (!restored.length) return c.json({ error: msg('Trop tard : la suppression est faite'), code: 'too_late' }, 409);
     return c.json({ restored });
@@ -223,7 +224,7 @@ export function workspaceRoutes(deps: AppDeps & { workspaces: WorkspaceService }
 
   r.post('/i/:inst/sessions/bulk', async (c) => {
     const inst = c.req.param('inst');
-    const { ids, action, workspace } = BulkBody.parse(await c.req.json());
+    const { ids, action, workspace } = BulkBody.parse(await readJson(c));
     const results: { id: string; ok: boolean; error?: string }[] = [];
     let undoUntil: number | undefined;
     for (const id of ids) {

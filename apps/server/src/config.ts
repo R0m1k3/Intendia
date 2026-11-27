@@ -55,6 +55,8 @@ const EnvSchema = z.object({
   INTENDIA_MCP_URL: z.url().optional(),
   INTENDIA_WEB_DIR: z.string().optional(),
   INTENDIA_TRUST_PROXY: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  /** Reverse proxies in front of Intendia that each add the address they saw to X-Forwarded-For (1 = Nginx alone). */
+  INTENDIA_TRUSTED_HOPS: z.coerce.number().int().min(1).max(10).default(1),
   /** Optional webhook called when a module changes state (JSON POST). */
   INTENDIA_WEBHOOK_URL: z.url().optional(),
   /** Minutes between two cheap version checks of each instance. */
@@ -78,6 +80,8 @@ export interface AppConfig {
   mcpUrlBase: string | undefined;
   webDir: string | undefined;
   trustProxy: boolean;
+  /** INTENDIA_TRUSTED_HOPS, default 1 */
+  trustedHops?: number;
   webhookUrl: string | undefined;
   versionCheckMinutes: number;
   uploadMaxBytes: number;
@@ -121,6 +125,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     mcpUrlBase: e.INTENDIA_MCP_URL?.replace(/\/+$/, ''),
     webDir: e.INTENDIA_WEB_DIR,
     trustProxy: e.INTENDIA_TRUST_PROXY,
+    trustedHops: e.INTENDIA_TRUSTED_HOPS,
     webhookUrl: e.INTENDIA_WEBHOOK_URL,
     versionCheckMinutes: e.INTENDIA_VERSION_CHECK_MINUTES,
     uploadMaxBytes: e.INTENDIA_UPLOAD_MAX_MB * 1024 * 1024,

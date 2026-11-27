@@ -8,6 +8,7 @@ import { sendFile, sendZip } from '../files/send.js';
 import { SLUG_RE } from '../workspaces/fs.js';
 import { ValidationError } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 const New = z.object({ path: z.string(), kind: z.enum(['file', 'dir']) });
 const Move = z.object({ from: z.string(), to: z.string() });
@@ -72,17 +73,17 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
 
   // not tied to the request: the extraction goes on when the browser leaves (the folder shows up in Fichiers)
   r.post(`${base}/extract`, async (c) => {
-    const { path } = Extract.parse(await c.req.json());
+    const { path } = Extract.parse(await readJson(c));
     return c.json(await files.extract(slugOf(c), path), 201);
   });
 
   r.post(`${base}/new`, async (c) => {
-    const { path, kind } = New.parse(await c.req.json());
+    const { path, kind } = New.parse(await readJson(c));
     return c.json(await files.create(slugOf(c), path, kind), 201);
   });
 
   r.patch(`${base}/move`, async (c) => {
-    const { from, to } = Move.parse(await c.req.json());
+    const { from, to } = Move.parse(await readJson(c));
     return c.json(await files.move(slugOf(c), from, to));
   });
 
@@ -92,17 +93,17 @@ export function fileRoutes(files: FileService, instanceFiles: InstanceFileServic
   });
 
   r.put(`${base}/text`, async (c) => {
-    const { path, text, mtime } = Text.parse(await c.req.json());
+    const { path, text, mtime } = Text.parse(await readJson(c));
     return c.json(await files.writeText(slugOf(c), path, text, mtime));
   });
 
   r.post(`${base}/exists`, async (c) => {
-    const { paths } = Exists.parse(await c.req.json());
+    const { paths } = Exists.parse(await readJson(c));
     return c.json({ results: await files.exists(slugOf(c), paths) });
   });
 
   r.post(`${base}/share`, async (c) => {
-    const { path } = Share.parse(await c.req.json());
+    const { path } = Share.parse(await readJson(c));
     return c.json(await files.share(slugOf(c), path), 201);
   });
 

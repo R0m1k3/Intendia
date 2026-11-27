@@ -4,6 +4,7 @@ import { SOUL_MAX, type AgentService } from '../agents/service.js';
 import { ValidationError } from '../workspaces/service.js';
 import { PROFILE_RE } from './params.js';
 import { msg } from '../i18n/index.js';
+import { readJson } from './body.js';
 
 const CreateBody = z.object({
   name: z.string().min(1).max(64),
@@ -30,20 +31,20 @@ export function agentRoutes(agents: AgentService): Hono {
   const r = new Hono();
   const inst = (c: Context) => c.req.param('inst') ?? '';
   r.get('/i/:inst/agents', async (c) => c.json({ agents: await agents.list(inst(c)) }));
-  r.post('/i/:inst/agents', async (c) => c.json(await agents.create(inst(c), CreateBody.parse(await c.req.json())), 201));
+  r.post('/i/:inst/agents', async (c) => c.json(await agents.create(inst(c), CreateBody.parse(await readJson(c))), 201));
   // names only, for the selectors; registered before /:name/... (a profile may be called "profiles")
   r.get('/i/:inst/agents/profiles', async (c) => c.json({ profiles: await agents.profiles(inst(c)) }));
   r.get('/i/:inst/agents/:name/detail', async (c) => c.json({ agent: await agents.get(inst(c), nameOf(c)) }));
   r.put('/i/:inst/agents/:name/description', async (c) => {
-    const body = DescriptionBody.parse(await c.req.json());
+    const body = DescriptionBody.parse(await readJson(c));
     return c.json(await agents.setDescription(inst(c), nameOf(c), body.description));
   });
   r.put('/i/:inst/agents/:name/soul', async (c) => {
-    const body = SoulBody.parse(await c.req.json());
+    const body = SoulBody.parse(await readJson(c));
     return c.json(await agents.setSoul(inst(c), nameOf(c), body.content));
   });
   r.put('/i/:inst/agents/:name/model', async (c) => {
-    const body = ModelBody.parse(await c.req.json());
+    const body = ModelBody.parse(await readJson(c));
     return c.json(await agents.setModel(inst(c), nameOf(c), body.provider, body.model));
   });
   r.post('/i/:inst/agents/:name/connect', async (c) => {

@@ -40,6 +40,7 @@ function main() {
   services.goalRunner.start();
   services.watcher.start();
   services.channelRunner.start();
+  services.retention.start();
   // splits cut by a stop of Intendia: Hermes may have finished them
   services.missions.resume();
   const app = createApp({ config, db, auth, store, compat, services, version: VERSION });
@@ -61,18 +62,25 @@ function main() {
   });
   compat.start(config.versionCheckMinutes);
 
+  let stopping = false;
   const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
     compat.stop();
-    services.purger.stop();
-    services.autoApprover.stop();
-    services.goalRunner.stop();
-    services.watcher.stop();
+    const loops = [services.purger, services.autoApprover, services.goalRunner, services.watcher, services.channelRunner, services.retention];
+    for (const l of loops) l.stop();
     const closed = (s: { close: (cb: () => void) => unknown }) => new Promise<void>((r) => { s.close(() => r()); });
-    void Promise.all([closed(server), closed(mcpServer)]).then(() => {
+    // a pass under way writes to the database: it ends first (the splits of missions resume at the next start)
+    const idle = async () => {
+      const end = Date.now() + 4000;
+      while (loops.some((l) => !l.idle) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    };
+    void Promise.all([closed(server), closed(mcpServer), idle()]).then(() => {
       db.$client.close();
       process.exit(0);
     });
-    setTimeout(() => process.exit(0), 5000).unref();
+    // an open stream (SSE) keeps a server from closing: the passes still get their 4 s
+    setTimeout(() => { void idle().then(() => process.exit(0)); }, 5000).unref();
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);

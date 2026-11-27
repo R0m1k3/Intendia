@@ -8,6 +8,7 @@ import {
   AlreadySentError, CLIENT_KEY_RE, GoalInactiveError, IdempotencyConflictError, RunBusyError, RunExtrasError, startRun, type StartRunDeps,
 } from '../chat/start-run.js';
 import { sessionParams } from './workspaces.js';
+import { readJson } from './body.js';
 
 const Budget = z.number().min(0.01).max(100).nullable();
 const Settings = {
@@ -57,7 +58,7 @@ export function goalRoutes(deps: StartRunDeps): Hono {
   // a new goal, and its first turn with the goal's text as the message
   r.post('/sessions/:inst/:id/goal', async (c) => {
     const ctx = ctxOf(c);
-    const body = CreateBody.parse(await c.req.json());
+    const body = CreateBody.parse(await readJson(c));
     const inst = ctx.instance.id;
     const id = ctx.session.id;
     if (body.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);
@@ -89,7 +90,7 @@ export function goalRoutes(deps: StartRunDeps): Hono {
   // settings only (text, cap, budget, mode): allowed during a run, never changes the state or the counter
   r.patch('/sessions/:inst/:id/goal', async (c) => {
     const ctx = ctxOf(c);
-    const body = EditBody.parse(await c.req.json());
+    const body = EditBody.parse(await readJson(c));
     const g = goals.get(ctx.instance.id, ctx.session.id);
     if (!g) return c.json({ error: msg('Aucun objectif sur cette session'), code: 'no_goal' }, 404);
     if (body.budgetUsd === null && ctx.session.autoApprove) return c.json(BUDGET_REQUIRED, 400);

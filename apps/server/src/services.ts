@@ -22,6 +22,7 @@ import { MissionService } from './kanban/missions.js';
 import { KanbanService } from './kanban/service.js';
 import { LinkService } from './links/service.js';
 import { RecentService } from './sessions/recent.js';
+import { Retention } from './db/retention.js';
 import { SessionPurger } from './sessions/purge.js';
 import { AutoApprover } from './sessions/auto-approve.js';
 import { SkillService } from './skills/service.js';
@@ -51,6 +52,8 @@ export interface Services {
   providers: ProvidersService;
   mcpLink: McpLink;
   purger: SessionPurger;
+  /** deletes the rows nothing reads any more (db/retention.ts) */
+  retention: Retention;
   autoApprover: AutoApprover;
   git: GitService;
   monitor: MonitorService;
@@ -100,5 +103,5 @@ export function createServices(deps: {
   const activity = new ActivityService(deps.compat, deps.store, workspaces, kanban, (inst?: string) => watcher.working(inst));
   const channels = new ChannelService(deps.db, deps.store, workspaces);
   const channelRunner = new ChannelRunner({ ...runDeps, channels, store: deps.store });
-  return { channels, channelRunner, goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), vault: new VaultService(deps.compat, deps.store), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
+  return { channels, channelRunner, goals, runDeps, goalRunner: new GoalRunner(runDeps), wakes, watcher, roots, workspaces, links, files, instanceFiles, crons, skills, agents, kanban, missions: new MissionService(deps.db, kanban), activity, recent, config, providers, mcpLink, purger: new SessionPurger(workspaces, deps.compat), retention: new Retention(deps.db), autoApprover: new AutoApprover(workspaces, activity, deps.compat), git: new GitService(workspaces, roots, deps.compat), monitor: new MonitorService(deps.compat, deps.store, deps.config.secret, config), memory: new MemoryService(deps.compat, deps.store, deps.config.secret), vault: new VaultService(deps.compat, deps.store), plugins: new PluginService(deps.compat, deps.store, deps.config.secret), mcpCatalog: new McpCatalogService(config, deps.compat, deps.config.publicUrl) };
 }
