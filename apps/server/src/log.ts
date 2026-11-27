@@ -30,9 +30,9 @@ export const requestId = (): string | undefined => requests.getStore()?.id;
 
 /**
  * The path of a request as the journal may show it: never its query string, and a share link (`/f/<token>`, read
- * without signing in) without its token, which is the whole secret of the link.
+ * without signing in; `/x/links/<token>`, its management) without its token, which is the whole secret of the link.
  */
-export const safePath = (path: string): string => path.replace(/^\/f\/[^/]+/, '/f/…');
+export const safePath = (path: string): string => path.replace(/^(\/f|\/x\/links)\/[^/]+/, '$1/…');
 
 /** One line: `2026-11-27T19:00:00.000Z WARN  message req=ab12cd34ef56`; an error adds its stack below. */
 export function formatLine(level: LogLevel, message: string, err?: unknown, now = new Date(), req = requestId()): string {

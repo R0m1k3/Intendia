@@ -79,6 +79,8 @@ describe('the journal', () => {
     expect(safePath('/f/AbC123-secret_token')).toBe('/f/…');
     expect(safePath('/f/AbC123-secret_token/report.pdf')).toBe('/f/…/report.pdf');
     expect(safePath('/x/i/fake/files')).toBe('/x/i/fake/files');
+    expect(safePath('/x/links/AbC123-secret_token')).toBe('/x/links/…');
+    expect(safePath('/x/links')).toBe('/x/links');
     const t = await testApp();
     setLogLevel('debug');
     lines.length = 0;
