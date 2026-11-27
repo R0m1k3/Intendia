@@ -87,7 +87,7 @@ export function HomePage() {
       {list.length > 0 && ws.length > 0 && (
         <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent px-4 pt-4 pb-4 md:px-8">
           <div className="mx-auto max-w-[920px]">
-            <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} onAttachmentsChange={setAttached} example={example} />
+            <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} onAttachmentsChange={setAttached} example={example} onExampleUsed={() => setExample(null)} />
           </div>
         </div>
       )}
