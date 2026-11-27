@@ -7,11 +7,12 @@ import { useCurrentInstance } from '../instance/current';
 import { Popover } from './Menu';
 import { cx, Mark, worst } from './ui';
 import { plural, t } from '../i18n';
+import { useApprovals } from './useApprovals';
 
 /** What needs a look on each instance: crons whose last run failed, runs waiting for approval. */
 export function useAlerts(): (id: string) => { failed: number; approvals: number } {
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
-  const approvals = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: 10_000, refetchIntervalInBackground: true });
+  const approvals = useApprovals();
   return (id) => ({
     failed: failedCount((overview.data?.crons ?? []).filter((c) => c.instanceId === id)),
     approvals: (approvals.data?.approvals ?? []).filter((a) => a.instanceId === id).length,

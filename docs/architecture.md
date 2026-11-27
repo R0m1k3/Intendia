@@ -746,6 +746,24 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
   route a 409 without code before anything is written.
 
+## Web client: what is downloaded
+
+- `apps/web/src/main.tsx` is a few lines: it loads the English dictionary (`i18n/en-all.ts`, `setEnglish`) only when
+  the interface is in English, then `app.tsx` (router, query client, shell). French users never download English.
+- Every page but the shell (`Layout`, the session list, the home page) is loaded on demand: `routes/lazy.tsx`
+  `page(() => import('./pages/X'), 'XPage')`. The router preloads a page when its link is hovered, shows
+  `PagePending` after half a second, and reloads the tab once when the file is gone (a tab opened before an update).
+  What the router needs from a page before its code (tab names, search values) lives in `routes/search.ts`: `app.tsx`
+  imports only types from page modules. A static import of a heavy module from the shell (the thread, Markdown, a
+  page) undoes this: `pnpm size` (`scripts/bundle-size.mjs`, run by CI after the build) fails above 620 kB of
+  first-load JavaScript.
+- The server sends `dist/assets/*` with `Cache-Control: immutable` (hashed names) and the `.br` / `.gz` copy made by
+  the build (`apps/web/scripts/precompress.mjs`); `index.html` is `no-cache`; a missing asset is a 404, never the page.
+- One poll of the approvals per tab (`components/useApprovals.ts`): every reader calls `useApprovals()`, never
+  `useQuery` with its own `refetchInterval` (each interval is a timer of its own).
+- Thread (`chat/Thread.tsx`): a turn is redrawn only when its data changed (`sameTurn`, `chat/turns.ts`), Markdown is
+  memoized on its text, and the turns more than 20 above the end are `content-visibility: auto` (`.turn-far`).
+
 ## Web client: errors, connection and drafts
 
 - **Errors are translated where they are made.** The server sends its own texts through `msg()` (401
@@ -761,7 +779,7 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   front of a stopped Intendia). Only those are retried by React Query (twice; mutations never), and only those raise the
   « Intendia server unreachable » bar. Any JSON answer of Intendia (403, 404, 409, 422, 500…) is final.
 - **Connection state** (`connection/connection.ts`, the only module with global state, started by `initConnection()`
-  from `main.tsx`): `call()` reports through `setCallHooks` (`network(ok)`, `unauthenticated()`, `writeTimeout()`).
+  from `app.tsx`): `call()` reports through `setCallHooks` (`network(ok)`, `unauthenticated()`, `writeTimeout()`).
   `serverDown` turns on at the first passing failure, a probe `GET /x/health` runs every 5 s, and the first good answer
   turns it off and invalidates every query. Offline is TanStack Query's `onlineManager` (queries and mutations pause
   and resume by themselves).

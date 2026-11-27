@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, ListTree } from 'lucide-react';
 import { Popover } from '../components/Menu';
 import { t } from '../i18n';
-import { clock } from './Thread';
+import { clock } from './clock';
 import type { OutlineItem } from './turns';
 
 /** Questions needed before « Plan » and the ↑ ↓ buttons show up. */

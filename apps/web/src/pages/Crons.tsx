@@ -14,7 +14,7 @@ import { Blueprints } from '../crons/Blueprints';
 import { snapshot, statusLabel, type FollowSnapshot } from '../crons/follow';
 import { describe, hermesDayDiff, hermesParts, offsetOf, whenFr } from '../crons/schedule';
 import { locale, plural, t } from '../i18n';
-import type { CronsSearch } from '../main';
+import type { CronsSearch } from '../app';
 
 const REQUIRED: OpRef[] = [['crons', 'list']];
 const OPTIONAL: OptionalOp[] = [

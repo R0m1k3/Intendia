@@ -82,3 +82,25 @@ export function outline(entries: Entry[]): OutlineItem[] {
     return { key: e.key, text: flat.length > 80 ? `${flat.slice(0, 80).trimEnd()}…` : flat, ts: e.ts };
   });
 }
+
+/** Structural equality of plain data (entries come out of JSON and reducers: no class, no Map). */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    const other = b as unknown[];
+    return a.length === other.length && a.every((v, i) => same(v, other[i]));
+  }
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => Object.hasOwn(b, k) && same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/**
+ * Two builds of the same turn show the same thing. The page rebuilds every entry at each render (each token of a
+ * streamed answer): comparing lets the thread redraw only the turn that changed, usually the last one.
+ */
+export function sameTurn(a: Turn, b: Turn): boolean {
+  return same(a, b);
+}

@@ -8,6 +8,7 @@ import { api } from '../api';
 import { useCurrentInstance } from '../instance/current';
 import { runMarks } from '../sessions/running';
 import { useActivePageValue } from './activePage';
+import { useApprovals } from './useApprovals';
 
 export type BadgeKind = 'waiting' | 'running';
 
@@ -93,8 +94,7 @@ async function drawBadge(kind: BadgeKind | null): Promise<void> {
 export function useTabStatus(navLabel: string | null): void {
   const { id: inst } = useCurrentInstance();
   const page = useActivePageValue();
-  // the same query as the approvals window (every instance)
-  const approvals = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: 10_000, refetchOnWindowFocus: true, refetchIntervalInBackground: true });
+  const approvals = useApprovals();
   // shared with the session list (5 s there): the shortest interval of the mounted observers wins
   const activity = useQuery({
     queryKey: ['activity', inst], queryFn: () => api.activity(inst!), enabled: inst !== null,

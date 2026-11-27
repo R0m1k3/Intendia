@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import { listSources, placeholders, scanFiles } from '../../../../scripts/i18n-scan.mjs';
 // @ts-expect-error plain JS helper shared with the server test
 import { bannedWords } from '../../../../scripts/i18n-glossary.mjs';
-import { __en, __setLangForTest, getLang, plural, t } from './index';
+import __en from './en-all';
+import { __setLangForTest, getLang, plural, setEnglish, t } from './index';
+
+setEnglish(__en);
 import { pickLang } from './detect';
 import { T } from './T';
 

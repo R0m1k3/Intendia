@@ -11,6 +11,7 @@ import { PendingItem } from '../components/PendingItem';
 import { ErrorText, Mark, Panel, SkeletonLines } from '../components/ui';
 import { useCurrentInstance } from '../instance/current';
 import { t } from '../i18n';
+import { useApprovals } from '../components/useApprovals';
 
 const POLL_MS = 5_000;
 const FINISHED_POLL_MS = 30_000;
@@ -38,7 +39,7 @@ export function CentrePage() {
     queryKey: ['activity', scope], queryFn: () => (all ? api.activityAll() : api.activity(inst!)),
     enabled: ready, refetchInterval: POLL_MS, staleTime: 0,
   });
-  const approvals = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: POLL_MS });
+  const approvals = useApprovals();
   const finished = useQuery({
     queryKey: ['activity-finished', scope], queryFn: () => api.finishedRuns(all ? undefined : inst!),
     enabled: ready, refetchInterval: FINISHED_POLL_MS,

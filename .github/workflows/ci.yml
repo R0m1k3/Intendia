@@ -19,6 +19,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # first-load JavaScript of the web app (pages are loaded on demand): fails above the budget
+      - run: pnpm size
   docker:
     runs-on: ubuntu-latest
     steps:

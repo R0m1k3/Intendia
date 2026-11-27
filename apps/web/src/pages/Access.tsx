@@ -11,8 +11,9 @@ import { DetailBody, DetailHeader, Empty, Facts, ListItemBody, ListLabel, ListLi
 import { ProfileSelect } from '../components/ProfileSelect';
 import { Button, ErrorText, host, Tag, SkeletonList } from '../components/ui';
 import { locale, plural, t } from '../i18n';
+import { ACCESS_KINDS } from '../routes/search';
 
-export const ACCESS_KINDS = ['login', 'payment', 'address'] as const;
+export { ACCESS_KINDS };
 /** The address never holds a secret: only the item shown, or a form to open with a site. */
 export interface AccessSearch { profile?: string; item?: string; add?: VaultKind; origin?: string; proposed?: '1'; replace?: '1' }
 

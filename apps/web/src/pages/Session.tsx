@@ -28,7 +28,8 @@ import {
   saveQueue, savePendingKey, takeHead, type Queue,
 } from '../chat/queue';
 import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
-import { AGENT_INDENT, AgentFace, ApprovalCard, OpenSubagents, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
+import { AGENT_INDENT, ApprovalCard } from '../chat/ApprovalCard';
+import { AgentFace, OpenSubagents, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
 import { artifactPaths } from '../chat/artifacts';
 import { lastTodos } from '../chat/todos';
@@ -70,6 +71,7 @@ import { useInbox } from '../sessions/InboxLayout';
 import { useVaultAvailable } from './Access';
 import { locale, t } from '../i18n';
 import { T } from '../i18n/T';
+import { useApprovals } from '../components/useApprovals';
 
 /** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
 export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg border border-line bg-sheet text-ink transition-colors hover:bg-paper';
@@ -292,7 +294,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const deferred = link.mode === 'polling';
   // followed without a live stream (streams.ts): what waits for an answer comes from the approvals feed, which the
   // global bar hides for the session on screen
-  const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: deferred, refetchInterval: deferred ? 5_000 : false });
+  const feed = useApprovals({ enabled: deferred });
   const pendingFeed = deferred && active ? feed.data?.approvals.find((a) => a.sessionId === sessionId && a.runId === active.id) : undefined;
   const approval: Approval | null = live?.approval
     ?? (pendingFeed?.kind === 'approval' ? { requestId: pendingFeed.requestId, command: pendingFeed.command, description: pendingFeed.description, choices: pendingFeed.choices } : null);
@@ -894,14 +896,22 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   // the element that scrolls the thread: the page's <main>, or the column of the Chat page
   const box = () => bottom.current?.closest<HTMLElement>('[data-scroll-root]') ?? null;
   // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
+  // While the thread follows its end, the browser must not "keep the reading position" on its own (scroll
+  // anchoring): a turn that changes height above (its buttons leave when a run starts) would move the position up by a
+  // few pixels, which reads as the reader leaving the bottom, and the answer would arrive off screen. Once the
+  // reader has scrolled up, anchoring is wanted again (turns far above take their real height as they come near).
+  const track = (main: HTMLElement, next: FollowState) => {
+    follow.current = next;
+    main.style.overflowAnchor = next.pinned ? 'none' : '';
+  };
   const toEnd = (main: HTMLElement) => {
     main.scrollTop = main.scrollHeight;
-    follow.current = { pinned: true, lastTop: main.scrollTop, lastHeight: main.scrollHeight };
+    track(main, { pinned: true, lastTop: main.scrollTop, lastHeight: main.scrollHeight });
   };
   const followIfPinned = () => {
     const main = box();
     if (!main) return;
-    follow.current = measure(follow.current, main);
+    track(main, measure(follow.current, main));
     if (follow.current.pinned) toEnd(main);
   };
   const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
@@ -910,12 +920,12 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     const main = box();
     const thread = bottom.current?.parentElement;
     if (!main || !thread) return;
-    follow.current = startFollow(main);
-    const onScroll = () => { follow.current = measure(follow.current, main); };
+    track(main, startFollow(main));
+    const onScroll = () => track(main, measure(follow.current, main));
     const grow = new ResizeObserver(followIfPinned);
     grow.observe(thread);
     main.addEventListener('scroll', onScroll, { passive: true });
-    return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); };
+    return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); main.style.overflowAnchor = ''; };
   }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(followIfPinned, [tail, approval, clarify]);
@@ -1290,7 +1300,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             prompts
             draftKey={inst ? sessionDraftKey(inst, sessionId) : undefined}
             onAttachmentsChange={setAttached}
-            onSend={(text, sk) => { setUsageOpen(false); return send(text, sk); }}
+            onSend={(text, sk) => {
+              setUsageOpen(false);
+              // sending is going back to the end of the thread, wherever the reader was
+              const main = box();
+              if (main) toEnd(main);
+              return send(text, sk);
+            }}
             skillNames={skillNames}
             autoApprove={sess.data?.session.autoApprove ? { onOff: () => void setAutoApprove(false) } : null}
             onStop={stop}

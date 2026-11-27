@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api, type ApprovalChoice, type PendingApproval } from '../api';
 import { ClarifyCard } from '../chat/ClarifyCard';
-import { ApprovalCard } from '../chat/Thread';
+import { ApprovalCard } from '../chat/ApprovalCard';
 import { ErrorText } from './ui';
 import { t } from '../i18n';
 

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Button, Input, Mark } from '../components/ui';
 import { t } from '../i18n';
 import type { Clarify } from './events';
-import { AGENT_INDENT } from './Thread';
+import { AGENT_INDENT } from './ApprovalCard';
 
 /**
  * A question of the agent (clarify tool). One button per choice (sends its label); with several choices allowed,

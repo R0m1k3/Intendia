@@ -10,9 +10,9 @@ import { EntryDetail, EntryList } from '../memory/Entries';
 import { LearnedDetail, LearnedList } from '../memory/Learned';
 import { t } from '../i18n';
 import { T } from '../i18n/T';
+import { MEMORY_TABS, type MemoryTab } from '../routes/search';
 
-export const MEMORY_TABS = ['memoire', 'appris'] as const;
-export type MemoryTab = (typeof MEMORY_TABS)[number];
+export { MEMORY_TABS, type MemoryTab };
 export interface MemorySearch { profile?: string; tab?: MemoryTab; entry?: string; skill?: string }
 
 const REQUIRED: OpRef[] = [['memory', 'graph']];
