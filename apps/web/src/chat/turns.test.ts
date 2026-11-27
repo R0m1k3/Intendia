@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunStat } from '../api';
 import type { Entry } from './events';
-import { outline, stepsLabel, toTurns, type ToolEntry } from './turns';
+import { outline, sameTurn, stepsLabel, toTurns, type ToolEntry } from './turns';
 
 const user = (key: string, ts = 1): Entry => ({ kind: 'user', key, text: key, ts });
 const said = (key: string, ts: number | null = 2, streaming = false): Entry => ({ kind: 'assistant', key, text: `texte ${key}`, ts, streaming });
@@ -76,5 +76,38 @@ describe('toTurns with a delivery of background sub-agents', () => {
     expect(t.map((x) => [x.kind, x.key])).toEqual([['user', 'u1'], ['agent', 'a1'], ['delegation', 'h9'], ['agent', 'a2']]);
     expect(t[2]!.footers.map((f) => f.runId)).toEqual(['r1']);
     expect(outline([user('u1'), said('a1'), delivery('h9')]).map((o) => o.key)).toEqual(['u1']);
+  });
+});
+
+describe('sameTurn', () => {
+  const build = (text: string, extra: Entry[] = []) => toTurns([
+    { kind: 'user', key: 'u1', text: 'bonjour', ts: 1 },
+    { kind: 'assistant', key: 'a1', text, ts: 2 },
+    ...extra,
+  ] as Entry[]);
+
+  it('sees two builds of the same entries as the same turns', () => {
+    const [u1, a1] = build('réponse');
+    const [u2, a2] = build('réponse');
+    expect(u1).not.toBe(u2);
+    expect(sameTurn(u1!, u2!)).toBe(true);
+    expect(sameTurn(a1!, a2!)).toBe(true);
+  });
+
+  it('sees a streamed answer grow, and nothing else move', () => {
+    const [u1, a1] = build('répon');
+    const [u2, a2] = build('réponse');
+    expect(sameTurn(u1!, u2!)).toBe(true);
+    expect(sameTurn(a1!, a2!)).toBe(false);
+  });
+
+  it('sees a new step, a step that ends and a run line', () => {
+    const [, plain] = build('réponse');
+    const [, running] = build('réponse', [{ ...tool('t1'), state: 'running' }]);
+    const [, done] = build('réponse', [tool('t1', 2)]);
+    expect(sameTurn(plain!, running!)).toBe(false);
+    expect(sameTurn(running!, done!)).toBe(false);
+    const entries = [user('u1')];
+    expect(sameTurn(toTurns(entries)[0]!, toTurns(entries, new Map([['u1', [stat('r1')]]]))[0]!)).toBe(false);
   });
 });

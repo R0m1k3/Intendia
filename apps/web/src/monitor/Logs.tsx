@@ -4,8 +4,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, type LogQuery } from '../api';
 import { Button, cx, ErrorText } from '../components/ui';
 import { t } from '../i18n';
+import { LOG_FILES } from '../routes/search';
 
-export const LOG_FILES = ['agent', 'errors', 'gateway', 'gui', 'desktop', 'update', 'handoff', 'mcp'] as const;
+export { LOG_FILES };
 const FILE_LABEL: Record<string, string> = {
   agent: t('Agent'), errors: t('Erreurs'), gateway: t('Passerelle'), gui: t('Interface'), desktop: t('Appli de bureau'), update: t('Mises à jour'),
   handoff: t('Passage de mise à jour'), mcp: t('Serveurs MCP'),

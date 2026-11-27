@@ -4,9 +4,9 @@ import { Chips, ErrorText, Panel, SkeletonLines } from '../components/ui';
 import { DailyBars } from './DailyBars';
 import { formatTokens, formatUsd } from './format';
 import { plural, t } from '../i18n';
+import { PERIODS, type Period } from '../routes/search';
 
-export const PERIODS = [7, 30, 90] as const;
-export type Period = (typeof PERIODS)[number];
+export { PERIODS, type Period };
 
 const SOURCE_LABEL: Record<string, string> = { api_server: t('API (Intendia, applis)'), cli: t('Terminal'), cron: t('Planifications'), telegram: 'Telegram', discord: 'Discord', slack: 'Slack', kanban: t('Tâches') };
 

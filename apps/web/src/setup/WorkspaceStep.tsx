@@ -6,7 +6,7 @@ import { AgentAvatar, ColorChoice, useAgentLooks } from '../agents/look';
 import { ask } from '../components/Dialog';
 import { NewWorkspace } from '../components/NewWorkspace';
 import { Button } from '../components/ui';
-import { NewAgent } from '../pages/Agents';
+import { NewAgent } from '../agents/NewAgent';
 import { finishSetup, StepFrame, useStepInstance } from './Frame';
 import { t } from '../i18n';
 

@@ -12,10 +12,11 @@ declare global {
 export const LANG_KEY = 'intendia-lang';
 const COOKIE = 'intendia-lang';
 
-const en: Record<string, string> = Object.assign(
-  {},
-  ...Object.values(import.meta.glob<{ default: Record<string, string> }>('./en/*.ts', { eager: true })).map((m) => m.default),
-);
+// filled by main.tsx before the app loads (English interface only), and by the tests
+let en: Record<string, string> = {};
+
+/** Gives the English dictionary (i18n/en-all.ts); French needs none. */
+export function setEnglish(dict: Record<string, string>): void { en = dict; }
 
 const isTest = import.meta.env.MODE === 'test';
 const hasWindow = typeof window !== 'undefined';
@@ -79,6 +80,3 @@ export function plural(n: number, one: string, other: string, vars?: Record<stri
 
 /** Tests only: switch the language of `t()` / `plural()` / `locale()` (module constants already built do not follow). */
 export function __setLangForTest(l: Lang) { current = l; }
-
-/** Tests only: the merged English dictionary. */
-export const __en: Readonly<Record<string, string>> = en;

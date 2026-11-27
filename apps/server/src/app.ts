@@ -382,11 +382,23 @@ export function createApp(deps: AppDeps) {
   const webDir = config.webDir;
   if (webDir && existsSync(join(webDir, 'index.html'))) {
     const indexHtml = readFileSync(join(webDir, 'index.html'), 'utf8');
-    app.use('/assets/*', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
-    app.use('/favicon.svg', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
-    app.use('/apple-touch-icon.png', serveStatic({ root: relative(process.cwd(), webDir) || '.' }));
+    const root = relative(process.cwd(), webDir) || '.';
+    // the build names each file after its content: a browser keeps it for good and never asks again. The compressed
+    // copy made by the build (.br, .gz) is sent when the browser accepts it.
+    app.use('/assets/*', async (c, next) => {
+      await next();
+      if (c.res.ok) c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    });
+    app.use('/assets/*', serveStatic({ root, precompressed: true }));
+    // a file of a previous version (a tab opened before an update asks for a page's code): a real 404, never the
+    // page in place of a script; the web app then reloads itself once (routes/lazy.tsx)
+    app.all('/assets/*', (c) => c.text('not found', 404));
+    app.use('/favicon.svg', serveStatic({ root }));
+    app.use('/apple-touch-icon.png', serveStatic({ root }));
     app.get('*', (c) => {
       if (c.req.path.startsWith('/x/') || c.req.path.startsWith('/f/')) return c.json({ error: 'not found' }, 404);
+      // always asked again (it is small): a new version is seen at the next load, with the names of its files
+      c.header('Cache-Control', 'no-cache');
       // the app's pages may be framed by the app itself (side chat, ⌘J); API and file responses keep their own rules.
       // frame-src: a frame of the app (an artefact's scripts) can never navigate itself to another site
       c.header('X-Frame-Options', 'SAMEORIGIN');

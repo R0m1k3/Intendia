@@ -14,6 +14,7 @@ import {
   type Chat, type ChatLayout, type Col,
 } from './columns';
 import { EMBEDDED } from './embed';
+import { useApprovals } from '../components/useApprovals';
 
 interface Report { running: boolean; waiting: boolean; title: string }
 
@@ -54,7 +55,7 @@ function ChatColumns() {
   const chat: Chat = useMemo(() => openHere(stored, here), [stored, here]);
   const { full, setFull } = useInbox();
   const phone = usePhone();
-  const approvals = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), staleTime: 5_000 });
+  const approvals = useApprovals();
   const [reports, setReports] = useState<Record<string, Report>>({});
 
   // The address: the session it names becomes the active chat; a copied link (?avec=) replaces the tab's chats.

@@ -8,7 +8,7 @@ import { api, type RecentSession, type SessionSource } from '../api';
 import { ask, askText } from '../components/Dialog';
 import { Menu, Picker, PICKER_BTN } from '../components/Menu';
 import { NewWorkspace, slugify } from '../components/NewWorkspace';
-import { NewAgent } from '../pages/Agents';
+import { NewAgent } from '../agents/NewAgent';
 import { Empty, ListLabel, ListPane } from '../components/Panes';
 import { Button, Chips, cx, ErrorText, SkeletonList } from '../components/ui';
 import { FILTERS } from '../home/labels';
@@ -22,6 +22,7 @@ import { invalidateSessionLists, SESSION_LIST_KEYS, showUndo } from './UndoBar';
 import { useSeen } from './unread';
 import { AgentAvatar, useAgentLooks } from '../agents/look';
 import { plural, t } from '../i18n';
+import { useApprovals } from '../components/useApprovals';
 
 /** Sessions read for the column (the server's maximum). */
 const LIMIT = 200;
@@ -102,7 +103,7 @@ export function AgentsPane({ openId, onBeside }: {
   const agents = useQuery({ queryKey: ['agents', inst], queryFn: () => api.agents(inst!).then((r) => r.agents), enabled: inst !== null, staleTime: 60_000, retry: false });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const activity = useQuery({ queryKey: ['activity', inst], queryFn: () => api.activity(inst!), enabled: inst !== null, refetchInterval: 5_000, staleTime: 0 });
-  const feed = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), enabled: inst !== null, refetchInterval: 5_000 });
+  const feed = useApprovals({ enabled: inst !== null });
   const marks: Map<string, RunMark> = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst, activity.data?.subagents ?? []) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
   const { isUnread, seen } = useSeen(inst);

@@ -24,6 +24,7 @@ import { ask } from '../components/Dialog';
 import { t } from '../i18n';
 import { T } from '../i18n/T';
 import { term, type TermId } from '../help/glossary';
+import { CONFIG_TABS, type ConfigTab } from '../routes/search';
 
 const REQUIRED: OpRef[] = [['config', 'get']];
 const OPTIONAL: OptionalOp[] = [
@@ -43,8 +44,7 @@ const PLUGINS_OPTIONAL: OptionalOp[] = [
   ['plugins', 'remove', t('Désinstaller')],
 ];
 
-export const CONFIG_TABS = ['modeles', 'fournisseurs', 'reglages', 'garde-fous', 'yaml', 'variables', 'mcp', 'plugins', 'plateformes', 'historique'] as const;
-export type ConfigTab = (typeof CONFIG_TABS)[number];
+export { CONFIG_TABS, type ConfigTab };
 export interface ConfigSearch { profile?: string; tab?: ConfigTab; key?: string }
 
 /** A tab shows when the config module has its operation (one of them, for a list); Plugins is its own module. */

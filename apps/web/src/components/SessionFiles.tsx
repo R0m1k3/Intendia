@@ -7,7 +7,7 @@ import { DropZone } from '../files/DropZone';
 import { FileRows } from '../files/FileRows';
 import { baseName } from '../files/paths';
 import { absoluteUrl } from '../files/Preview';
-import { clock } from '../chat/Thread';
+import { clock } from '../chat/clock';
 import type { Written } from '../chat/written';
 import { chipClass, copyText, } from './ui';
 import { workspaceScope } from '../files/scope';

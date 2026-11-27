@@ -1,4 +1,4 @@
-// Sessions whose agent is working, put forward in the session list (SessionsPane): an « En cours » group on top.
+// Sessions whose agent is working, put forward in the session list (AgentsPane): an « En cours » group on top.
 
 import type { ActiveRun, RecentSession, WorkingSubagents } from '../api';
 import { t } from '../i18n';

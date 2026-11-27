@@ -2,22 +2,24 @@ import { isExpiredWake } from './goal';
 import { thinkingState } from './thinking';
 import { Link } from '@tanstack/react-router';
 import { Check, ChevronDown, ChevronRight, Copy, FileText, GitBranch, KeyRound, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, memo, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { rawUrl, type ApprovalChoice, type RunStat, type SubagentsSummary } from '../api';
-import { Button, copyText, cx, Mark } from '../components/ui';
+import { rawUrl, type RunStat, type SubagentsSummary } from '../api';
+import { Button, copyText, cx } from '../components/ui';
 import { useFilePaths } from '../files/FilePaths';
 import { baseName, fileKind } from '../files/paths';
 import { locale, t } from '../i18n';
 import { rehypePaths } from '../files/rehypePaths';
 import { splitAttachments } from './attachments';
-import type { Approval, Entry } from './events';
+import type { Entry } from './events';
 import { AgentAvatar as FaceAvatar } from '../agents/look';
+import { AGENT_INDENT } from './ApprovalCard';
 import { Artifact } from './Artifact';
+import { clock } from './clock';
 import { splitArtifacts } from './artifacts';
 import { RunFooter } from './RunFooter';
-import { stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
+import { sameTurn, stepsLabel, toTurns, type Part, type ToolEntry, type Turn } from './turns';
 import { Delivery } from './Delivery';
 import { vaultHint } from './vault-hint';
 import { duration, Subagents } from './Subagents';
@@ -25,11 +27,6 @@ import type { Stamp } from './timeline';
 
 /** How the user is named in the thread. */
 const USER = t('Vous');
-
-export function clock(ts: number | null, seconds = false): string {
-  if (!ts) return '';
-  return new Date(ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}) });
-}
 
 /** « Afficher les heures »: stamps of the entries by key (chat/timeline.ts); null = normal display. */
 const Times = createContext<Map<string, Stamp> | null>(null);
@@ -91,7 +88,8 @@ function StampLine({ k }: { k: string }) {
  * Markdown of the assistant. Inside a session, paths of existing workspace files become chips that
  * open the preview (rehypePaths); every other link opens in a new tab.
  */
-export function Md({ text }: { text: string }) {
+/** Markdown of a message. Memoized on the text: parsing is the costly part of a thread. */
+export const Md = memo(function Md({ text }: { text: string }) {
   const paths = useFilePaths();
   const rehype = useMemo(() => (paths?.found.size ? [rehypePaths(paths.found)] : []), [paths?.found]);
   return (
@@ -118,10 +116,7 @@ export function Md({ text }: { text: string }) {
       </Markdown>
     </div>
   );
-}
-
-/** Width of the avatar column: the agent's content and its cards line up after it. */
-export const AGENT_INDENT = 'pl-10';
+});
 
 function StepIcon({ state }: { state: ToolEntry['state'] }) {
   if (state === 'running') return <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-faint" strokeWidth={1.75} />;
@@ -369,7 +364,17 @@ function DeliveryTurn({ turn, clock: at }: { turn: Extract<Turn, { kind: 'delega
   return <Delivery entry={turn.entry} clock={at} footers={turn.footers} summary={summary} />;
 }
 
-function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; actions?: ThreadActions }) {
+/** What the page lets the user do on one turn, as plain values: they tell whether the turn must be redrawn. */
+interface TurnRights { edit: boolean; retry: boolean; branch: boolean; busy: boolean }
+/** The page's actions behind stable functions (the latest ones are called). */
+type TurnActs = Pick<ThreadActions, 'edit' | 'retry' | 'branch'>;
+interface TurnProps { turn: Turn; agent?: string; rights: TurnRights | null; acts: TurnActs }
+
+const sameRights = (a: TurnRights | null, b: TurnRights | null) =>
+  a === b || (a !== null && b !== null && a.edit === b.edit && a.retry === b.retry && a.branch === b.branch && a.busy === b.busy);
+
+/** One turn. Redrawn only when what it shows changed: during a streamed answer, the turns above stay as they are. */
+const TurnView = memo(function TurnView({ turn, agent, rights, acts }: TurnProps) {
   const [editing, setEditing] = useState(false);
   const times = useContext(Times);
   if (turn.kind === 'delegation') return <DeliveryTurn turn={turn} clock={clock(turn.entry.ts, Boolean(times))} />;
@@ -388,12 +393,12 @@ function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; action
     );
   }
   if (turn.kind === 'user') {
-    const editable = Boolean(actions?.canEdit(turn.key));
-    if (editing && actions) {
+    const editable = Boolean(rights?.edit);
+    if (editing && rights) {
       return (
         <div className="flex gap-3" data-turn="user" data-key={turn.key}>
           <Avatar name={USER} agent={false} />
-          <EditMessage text={turn.entry.text} busy={actions.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); actions.edit(turn.key, v); }} />
+          <EditMessage text={turn.entry.text} busy={rights.busy} onCancel={() => setEditing(false)} onSend={(v) => { setEditing(false); acts.edit(turn.key, v); }} />
         </div>
       );
     }
@@ -401,8 +406,9 @@ function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; action
     return (
       <div className="group flex justify-end" data-turn="user" data-key={turn.key}>
         <div className="flex min-w-0 max-w-[85%] flex-col items-end">
-          <div className="flex min-w-0 items-center gap-1.5">
-            {editable && <TurnButton label={t('Modifier le message')} onClick={() => setEditing(true)} disabled={actions!.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
+          {/* min-h: the height of the edit button, so the thread does not move when it comes and goes with a run */}
+          <div className="flex min-h-7 min-w-0 items-center gap-1.5">
+            {editable && <TurnButton label={t('Modifier le message')} onClick={() => setEditing(true)} disabled={rights?.busy}><Pencil className="size-3.5" strokeWidth={1.5} /></TurnButton>}
             {turn.entry.steer && <span data-steer className="text-[11.5px] font-medium text-accent-ink" title={t('Donné à l’agent pendant son travail, après ses outils en cours')}>{t('Réorientation')}</span>}
             <Who name={USER} ts={turn.entry.ts} seconds={Boolean(times)} />
           </div>
@@ -417,16 +423,16 @@ function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; action
       <AgentHeader ts={turn.ts} name={agent} />
       <div className={cx('mt-1.5 space-y-2.5 text-[15px]', AGENT_INDENT)}>
         {turn.parts.map((p) => <PartView key={p.key} p={p} />)}
-        {(turn.footers.length > 0 || (turn.text && !turn.streaming) || actions) && (
+        {(turn.footers.length > 0 || (turn.text && !turn.streaming) || rights) && (
           <div className="space-y-0.5">
             {turn.footers.map((r) => <RunFooter key={r.runId} r={r} />)}
             <div className="flex items-center gap-0.5">
               {turn.text && !turn.streaming && <CopyReply text={turn.text} />}
-              {actions && actions.retryTurn === turn.key && (
-                <TurnButton label={t('Réessayer')} onClick={actions.retry} disabled={actions.busy}><RotateCcw className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              {rights?.retry && (
+                <TurnButton label={t('Réessayer')} onClick={acts.retry} disabled={rights.busy}><RotateCcw className="size-3.5" strokeWidth={1.5} /></TurnButton>
               )}
-              {actions?.canBranch(turn.key) && (
-                <TurnButton label={t('Créer une branche')} onClick={() => actions.branch(turn.key)} disabled={actions.busy}><GitBranch className="size-3.5" strokeWidth={1.5} /></TurnButton>
+              {rights?.branch && (
+                <TurnButton label={t('Créer une branche')} onClick={() => acts.branch(turn.key)} disabled={rights.busy}><GitBranch className="size-3.5" strokeWidth={1.5} /></TurnButton>
               )}
             </div>
           </div>
@@ -434,7 +440,7 @@ function TurnView({ turn, agent, actions }: { turn: Turn; agent?: string; action
       </div>
     </div>
   );
-}
+}, (a, b) => a.agent === b.agent && a.acts === b.acts && sameRights(a.rights, b.rights) && sameTurn(a.turn, b.turn));
 
 /** Shown at the end of the thread while a run is going on: what the agent is doing, with three moving dots. */
 export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?: string }) {
@@ -448,6 +454,9 @@ export function ThinkingIndicator({ entries, agent }: { entries: Entry[]; agent?
   if (th.inTurn) return <div className="mt-3">{line}</div>;
   return <div className="mt-6"><AgentHeader ts={null} name={agent} />{line}</div>;
 }
+
+/** Turns at the end of the thread always laid out; the ones above are `turn-far` (styles.css). */
+const RECENT_TURNS = 20;
 
 /** The conversation as turns (see toTurns); `footers` = run lines keyed by entry (placeRunStats). */
 export function Thread({ entries, footers, agent, actions, times, liveDeliveries = false, subagents, vault, hasOlder, loadingOlder, onLoadOlder }: {
@@ -468,6 +477,22 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
   const turns = useMemo(() => toTurns(entries, footers), [entries, footers]);
   const lastKey = useMemo(() => entries.filter((e) => e.kind === 'delegation').at(-1)?.key ?? null, [entries]);
   const wake = useMemo(() => ({ summary: subagents, lastKey }), [subagents, lastKey]);
+  // the page builds new actions at each render: the turns get stable functions that call the latest ones
+  const latest = useRef(actions);
+  latest.current = actions;
+  const acts = useMemo<TurnActs>(() => ({
+    edit: (key, text) => latest.current?.edit(key, text),
+    retry: () => latest.current?.retry(),
+    branch: (key) => latest.current?.branch(key),
+  }), []);
+  const rightsOf = (turn: Turn): TurnRights | null => (actions ? {
+    edit: turn.kind === 'user' && !turn.entry.relaunch && !turn.entry.wake && actions.canEdit(turn.key),
+    retry: actions.retryTurn === turn.key,
+    branch: turn.kind === 'agent' && actions.canBranch(turn.key),
+    busy: actions.busy,
+  } : null);
+  // long sessions: the browser skips the layout and painting of the turns far above until they are scrolled to
+  const far = turns.length - RECENT_TURNS;
   return (
     <Times.Provider value={times ?? null}>
       <VaultLink.Provider value={vault ?? null}>
@@ -482,46 +507,15 @@ export function Thread({ entries, footers, agent, actions, times, liveDeliveries
           </div>
         )}
         <div className="space-y-7">
-          {turns.map((turn) => <TurnView key={turn.key} turn={turn} agent={agent} actions={actions} />)}
+          {turns.map((turn, i) => (
+            <div key={turn.key} className={i < far ? 'turn-far' : undefined}>
+              <TurnView turn={turn} agent={agent} rights={rightsOf(turn)} acts={acts} />
+            </div>
+          ))}
         </div>
       </WakeInfo.Provider>
       </LiveDeliveries.Provider>
       </VaultLink.Provider>
     </Times.Provider>
-  );
-}
-
-const CHOICES: Record<string, { label: string; variant: 'primary' | 'secondary' | 'danger' }> = {
-  once: { label: t('Autoriser une fois'), variant: 'primary' },
-  session: { label: t('Pour cette session'), variant: 'secondary' },
-  always: { label: t('Toujours'), variant: 'secondary' },
-  deny: { label: t('Refuser'), variant: 'danger' },
-};
-
-/** `inline`: without the thread's indent (notifications); `footer`: shown under the choices. */
-export function ApprovalCard({ approval, onChoose, busy, inline, footer }: {
-  approval: Approval; onChoose: (c: ApprovalChoice) => void; busy: boolean; inline?: boolean; footer?: ReactNode;
-}) {
-  return (
-    <div className={inline ? undefined : AGENT_INDENT}>
-      <div className="rounded-xl border border-warn/40 bg-warn-soft/40 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Mark state="readonly" />
-          {t('Approbation demandée')}
-        </div>
-        {approval.description && <p className="mt-2 text-sm text-ink-soft">{approval.description}</p>}
-        {approval.command && (
-          <pre className="mt-3 overflow-auto rounded-lg border border-line bg-sheet p-3 font-mono text-xs whitespace-pre-wrap">{approval.command}</pre>
-        )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {approval.choices.map((c) => (
-            <Button key={c} variant={CHOICES[c]?.variant ?? 'secondary'} disabled={busy} onClick={() => onChoose(c as ApprovalChoice)}>
-              {CHOICES[c]?.label ?? c}
-            </Button>
-          ))}
-        </div>
-        {footer}
-      </div>
-    </div>
   );
 }

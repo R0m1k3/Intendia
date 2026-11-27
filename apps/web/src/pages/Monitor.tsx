@@ -7,9 +7,9 @@ import { Logs } from '../monitor/Logs';
 import { System } from '../monitor/System';
 import { Usage, type Period } from '../monitor/Usage';
 import { t } from '../i18n';
+import { MONITOR_TABS, type MonitorTab } from '../routes/search';
 
-export const MONITOR_TABS = ['usage', 'logs', 'server'] as const;
-export type MonitorTab = (typeof MONITOR_TABS)[number];
+export { MONITOR_TABS, type MonitorTab };
 export interface MonitorSearch { tab?: MonitorTab; days?: Period; file?: string; profile?: string }
 
 const REQUIRED: OpRef[] = [['monitor', 'usage']];

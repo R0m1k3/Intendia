@@ -1,12 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouterState } from '@tanstack/react-router';
 import { BellRing } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api } from '../api';
 import { toNotify, visibleApprovals } from './approvals';
 import { canNotify, PendingItem } from './PendingItem';
 import { plural, t } from '../i18n';
+import { useApprovals } from './useApprovals';
 
 const MAX_SHOWN = 3;
 export const CENTRE_PATH = '/activite';
@@ -18,10 +18,7 @@ export const CENTRE_PATH = '/activite';
 export function Approvals() {
   const qc = useQueryClient();
   const { sessionId } = useParams({ strict: false }) as { sessionId?: string };
-  const list = useQuery({ queryKey: ['approvals'], queryFn: () => api.approvals(), refetchInterval: 10_000, refetchOnWindowFocus: true,
-    // keeps polling in a hidden tab: that is when the browser notification is useful
-    refetchIntervalInBackground: true,
-  });
+  const list = useApprovals(); // polled in a hidden tab too: that is when the browser notification is useful
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const notified = useRef(new Set<string>());
   const all = list.data?.approvals ?? [];

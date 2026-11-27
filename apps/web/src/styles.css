@@ -134,6 +134,13 @@
 }
 
 /* Agent answers (react-markdown, no raw HTML). */
+/* Long sessions: the turns far above the end (chat/Thread.tsx) are laid out and painted only once scrolled near;
+   their last real height is remembered. Only where the browser keeps the reading position when something above
+   changes size (scroll anchoring): elsewhere the thread would jump while scrolling up. */
+@supports (overflow-anchor: auto) {
+  .turn-far { content-visibility: auto; contain-intrinsic-size: auto 320px; }
+}
+
 .md { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
 .md > * + * { margin-top: 0.75em; }
 .md h1, .md h2, .md h3 { font-weight: 600; line-height: 1.3; margin-top: 1.25em; }

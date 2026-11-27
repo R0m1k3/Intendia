@@ -167,7 +167,6 @@ export default {
   "Aucune session pour l’instant": "No sessions yet",
   "Aucune session de cette source": "No sessions from this source",
   "Les 30 premiers résultats : précisez la recherche pour en voir d’autres": "The first 30 results: refine the search to see others",
-  "Afficher plus": "Show more",
   "{n} session jamais utilisée dans Intendia, créée il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.": "{n} session never used in Intendia, created more than an hour ago. Sessions from other sources are not touched.",
   "{n} sessions jamais utilisées dans Intendia, créées il y a plus d’une heure. Les sessions des autres sources ne sont pas touchées.": "{n} sessions never used in Intendia, created more than an hour ago. Sessions from other sources are not touched.",
   "Trop tard : la suppression est faite": "Too late: the deletion is done",
