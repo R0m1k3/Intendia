@@ -6,6 +6,7 @@ import { callOp, HermesError } from '../connectors/runtime.js';
 import type { ExportSchema } from '../connectors/sessions/index.js';
 import { readHistory } from '../chat/history.js';
 import { pushHermesTitle } from '../workspaces/title.js';
+import { HttpError } from '../http-error.js';
 
 // One way to copy a session: the dashboard's export, ids of messages removed, imported under a new id with
 // source "api_server" (the only one, with bot_room, that accepts runs). Used to duplicate, to continue a session
@@ -20,11 +21,13 @@ export const MAX_MESSAGES = 10_000;
 /** Ids tying a message to its original session: Hermes makes new ones. */
 const MESSAGE_IDS = ['id', 'session_id', 'message_uid', 'absorbed_message_uids', 'tool_call_uid', 'tool_call_uids', 'platform_message_id'];
 
-export class CopyError extends Error {
+export class CopyError extends HttpError {
   constructor(readonly code: 'empty' | 'too_many' | 'invalid' | 'refused' | 'busy' | 'cut_not_found' | 'reverted' | 'too_late', message: string, readonly status: 400 | 404 | 409 | 413 | 502 | 503) {
     super(message);
     this.name = 'CopyError';
   }
+
+  override body() { return { code: this.code }; }
 }
 
 /**

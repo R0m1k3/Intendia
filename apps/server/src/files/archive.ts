@@ -5,10 +5,13 @@
 import { Gunzip, Unzip, UnzipInflate, unzipSync, type UnzipFileInfo } from 'fflate';
 import { checkName } from './paths.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 export type ArchiveKind = 'zip' | 'tar' | 'tgz';
 
-export class ArchiveError extends Error {
+export class ArchiveError extends HttpError {
+  get status() { return ARCHIVE_STATUS[this.code]; }
+  override body() { return { code: ARCHIVE_CODE[this.code] }; }
   constructor(readonly code: 'invalid' | 'too_big' | 'busy', message: string) {
     super(message);
     this.name = 'ArchiveError';

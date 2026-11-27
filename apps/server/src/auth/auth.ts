@@ -9,6 +9,7 @@ import { RateLimiter } from './limiter.js';
 import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
 import { authSessions, settings } from '../db/schema.js';
+import { HttpError } from '../http-error.js';
 
 export const COOKIE = 'intendia_session';
 /** Life of a session without use; each day of use pushes it back, up to MAX_DAYS after sign-in. */
@@ -173,7 +174,7 @@ export class Auth {
   }
 }
 
-export class AuthError extends Error {
+export class AuthError extends HttpError {
   constructor(readonly status: 400 | 401 | 403 | 409 | 429, message: string) {
     super(message);
   }

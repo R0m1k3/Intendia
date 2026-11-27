@@ -11,6 +11,7 @@ import { createMcpApp } from './mcp/server.js';
 import { createServices } from './services.js';
 import { appVersion, readPkgVersion } from './version.js';
 import { log, setLogLevel } from './log.js';
+import { sleep } from './util.js';
 
 const VERSION = appVersion(process.env.INTENDIA_VERSION, readPkgVersion());
 
@@ -76,7 +77,7 @@ function main() {
     // a pass under way writes to the database: it ends first (the splits of missions resume at the next start)
     const idle = async () => {
       const end = Date.now() + 4000;
-      while (loops.some((l) => !l.idle) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+      while (loops.some((l) => !l.idle) && Date.now() < end) await sleep(50);
     };
     void Promise.all([closed(server), closed(mcpServer), idle()]).then(() => {
       db.$client.close();

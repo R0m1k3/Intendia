@@ -12,6 +12,7 @@ import { msg } from '../i18n/index.js';
 import { AdminError } from '../admin-error.js';
 import type { RevisionOf } from '../revision.js';
 import { log } from '../log.js';
+import { HttpError } from '../http-error.js';
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
@@ -94,14 +95,16 @@ export interface RecentRun {
   autoApprove: boolean;
 }
 
-export class NotFoundError extends Error {
+export class NotFoundError extends HttpError {
+  readonly status = 404;
   constructor(message: string) {
     super(message);
     this.name = 'NotFoundError';
   }
 }
 
-export class ValidationError extends Error {
+export class ValidationError extends HttpError {
+  readonly status = 400;
   constructor(message: string) {
     super(message);
     this.name = 'ValidationError';

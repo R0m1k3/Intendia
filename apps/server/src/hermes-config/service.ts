@@ -21,6 +21,8 @@ import { KNOWN_MIN, Masker, PLACEHOLDER_START, parse, SecretError } from './mask
 import { checkValue, flatten, MODEL_PATHS, unflatten, validateDoc, type Fields } from './schema.js';
 import { msg } from '../i18n/index.js';
 import { KeyedLock } from '../keyed-lock.js';
+import { HttpError } from '../http-error.js';
+import { isObj } from '../util.js';
 
 /**
  * Settings of a Hermes instance (phase 6): config form and YAML editor, history, models, env, MCP servers,
@@ -40,14 +42,18 @@ const CHECKED: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'm
 const FILE_SOURCES: ReadonlySet<WriteSource> = new Set(['form', 'yaml', 'restore', 'model', 'provider-models', 'custom-providers', 'mcp', 'orchestration']);
 const MANAGED_TTL_MS = 60_000;
 
-export class ConfigInputError extends Error {
+export class ConfigInputError extends HttpError {
+  readonly status = 400;
   constructor(readonly code: string, message: string, readonly extra: Record<string, unknown> = {}) {
     super(message);
     this.name = 'ConfigInputError';
   }
+  override body() { return { ...this.extra, code: this.code }; }
 }
 
-export class ConfigConflictError extends Error {
+export class ConfigConflictError extends HttpError {
+  readonly status = 409;
+  override body() { return { code: this.code }; }
   constructor(
     readonly code: 'config_changed' | 'config_managed' | 'config_unavailable' | 'config_unreadable' | 'hermes_conflict' | 'mcp_plugin' | 'mcp_other' | 'mcp_unavailable'
       | 'exists' | 'in_use' | 'raw_unavailable' | 'api_key_present',
@@ -72,8 +78,10 @@ export function checkSetupToken(raw: string): string {
   return t;
 }
 
-export class ConfirmRequiredError extends Error {
+export class ConfirmRequiredError extends HttpError {
   readonly code = 'confirm_required';
+  readonly status = 409;
+  override body() { return { code: this.code, message: this.prompt, ...(this.task ? { task: this.task } : {}) }; }
   constructor(readonly prompt: string, readonly task?: string) {
     super(msg('Confirmation demandée par Hermes'));
     this.name = 'ConfirmRequiredError';
@@ -81,8 +89,10 @@ export class ConfirmRequiredError extends Error {
 }
 
 /** Some tasks of a group write may be written and could not be put back: the history copy stays. */
-export class PartialWriteError extends Error {
+export class PartialWriteError extends HttpError {
   readonly code = 'partial_write';
+  readonly status = 502;
+  override body() { return { code: this.code }; }
   constructor(message = msg('Écriture peut-être partielle : vérifiez les valeurs ou restaurez la version d\'avant dans l\'onglet Historique')) {
     super(message);
     this.name = 'PartialWriteError';
@@ -90,8 +100,10 @@ export class PartialWriteError extends Error {
 }
 
 /** Hermes answered ok but the file did not change (managed installation, key fixed by an administrator, default value). */
-export class ConfigNotAppliedError extends Error {
+export class ConfigNotAppliedError extends HttpError {
   readonly code = 'not_applied';
+  readonly status = 409;
+  override body() { return { code: this.code, ...(this.paths ? { paths: this.paths } : {}) }; }
   constructor(readonly paths?: string[]) {
     super(msg('Hermes a répondu OK mais n’a pas appliqué ce changement. Causes possibles : Hermes installé par un gestionnaire de paquets (Nix), réglage fixé par un administrateur, ou valeur égale à la valeur par défaut (Hermes la retire du fichier).'));
     this.name = 'ConfigNotAppliedError';
@@ -161,21 +173,17 @@ export function versionOf(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 16);
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-}
-
 function containsEnvRef(v: unknown): boolean {
   if (typeof v === 'string') return v.includes('${');
   if (Array.isArray(v)) return v.some(containsEnvRef);
-  if (isPlainObject(v)) return Object.values(v).some(containsEnvRef);
+  if (isObj(v)) return Object.values(v).some(containsEnvRef);
   return false;
 }
 
 function getPath(obj: unknown, path: string): unknown {
   let node = obj;
   for (const k of path.split('.')) {
-    if (!isPlainObject(node) || !(k in node)) return undefined;
+    if (!isObj(node) || !(k in node)) return undefined;
     node = node[k];
   }
   return node;
@@ -198,7 +206,7 @@ function sameDoc(a: string, b: string): boolean {
 
 function oauthRedirect(raw: string, name: string): unknown {
   const servers = (parse(raw).toJS() as { mcp_servers?: unknown } | null)?.mcp_servers;
-  const entry = isPlainObject(servers) ? servers[name] : undefined;
+  const entry = isObj(servers) ? servers[name] : undefined;
   return getPath(entry, 'oauth.redirect_uri');
 }
 

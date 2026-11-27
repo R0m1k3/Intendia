@@ -7,23 +7,22 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { InstanceConfigSchema, type AppConfig, type InstanceConfig } from './config.js';
-import { Auth, AuthError, requireAuth } from './auth/auth.js';
+import { Auth, requireAuth } from './auth/auth.js';
 import type { CompatService } from './compat/service.js';
 import { checkInstance } from './compat/engine.js';
 import { withFilesRoot } from './compat/files-root.js';
 import type { Db } from './db/index.js';
 import { HermesError, HermesHttp, type FetchLike } from './hermes/http.js';
+import { HttpError } from './http-error.js';
 import { KeyedLock } from './keyed-lock.js';
-import { changedFields, DeclarativeError, InstanceEditError, InstanceStore, mergeInstance, type InstancePatch } from './instances/store.js';
+import { changedFields, DeclarativeError, InstanceStore, mergeInstance, type InstancePatch } from './instances/store.js';
 import type { CompatReport } from './connectors/types.js';
 import { ModuleUnavailableError } from './connectors/runtime.js';
 import { forgetMcpToken, forgetPreviousMcpToken, mcpToken, mcpUrl } from './mcp/server.js';
 import { chatRoutes } from './routes/chat.js';
 import { fileRoutes } from './routes/files.js';
 import { gitRoutes } from './routes/git.js';
-import { GitError } from './git/service.js';
-import { AdminError } from './admin-error.js';
-import { Masker, SecretError } from './hermes-config/mask.js';
+import { Masker } from './hermes-config/mask.js';
 import { CODE_MESSAGE, hermesErrorResponse } from './connectors/errors.js';
 import { memoryRoutes } from './routes/memory.js';
 import { vaultRoutes } from './routes/vault.js';
@@ -35,26 +34,16 @@ import { linkRoutes, publicLinkRoute } from './routes/links.js';
 import type { Services } from './services.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { sessionCopyRoutes } from './routes/session-copies.js';
-import { CopyError } from './sessions/copy.js';
-import { TitleError } from './sessions/title-ai.js';
-import { FS_ERROR_STATUS, WorkspaceFsError } from './workspaces/fs.js';
 import { PromptService } from './prompts/service.js';
 import { promptRoutes } from './routes/prompts.js';
-import { ARCHIVE_CODE, ARCHIVE_STATUS, ArchiveError } from './files/archive.js';
 import { cronRoutes } from './routes/crons.js';
 import { skillRoutes } from './routes/skills.js';
 import { agentRoutes } from './routes/agents.js';
 import { activityRoutes } from './routes/activity.js';
 import { kanbanRoutes } from './routes/kanban.js';
 import type { WsFactory } from './connectors/kanban/index.js';
-import { AgentConflictError } from './agents/service.js';
-import { KanbanError } from './kanban/service.js';
 import { configRoutes } from './routes/config.js';
-import { ConfigConflictError, ConfigInputError, ConfigNotAppliedError, ConfirmRequiredError, PartialWriteError } from './hermes-config/service.js';
-import { ActionBusyError, ScanRefusedError } from './skills/service.js';
-import { CronInputError } from './crons/service.js';
-import { NotFoundError, ValidationError } from './workspaces/service.js';
-import { BodyError, jsonBodyLimit, readJson } from './routes/body.js';
+import { jsonBodyLimit, readJson } from './routes/body.js';
 import { log, newRequestId, requestId, safePath, withRequest } from './log.js';
 
 export interface AppDeps {
@@ -116,34 +105,8 @@ export function createApp(deps: AppDeps) {
   });
 
   app.onError((err, c) => {
-    if (err instanceof AuthError) return c.json({ error: err.message }, err.status);
-    if (err instanceof BodyError) return c.json({ error: err.message, code: err.code }, 400);
+    if (err instanceof HttpError) return c.json({ ...err.body(), error: err.message }, err.status);
     if (err instanceof z.ZodError) return c.json({ error: msg('Requête invalide'), issues: err.issues }, 400);
-    if (err instanceof CronInputError) return c.json({ error: err.message, field: err.field, detail: err.detail }, 400);
-    if (err instanceof ScanRefusedError) return c.json({ error: err.message, code: err.code, scan: err.scan }, 409);
-    if (err instanceof ActionBusyError) return c.json({ error: err.message, code: err.code, action: err.action }, 409);
-    if (err instanceof KanbanError) return c.json({ error: err.message, code: err.code }, err.status);
-    if (err instanceof AgentConflictError) return c.json({ error: err.message, code: err.code }, 409);
-    if (err instanceof ConfigInputError) return c.json({ ...err.extra, error: err.message, code: err.code }, 400);
-    if (err instanceof ConfigConflictError) return c.json({ error: err.message, code: err.code }, 409);
-    if (err instanceof ConfigNotAppliedError) return c.json({ error: err.message, code: err.code, ...(err.paths ? { paths: err.paths } : {}) }, 409);
-    if (err instanceof ConfirmRequiredError) {
-      return c.json({ error: err.message, code: err.code, message: err.prompt, ...(err.task ? { task: err.task } : {}) }, 409);
-    }
-    if (err instanceof PartialWriteError) return c.json({ error: err.message, code: err.code }, 502);
-    if (err instanceof DeclarativeError) return c.json({ error: err.message, code: 'declarative' }, 409);
-    if (err instanceof InstanceEditError) return c.json({ error: err.message, code: err.code, field: err.field }, 400);
-    if (err instanceof ValidationError) return c.json({ error: err.message }, 400);
-    if (err instanceof CopyError) return c.json({ error: err.message, code: err.code }, err.status);
-    if (err instanceof TitleError) return c.json({ error: err.message, code: err.code }, err.status);
-    if (err instanceof GitError) return c.json({ error: err.message, code: err.code }, err.status);
-    if (err instanceof SecretError) return c.json({ ...err.extra, error: err.message, code: err.code }, 400);
-    if (err instanceof AdminError) return c.json({ ...err.extra, error: err.message, code: err.code }, err.status);
-    if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
-    if (err instanceof ArchiveError) return c.json({ error: err.message, code: ARCHIVE_CODE[err.code] }, ARCHIVE_STATUS[err.code]);
-    if (err instanceof WorkspaceFsError) {
-      return c.json({ error: err.message, code: err.code }, FS_ERROR_STATUS[err.code]);
-    }
     if (err instanceof ModuleUnavailableError) {
       const body = { error: err.message, module: err.module, op: err.op, reasons: err.reasons };
       if (!err.code) return c.json(body, 409);

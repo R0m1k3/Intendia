@@ -4,6 +4,7 @@ import { decrypt, encrypt } from '../crypto.js';
 import { msg } from '../i18n/index.js';
 import type { Db } from '../db/index.js';
 import { instances, profileKeys } from '../db/schema.js';
+import { HttpError } from '../http-error.js';
 
 const KEY_PURPOSE = 'profile-keys-v1';
 
@@ -20,7 +21,9 @@ export interface PublicInstance {
 }
 
 /** Instances declared in INTENDIA_INSTANCES are read-only from the UI. */
-export class DeclarativeError extends Error {
+export class DeclarativeError extends HttpError {
+  readonly status = 409;
+  override body() { return { code: 'declarative' }; }
   constructor() {
     super(msg('Instances déclarées par INTENDIA_INSTANCES : modifiez-les dans la configuration du conteneur'));
     this.name = 'DeclarativeError';
@@ -28,8 +31,10 @@ export class DeclarativeError extends Error {
 }
 
 /** An edit that would send a saved secret to a new host (400 `secret_required`). */
-export class InstanceEditError extends Error {
+export class InstanceEditError extends HttpError {
   readonly code = 'secret_required';
+  readonly status = 400;
+  override body() { return { code: this.code, field: this.field }; }
   constructor(message: string, readonly field: 'apiKey' | 'dashboardToken') {
     super(message);
     this.name = 'InstanceEditError';

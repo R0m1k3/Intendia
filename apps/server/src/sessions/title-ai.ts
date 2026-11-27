@@ -8,6 +8,7 @@ import type { WsFactory } from '../hermes/events.js';
 import { pushTitle } from '../workspaces/title.js';
 import { TITLE_MAX, type PublicSession, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { CopyError } from './copy.js';
+import { HttpError } from '../http-error.js';
 
 const INSTRUCTIONS = 'Donne un titre court (6 mots au plus) à cette conversation, dans sa langue. Réponds par le titre seul, sans guillemets ni ponctuation finale.';
 /** The start of the conversation is enough for a title. */
@@ -18,10 +19,12 @@ const TIMEOUT_MS = 30_000;
 /** One generation at a time per session (a double click). */
 const pending = new Set<string>();
 
-export class TitleError extends Error {
+export class TitleError extends HttpError {
   constructor(readonly code: 'unsupported' | 'busy' | 'no_model' | 'empty', message: string, readonly status: 409 | 502 | 503) {
     super(message);
   }
+
+  override body() { return { code: this.code }; }
 }
 
 /** The model's answer as a title: first line, quotes and final dot removed, at most TITLE_MAX characters. */

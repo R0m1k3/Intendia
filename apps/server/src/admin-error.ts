@@ -1,3 +1,5 @@
+import { HttpError } from './http-error.js';
+
 /** Refusals of the admin screens (lot 8): code + HTTP status, rendered by `app.onError` with `extra`. */
 export type AdminCode =
   | 'refused' | 'multiplexed' | 'protected' | 'in_use' | 'too_long' | 'stale' | 'over_budget'
@@ -10,11 +12,13 @@ const STATUS: Record<AdminCode, 400 | 409> = {
   key_exists: 409, not_served: 409,
 };
 
-export class AdminError extends Error {
+export class AdminError extends HttpError {
   readonly status: 400 | 409;
   constructor(readonly code: AdminCode, message: string, readonly extra: Record<string, unknown> = {}) {
     super(message);
     this.name = 'AdminError';
     this.status = STATUS[code];
   }
+
+  override body() { return { ...this.extra, code: this.code }; }
 }

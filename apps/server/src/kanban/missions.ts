@@ -7,6 +7,7 @@ import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { KanbanError, LIMITS, type KanbanService, type TaskDetail } from './service.js';
 import { msg } from '../i18n/index.js';
 import { log } from '../log.js';
+import { sleep } from '../util.js';
 
 /**
  * Supervised missions (lot 9 C): a goal becomes a root task in triage that Hermes splits (`decompose`) into
@@ -54,7 +55,6 @@ export interface MissionDeps {
   log?: (msg: string) => void;
 }
 
-const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class MissionService {
   private readonly now: () => number;
@@ -67,7 +67,7 @@ export class MissionService {
 
   constructor(private readonly db: Db, private readonly kanban: KanbanService, deps: MissionDeps = {}) {
     this.now = deps.now ?? Date.now;
-    this.sleep = deps.sleep ?? realSleep;
+    this.sleep = deps.sleep ?? sleep;
     this.log = deps.log ?? ((m) => log.warn(`[intendia] mission: ${m}`));
   }
 
