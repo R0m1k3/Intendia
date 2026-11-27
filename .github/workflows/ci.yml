@@ -10,8 +10,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
@@ -22,12 +22,12 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with: { context: ., push: false, load: true, tags: 'intendia:ci' }
       # installation as in docs/install.md, against fake-hermes on the host
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile
       - name: Start fake-hermes
@@ -47,8 +47,8 @@ jobs:
       API_KEY: ci-api-key-0123456789abcdef
       DASH_TOKEN: ci-dashboard-token-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile
       - run: pnpm build
@@ -63,13 +63,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm --filter @intendia/e2e exec playwright install --with-deps chromium
       - run: pnpm e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with: { name: e2e-traces, path: apps/e2e/test-results }

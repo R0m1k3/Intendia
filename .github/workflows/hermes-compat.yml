@@ -19,8 +19,8 @@ jobs:
       API_KEY: ci-api-key-0123456789abcdef
       DASH_TOKEN: ci-dashboard-token-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile
       - name: Start Hermes latest (gateway + dashboard)
@@ -41,7 +41,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if [ "$dcode" != 0 ] && [ "$dcode" != 4 ]; then echo "probe diff failed ($dcode)"; exit "$dcode"; fi
           if [ "$code" != 0 ] || [ "$dcode" = 4 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: hermes-latest-recording, path: /tmp/latest }
       - name: Smoke against latest
