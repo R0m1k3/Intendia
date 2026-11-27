@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { BASE_URL, FAKE_API_PORT, FAKE_DASH_PORT, MCP_PORT, PORT, STATE, TMP_PATH } from './ports.js';
+import { BASE_URL, FAKE_API_PORT, FAKE_DASH_PORT, MCP_PORT, PASSWORD, PORT, STATE, TMP_PATH } from './ports.js';
 import teardown from './teardown.js';
 
 const here = import.meta.dirname;
@@ -99,7 +99,7 @@ async function start(): Promise<void> {
   const res = await fetch(`${BASE_URL}/x/setup/password`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-intendia': '1' },
-    body: JSON.stringify({ code, password: 'test-password-e2e-123' }),
+    body: JSON.stringify({ code, password: PASSWORD }),
     signal: AbortSignal.timeout(10_000),
   }).catch((err: Error) => { throw failed(`setup password: ${err.message}`); });
   const cookie = /intendia_session=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1];

@@ -134,7 +134,14 @@ pnpm dev:fake                 # fake Hermes replaying fixtures/ on 18642 / 19119
 INTENDIA_SECRET=$(openssl rand -hex 32) INTENDIA_DATA_DIR=.data pnpm dev
 pnpm test                     # web tests, and server tests against the fake Hermes
 pnpm -r typecheck
+pnpm lint                     # Biome
+pnpm build && pnpm e2e        # the walks in a real browser (apps/e2e, Playwright)
+pnpm size                     # JavaScript of the first display, against its budget
 ```
+
+A release: `pnpm release bump` on the pull request (next free version in the four `package.json`), `pnpm shots` when
+the screens changed (README screenshots), then after the merge `pnpm release publish notes.md` (tag, image, GitHub
+release).
 
 `pnpm probe record` records a real instance (read-only) into `fixtures/hermes-<version>/`, and `pnpm probe diff A B`
 compares two recordings. Read [docs/architecture.md](docs/architecture.md) before changing a connector. Interface

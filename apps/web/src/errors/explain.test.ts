@@ -29,6 +29,12 @@ describe('explain', () => {
     expect(h.detail).toContain('{"detail":"boom"}');
     const i = explain(new ApiError(500, 'Erreur interne du serveur Intendia (voir ses journaux)', { error: 'x' }));
     expect(i.text).toBe('Intendia a rencontré une erreur');
+    expect(i.detail).not.toContain('Référence');
+    const r = explain(new ApiError(500, 'Erreur interne du serveur Intendia (voir ses journaux)', { error: 'x', requestId: 'ab12cd34ef56' }));
+    expect(r.detail).toContain('Référence : ab12cd34ef56');
+    expect(r.todo).toContain('cherchez la référence');
+    // only an identifier of ours is shown, never a text that came in its place
+    expect(explain(new ApiError(500, 'x', { requestId: '<b>not an id</b>' })).detail).not.toContain('Référence');
   });
   it('names the rejected field of an invalid request', () => {
     const e = explain(new ApiError(400, 'Requête invalide', { error: 'Requête invalide', issues: [{ path: ['name'], message: 'Too small' }, { path: ['schedule', 'minutes'], message: 'Expected number' }] }));

@@ -11,6 +11,7 @@ import { createSessionDir, createWorkspaceDir, WorkspaceFsError, framingAgentsMd
 import { msg } from '../i18n/index.js';
 import { AdminError } from '../admin-error.js';
 import type { RevisionOf } from '../revision.js';
+import { log } from '../log.js';
 
 export type Workspace = typeof workspaces.$inferSelect;
 type SessionRow = typeof sessionWorkspace.$inferSelect;
@@ -315,7 +316,7 @@ export class WorkspaceService {
     try {
       await createSessionDir(this.roots.fs(ws.instanceId), slug, id);
     } catch (err) {
-      console.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
+      log.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
     }
     const now = Date.now();
     this.db.insert(sessionWorkspace).values({
@@ -350,7 +351,7 @@ export class WorkspaceService {
     try {
       await createSessionDir(this.roots.fs(o.instanceId), o.slug, o.newId);
     } catch (err) {
-      console.warn(`[intendia] session folder ${o.slug}/sessions/${o.newId} not created: ${(err as Error).message}`);
+      log.warn(`[intendia] session folder ${o.slug}/sessions/${o.newId} not created: ${(err as Error).message}`);
     }
     const now = o.now ?? Date.now();
     const f = o.from;
@@ -423,7 +424,7 @@ export class WorkspaceService {
     try {
       await createSessionDir(this.roots.fs(ws.instanceId), slug, id);
     } catch (err) {
-      console.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
+      log.warn(`[intendia] session folder ${slug}/sessions/${id} not created: ${(err as Error).message}`);
     }
     const now = Date.now();
     this.db.insert(sessionWorkspace).values({

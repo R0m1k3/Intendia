@@ -1,4 +1,5 @@
 import type { CompatReport, ModuleState } from '../connectors/types.js';
+import { log } from '../log.js';
 
 export interface StateChange {
   module: string;
@@ -24,7 +25,7 @@ export class WebhookNotifier implements Notifier {
   async moduleStates(report: CompatReport, changes: StateChange[]): Promise<void> {
     const lines = changes.map((c) => `• ${c.label} : ${c.from ? STATE_FR[c.from] : 'nouveau'} → ${STATE_FR[c.to]}${c.reasons[0] ? ` (${c.reasons[0]})` : ''}`);
     const text = `Intendia — instance ${report.instanceId} (Hermes ${report.hermesVersion ?? '?'})\n${lines.join('\n')}`;
-    console.log(`[compat] ${text.replace(/\n/g, ' | ')}`);
+    log.info(`[compat] ${text.replace(/\n/g, ' | ')}`);
     if (!this.url) return;
     try {
       await fetch(this.url, {
@@ -40,7 +41,7 @@ export class WebhookNotifier implements Notifier {
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
-      console.warn(`[compat] webhook failed: ${(err as Error).message}`);
+      log.warn(`[compat] webhook failed: ${(err as Error).message}`);
     }
   }
 }

@@ -12,6 +12,7 @@ import type { PublicSession, RunStatRow, SessionContext, WorkspaceService } from
 import { readHistory, readRunStatus, runKey, startingRuns } from './history.js';
 import { goalBlock, type GoalStore } from './goal.js';
 import { COST_SETTLE_MS, finishFields, runCost, sessionCost, type CostReading } from './run-stats.js';
+import { log } from '../log.js';
 
 export interface StartRunDeps {
   compat: CompatService;
@@ -303,7 +304,7 @@ export async function startRun(
         const retryable = err instanceof HermesError && (err.kind === 'timeout' || err.kind === 'network') && runs?.idempotency && runs.durable;
         const timeoutMs = retryable ? createTimeout(deadline, Date.now(), configured, true) : null;
         if (timeoutMs === null) throw err;
-        console.warn(`[intendia] createRun ${ctx.instance.id}/${ctx.session.id} : nouvel essai, même clé`);
+        log.warn(`[intendia] createRun ${ctx.instance.id}/${ctx.session.id} : nouvel essai, même clé`);
         created = await create(timeoutMs);
         retried = true;
       }

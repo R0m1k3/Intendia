@@ -17,6 +17,7 @@ import { listChildren, type SubagentChild } from './subagents.js';
 import { WAKE_PREFIX } from './goal.js';
 import { readHistory, readRunStatus, runKey, startingRuns, type ChatMessage } from './history.js';
 import { AlreadySentError, hashKey, IdempotencyConflictError, RunBusyError, startRun, type StartRunDeps } from './start-run.js';
+import { log } from '../log.js';
 
 export const MAX_WAKES = 5;
 /** Never contains « fond »: the fake plays background sub-agents on that word (a wake would delegate again). */
@@ -287,7 +288,7 @@ export class DelegationWatcher {
     private readonly deps: StartRunDeps & { wakes: WakeStore },
     opts: WatcherOptions = {},
   ) {
-    this.log = opts.log ?? ((l) => console.error(l));
+    this.log = opts.log ?? ((l) => log.error(l));
     this.startFn = opts.start ?? ((d, ctx, input, keySuffix) => startRun(d, ctx, input, { keySuffix }));
     this.childrenFn = opts.children ?? ((ctx) => listChildren(this.deps.compat, ctx));
     this.graceS = opts.graceS ?? LOST_GRACE_S;

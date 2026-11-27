@@ -70,7 +70,13 @@ export function explain(error: unknown): Explained {
     return { text: message, todo: t('Cette fonction dépend de la version d’Hermes : la page État dit ce qui manque.'), link: STATUS_LINK(), detail: tech((data.reasons as unknown[]).filter((r) => typeof r === 'string').join(' ; ')) };
   }
   if (error.status === 500) {
-    return { text: t('Intendia a rencontré une erreur'), todo: t('Réessayez. Si cela continue, les journaux du serveur Intendia donnent le détail.'), detail: tech(message) };
+    // the identifier of the request: the same one is on the error's line in the server's journal
+    const ref = typeof data.requestId === 'string' && /^[0-9a-f]{6,32}$/.test(data.requestId) ? t('Référence : {id}', { id: data.requestId }) : null;
+    return {
+      text: t('Intendia a rencontré une erreur'),
+      todo: ref ? t('Réessayez. Si cela continue, cherchez la référence du détail dans les journaux du serveur Intendia.') : t('Réessayez. Si cela continue, les journaux du serveur Intendia donnent le détail.'),
+      detail: [tech(message), ref].filter(Boolean).join(' · '),
+    };
   }
   return { text: message, detail: error.status >= 400 && code ? tech() : undefined };
 }

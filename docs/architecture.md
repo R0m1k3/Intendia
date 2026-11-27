@@ -864,16 +864,37 @@ leave a half-done state or a duplicate silently.
    and the fake's CLI replay `REFERENCE_FIXTURES` (`apps/fake-hermes/src/index.ts`), a recording made on a used
    instance. CI recordings come from an empty container: move the reference only to a recording with data.
 
+## Journal and releases
+
+- **Journal** (`apps/server/src/log.ts`): every line the server writes goes through `log.debug/info/warn/error`
+  (time, level, text; `INTENDIA_LOG_LEVEL`, default `info`). Each HTTP request gets an identifier, kept for the
+  whole request by an `AsyncLocalStorage`: its lines end with `req=<id>`, the answer carries `X-Request-Id`, and an
+  unexpected error (500) returns `requestId`, which the web shows in the technical detail of the error
+  (`errors/explain.ts`). `debug` adds one line per request (method, path without its query string nor the token of a share link, status, time).
+  Only the installation code of a first start and the command-line tools (`src/cli/`) write to the console directly.
+  Never pass a body, a key or a token to the journal.
+- **Release** (`scripts/release.mjs`, logic in `release-lib.mjs`): `pnpm release bump` on the pull request writes
+  the next free version into the four `package.json` (`apps/e2e` stays 0.0.0; 1.0.0 and above need
+  `--allow-major`); after the merge, `pnpm release publish notes.md` re-reads `origin/main`, puts the tag on it,
+  pushes it (the tag builds the image, `build.yml`) and creates the GitHub release, whose notes end with the image.
+  CI runs `release.mjs check` (the four versions agree).
+
 ## Tests
 
 Three levels:
 
 - **Unit** (`pnpm -r test`, vitest): server logic against `apps/fake-hermes` in process, web by pure functions.
-- **End-to-end** (`apps/e2e`, Playwright Test): five walks (chat, crons, files, kanban, dialogs) in a real browser
-  against a bench started by `globalSetup` (`bench.ts`: fake-hermes and the repo build on their own ports,
+- **End-to-end** (`apps/e2e`, Playwright Test): fifteen specs in a real browser: the first five (chat, crons, files,
+  kanban, dialogs) follow a task end to end; the others check the rail and palette (navigation), the empty home and
+  its first steps (home), a long session (session), Configuration, Skills, Réglages and the English interface
+  (config, skills, settings), sign-in and sign-out (login), Aide and explained errors (help), channels, and pages
+  loaded on demand (loading). They run against a bench started by `globalSetup` (`bench.ts`: fake-hermes and the repo build on their own ports,
   `ports.ts`, data in a temporary folder, one sign-in saved as `storageState`). Run `pnpm build && pnpm e2e`; on a
   machine without `playwright install`, point `E2E_CHROMIUM` at a Chromium. `apps/e2e` has no `test` script, so
   `pnpm -r test` skips it. CI: job `e2e`, traces in the `e2e-traces` artifact on failure.
+- **README screenshots** (`apps/e2e/shots/readme.spec.ts`, `pnpm shots` after `pnpm build`): the same bench with a
+  fake that answers in English; writes `docs/screenshots/*.png`. Not run by CI: run it before a release that changes
+  how the screens look, and commit the images.
 - **Smoke checks** (`.github/scripts/smoke-checks.sh`): one script against a running Intendia (setup, compat,
   workspace written by the dashboard, reads of every module, a paused cron created and deleted). CI runs it against
   fake-hermes with the Docker image (job `docker`, `install-smoke.sh`) and against the official Hermes image with

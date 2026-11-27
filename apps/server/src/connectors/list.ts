@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { log } from '../log.js';
 
 /** At most one log line per label in this window. */
 export const DROP_LOG_MS = 600_000;
@@ -43,7 +44,7 @@ export function tolerantArray<T extends z.ZodType>(item: T, label: string) {
       const last = lastDropLog.get(label);
       if (last === undefined || now - last >= DROP_LOG_MS) {
         lastDropLog.set(label, now);
-        console.warn(`[intendia] ${label}: ${dropped} élément(s) ignoré(s) sur ${arr.length}`);
+        log.warn(`[intendia] ${label}: ${dropped} élément(s) ignoré(s) sur ${arr.length}`);
       }
     }
     rawLengths.set(kept, arr.length);

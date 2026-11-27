@@ -7,6 +7,7 @@ import { pendingFromStatus, readApproval } from '../agents/approvals.js';
 import { answerApproval } from '../chat/approve.js';
 import type { CompatService } from '../compat/service.js';
 import type { SessionContext, WorkspaceService } from '../workspaces/service.js';
+import { log as journal } from '../log.js';
 
 const EVERY_MS = 2_000;
 
@@ -18,7 +19,7 @@ export class AutoApprover {
     private readonly workspaces: WorkspaceService,
     private readonly activity: ActivityService,
     private readonly compat: CompatService,
-    private readonly log: (line: string) => void = (l) => console.error(l),
+    private readonly log: (line: string) => void = (l) => journal.error(l),
   ) {}
 
   /** One pass; returns the runs approved (`<instance>/<run>`). */

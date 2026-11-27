@@ -1,7 +1,7 @@
 {
   "name": "intendia",
   "private": true,
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Web UI to work with and administer Hermes Agent instances through their HTTP APIs only",
   "license": "MIT",
   "type": "module",
@@ -16,9 +16,11 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "biome lint",
     "size": "node scripts/bundle-size.mjs --max=620",
+    "release": "node scripts/release.mjs",
     "test": "pnpm -r test",
     "probe": "pnpm --filter @intendia/server probe",
-    "e2e": "pnpm --filter @intendia/e2e e2e"
+    "e2e": "pnpm --filter @intendia/e2e e2e",
+    "shots": "pnpm --filter @intendia/e2e shots"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.9"

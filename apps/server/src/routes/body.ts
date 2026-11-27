@@ -15,7 +15,7 @@ export class BodyError extends Error {
 
 /**
  * The body as JSON. `c.req.json()` throws a SyntaxError that quotes part of the text (a password, a key), which the
- * generic `console.error` of `app.onError` would write to the logs: a body that does not parse gives a fixed error.
+ * generic journal line of `app.onError` would write to the logs: a body that does not parse gives a fixed error.
  * A read cut by the size limit is left alone (the limit answers 413).
  */
 export async function readJson(c: Context): Promise<unknown> {

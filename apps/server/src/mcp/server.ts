@@ -15,6 +15,7 @@ import { toVolumePath } from '../files/paths.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NO_PUBLIC_URL_NOTE, type LinkService } from '../links/service.js';
 import { WorkspaceFsError } from '../workspaces/fs.js';
+import { log } from '../log.js';
 
 export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 export const BODY_MAX_BYTES = 64 * 1024;
@@ -224,7 +225,7 @@ export function createMcpApp(deps: McpDeps): Hono {
     try {
       reply = await handle(instanceId, msg);
     } catch (err) {
-      console.error('[mcp]', err);
+      log.error('[mcp] unexpected error', err);
       reply = fail((msg as { id?: Id }).id ?? null, -32603, 'Internal error');
     }
     if (reply === null) return c.body(null, 202);
