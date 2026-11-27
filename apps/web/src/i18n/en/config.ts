@@ -1,7 +1,6 @@
 // English of zone D: configuration (config/, pages/Config.tsx).
 export default {
   "Redémarrer la passerelle ?": "Restart the gateway?",
-  "Les runs en cours seront interrompus. Si la passerelle sert plusieurs agents, tous sont concernés.": "Running runs will be interrupted. If the gateway serves several agents, all of them are affected.",
   "Redémarrer": "Restart",
   "Redémarrage de la passerelle…": "Restarting the gateway…",
   "Le redémarrage ne s’est pas terminé en 5 minutes : voir l’état de l’instance.": "The restart did not finish within 5 minutes: see the instance status.",
@@ -430,7 +429,6 @@ export default {
   "Variables": "Variables",
   "Définir une variable": "Set a variable",
   "Serveurs MCP": "MCP servers",
-  "Plateformes": "Platforms",
   "Redémarrer la passerelle": "Restart the gateway",
   "Connecter un abonnement": "Connect a subscription",
   "Suivre une connexion": "Follow a login",

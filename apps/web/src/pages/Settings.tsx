@@ -10,6 +10,7 @@ import { RESTART_CONFIRM, RestartStrip, useRestart } from '../config/restart';
 import { ask, askText } from '../components/Dialog';
 import { langSetting, locale, setLangSetting, t, type LangSetting } from '../i18n';
 import { T } from '../i18n/T';
+import { setRunDetails, useRunDetails } from '../chat/runDetails';
 
 type Theme = 'system' | 'light' | 'dark';
 
@@ -228,6 +229,7 @@ function SecurityCard({ head }: { head: string }) {
 }
 
 export function SettingsPage() {
+  const runDetails = useRunDetails();
   const qc = useQueryClient();
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const compat = useQuery({ queryKey: ['compat'], queryFn: api.compat });
@@ -373,6 +375,13 @@ export function SettingsPage() {
               onChange={(l: LangSetting) => { setLang(l); setLangSetting(l); }}
             />
           </div>
+          <label className="flex cursor-pointer flex-wrap items-center gap-3 border-t border-line/70 px-4 py-3" data-setting="run-details">
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">{t('Détails techniques sous les réponses')}</span>
+              <span className="mt-0.5 block text-[13px] text-ink-faint">{t('Modèle, jetons, débit et part du cache. Sans cela : la durée et le coût, le reste au survol.')}</span>
+            </span>
+            <input type="checkbox" className="size-4 accent-[var(--color-ink)]" checked={runDetails} onChange={(e) => setRunDetails(e.target.checked)} />
+          </label>
         </section>
       </div>
     </Narrow>

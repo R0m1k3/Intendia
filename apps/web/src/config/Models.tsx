@@ -10,6 +10,7 @@ import { ChatModels } from './ChatModels';
 import { configKey, errorCode, errorData, ICON, SELECT, useInvalidateConfig, type TabProps } from './common';
 import { ask } from '../components/Dialog';
 import { locale, plural, t } from '../i18n';
+import { Picker } from '../components/Menu';
 
 /** Main model and auxiliary tasks; the provider key is set in the Variables tab, never here. */
 export function ConfigModelsTab({ inst, profile, can, onSaved, onKey, onProviders }: TabProps & { onKey: (key: string) => void; onProviders?: () => void }) {
@@ -73,16 +74,24 @@ function useInvalidateOthers(inst: string, profile: string) {
   return () => qc.invalidateQueries({ queryKey: ['config', inst, profile], predicate: (q) => q.queryKey[3] !== 'models' });
 }
 
+const PROVIDER_BTN = 'flex h-9 w-full min-w-40 items-center justify-between gap-2 rounded-lg border border-line bg-sheet px-3 text-sm text-ink transition-colors hover:border-ink-faint/60 disabled:opacity-50 aria-expanded:border-ink';
+
 function ProviderSelect({ value, providers, onChange, disabled, auto = false }: {
   value: string; providers: ConfigModels['providers']; onChange: (v: string) => void; disabled: boolean; auto?: boolean;
 }) {
   const known = providers.some((p) => p.slug === value) || (auto && value === 'auto');
+  const label = (p: ConfigModels['providers'][number]) => `${p.name}${p.authenticated ? '' : ` ${t('(sans clé)')}`}`;
+  const shown = value === 'auto' ? 'auto' : providers.find((p) => p.slug === value)?.name ?? value;
   return (
-    <select className={SELECT} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={t('Fournisseur')}>
-      {auto && <option value="auto">auto</option>}
-      {!known && <option value={value}>{value}</option>}
-      {providers.map((p) => <option key={p.slug} value={p.slug}>{p.name}{p.authenticated ? '' : ` ${t('(sans clé)')}`}</option>)}
-    </select>
+    <Picker
+      title={t('Fournisseur')} label={shown} value={value} disabled={disabled} placement="below" triggerClass={PROVIDER_BTN}
+      items={[
+        ...(auto ? [{ value: 'auto', label: 'auto', hint: t('Hermes choisit d’après le modèle') }] : []),
+        ...(!known ? [{ value, label: value }] : []),
+        ...providers.map((p) => ({ value: p.slug, label: label(p) })),
+      ]}
+      onPick={(v) => { if (v !== null && v !== value) onChange(v); }}
+    />
   );
 }
 

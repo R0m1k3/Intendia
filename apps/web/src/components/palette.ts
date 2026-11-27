@@ -22,6 +22,20 @@ const GROUP_LABEL: Record<PaletteGroupId, string> = {
   page: t('Session ouverte'), actions: t('Actions'), pages: t('Pages'), agents: t('Agents'), workspaces: t('Dossiers'), crons: t('Planning'), sessions: t('Sessions'), files: t('Fichiers'),
 };
 
+/** The sections of Configuration, found by their name or by what people call them (search only). */
+const CONFIG_PAGES = (): { tab: string; label: string; words?: string }[] => [
+  { tab: 'modeles', label: t('Modèles'), words: 'model ia llm' },
+  { tab: 'fournisseurs', label: t('Fournisseurs'), words: 'providers anthropic openai openrouter clé api key' },
+  { tab: 'reglages', label: t('Réglages'), words: 'settings options' },
+  { tab: 'garde-fous', label: t('Garde-fous'), words: 'guardrails limites budget boucles' },
+  { tab: 'mcp', label: t('MCP'), words: 'serveurs outils connecteurs' },
+  { tab: 'plugins', label: t('Plugins') },
+  { tab: 'plateformes', label: t('Messageries'), words: 'plateformes telegram discord slack whatsapp platforms' },
+  { tab: 'yaml', label: t('YAML'), words: 'config.yaml fichier' },
+  { tab: 'variables', label: t('Variables'), words: 'env secrets clés tokens' },
+  { tab: 'historique', label: t('Historique'), words: 'history versions restaurer' },
+];
+
 export const ACTIONS: PaletteItem[] = [
   { id: 'a:new-session', label: t('Nouvelle session'), target: { to: '/chat/nouvelle' } },
   { id: 'a:new-workspace', label: t('Nouveau dossier'), target: { to: '/w' } },
@@ -100,16 +114,27 @@ export function paletteGroups(q: string, src: PaletteSources): PaletteGroup[] {
   const agents: PaletteItem[] = (src.agents?.list ?? []).map((a) => ({
     id: `g:${a.name}`, label: a.name, hint: a.description || undefined, target: { to: '/i/$inst/agents/$name', params: { inst: src.agents!.inst, name: a.name } },
   }));
+  // actions and pages that need the current instance: their target comes from the page's own entry
+  const cronsNav = src.nav.find((n) => n.key === 'crons');
+  const configNav = src.nav.find((n) => n.key === 'config');
+  const actions: PaletteItem[] = [
+    ...ACTIONS,
+    ...(cronsNav ? [{ id: 'a:new-schedule', label: t('Créer une planification'), words: 'cron planning nouveau', target: { ...cronsNav.target, search: { nouveau: 1 } } }] : []),
+    ...(configNav ? [{ id: 'a:add-provider', label: t('Ajouter un fournisseur'), words: 'clé api modèle ia provider', target: { ...configNav.target, search: { tab: 'fournisseurs' } } }] : []),
+  ];
+  const configPages: PaletteItem[] = configNav
+    ? CONFIG_PAGES().map((c) => ({ id: `p:config:${c.tab}`, label: `${configNav.label} › ${c.label}`, words: c.words, target: { ...configNav.target, search: { tab: c.tab } } }))
+    : [];
   const groups: [PaletteGroupId, PaletteItem[]][] = words.length
     ? [
-        ['actions', keep(ACTIONS)],
-        ['pages', keep(pages)],
+        ['actions', keep(actions)],
+        ['pages', keep([...pages, ...configPages])],
         ['agents', keep(agents)],
         ['workspaces', keep(src.workspaces.map((w) => ({ id: `w:${w.slug}`, label: w.name, hint: [w.slug, w.profile].filter(Boolean).join(' · '), target: { to: '/w/$slug', params: { slug: w.slug } } })))],
         ['crons', keep(src.crons.map((c) => ({ id: `c:${c.instanceId}:${c.id}`, label: c.name, target: { to: '/i/$inst/crons', params: { inst: c.instanceId } } })))],
         ['sessions', sessions],
       ]
-    : [['actions', ACTIONS], ['pages', pages], ['sessions', sessions]];
+    : [['actions', actions], ['pages', pages], ['sessions', sessions]];
   const page: PaletteGroup = { id: 'page', label: GROUP_LABEL.page, items: keep([...(src.page ?? [])]) };
   return [page, ...groups.map(([id, items]) => ({ id, label: GROUP_LABEL[id], items: items.slice(0, PER_GROUP) }))]
     .filter((g) => g.items.length > 0);

@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api';
 import { Narrow, PageHeader } from '../components/Layout';
 import { ModuleNotice, useModuleAvailability, type OpRef, type OptionalOp } from '../components/ModuleNotice';
-import { Button, Chips, cx } from '../components/ui';
+import { Button, chipClass, cx, Input } from '../components/ui';
 import { ICON, configKey } from '../config/common';
+import { Hint } from '../components/Hint';
 import { ProfileSelect } from '../components/ProfileSelect';
 import { ConfigEnv } from '../config/Env';
 import { GUARDRAILS } from '../config/guardrails';
@@ -29,7 +30,7 @@ const OPTIONAL: OptionalOp[] = [
   ['config', 'schema', t('Formulaire')], ['config', 'put', t('Enregistrer le formulaire')], ['config', 'raw', t('Éditeur YAML et historique')],
   ['config', 'putRaw', t('Enregistrer le YAML, restaurer')], ['config', 'modelInfo', t('Modèles')], ['config', 'setModel', t('Changer de modèle')],
   ['config', 'env', t('Variables')], ['config', 'putEnv', t('Définir une variable')], ['config', 'mcpServers', t('Serveurs MCP')],
-  ['config', 'platforms', t('Plateformes')], ['config', 'restartGateway', t('Redémarrer la passerelle')],
+  ['config', 'platforms', t('Messageries')], ['config', 'restartGateway', t('Redémarrer la passerelle')],
   ['config', 'oauthList', t('Abonnements')], ['config', 'oauthStart', t('Connecter un abonnement')], ['config', 'oauthPoll', t('Suivre une connexion')],
   ['config', 'oauthCancel', t('Annuler une connexion')], ['config', 'oauthDisconnect', t('Déconnecter un abonnement')],
   ['config', 'mcpCatalog', t('Catalogue MCP')], ['config', 'mcpAuth', t('Connexion OAuth MCP')],
@@ -55,9 +56,16 @@ const TAB: Record<Exclude<ConfigTab, 'plugins'>, { label: string; op: string | s
   yaml: { label: t('YAML'), op: 'raw' },
   variables: { label: t('Variables'), op: 'env' },
   mcp: { label: t('MCP'), op: 'mcpServers' },
-  plateformes: { label: t('Plateformes'), op: 'platforms' },
+  plateformes: { label: t('Messageries'), op: 'platforms' },
   historique: { label: t('Historique'), op: 'raw' },
 };
+
+/** The tabs in three groups (in this order); a group without any available tab is not shown. */
+const GROUPS: readonly { key: string; label: string; tabs: readonly ConfigTab[] }[] = [
+  { key: 'ia', label: t('Modèles et fournisseurs'), tabs: ['modeles', 'fournisseurs'] },
+  { key: 'comportement', label: t('Comportement'), tabs: ['reglages', 'garde-fous', 'mcp', 'plugins', 'plateformes'] },
+  { key: 'avance', label: t('Avancé'), tabs: ['yaml', 'variables', 'historique'] },
+];
 
 /** The sentence under the tabs: what this section is, in plain words (help/glossary.ts). */
 const TAB_TERM: Partial<Record<ConfigTab, TermId>> = {
@@ -80,6 +88,8 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
   const tabs = CONFIG_TABS.filter((k) => (k === 'plugins' ? pa.available : [TAB[k].op].flat().some(can)));
   const tab: ConfigTab | undefined = search.tab && tabs.includes(search.tab) ? search.tab : tabs[0];
   const [needRestart, setNeedRestart] = useState(false);
+  // « Chercher un réglage » from another tab: Enter opens Réglages with the text already searched
+  const [find, setFind] = useState('');
   const restart = useRestart(inst, profile, () => setNeedRestart(false));
   const platforms = useQuery({
     queryKey: configKey(inst, profile, 'platforms'), queryFn: () => api.platforms(inst, profile).then((r) => r.platforms),
@@ -109,6 +119,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
                 <RefreshCw className={cx(ICON, restart.running && 'animate-spin')} strokeWidth={1.5} />{restart.running ? t('Redémarrage…') : t('Redémarrer la passerelle')}
               </Button>
             )}
+            {a.available && can('restartGateway') && <Hint id="passerelle" />}
           </div>
         )}
       />
@@ -125,11 +136,34 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
         <RestartStrip state={restart} />
         {a.available && tab && (
           <>
-            <Chips role="tab" label={t('Sections')} value={tab} items={tabs.map((k) => ({ key: k, label: k === 'plugins' ? t('Plugins') : TAB[k].label }))} onChange={(k) => go({ tab: k, key: undefined })} />
+<div className="flex flex-wrap items-end gap-x-6 gap-y-3" data-config-tabs>
+              {GROUPS.map((g) => {
+                const own = g.tabs.filter((k) => tabs.includes(k));
+                if (!own.length) return null;
+                return (
+                  <div key={g.key} data-config-group={g.key}>
+                    <p className="mb-1.5 text-xs font-medium text-ink-faint" aria-hidden>{g.label}</p>
+                    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={g.label}>
+                      {own.map((k) => (
+                        <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go({ tab: k, key: undefined })} className={chipClass(tab === k)}>
+                          {k === 'plugins' ? t('Plugins') : TAB[k].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {tab !== 'reglages' && tabs.includes('reglages') && (
+                <form className="relative ml-auto w-full sm:w-56" onSubmit={(e) => { e.preventDefault(); if (find.trim()) go({ tab: 'reglages', key: undefined }); }}>
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+                  <Input className="pl-8" placeholder={t('Chercher un réglage')} aria-label={t('Chercher un réglage')} value={find} onChange={(e) => setFind(e.target.value)} />
+                </form>
+              )}
+            </div>
             {TAB_TERM[tab] && <p className="-mt-1 max-w-3xl text-sm text-ink-faint" data-tab-help>{term(TAB_TERM[tab]).text}</p>}
             {tab === 'modeles' && <ConfigModelsTab {...props} onKey={(key) => go({ tab: 'variables', key })} onProviders={() => go({ tab: 'fournisseurs', key: undefined })} />}
             {tab === 'fournisseurs' && <ConfigProviders {...props} onVariable={(key) => go({ tab: 'variables', key })} />}
-            {tab === 'reglages' && <ConfigForm {...props} />}
+            {tab === 'reglages' && <ConfigForm key={find} {...props} initialQuery={find} />}
             {tab === 'garde-fous' && <ConfigForm {...props} preset={GUARDRAILS} />}
             {tab === 'yaml' && <ConfigYaml {...props} />}
             {tab === 'variables' && <ConfigEnv key={search.key ?? ''} {...props} focusKey={search.key} />}

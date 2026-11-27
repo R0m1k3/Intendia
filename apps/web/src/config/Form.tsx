@@ -17,11 +17,11 @@ const LABEL: Record<string, string> = {};
  * Schema-generated form: one category at a time, only changed paths are sent. With `preset` (Garde-fous), a fixed
  * list of paths with French labels instead of the categories; the paths missing from the schema are named below.
  */
-export function ConfigForm({ inst, profile, can, onSaved, preset }: TabProps & { preset?: Preset }) {
+export function ConfigForm({ inst, profile, can, onSaved, preset, initialQuery }: TabProps & { preset?: Preset; initialQuery?: string }) {
   const form = useQuery({ queryKey: configKey(inst, profile, 'form'), queryFn: () => api.config(inst, profile) });
   const invalidate = useInvalidateConfig(inst, profile);
   const [category, setCategory] = useState<string | null>(null);
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery ?? '');
   const [pending, setPending] = useState<Record<string, unknown>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [bad, setBad] = useState<Record<string, string>>({});

@@ -2,10 +2,12 @@ import { Check, Square, X } from 'lucide-react';
 import type { RunStat } from '../api';
 import { locale, plural, t } from '../i18n';
 import { cacheShare, effortLabel, formatCost, formatDuration, formatShare, formatTokens, shortModel } from './format';
+import { useRunDetails } from './runDetails';
 
 /** Hover text: token detail and what was asked for. */
 function detail(r: RunStat): string {
   const parts: string[] = [];
+  if (r.servedModel) parts.push(t('Modèle : {model}', { model: r.servedModel }));
   if (r.inputTokens !== null) {
     const fr = (n: number) => n.toLocaleString(locale());
     parts.push(t('Entrée : {n} jetons dont {read} lus du cache et {written} écrits dans le cache', { n: fr(r.inputTokens), read: fr(r.cacheReadTokens ?? 0), written: fr(r.cacheWriteTokens ?? 0) }));
@@ -41,20 +43,35 @@ const STATUS: Record<string, { icon: React.ReactNode; label: string }> = {
   interrupted: { icon: <Square className="size-3 fill-current" strokeWidth={1.5} />, label: t('Interrompu') },
 };
 
-/** One line under a reply: status · model · duration · cost · input → output · cache share. */
-export function RunFooter({ r }: { r: RunStat }) {
+/**
+ * What the line under a reply shows. Simple (default): duration · cost, plus what the user must know (a fallback
+ * model served, a cost covering several replies). Full (« Détails techniques »): model · duration · cost ·
+ * input → output · rate · cache share. The hover text carries everything in both.
+ */
+export function footerItems(r: RunStat, full: boolean): string[] {
   const items: string[] = [];
-  if (r.servedModel) items.push(fallback(r) ? t('{model} (secours)', { model: shortModel(r.servedModel) }) : shortModel(r.servedModel));
-  else if (r.requestedModel) items.push(t('{model} (demandé)', { model: shortModel(r.requestedModel) }));
+  if (full) {
+    if (r.servedModel) items.push(fallback(r) ? t('{model} (secours)', { model: shortModel(r.servedModel) }) : shortModel(r.servedModel));
+    else if (r.requestedModel) items.push(t('{model} (demandé)', { model: shortModel(r.requestedModel) }));
+  } else if (fallback(r)) items.push(t('{model} (secours)', { model: shortModel(r.servedModel ?? '') }));
   // Hermes dates interrupted / forgotten runs when it notices them: no meaningful duration
   if (r.endedAt !== null && r.status !== 'interrupted' && r.status !== 'unknown') items.push(formatDuration(r.endedAt - r.startedAt));
   // a cost covering previous replies too (sent before their cost was known) says so
   if (r.costUsd) items.push(r.costRuns > 1 ? t('{cost} ({n} réponses)', { cost: formatCost(r.costUsd), n: r.costRuns }) : formatCost(r.costUsd));
-  if (r.inputTokens !== null && r.outputTokens !== null) items.push(`${formatTokens(r.inputTokens)} → ${formatTokens(r.outputTokens)}`);
-  const rate = tokensPerSecond(r);
-  if (rate !== null) items.push(t('≈ {n} jetons/s', { n: rate }));
-  const share = cacheShare(r);
-  if (share !== null) items.push(`Cache ${formatShare(share)}`);
+  if (full) {
+    if (r.inputTokens !== null && r.outputTokens !== null) items.push(`${formatTokens(r.inputTokens)} → ${formatTokens(r.outputTokens)}`);
+    const rate = tokensPerSecond(r);
+    if (rate !== null) items.push(t('≈ {n} jetons/s', { n: rate }));
+    const share = cacheShare(r);
+    if (share !== null) items.push(`Cache ${formatShare(share)}`);
+  }
+  return items;
+}
+
+/** One line under a reply: status, then `footerItems` (simple, or full with « Détails techniques »). */
+export function RunFooter({ r }: { r: RunStat }) {
+  const full = useRunDetails();
+  const items = footerItems(r, full);
   // « Sans confirmation »: what Intendia approved by itself
   if (r.autoApproved) items.push(plural(r.autoApproved, '{n} approbation automatique', '{n} approbations automatiques'));
   const st = STATUS[r.status];

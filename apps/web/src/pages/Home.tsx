@@ -5,6 +5,7 @@ import { api } from '../api';
 import { configKey } from '../config/common';
 import { Panel } from '../components/ui';
 import { Ask } from '../home/Ask';
+import { Examples, FirstSteps } from '../home/Start';
 import { useCurrentInstance } from '../instance/current';
 import { InstancePick } from '../chat/InstancePick';
 import { t } from '../i18n';
@@ -17,6 +18,10 @@ export function HomePage() {
   const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
   const { id, instance, select } = useCurrentInstance();
   const [attached, setAttached] = useState(0);
+  // an example request picked on the empty page: put in the message box (n: the same one can be picked again)
+  const [example, setExample] = useState<{ text: string; n: number } | null>(null);
+  // same key as the layout's rail: no extra request
+  const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), staleTime: 60_000 });
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const search = useSearch({ from: '/app/inbox/' });
   const navigate = useNavigate();
@@ -64,13 +69,25 @@ export function HomePage() {
             </Link>
           </Panel>
         ) : (
-          <p className="text-sm text-ink-faint">{instance && list.length > 1 ? t('Nouvelle session sur {label}', { label: instance.label }) : t('Nouvelle session')}</p>
+          <div className="w-full max-w-[680px]" data-start>
+            <h1 className="text-[22px] font-semibold leading-tight">{t('Que voulez-vous faire ?')}</h1>
+            <p className="mt-1.5 text-sm text-ink-faint">
+              {instance && list.length > 1 ? t('Nouvelle session sur {label} : écrivez votre demande en bas, ou partez d’un exemple.', { label: instance.label }) : t('Écrivez votre demande en bas, ou partez d’un exemple.')}
+            </p>
+            <Examples onPick={(text) => setExample({ text, n: Date.now() })} />
+            <FirstSteps facts={{
+              model: info.isSuccess ? Boolean(info.data.model) : null,
+              folders: ws.length,
+              sessions: ws.reduce((n, w) => n + (w.sessionCount ?? 0), 0),
+              schedules: overview.data ? overview.data.crons.filter((c) => c.instanceId === id).length : null,
+            }} />
+          </div>
         )}
       </div>
       {list.length > 0 && ws.length > 0 && (
         <div className="sticky bottom-0 bg-linear-to-t from-sheet from-70% to-transparent px-4 pt-4 pb-4 md:px-8">
           <div className="mx-auto max-w-[920px]">
-            <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} onAttachmentsChange={setAttached} />
+            <Ask key={id} workspaces={ws} focus={search.nouvelle === 1} onFocused={focused} onAttachmentsChange={setAttached} example={example} />
           </div>
         </div>
       )}

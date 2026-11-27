@@ -20,8 +20,10 @@ const LAST = 'intendia-last-workspace';
  * session page, which follows the run (it plugs into a run in progress; the message is handed over to show at once).
  * The session starts from the workspace's last model choice. `focus` puts the cursor in it ("Nouvelle session").
  */
-export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
+export function Ask({ workspaces, focus, onFocused, onAttachmentsChange, example }: {
   workspaces: Workspace[]; focus?: boolean; onFocused?: () => void;
+  /** an example request to put in the box (the home page's examples); `n` changes at each pick */
+  example?: { text: string; n: number } | null;
   /** files waiting to be sent (the home page's instance card is locked meanwhile: changing instance remounts this box) */
   onAttachmentsChange?: (count: number) => void;
 }) {
@@ -41,6 +43,12 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange }: {
     composer.current?.focus();
     onFocused?.();
   }, [focus, onFocused]);
+
+  const picked = example?.n;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one fill per pick (n), not per render of the text
+  useEffect(() => {
+    if (example) composer.current?.setText(example.text);
+  }, [picked]);
 
   const send = async (text: string): Promise<boolean> => {
     setError(null);

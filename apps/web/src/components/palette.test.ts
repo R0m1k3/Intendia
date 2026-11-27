@@ -38,6 +38,14 @@ describe('paletteGroups', () => {
     expect(g.find((x) => x.id === 'crons')!.items[0]!.hint).toBeUndefined();
     expect(g.find((x) => x.id === 'pages')!.items[0]!).toMatchObject({ id: 'p:crons', target: { to: '/i/$inst/crons', params: { inst: 'a' } } });
   });
+  it('offers the actions that need the instance, and finds a section of Configuration', () => {
+    expect(paletteGroups('', src()).find((x) => x.id === 'actions')!.items.map((i) => i.id)).toEqual(['a:new-session', 'a:new-workspace', 'a:files', 'a:new-schedule', 'a:add-provider']);
+    const sched = paletteGroups('planification', src()).find((x) => x.id === 'actions')!.items[0]!;
+    expect(sched).toMatchObject({ id: 'a:new-schedule', target: { to: '/i/$inst/crons', params: { inst: 'a' }, search: { nouveau: 1 } } });
+    const tg = paletteGroups('telegram', src()).find((x) => x.id === 'pages')!.items;
+    expect(tg.map((i) => i.label)).toEqual(['Configuration › Messageries']);
+    expect(tg[0]!.target).toEqual({ to: '/i/$inst/config', params: { inst: 'a' }, search: { tab: 'plateformes' } });
+  });
   it('folds case and accents', () => {
     expect(paletteGroups('electricite', src()).find((x) => x.id === 'workspaces')!.items[0]!.label).toBe('Électricité maison');
   });
