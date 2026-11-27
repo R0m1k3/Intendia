@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "fake-hermes": "workspace:*",
     "tsx": "^4.23.15",
