@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useFailuresSeen } from '../crons/failuresSeen';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { CalendarClock, FolderOpen, LayoutTemplate, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -190,6 +191,9 @@ export function CronsPage() {
   const a = useModuleAvailability(inst, 'crons', REQUIRED, OPTIONAL);
   const crons = useQuery({ queryKey: ['crons', inst], queryFn: () => api.crons(inst).then((r) => r.crons), enabled: a.available });
   const [editing, setEditing] = useState<Cron | 'new' | 'blueprint' | null>(null);
+  // the failures shown here are seen: the red badge of « Planning » goes until a new run fails
+  const { markSeen } = useFailuresSeen();
+  useEffect(() => { if (crons.data) markSeen(inst, crons.data); }, [crons.data, inst, markSeen]);
   // ?nouveau=1 (the palette's « Créer une planification »): open the editor once, then clean the address
   const wantsNew = search.nouveau === 1;
   const canCreate = a.available && a.has('crons', 'create');

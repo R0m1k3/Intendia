@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isUnread, markSeen, readSeen, SEEN_MAX } from './unread';
+import { countsAsUnread, isUnread, markAllSeen, markSeen, readSeen, SEEN_MAX } from './unread';
 
 describe('unread sessions', () => {
   it('first visit: everything older is read; a session that moves after is unread until opened', () => {
@@ -19,5 +19,17 @@ describe('unread sessions', () => {
     expect(Object.keys(st.seen)).toHaveLength(SEEN_MAX);
     expect(st.seen.s1).toBeUndefined();
     expect(st.seen[`s${SEEN_MAX + 5}`]).toBe(SEEN_MAX + 5);
+  });
+
+  it('« Tout marquer comme lu »: everything before now is read, a later move is unread again', () => {
+    const state = markAllSeen(1000);
+    expect(isUnread(state, { id: 'a', at: 999 })).toBe(false);
+    expect(isUnread(state, { id: 'a', at: 1001 })).toBe(true);
+  });
+
+  it('a cron’s runs never count as unread', () => {
+    expect(countsAsUnread({ source: 'cron' })).toBe(false);
+    expect(countsAsUnread({ source: 'telegram' })).toBe(true);
+    expect(countsAsUnread({ source: null })).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Bot, Brain, CalendarClock, Columns3, Ellipsis, Files, Folder, House, KanbanSquare, Keyboard, KeyRound, Layers, LifeBuoy, LineChart, LogOut, MessageSquareText, MessagesSquare, PenLine, Search, Server, Settings2, SlidersHorizontal } from 'lucide-react';
-import { failedCount } from '../home/summary';
+import { useFailuresSeen } from '../crons/failuresSeen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -108,7 +108,8 @@ function FullLayout() {
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
   const mine = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
   const myCrons = (overview.data?.crons ?? []).filter((c) => c.instanceId === inst);
-  const failed = failedCount(myCrons);
+  const { unseen } = useFailuresSeen();
+  const failed = inst ? unseen(inst, myCrons) : 0;
   // every open chat of this tab, whatever its instance
   const openChats = useChat().open.length;
   const counts: Record<string, { n?: number; bad?: boolean; label?: string }> = {
@@ -220,7 +221,8 @@ function FullLayout() {
       >
         <span className="relative">
           <n.icon className="size-[19px]" strokeWidth={1.5} />
-          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-sheet' : 'bg-raised text-ink-soft')} role="img" aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
+          {/* the rail only counts what needs a look; plain totals stay in « Plus » and on the pages */}
+          {c.n && c.bad ? <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-bad px-1 text-center font-mono text-[10px] leading-4 text-sheet" role="img" aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
         </span>
         <span className="max-w-full truncate text-[10.5px] leading-none">{n.short ?? n.label}</span>
       </Link>
