@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
 import { markFailuresSeen, readFailuresSeen, unseenFailures } from './failuresSeen';
 
-const ok = { id: 'a', lastRunAt: '2026-11-28T07:00:00Z', lastStatus: 'ok' };
-const bad = { id: 'b', lastRunAt: '2026-11-28T07:00:00Z', lastStatus: 'error' };
-const late = { id: 'c', lastRunAt: '2026-11-28T08:00:00Z', lastStatus: 'delivery_failed' };
+const ok = { id: 'a', profile: 'default', lastRunAt: '2026-11-28T07:00:00Z', lastStatus: 'ok' };
+const bad = { id: 'b', profile: 'default', lastRunAt: '2026-11-28T07:00:00Z', lastStatus: 'error' };
+const late = { id: 'c', profile: 'default', lastRunAt: '2026-11-28T08:00:00Z', lastStatus: 'delivery_failed' };
 
 it('counts only failures not seen yet, per instance', () => {
   expect(unseenFailures({}, 'x', [ok, bad, late])).toBe(2);
@@ -19,7 +19,7 @@ it('shows the badge again on a new failed run of the same cron', () => {
 
 it('keeps only failing crons and changes nothing when all is already seen', () => {
   const seen = markFailuresSeen({}, 'x', [ok, bad])!;
-  expect(seen.x).toEqual({ b: bad.lastRunAt });
+  expect(seen.x).toEqual({ 'default/b': bad.lastRunAt });
   expect(markFailuresSeen(seen, 'x', [ok, bad])).toBeNull();
   // the cron works again: its entry goes
   expect(markFailuresSeen(seen, 'x', [{ ...bad, lastStatus: 'ok' }])).toEqual({ x: {} });
@@ -29,4 +29,10 @@ it('reads a broken value as nothing seen', () => {
   expect(readFailuresSeen('{oops')).toEqual({});
   expect(readFailuresSeen('[1]')).toEqual({});
   expect(readFailuresSeen(null)).toEqual({});
+});
+
+it('tells apart two profiles whose crons have the same id', () => {
+  const other = { ...bad, profile: 'veille', lastRunAt: '2026-11-28T10:00:00Z' };
+  const seen = markFailuresSeen({}, 'x', [bad, other])!;
+  expect(unseenFailures(seen, 'x', [bad, other])).toBe(0);
 });

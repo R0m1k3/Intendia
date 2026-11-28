@@ -1,14 +1,15 @@
 // Failed planifications already seen: the red badge of « Planning » (and of the instance) counts only the failures you
 // have not looked at yet. Opening the Planning page marks the current ones as seen; a new failed run (another
 // `lastRunAt`) shows the badge again. The page itself keeps showing every failure in red.
-// Kept in localStorage: instance → cron id → `lastRunAt` of the failed run seen. Pure helpers + a small hook.
+// Kept in localStorage: instance → cron (`profile/id`: an id is unique only within a profile) → `lastRunAt` of the failed run seen. Pure helpers + a small hook.
 
 import { useCallback, useEffect, useState } from 'react';
+import { cronKey } from '../components/selection';
 import { FAILED } from '../home/summary';
 
 export type FailuresSeen = Record<string, Record<string, string>>;
 
-interface FailingCron { id: string; lastRunAt: string | null; lastStatus: string | null }
+interface FailingCron { id: string; profile: string; lastRunAt: string | null; lastStatus: string | null }
 
 const KEY = 'intendia-failures-seen';
 
@@ -25,12 +26,12 @@ const failing = (crons: FailingCron[]) => crons.filter((c) => FAILED.has(c.lastS
 /** Crons of `inst` whose last run failed and was not seen yet. */
 export function unseenFailures(seen: FailuresSeen, inst: string, crons: FailingCron[]): number {
   const mine = seen[inst] ?? {};
-  return failing(crons).filter((c) => mine[c.id] !== (c.lastRunAt ?? '')).length;
+  return failing(crons).filter((c) => mine[cronKey(c)] !== (c.lastRunAt ?? '')).length;
 }
 
 /** The state once every current failure of `inst` is seen (only failing crons are kept); null when nothing changes. */
 export function markFailuresSeen(seen: FailuresSeen, inst: string, crons: FailingCron[]): FailuresSeen | null {
-  const next = Object.fromEntries(failing(crons).map((c) => [c.id, c.lastRunAt ?? '']));
+  const next = Object.fromEntries(failing(crons).map((c) => [cronKey(c), c.lastRunAt ?? '']));
   const before = seen[inst] ?? {};
   const same = Object.keys(next).length === Object.keys(before).length && Object.entries(next).every(([id, at]) => before[id] === at);
   return same ? null : { ...seen, [inst]: next };
