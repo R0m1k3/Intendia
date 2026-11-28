@@ -21,7 +21,9 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
   const follow = useRef<FollowState>({ pinned: true, lastTop: 0, lastHeight: 0 });
   // time of the reader's last gesture that can scroll up: only such a move leaves the end of the thread
   const gesture = useRef(0);
-  const byReader = () => Date.now() - gesture.current < GESTURE_MS;
+  // the scrollbar held: a drag counts for as long as the button stays down
+  const held = useRef(false);
+  const byReader = () => held.current || Date.now() - gesture.current < GESTURE_MS;
   // the element that scrolls the thread: the page's <main>, or the column of the Chat page
   const box = () => bottom.current?.closest<HTMLElement>('[data-scroll-root]') ?? null;
   // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
@@ -60,7 +62,8 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
       if (['ArrowUp', 'PageUp', 'Home'].includes(e.key) || (e.key === ' ' && e.shiftKey)) mark();
     };
     // the scrollbar: a press on the scrolling element itself (not on its content)
-    const onPointer = (e: PointerEvent) => { if (e.target === main) mark(); };
+    const onPointer = (e: PointerEvent) => { if (e.target === main) { held.current = true; mark(); } };
+    const onRelease = () => { if (held.current) { held.current = false; mark(); } };
     // the thread and what sits under it (the composer grows with a queued message, files, a card)
     const grow = new ResizeObserver(followIfPinned);
     grow.observe(thread);
@@ -69,6 +72,8 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
     main.addEventListener('wheel', onWheel, { passive: true });
     main.addEventListener('touchmove', mark, { passive: true });
     main.addEventListener('pointerdown', onPointer);
+    window.addEventListener('pointerup', onRelease);
+    window.addEventListener('pointercancel', onRelease);
     window.addEventListener('keydown', onKey);
     return () => {
       grow.disconnect();
@@ -76,6 +81,9 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
       main.removeEventListener('wheel', onWheel);
       main.removeEventListener('touchmove', mark);
       main.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('pointerup', onRelease);
+      window.removeEventListener('pointercancel', onRelease);
+      held.current = false;
       window.removeEventListener('keydown', onKey);
       main.style.overflowAnchor = '';
     };
