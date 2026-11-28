@@ -3,7 +3,7 @@
 // icons and that carries no `aria-label` / `aria-labelledby` / `title` is reported with its file and line.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import ts from 'typescript';
+import { parseSync } from 'vite';
 import { expect, it } from 'vitest';
 
 const SRC = join(import.meta.dirname, '..');
@@ -18,70 +18,95 @@ function files(dir: string): string[] {
   });
 }
 
+/**
+ * A node of the syntax tree (ESTree with JSX) from the parser Vite ships. TypeScript 7 no longer has a compiler API to
+ * import, so the tree is read by `type` and field name through `one` / `many`.
+ */
+interface Node { type: string; start: number; [key: string]: unknown }
+
+const isNode = (v: unknown): v is Node => typeof v === 'object' && v !== null && typeof (v as Node).type === 'string';
+const one = (n: Node | null, key: string): Node | null => { const v = n?.[key]; return isNode(v) ? v : null; };
+const many = (n: Node | null, key: string): Node[] => { const v = n?.[key]; return Array.isArray(v) ? v.filter(isNode) : []; };
+
+function walk(node: Node, visit: (n: Node) => void): void {
+  visit(node);
+  for (const v of Object.values(node)) {
+    if (isNode(v)) walk(v, visit);
+    else if (Array.isArray(v)) for (const c of v) if (isNode(c)) walk(c, visit);
+  }
+}
+
+/** The name as written: `button`, `n.icon`, `aria-label`, `xlink:href`. */
+function tag(name: Node | null): string {
+  if (!name) return '';
+  if (name.type === 'JSXMemberExpression') return `${tag(one(name, 'object'))}.${tag(one(name, 'property'))}`;
+  if (name.type === 'JSXNamespacedName') return `${tag(one(name, 'namespace'))}:${tag(one(name, 'name'))}`;
+  return String(name.name);
+}
+
 /** Names imported from lucide-react in this file, and local names that look like an icon (`<n.icon />`, `<Icon />`). */
-function iconNames(source: ts.SourceFile): Set<string> {
+function iconNames(program: Node): Set<string> {
   const icons = new Set<string>(['svg']);
-  for (const st of source.statements) {
-    if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier) || st.moduleSpecifier.text !== 'lucide-react') continue;
-    const named = st.importClause?.namedBindings;
-    if (named && ts.isNamedImports(named)) for (const el of named.elements) icons.add(el.name.text);
+  for (const st of many(program, 'body')) {
+    if (st.type !== 'ImportDeclaration' || one(st, 'source')?.value !== 'lucide-react') continue;
+    for (const el of many(st, 'specifiers')) if (el.type === 'ImportSpecifier') icons.add(tag(one(el, 'local')));
   }
   return icons;
 }
 
-const isIcon = (tag: string, icons: Set<string>) => icons.has(tag) || /(^|\.)(icon|Icon)$/.test(tag) || /Icon$/.test(tag);
+const isIcon = (name: string, icons: Set<string>) => icons.has(name) || /(^|\.)(icon|Icon)$/.test(name) || /Icon$/.test(name);
+
+/** `opening`: a JSXOpeningElement. Props passed through (`{...p}`) count: the caller names it. */
+const hasName = (opening: Node | null): boolean =>
+  many(opening, 'attributes').some((p) => p.type === 'JSXSpreadAttribute' || NAMES.has(tag(one(p, 'name'))));
 
 /** true: this child can give the control a name; false: it only draws (an icon, white space, a comment). */
-function names(child: ts.JsxChild, icons: Set<string>): boolean {
-  if (ts.isJsxText(child)) return child.text.trim() !== '';
-  if (ts.isJsxExpression(child)) {
-    const e = child.expression;
-    if (!e) return false; // a comment
+function names(child: Node, icons: Set<string>): boolean {
+  if (child.type === 'JSXText') return String(child.value).trim() !== '';
+  if (child.type === 'JSXExpressionContainer') {
     // `cond && <Icon />`, `a ? <Icon /> : <Other />`: look inside; any other expression may be a text
-    const parts: ts.Expression[] = [];
-    const open = (x: ts.Expression): void => {
-      if (ts.isParenthesizedExpression(x)) open(x.expression);
-      else if (ts.isBinaryExpression(x) && (x.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken || x.operatorToken.kind === ts.SyntaxKind.BarBarToken)) open(x.right);
-      else if (ts.isConditionalExpression(x)) { open(x.whenTrue); open(x.whenFalse); }
+    const parts: Node[] = [];
+    const open = (x: Node | null): void => {
+      if (!x) return;
+      if (x.type === 'ParenthesizedExpression') open(one(x, 'expression'));
+      else if (x.type === 'LogicalExpression' && (x.operator === '&&' || x.operator === '||')) open(one(x, 'right'));
+      else if (x.type === 'ConditionalExpression') { open(one(x, 'consequent')); open(one(x, 'alternate')); }
       else parts.push(x);
     };
-    open(e);
+    open(one(child, 'expression'));
     return parts.some((x) => {
-      if (ts.isJsxSelfClosingElement(x) || ts.isJsxElement(x) || ts.isJsxFragment(x)) return names(x, icons);
-      return x.kind !== ts.SyntaxKind.NullKeyword && x.kind !== ts.SyntaxKind.FalseKeyword;
+      if (x.type === 'JSXEmptyExpression') return false; // a comment
+      if (x.type === 'JSXElement' || x.type === 'JSXFragment') return names(x, icons);
+      return !(x.type === 'Literal' && (x.raw === 'null' || x.raw === 'false'));
     });
   }
-  if (ts.isJsxSelfClosingElement(child)) return !isIcon(child.tagName.getText(), icons) || hasName(child.attributes);
-  if (ts.isJsxElement(child)) {
-    if (hasName(child.openingElement.attributes)) return true;
-    if (isIcon(child.openingElement.tagName.getText(), icons)) return false;
-    return child.children.some((c) => names(c, icons));
+  if (child.type === 'JSXElement') {
+    const opening = one(child, 'openingElement');
+    if (hasName(opening)) return true;
+    if (isIcon(tag(one(opening, 'name')), icons)) return false;
+    return opening?.selfClosing === true || many(child, 'children').some((c) => names(c, icons));
   }
-  if (ts.isJsxFragment(child)) return child.children.some((c) => names(c, icons));
+  if (child.type === 'JSXFragment') return many(child, 'children').some((c) => names(c, icons));
   return true;
 }
 
-function hasName(attrs: ts.JsxAttributes): boolean {
-  return attrs.properties.some((p) => ts.isJsxSpreadAttribute(p) // props passed through: the caller names it
-    || (ts.isJsxAttribute(p) && NAMES.has(p.name.getText())));
+/** Lines (from 1) of the buttons and links of this source that nothing names. */
+function unnamedLines(path: string, text: string): number[] {
+  const { program, errors } = parseSync(path, text, { lang: 'tsx' });
+  if (errors.length > 0) throw new Error(`${path}: ${errors[0]?.message}`);
+  const root = program as unknown as Node;
+  const icons = iconNames(root);
+  const lines: number[] = [];
+  walk(root, (node) => {
+    if (node.type !== 'JSXElement') return;
+    const opening = one(node, 'openingElement');
+    if (!CONTROLS.has(tag(one(opening, 'name'))) || hasName(opening)) return;
+    if (!many(node, 'children').some((c) => names(c, icons))) lines.push(text.slice(0, node.start).split('\n').length);
+  });
+  return lines;
 }
 
-function unnamed(path: string): string[] {
-  const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const icons = iconNames(source);
-  const found: string[] = [];
-  const at = (node: ts.Node) => `${relative(SRC, path)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
-  const visit = (node: ts.Node): void => {
-    if (ts.isJsxElement(node) && CONTROLS.has(node.openingElement.tagName.getText())) {
-      if (!hasName(node.openingElement.attributes) && !node.children.some((c) => names(c, icons))) found.push(at(node));
-    } else if (ts.isJsxSelfClosingElement(node) && CONTROLS.has(node.tagName.getText())) {
-      if (!hasName(node.attributes)) found.push(at(node));
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return found;
-}
+const unnamed = (path: string): string[] => unnamedLines(path, readFileSync(path, 'utf8')).map((line) => `${relative(SRC, path)}:${line}`);
 
 it('names every button and link that only draws an icon', () => {
   const all = files(SRC);
@@ -90,18 +115,7 @@ it('names every button and link that only draws an icon', () => {
 });
 
 it('sees an icon-only button without a label, and accepts the usual ways of naming one', () => {
-  const check = (jsx: string) => {
-    const source = ts.createSourceFile('x.tsx', `import { X, Plus } from 'lucide-react';\nconst a = ${jsx};`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const icons = iconNames(source);
-    let bad = 0;
-    const visit = (node: ts.Node): void => {
-      if (ts.isJsxElement(node) && CONTROLS.has(node.openingElement.tagName.getText()) && !hasName(node.openingElement.attributes) && !node.children.some((c) => names(c, icons))) bad += 1;
-      if (ts.isJsxSelfClosingElement(node) && CONTROLS.has(node.tagName.getText()) && !hasName(node.attributes)) bad += 1;
-      ts.forEachChild(node, visit);
-    };
-    visit(source);
-    return bad;
-  };
+  const check = (jsx: string) => unnamedLines('x.tsx', `import { X, Plus } from 'lucide-react';\nconst a = ${jsx};`).length;
   expect(check('<button type="button"><X className="size-3" /></button>')).toBe(1);
   expect(check('<button type="button">{open ? <X /> : <Plus />}</button>')).toBe(1);
   expect(check('<button type="button"><span className="flex"><n.icon /></span></button>')).toBe(1);
