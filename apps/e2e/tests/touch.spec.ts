@@ -32,23 +32,25 @@ const small = (page: Page) => page.evaluate(() => {
     const cy = r.top + r.height / 2;
     seen.push({ el, own: r, area: { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 }, extended: extended && (w > r.width || h > r.height) });
   }
-  const meet = (a: Box, b: Box) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
   const inside = (a: Box, b: Box) => a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
-  // under a menu or a dialog, a control cannot be touched: what is drawn over it is not its neighbour
-  const covered = (x: { el: HTMLElement; own: Box }) => {
-    const px = (x.own.left + x.own.right) / 2;
-    const py = (x.own.top + x.own.bottom) / 2;
-    if (px < 0 || py < 0 || px >= innerWidth || py >= innerHeight) return false; // not on screen now: not known
-    const top = document.elementFromPoint(px, py);
-    return !top || !(x.el.contains(top) || top.contains(x.el));
-  };
   for (const a of seen) {
-    if (!a.extended || covered(a)) continue;
+    if (!a.extended) continue;
     for (const b of seen) {
-      if (a === b || a.el.contains(b.el) || b.el.contains(a.el) || covered(b)) continue;
+      if (a === b || a.el.contains(b.el) || b.el.contains(a.el)) continue;
       // drawn on top of the other on purpose (the × inside a search field): its area is part of that field
       if (inside(a.own, b.own)) continue;
-      if (meet(a.area, b.extended ? b.area : b.own)) found.push(`${name(a.el)} reaches ${name(b.el)}`);
+      // where the area of `a` lies over the drawing of `b`
+      const left = Math.max(a.area.left, b.own.left);
+      const right = Math.min(a.area.right, b.own.right);
+      const top = Math.max(a.area.top, b.own.top);
+      const bottom = Math.min(a.area.bottom, b.own.bottom);
+      if (right - left <= 1 || bottom - top <= 1) continue;
+      const x = (left + right) / 2;
+      const y = (top + bottom) / 2;
+      // on screen: who answers there? (a menu or a dialog drawn over `a` keeps the finger); off screen: not known, refused
+      const onScreen = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+      const hit = onScreen ? document.elementFromPoint(x, y) : null;
+      if (!onScreen || (hit && a.el.contains(hit))) found.push(`${name(a.el)} reaches ${name(b.el)}`);
     }
   }
   return found;
@@ -76,6 +78,13 @@ test('controls are at least 44 px on a touch screen', async ({ page }) => {
   await expect(page.locator('[data-turn="agent"]')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.locator('[aria-label="Envoyer"]')).toBeVisible({ timeout: 30_000 });
   await check('session');
+  // two more cited files on the next lines of the answer: their areas must not reach one another
+  await expect(page.locator('button.file-chip')).toHaveCount(1);
+  await page.evaluate(() => {
+    const chip = document.querySelector('button.file-chip')!;
+    for (let i = 0; i < 2; i++) chip.closest('p')!.append(document.createElement('br'), chip.cloneNode(true));
+  });
+  await check('pastilles de fichier sur des lignes voisines');
   const session = page.url();
 
   // the session's menu, then a dialog opened from it
