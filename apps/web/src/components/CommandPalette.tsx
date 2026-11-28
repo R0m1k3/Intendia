@@ -69,6 +69,8 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
   }, [fileQuery, text, q, files.data, inst, mine]);
   const groups = mode === 'files' ? fileGroups : allGroups;
   const items = flatItems(groups);
+  // biome-ignore lint/correctness/useExhaustiveDependencies(text): the trigger, not read by the effect: it runs again when this changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies(mode): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => setIndex(0), [text, mode]);
   const current = items[Math.min(index, items.length - 1)];
 

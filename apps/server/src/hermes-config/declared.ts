@@ -4,6 +4,7 @@
  * `{id|name}` objects, or a `{id: metadata}` mapping; duplicates dropped case-insensitively.
  */
 import { parse } from './mask.js';
+import { isObj } from '../util.js';
 
 export type DeclaredShape = 'strings' | 'string' | 'objects' | 'dict' | 'none';
 export interface Declared {
@@ -14,7 +15,6 @@ export interface Declared {
 }
 
 const SENTINELS = new Set(['__explicit_model_allowlist__', '__discovered_model_catalog__']);
-const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 function shapeOf(v: unknown): DeclaredShape {
   if (typeof v === 'string') return 'string';

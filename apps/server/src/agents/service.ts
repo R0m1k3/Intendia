@@ -11,6 +11,8 @@ import { NotFoundError, ValidationError, type WorkspaceService } from '../worksp
 import { msg } from '../i18n/index.js';
 import { EnvListSchema } from '../connectors/config/index.js';
 import { randomToken } from '../crypto.js';
+import { HttpError } from '../http-error.js';
+import { sleep } from '../util.js';
 
 export const SOUL_MAX = 64 * 1024;
 const DESCRIPTION_MAX = 1000;
@@ -27,8 +29,10 @@ export interface CreateAgentInput {
   model?: string;
 }
 
-export class AgentConflictError extends Error {
+export class AgentConflictError extends HttpError {
   readonly code = 'agent_exists';
+  readonly status = 409;
+  override body() { return { code: this.code }; }
 }
 
 export interface PublicAgent {
@@ -223,7 +227,7 @@ export class AgentService {
         status = 0;
       }
       if (status === 200 || status === 404) return status;
-      await new Promise((r) => setTimeout(r, this.retryMs));
+      await sleep(this.retryMs);
     }
     return status;
   }

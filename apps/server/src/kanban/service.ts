@@ -14,9 +14,10 @@ import type { InstanceStore } from '../instances/store.js';
 import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js';
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 /** 409 from Hermes, or a kanban state Intendia reports with its own code. */
-export class KanbanError extends Error {
+export class KanbanError extends HttpError {
   constructor(
     readonly code: 'hermes_conflict' | 'worker_ended' | 'task_restarted' | 'board_exists' | 'aux_failed'
       | 'mission_state' | 'mission_dependency' | 'mission_last',
@@ -25,6 +26,8 @@ export class KanbanError extends Error {
   ) {
     super(message);
   }
+
+  override body() { return { code: this.code }; }
 }
 
 export const LIMITS = { title: 200, body: 20_000, comment: 10_000, blockReason: 500, boardName: 100 } as const;

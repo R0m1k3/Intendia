@@ -20,6 +20,7 @@ export function WorkspacesPage() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces });
   const { id: inst, instance, instances } = useCurrentInstance();
   const [adding, setAdding] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies(slug): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => setAdding(false), [slug]);
   const list = (workspaces.data?.workspaces ?? []).filter((w) => w.instanceId === inst);
   const empty = workspaces.isSuccess && inst !== null && list.length === 0;

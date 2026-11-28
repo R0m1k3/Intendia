@@ -17,19 +17,22 @@ import { WorkspaceFsError } from '../workspaces/fs.js';
 import { ValidationError, type WorkspaceService } from '../workspaces/service.js';
 import { GatewaySocketError, oneshot } from '../hermes/gateway-ws.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 export type GitErrorCode = 'sensitive' | 'staged_sensitive' | 'nothing_staged' | 'git_failed' | 'busy' | 'unsupported' | 'no_model' | 'empty';
 const GIT_STATUS: Record<GitErrorCode, 403 | 409 | 502 | 503> = {
   sensitive: 403, staged_sensitive: 409, nothing_staged: 409, git_failed: 409, busy: 409, unsupported: 409, empty: 502, no_model: 503,
 };
 
-export class GitError extends Error {
+export class GitError extends HttpError {
   readonly status: 403 | 409 | 502 | 503;
   constructor(readonly code: GitErrorCode, message: string) {
     super(message);
     this.name = 'GitError';
     this.status = GIT_STATUS[code];
   }
+
+  override body() { return { code: this.code }; }
 }
 
 /** Files sent to the browser at most (the server works on the whole list). */

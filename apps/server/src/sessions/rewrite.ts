@@ -8,6 +8,7 @@ import { readRunStatus, whenIdle } from '../chat/history.js';
 import { TERMINAL_STATUSES } from '../connectors/chat/index.js';
 import { NotFoundError, UNDO_MS, type PublicSession, type SessionContext, type WorkspaceService } from '../workspaces/service.js';
 import { copyId, copyPayload, CopyError, cutBefore, exportSession, importCopy } from './copy.js';
+import { sleep } from '../util.js';
 
 export type RewriteMode = 'replace' | 'branch';
 export interface RewriteResult { session: PublicSession; replaced?: string; undoUntil?: number | null; created: boolean }
@@ -115,7 +116,7 @@ async function stopLastRun(compat: CompatService, ctx: SessionContext): Promise<
   await callOp(compat.http(ctx.instance.id), compat.get(ctx.instance.id), 'chat', 'stopRun', { params: { run_id: runId }, profile: ctx.profile, body: {} })
     .catch(() => {});
   for (let waited = 0; waited < STOP_WAIT_MS; waited += STOP_POLL_MS) {
-    await new Promise((r) => setTimeout(r, STOP_POLL_MS));
+    await sleep(STOP_POLL_MS);
     if (!(await running())) return;
   }
   throw new RunActiveError(msg('La réponse ne s’arrête pas : réessayez'));

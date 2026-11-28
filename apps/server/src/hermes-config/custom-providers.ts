@@ -8,6 +8,7 @@ import { isMap } from 'yaml';
 import { ConfigInputError } from './service.js';
 import { parse } from './mask.js';
 import { msg } from '../i18n/index.js';
+import { isObj } from '../util.js';
 
 export interface PublicCustomProvider {
   /** Key of `providers` (v12 shape); null for an old `custom_providers` entry. */
@@ -25,7 +26,6 @@ export type ReadCustomProvider = Omit<PublicCustomProvider, 'key'> & { key: { ki
 /** Hermes aliases of `custom` (comment « Aliases » of its config template, 0.23). */
 export const HERMES_ALIASES = ['custom', 'auto', 'ollama', 'vllm', 'llamacpp'] as const;
 
-const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
 function keyOf(e: Record<string, unknown>): ReadCustomProvider['key'] {

@@ -1,6 +1,7 @@
 import { isMap, isPair, isScalar, isSeq, parseDocument, visit, type Document, type Scalar } from 'yaml';
 import { sign } from '../crypto.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 /**
  * Secret masking for everything Intendia sends to the browser about an instance's configuration.
@@ -69,7 +70,9 @@ export function pathString(path: PathKey[]): string {
   return path.map((k, i) => (typeof k === 'number' ? `[${k}]` : i === 0 ? k : `.${k}`)).join('');
 }
 
-export class SecretError extends Error {
+export class SecretError extends HttpError {
+  readonly status = 400;
+  override body() { return { ...this.extra, code: this.code }; }
   constructor(readonly code: 'secret_placeholder' | 'secret_moved' | 'invalid_yaml', message: string, readonly extra: Record<string, unknown> = {}) {
     super(message);
     this.name = 'SecretError';

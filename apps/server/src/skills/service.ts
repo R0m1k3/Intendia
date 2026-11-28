@@ -12,6 +12,7 @@ import { lastRunLines } from '../connectors/actions.js';
 import type { InstanceStore } from '../instances/store.js';
 import { NotFoundError, ValidationError } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 export interface PublicSkill {
   name: string;
@@ -63,8 +64,10 @@ export interface PublicActionStatus {
 }
 
 /** The scan does not allow the install (block, ask without consent, unknown policy). */
-export class ScanRefusedError extends Error {
+export class ScanRefusedError extends HttpError {
   readonly code = 'scan_refused';
+  readonly status = 409;
+  override body() { return { code: this.code, scan: this.scan }; }
   constructor(message: string, readonly scan: PublicScan) {
     super(message);
     this.name = 'ScanRefusedError';
@@ -72,8 +75,10 @@ export class ScanRefusedError extends Error {
 }
 
 /** An action with the same Hermes name is running (Hermes keeps one process per name). */
-export class ActionBusyError extends Error {
+export class ActionBusyError extends HttpError {
   readonly code = 'busy';
+  readonly status = 409;
+  override body() { return { code: this.code, action: this.action }; }
   constructor(readonly action: string) {
     super(msg('Une action identique est en cours'));
     this.name = 'ActionBusyError';

@@ -5,6 +5,7 @@
  */
 import type { HermesFs } from '../files/hermes-fs.js';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const AGENTS_MD_MAX_BYTES = 65_536;
@@ -17,7 +18,9 @@ export const FS_ERROR_STATUS: Record<WorkspaceFsCode, 400 | 403 | 404 | 409 | 41
   no_root: 422, unreachable: 502, unsupported: 409, exists: 409, too_large: 413, invalid: 400, outside: 403, not_found: 404, not_file: 400, busy: 409,
 };
 
-export class WorkspaceFsError extends Error {
+export class WorkspaceFsError extends HttpError {
+  get status() { return FS_ERROR_STATUS[this.code]; }
+  override body() { return { code: this.code }; }
   constructor(readonly code: WorkspaceFsCode, message: string) {
     super(message);
     this.name = 'WorkspaceFsError';

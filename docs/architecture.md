@@ -211,7 +211,7 @@ merged settings without saving (the browser never has the secrets).
   never HTML (`sessions/marks.ts`).
 - Ctrl/Cmd K (`components/CommandPalette.tsx`, logic in `components/palette.ts`): actions, pages, workspaces, crons
   and sessions; without text the latest sessions of the home page, with 2 characters or more the search above.
-- Attachments: the composer (`chat/Composer.tsx`) turns pasted, picked or dropped files into tiles, uploads them to
+- Attachments: the composer (`chat/Composer.tsx`, attachments in `chat/composer/useAttachments.tsx`) turns pasted, picked or dropped files into tiles, uploads them to
   `inbox/` one by one (`upload` prop), and only adds their paths to the message at send time, one per line after the
   text: that is how the agent reads them. In the thread, `chat/attachments.ts` (`splitAttachments`) takes those last
   path lines out of the user's bubble and shows them as thumbnails or chips, without a server call.
@@ -746,6 +746,21 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   would turn ready between two calls), then the held children. A missing kanban op hides the button and makes the
   route a 409 without code before anything is written.
 
+## Web client: where the big pieces live
+
+- `api.ts` is the one import point of the server client (`api`, its types, `ApiError`, the URL helpers). Behind it:
+  `api/call.ts` (the HTTP call, timeouts, `ApiError`), `api/paths.ts` (paths and URLs), `api/types/<domain>.ts` (the
+  types, one file per domain). New code keeps importing from `api.ts`.
+- The session page `pages/Session.tsx` is a composition. Its units are in `sessions/session/`: `useSessionData`
+  (what is read from the server), `useRunControl` (the run, its stream, the queue), `useThreadEntries`,
+  `useHistoryActions`, `useSessionActions`, `useSessionMove`, `useSessionGoal`, `useSessionFiles`, `useThreadScroll`
+  (following the end of the thread), `usePalettePage`, `useSidePanel`, `SessionHeader`, `SessionSidePanel`.
+- The composer `chat/Composer.tsx` keeps the sends; `chat/composer/` holds the draft (`useDraft`), the attachments
+  (`useAttachments`), the slash menus (`useSlashMenus`) and the waiting messages (`QueueList`).
+- Component tests run in happy-dom (`// @vitest-environment happy-dom`) with the helpers of `test/dom.tsx` (mount,
+  type, press, click): `chat/Composer.test.tsx`, `components/Dialog.test.tsx`, `components/ErrorText.test.tsx`.
+- Server errors answered to the client extend `HttpError` (`apps/server/src/http-error.ts`): status, code, message.
+
 ## Web client: what is downloaded
 
 - `apps/web/src/main.tsx` is a few lines: it loads the English dictionary (`i18n/en-all.ts`, `setEnglish`) only when
@@ -768,7 +783,7 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 
 - **Errors are translated where they are made.** The server sends its own texts through `msg()` (401
   `unauthenticated` « Session expirée », 403 `csrf`, « Requête invalide », the 500 text); Hermes errors keep the codes
-  of the compat follow-up (`hermes_unreachable`, `hermes_busy`). `call()` (`apps/web/src/api.ts`) turns what never
+  of the compat follow-up (`hermes_unreachable`, `hermes_busy`). `call()` (`apps/web/src/api/call.ts`) turns what never
   reached a JSON answer into an `ApiError` with a `code`: `network` (the `TypeError` of `fetch`), `timeout`, or
   « Réponse inattendue du serveur Intendia (HTTP n) » for an error without a JSON body. `ErrorText` shows
   `err.message`; on a read, `onRetry` adds « Réessayer ».

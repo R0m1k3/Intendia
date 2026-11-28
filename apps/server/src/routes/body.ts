@@ -1,13 +1,16 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { msg } from '../i18n/index.js';
+import { HttpError } from '../http-error.js';
 
 /** Largest JSON body of the API: the raw YAML of a configuration (2 M characters) fits, a file does not. */
 export const JSON_MAX_BYTES = 4 * 1024 * 1024;
 
 /** A request body that is not JSON: answered 400 with a fixed text, never logged. */
-export class BodyError extends Error {
+export class BodyError extends HttpError {
   readonly code = 'invalid_body';
+  readonly status = 400;
+  override body() { return { code: this.code }; }
   constructor() {
     super(msg('Corps illisible'));
   }

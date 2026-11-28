@@ -43,9 +43,11 @@ export function ChannelPage() {
     onSuccess: refresh,
   });
   const count = q.data?.messages.length ?? 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies(count): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [count]);
   // the column's channel row (« en cours », « arrêté ») follows the turns of this page
   const states = (q.data?.turns ?? []).map((x) => `${x.id}:${x.status}`).join(',');
+  // biome-ignore lint/correctness/useExhaustiveDependencies(states): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { void qc.invalidateQueries({ queryKey: ['channels'] }); }, [states, qc]);
 
   const d = q.data;

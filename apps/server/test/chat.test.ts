@@ -344,7 +344,7 @@ describe('run options and consumption', () => {
     expect(r3.map((r: any) => [r.costUsd, r.costRuns])).toEqual([[null, 1], [0.0246, 2], [0.0123, 1]]);
     // c2 not costed yet when the next message goes out: handed over to it
     t.fake.sim.costs.set(sid, 0.0246);
-    const c = (await t.request('POST', `${base}/runs`, { input: 'quatre lent' })).json.runId;
+    await t.request('POST', `${base}/runs`, { input: 'quatre lent' });
     // a refused send (run in progress) inserts nothing
     expect((await t.request('POST', `${base}/runs`, { input: 'cinq' })).status).toBe(409);
     // c (still running, not listed) took over from c2

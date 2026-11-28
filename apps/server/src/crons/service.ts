@@ -12,13 +12,16 @@ import { blockLines, folderKey, frame, unframe } from '../workspaces/framing.js'
 import { NotFoundError, ValidationError, type Workspace, type WorkspaceService } from '../workspaces/service.js';
 import { msg } from '../i18n/index.js';
 import { KeyedLock } from '../keyed-lock.js';
+import { HttpError } from '../http-error.js';
 
 /** A Hermes 400 on a cron write: shown under the matching editor field. */
-export class CronInputError extends Error {
+export class CronInputError extends HttpError {
+  readonly status = 400;
   constructor(message: string, readonly field: 'schedule' | null, readonly detail: string) {
     super(message);
     this.name = 'CronInputError';
   }
+  override body() { return { field: this.field, detail: this.detail }; }
 }
 
 export interface PublicSchedule {

@@ -1,5 +1,6 @@
 import type { HermesConfigField } from '../connectors/config/index.js';
 import { msg } from '../i18n/index.js';
+import { isObj } from '../util.js';
 
 /**
  * Hermes publishes its config schema as flat dotted paths (`terminal.backend`). These helpers move between
@@ -11,21 +12,17 @@ export type Fields = Record<string, HermesConfigField>;
 /** Paths managed elsewhere: `model` is a table in the file but a string in the schema. */
 export const MODEL_PATHS = new Set(['model', 'model_context_length']);
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-}
-
 /**
  * Flat path → value for the paths of the schema. Descends into tables and stops on any schema path
  * (a leaf, even when its value is a table or a list); lists are never walked.
  */
 export function flatten(obj: unknown, fields: Fields, prefix = ''): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (!isPlainObject(obj)) return out;
+  if (!isObj(obj)) return out;
   for (const [k, v] of Object.entries(obj)) {
     const path = prefix ? `${prefix}.${k}` : k;
     if (path in fields) out[path] = v;
-    else if (isPlainObject(v)) Object.assign(out, flatten(v, fields, path));
+    else if (isObj(v)) Object.assign(out, flatten(v, fields, path));
   }
   return out;
 }
@@ -37,7 +34,7 @@ export function unflatten(changes: Record<string, unknown>): Record<string, unkn
     const keys = path.split('.');
     let node = out;
     for (const k of keys.slice(0, -1)) {
-      if (!isPlainObject(node[k])) node[k] = {};
+      if (!isObj(node[k])) node[k] = {};
       node = node[k] as Record<string, unknown>;
     }
     node[keys[keys.length - 1]!] = value;

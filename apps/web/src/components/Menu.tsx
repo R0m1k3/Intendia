@@ -40,6 +40,8 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
       : { left, width: w, top: r.bottom + 6, maxHeight: Math.max(160, window.innerHeight - r.bottom - 16) });
   }, [open, placement, align, width]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(pos): the trigger, not read by the effect: it runs again once the panel is placed
+  // biome-ignore lint/correctness/useExhaustiveDependencies(setOpen): a new function on each render: listed, the effect would take the focus back at every render
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => {

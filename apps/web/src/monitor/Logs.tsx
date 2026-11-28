@@ -46,6 +46,7 @@ export function Logs({ inst, profile, file, onFile }: { inst: string; profile: s
   const box = useRef<HTMLPreElement>(null);
   const atBottom = useRef(true);
   // keep the reader at the bottom when they were there (new lines), else leave the scroll alone
+  // biome-ignore lint/correctness/useExhaustiveDependencies(q.data): the trigger, not read by the effect: it runs again when this changes
   useLayoutEffect(() => {
     const el = box.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;

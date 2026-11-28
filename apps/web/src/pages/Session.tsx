@@ -1,133 +1,63 @@
-import { AgentPanel } from '../agents/AgentPanel';
-import { AgentAvatar, useAgentLooks } from '../agents/look';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+// The session page: the composition of its units (sessions/session/): what is read from the server, the run,
+// the actions on the session and its history, the thread's scroll, the header, the side panel and the composer.
+import { useAgentLooks } from '../agents/look';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { Archive, ArchiveRestore, ArrowLeft, Check, Clock, Copy, Download, Ellipsis, Eraser, Link2, Maximize2, Minimize2, PanelRight, Pencil, Pin, PinOff, ShieldCheck, ShieldOff, Sparkles, Trash2, Undo2, X } from 'lucide-react';
-import { SESSION_LIST_KEYS, showUndo, invalidateSessionLists } from '../sessions/UndoBar';
-import { useRemoveSession } from '../sessions/remove';
-import { clampWidth, readPanel, savePanel, type PanelPrefs, type PanelTab } from '../sessions/panelPrefs';
-import { Subagents } from '../chat/Subagents';
-import { AsideQuestion } from '../chat/AsideQuestion';
-import { download, newKey, useCopyOps } from '../sessions/copies';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { api, ApiError, rawUrl, type ApprovalChoice, type ChatMessage, type Effort, type RunStat, type RunStatus } from '../api';
-import { historyEntries, isTerminal, mergeHistory, withTrees, type Approval, type Clarify, type Entry, type RunState } from '../chat/events';
-import { EMBEDDED, forgetSideSession, setSideSession } from '../chat/embed';
-import { Composer, type ComposerHandle, type ExtractArchive, type Upload } from '../chat/Composer';
-import { clearDraft, flushDrafts, loadDraft, saveDraft, sessionDraftKey } from '../chat/draft';
+import { X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { api, type RunStat } from '../api';
+import { historyEntries } from '../chat/events';
+import { EMBEDDED, setSideSession } from '../chat/embed';
+import { Composer, type ComposerHandle } from '../chat/Composer';
+import { sessionDraftKey } from '../chat/draft';
 import { InstancePick } from '../chat/InstancePick';
-import { loadChat } from '../chat/columns';
-import { pickWorkspace } from '../chat/newSession';
 import { ContextGauge } from '../chat/ContextGauge';
 import { estimateTokens } from '../chat/estimate';
-import { agentName, shortModel, costSettling, COST_POLL_MS, placeRunStats } from '../chat/format';
-import { applyDeliveries, attachChildren, delegationState, pollDelay } from '../chat/deliveries';
-import { measure, startFollow, type FollowState } from '../chat/follow';
-import {
-  clearPendingKey, EMPTY_QUEUE, dropItem, editItem, enqueue, moveItem, firstTime, loadPendingKey, loadQueue, newSendKey, pauseQueue, pushHead, resumeQueue,
-  saveQueue, savePendingKey, takeHead, type Queue,
-} from '../chat/queue';
-import { chatModelsQuery, modelPickerDisabled, RunOptions } from '../chat/RunOptions';
+import { placeRunStats } from '../chat/format';
+import { RunOptions } from '../chat/RunOptions';
 import { AGENT_INDENT, ApprovalCard } from '../chat/ApprovalCard';
-import { AgentFace, OpenSubagents, ThinkingIndicator, Thread, type ThreadActions } from '../chat/Thread';
+import { AgentFace, OpenSubagents, ThinkingIndicator, Thread } from '../chat/Thread';
 import { stamps } from '../chat/timeline';
-import { artifactPaths } from '../chat/artifacts';
-import { lastTodos } from '../chat/todos';
-import { writtenPaths } from '../chat/written';
 import { Todos } from '../chat/Todos';
-import { OUTLINE_MIN, TurnJump, TurnPlan } from '../chat/TurnNav';
-import { outline } from '../chat/turns';
-import { confirmClose } from '../components/dirty';
-import { useActivePage, type ActivePage } from '../components/activePage';
-import type { PaletteItem } from '../components/palette';
+import { OUTLINE_MIN, TurnJump } from '../chat/TurnNav';
 import { useStoredFlag } from '../components/useStoredFlag';
 import { ClarifyCard } from '../chat/ClarifyCard';
 import { useColumn, useOpenSession } from '../chat/column-context';
-import { useRun } from '../chat/useRun';
-import { ChatNotice, useChatAvailability } from '../components/ChatNotice';
-import { SessionFiles } from '../components/SessionFiles';
+import { ChatNotice } from '../components/ChatNotice';
 import { DropZone } from '../files/DropZone';
-import { FilePaths, type FilePathsValue } from '../files/FilePaths';
-import { findPathCandidates } from '../files/paths';
-import { splitAttachments } from '../chat/attachments';
-import { Preview } from '../files/Preview';
-import { uploadFiles } from '../files/upload';
-import { setDraft, setHandoff, takeDraft, takeHandoff } from '../home/handoff';
-import { ACTION_LABEL, cutFor, lastUser, type HistoryAction } from '../chat/history-actions';
+import { FilePaths } from '../files/FilePaths';
+import { cutFor } from '../chat/history-actions';
 import { COMMANDS, type Command, type CommandName } from '../chat/commands';
 import { formatTokens } from '../chat/format';
-import { Menu, Picker } from '../components/Menu';
-import { copyText, cx, ErrorText, SkeletonThread } from '../components/ui';
-import { ask, askText } from '../components/Dialog';
-import { GoalBar, goalKey, useGoal } from '../chat/GoalBar';
+import { Picker } from '../components/Menu';
+import { cx, ErrorText, SkeletonThread } from '../components/ui';
+import { GoalBar, goalKey } from '../chat/GoalBar';
 import { SubagentsBar } from '../chat/SubagentsBar';
 import { GoalDialog } from '../chat/GoalDialog';
-import { nextCursor, olderOffset } from '../chat/older-pages';
-import type { GoalSettings } from '../api';
-import { workspaceScope } from '../files/scope';
-
-const REREAD_TOOLS = new Set(['todo_list', 'write_file', 'patch']);
-import { useInbox } from '../sessions/InboxLayout';
-import { useVaultAvailable } from './Access';
+import { SESSION_LIST_KEYS } from '../sessions/UndoBar';
+import { SessionHeader } from '../sessions/session/SessionHeader';
+import { SessionSidePanel } from '../sessions/session/SessionSidePanel';
+import { useHistoryActions } from '../sessions/session/useHistoryActions';
+import { usePalettePage } from '../sessions/session/usePalettePage';
+import { OUTCOME, useRunControl, type ActiveRun } from '../sessions/session/useRunControl';
+import { useSessionActions } from '../sessions/session/useSessionActions';
+import { useSessionData } from '../sessions/session/useSessionData';
+import { useSessionFiles } from '../sessions/session/useSessionFiles';
+import { useSessionGoal } from '../sessions/session/useSessionGoal';
+import { useSessionMove } from '../sessions/session/useSessionMove';
+import { useSidePanel } from '../sessions/session/useSidePanel';
+import { useThreadEntries } from '../sessions/session/useThreadEntries';
+import { useThreadScroll } from '../sessions/session/useThreadScroll';
 import { locale, t } from '../i18n';
 import { T } from '../i18n/T';
-import { useApprovals } from '../components/useApprovals';
 
-/** Bordered 34 px icon button of the session header (the mockup's `.btn.ib`). */
-export const ICON_BTN = 'grid size-[34px] shrink-0 place-items-center rounded-lg border border-line bg-sheet text-ink transition-colors hover:bg-paper';
-
-/** Session date in the header: "16:21" today, else "2 nov. 16:21" (ms). */
-export function when(ms: number): string {
-  const d = new Date(ms);
-  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })} ${time}`;
-}
-
-/** "Plein écran": hides the inbox column (kept in this browser); only from 1280 px, where the column shows. */
-export function FullScreen() {
-  const { full, setFull } = useInbox();
-  return (
-    <button
-      type="button" onClick={() => setFull(!full)} aria-pressed={full}
-      className={cx(
-        'hidden h-[34px] items-center gap-2 rounded-lg border px-3.5 text-[13.5px] font-medium transition-colors xl:inline-flex',
-        full ? 'border-line bg-sheet text-ink hover:bg-paper' : 'border-accent-strong bg-accent text-on-accent hover:bg-accent-strong',
-      )}
-    >
-      {full ? <Minimize2 className="size-4" strokeWidth={1.5} /> : <Maximize2 className="size-4" strokeWidth={1.5} />}
-      {full ? t('Afficher la liste') : t('Plein écran')}
-    </button>
-  );
-}
+// moved to sessions/session/SessionHeader.tsx; still imported from here (pages/ExternalSession.tsx)
+export { FullScreen, ICON_BTN, when } from '../sessions/session/SessionHeader';
 
 /** In a column of the Chat page, the thread scrolls in its own element (its panel stays beside it, outside). */
 function Scroller({ inColumn, children }: { inColumn: boolean; children: ReactNode }) {
   return inColumn ? <div data-scroll-root className="min-w-0 flex-1 overflow-y-auto">{children}</div> : <>{children}</>;
 }
-
-interface ActiveRun {
-  id: string;
-  /** seconds; null until the status is known */
-  createdAt: number | null;
-  /**
-   * Largest message id the page knew when it started the run (Hermes' ids grow): the history read during the run is
-   * cut there. null = not known (the history was not loaded, or the page was reopened during the run).
-   */
-  afterId: number | null;
-  seed: Entry[];
-}
-
-/** A send refused because a run goes on: the session is re-read every 3 s, 30 times at most, for its new run. */
-const BUSY_READS = 30;
-const BUSY_EVERY_MS = 3_000;
-const codeOf = (err: unknown): string | undefined => (err instanceof ApiError ? (err.data as { code?: string } | null)?.code : undefined);
-
-const OUTCOME: Record<string, string> = {
-  failed: t('Le run a échoué'),
-  cancelled: t('Run arrêté'),
-  interrupted: t('Run interrompu'),
-  error: t('Flux interrompu'),
-};
 
 /**
  * The route reuses the page when another session is opened from the sidebar: a key remounts it so the
@@ -142,112 +72,20 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const qc = useQueryClient();
   const col = useColumn();
   const goTo = useOpenSession();
-  const ws = useQuery({ queryKey: ['workspace', slug], queryFn: () => api.workspace(slug) });
-  const inst = ws.data?.workspace.instanceId;
-  const sess = useQuery({ queryKey: ['session', inst, sessionId], queryFn: () => api.session(inst!, sessionId), enabled: Boolean(inst) });
-  // activated skills of the session's agent, offered by /use
-  const agentProfile = sess.data?.profile ?? 'default';
-  // the credential vault can be managed: a browser_vault call that could not ask for a login gets a link to « Accès »
-  const vaultOn = useVaultAvailable(inst ?? '') === true;
-  const skillList = useQuery({ queryKey: ['skills', inst, agentProfile], queryFn: () => api.skills(inst!, agentProfile).then((r) => r.skills), enabled: Boolean(inst && sess.data), staleTime: 60_000 });
-  const skillNames = useMemo(() => (skillList.data ?? []).filter((x) => x.enabled !== false).map((x) => x.name), [skillList.data]);
+  // the run followed by the page: its reading of the history depends on it (sessions/session/useRunControl.ts)
   const [active, setActive] = useState<ActiveRun | null>(null);
-  const history = useQuery({
-    queryKey: ['messages', inst, sessionId], queryFn: () => api.messages(inst!, sessionId),
-    enabled: Boolean(inst), refetchOnWindowFocus: false,
-    // sub-agents in the background: their result is written later, outside any run (15 s, then 60 s, 24 h at
-    // most), then every 3 s until the server's wake starts (the cost is followed by `run-stats`, without messages)
-    refetchInterval: (q) => (active ? false : pollDelay(q.state.data?.subagents, Date.now() / 1000)),
-  });
-  // Hermes writes costs late: the last reply's cost is re-read until the server freezes it, without any message
-  const runStatsQ = useQuery({
-    queryKey: ['run-stats', inst, sessionId], queryFn: () => api.runStats(inst!, sessionId),
-    enabled: Boolean(inst) && !active && costSettling(history.data?.runs), refetchOnWindowFocus: false,
-    refetchInterval: (q) => (costSettling(q.state.data?.runs ?? history.data?.runs) ? COST_POLL_MS : false),
-  });
-  // older pages of the thread (500 messages each, from the end), loaded on demand; forgotten at each run's end and
-  // each rewrite (a page read by offset may shift meanwhile)
-  const [older, setOlder] = useState<ChatMessage[]>([]);
-  const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
-  // raw rows read by the older pages (the server's `nextOffset`, hidden rows included): kept apart from the messages
-  // shown, so a page of hidden rows only still moves the cursor
-  const [olderCursor, setOlderCursor] = useState<number | null>(null);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const forgetOlder = useCallback(() => { setOlder([]); setOlderHasMore(null); setOlderCursor(null); }, []);
-  useEffect(() => { forgetOlder(); }, [sessionId, forgetOlder]);
-  const lastRunId = sess.data?.session.lastRunId ?? null;
-  const lastRun = useQuery({
-    queryKey: ['run', inst, sessionId, lastRunId], queryFn: () => api.runStatus(inst!, sessionId, lastRunId!),
-    enabled: Boolean(inst && lastRunId), staleTime: 0, refetchOnWindowFocus: false,
-  });
-  const [outcome, setOutcome] = useState<{ status: string; error: string | null; input: string | null } | null>(null);
   const [error, setError] = useState<unknown>(null);
-  // a message on its way (before the run is known): the empty session must not change instance meanwhile
-  const [sending, setSending] = useState(false);
+  const data = useSessionData({ slug, sessionId, running: Boolean(active), setError });
+  const { ws, inst, sess, agentProfile, vaultOn, skillNames, history, runStatsQ, lastRunId, lastRun, chat, mounts, agent, messages } = data;
   const [attached, setAttached] = useState(0);
-  const [switching, setSwitching] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const chat = useChatAvailability(inst);
-  const instances = useQuery({ queryKey: ['instances'], queryFn: api.instances });
-  const mounts = instances.data?.instances.find((i) => i.id === inst);
-  const agent = agentName(sess.data?.profile, mounts?.label);
-  // closed at first: the inbox column takes the room; opening it (or a preview) moves the column aside
-  const [panel, setPanel] = useState(false);
-  /** the side panel's tab (files, sub-agents, the agent's card: OpenBot-like) and width, kept per session */
-  const [panelPrefs, setPanelPrefs] = useState<PanelPrefs>(() => readPanel(sessionId));
-  const panelTab = panelPrefs.tab;
-  const setPanelTab = useCallback((tab: PanelTab) => setPanelPrefs((p) => {
-    const next = { ...p, tab };
-    savePanel(sessionId, next);
-    return next;
-  }), [sessionId]);
   const looks = useAgentLooks(inst ?? null);
   const faceProfile = sess.data?.profile ?? 'default';
   const faceColor = looks.color(faceProfile);
   const face = useMemo(() => ({ profile: faceProfile, color: faceColor }), [faceProfile, faceColor]);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const inbox = useInbox();
-  const sideOpen = panel || previewPath !== null;
-  const { setPanelOpen } = inbox;
-  useEffect(() => { setPanelOpen(sessionId, sideOpen); }, [sessionId, sideOpen, setPanelOpen]);
-  useEffect(() => () => setPanelOpen(sessionId, false), [sessionId, setPanelOpen]);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [runCount, setRunCount] = useState(0);
-  /** Sub-agent trees of the runs that ended on this page (Hermes' history does not keep them). */
-  const [trees, setTrees] = useState<Extract<Entry, { kind: 'subagents' }>[]>([]);
+  const side = useSidePanel(sessionId);
+  const { panel, openFiles, openSubagents } = side;
   const composer = useRef<ComposerHandle>(null);
-  // Messages written during a run (chat/queue.ts): one leaves when a run ends well (`drain`), never on opening the page
-  const [queue, setQueue] = useState<Queue>(EMPTY_QUEUE);
-  const [queueLoaded, setQueueLoaded] = useState(false);
-  const [drain, setDrain] = useState<string | null>(null);
-  useEffect(() => {
-    if (!inst) return;
-    setQueue(loadQueue(inst, sessionId));
-    setQueueLoaded(true);
-  }, [inst, sessionId]);
-  useEffect(() => { if (inst && queueLoaded) saveQueue(inst, sessionId, queue); }, [inst, sessionId, queue, queueLoaded]);
-  const queued = queue.items.length;
-  useEffect(() => {
-    if (!queued) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [queued]);
 
-  // Reopened during a run (reload, other tab, network cut, sent from the home page): plug back into its stream.
-  // A message sent from the home page is shown at once (handoff), and kept on screen if its run failed.
-  useEffect(() => {
-    const s = lastRun.data;
-    if (active || !s || !lastRunId || !inst) return;
-    const h = takeHandoff(inst, sessionId, lastRunId);
-    const seed: Entry[] = h ? [{ kind: 'user', key: `u-${lastRunId}`, text: h.text, ts: h.ts }] : [];
-    if (!isTerminal(s.status)) setActive({ id: lastRunId, createdAt: s.createdAt, afterId: null, seed });
-    else if (h && OUTCOME[s.status]) setOutcome({ status: s.status, error: s.error ?? s.output, input: h.text });
-    // ended while the page was closed with a reorientation Hermes did not deliver: back in front of the queue, once
-    if (isTerminal(s.status) && s.pendingSteer && queueLoaded && firstTime(inst, lastRunId)) {
-      setQueue((q) => pauseQueue(pushHead(q, s.pendingSteer!), t('réorientation non livrée')));
-    }
-  }, [lastRun.data, lastRunId, active, inst, sessionId, queueLoaded]);
   // the last workspace used is the home page's starting choice
   // (in the Chat page, only the active column: the others are not « the session opened last »)
   const leading = !col || col.active;
@@ -256,501 +94,36 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const found = Boolean(sess.data);
   useEffect(() => { if (inst && found && leading) setSideSession(inst, { slug, id: sessionId }); }, [inst, found, slug, sessionId, leading]);
   // in the side chat, the cursor goes to the message field
+  // biome-ignore lint/correctness/useExhaustiveDependencies(found): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { if (EMBEDDED) composer.current?.focus(); }, [found]);
 
-  /** Run being followed, read by onEnd (once per run). */
-  const endingRun = useRef<string | null>(null);
-  endingRun.current = active?.id ?? null;
-  const onEnd = useCallback(async (state: RunState) => {
-    // once per run: a reorientation not delivered goes back in front and waits; a run that did not end well stops the queue
-    if (state.pendingSteer) {
-      if (firstTime(inst ?? '', endingRun.current ?? '')) setQueue((q) => pauseQueue(pushHead(q, state.pendingSteer!), t('réorientation non livrée')));
-    } else if (state.status !== 'completed') setQueue((q) => pauseQueue(q, t('le travail précédent n’a pas abouti')));
-    else setDrain(`end-${Date.now()}`);
-    const tree = state.entries.find((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
-    // a truncated replay may lack earlier delegations: the history's cards (all of them) win then
-    if (tree && !state.truncated) setTrees((prev) => [...prev, tree]);
-    const input = state.entries.find((e): e is Extract<Entry, { kind: 'user' }> => e.kind === 'user' && !e.steer)?.text ?? null;
-    setOutcome(OUTCOME[state.status] ? { status: state.status, error: state.error, input } : null);
-    // the run's terminal status in its query: a re-read that fails (Hermes unreachable) never follows it again
-    qc.setQueryData(['run', inst, sessionId, endingRun.current], (old: RunStatus | undefined) => old && { ...old, status: state.status, error: state.error });
-    forgetOlder();
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }),
-      qc.invalidateQueries({ queryKey: ['run', inst, sessionId] }),
-      invalidateSessionLists(qc),
-    ]);
-    // the session list's « En cours » mark goes at once; not awaited: the activity read waits on kanban workers
-    void qc.invalidateQueries({ queryKey: ['activity', inst] });
-    void qc.invalidateQueries({ queryKey: ['approvals'] });
-    setActive(null);
-    setRunCount((n) => n + 1);
-    void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-    void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
-  }, [qc, inst, sessionId, forgetOlder]);
-
-  const run = useMemo(() => (active ? { id: active.id, seed: active.seed } : null), [active]);
-  const [live, localEvent, link] = useRun(inst ?? '', sessionId, inst ? run : null, onEnd);
-  const deferred = link.mode === 'polling';
-  // followed without a live stream (streams.ts): what waits for an answer comes from the approvals feed, which the
-  // global bar hides for the session on screen
-  const feed = useApprovals({ enabled: deferred });
-  const pendingFeed = deferred && active ? feed.data?.approvals.find((a) => a.sessionId === sessionId && a.runId === active.id) : undefined;
-  const approval: Approval | null = live?.approval
-    ?? (pendingFeed?.kind === 'approval' ? { requestId: pendingFeed.requestId, command: pendingFeed.command, description: pendingFeed.description, choices: pendingFeed.choices } : null);
-  const clarify: Clarify | null = live?.clarify
-    ?? (pendingFeed?.kind === 'clarify' ? { requestId: pendingFeed.requestId, question: pendingFeed.question ?? '', choices: pendingFeed.choices, multiSelect: pendingFeed.multiSelect } : null);
-
-  const send = async (text: string, skills?: string[]): Promise<boolean> => (await launch(text, skills)) === null;
-  /** Largest message id known (null while the history is not loaded: never 0, an unloaded history is not empty). */
-  const knownId = (): number | null => (history.isSuccess ? allMessages.reduce((m, x) => Math.max(m, x.id), 0) : null);
-  /**
-   * A send refused with `run_busy` on its own key (`mine` from the server: the first send of this message still
-   * waits for Hermes behind a proxy that answered 502, or its run already started): the session is re-read until its
-   * last run changes from the one before that first send (no other run can start meanwhile: the server holds the
-   * session), then that run is followed. Busy on another intent (no `mine`): an error, the message was not sent.
-   */
-  const awaitOwnRun = async (mine: { runId: string | null; lastRunId: string | null }): Promise<boolean> => {
-    for (let i = 0; i < BUSY_READS; i++) {
-      if (mine.runId === null || i > 0) await new Promise((r) => setTimeout(r, BUSY_EVERY_MS));
-      const s = await api.session(inst!, sessionId).catch(() => null);
-      if (s && (mine.runId !== null || s.session.lastRunId !== mine.lastRunId)) {
-        qc.setQueryData(['session', inst, sessionId], s);
-        void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
-        return true;
-      }
-    }
-    return false;
-  };
-  /**
-   * Starts a run; the error, or null once started. The message's key (`key`: a queued item's, else the one kept for
-   * the same text, else a new one) is kept in the tab until the send succeeded: sending the same text again after a
-   * 502, a network cut or a reload never starts a second run.
-   */
-  const launch = async (text: string, skills?: string[], key?: string): Promise<unknown> => {
-    if (!inst) return new Error(t('Instance inconnue'));
-    setError(null);
-    setOutcome(null);
-    setSending(true);
-    const kept = loadPendingKey(inst, sessionId);
-    const clientKey = key ?? (kept && kept.text === text ? kept.key : newSendKey());
-    savePendingKey(inst, sessionId, { text, key: clientKey });
-    try {
-      const afterId = knownId();
-      const res = await api.send(inst, sessionId, text, skills, clientKey);
-      clearPendingKey(inst, sessionId);
-      // the server paused an active goal (the user writes)
-      void qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
-      const status: RunStatus | null = await api.runStatus(inst, sessionId, res.runId).catch(() => null);
-      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      setActive({ id: res.runId, createdAt: status?.createdAt ?? null, afterId, seed: [{ kind: 'user', key: `u-${res.runId}`, text, ts: Date.now() / 1000 }] });
-      void invalidateSessionLists(qc);
-      return null;
-    } catch (err) {
-      const code = codeOf(err);
-      if (code === 'idempotency_conflict' || code === 'already_sent') clearPendingKey(inst, sessionId);
-      if (code === 'already_sent') {
-        // Hermes already has this message: its answer comes in the conversation, nothing to send again
-        void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
-        void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-      }
-      const mine = code === 'run_busy' ? (err as ApiError).data as { mine?: { runId: string | null; lastRunId: string | null } } | null : null;
-      if (mine?.mine) {
-        setSending(false);
-        // the run of this very send is on its way or started: follow it as soon as the session names it
-        if (await awaitOwnRun(mine.mine)) {
-          clearPendingKey(inst, sessionId);
-          return null;
-        }
-      }
-      setError(err);
-      return err;
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // the head of the queue leaves once the run is over (and not paused); a refused send puts it back and pauses
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
-  useEffect(() => {
-    if (active || drain === null || !inst) return;
-    setDrain(null);
-    if (queue.paused) return;
-    const [head, rest] = takeHead(queue);
-    if (!head) return;
-    setQueue(rest);
-    void launch(head.text, head.skills, head.key).then((err) => {
-      if (err === null) return;
-      // already received by Hermes: its answer comes in the conversation, never sent again
-      if (codeOf(err) === 'already_sent') return;
-      const reason = err instanceof ApiError && err.status === 409 ? t('un autre onglet a lancé un travail') : t('l’envoi a échoué');
-      setQueue((q) => pauseQueue(pushHead(q, head.text, head.skills, head.key), reason));
-    });
-  }, [active, drain]);
-
-  /** the waiting message being given to the agent (« Envoyer maintenant »), until Hermes answered */
-  const [sendingNow, setSendingNow] = useState<string | null>(null);
-  const steer = async (text: string): Promise<boolean> => {
-    if (!inst || !active) return false;
-    setError(null);
-    try {
-      await api.steer(inst, sessionId, active.id, text);
-      localEvent({ event: 'intendia.steer', text, timestamp: Date.now() / 1000 });
-      return true;
-    } catch (err) {
-      setError(err);
-      return false;
-    }
-  };
-  const steerDisabled = approval || clarify ? t('Un accord ou une réponse est attendu')
-    : !chat.has('chat', 'steer') ? t('Réorientation indisponible sur cette instance')
-    : live?.status !== 'running' ? t('L’agent n’a pas encore commencé') : undefined;
-
-  const approve = async (choice: ApprovalChoice) => {
-    if (!inst || !active || !approval) return;
-    setBusy(true);
-    try {
-      await api.approve(inst, sessionId, active.id, choice, approval.requestId ?? undefined);
-      if (deferred) void qc.invalidateQueries({ queryKey: ['approvals'] });
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const answer = async (text: string) => {
-    if (!inst || !active || !clarify) return;
-    setBusy(true);
-    try {
-      await api.clarify(inst, sessionId, active.id, text, clarify.requestId ?? undefined);
-      if (deferred) void qc.invalidateQueries({ queryKey: ['approvals'] });
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stop = async () => {
-    if (!inst || !active) return;
-    await api.stop(inst, sessionId, active.id).catch(setError);
-  };
-
-  const rename = useMutation({
-    meta: { fail: true },
-    mutationFn: (title: string) => api.updateSession(inst!, sessionId, { title }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }).then(() => invalidateSessionLists(qc)),
-  });
-  const archive = useMutation({
-    meta: { fail: true },
-    mutationFn: (archived: boolean) => api.updateSession(inst!, sessionId, { archived }),
-    onSuccess: async (_res, archived) => {
-      await invalidateSessionLists(qc);
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
-      void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-      if (archived) goTo.leave(slug);
-    },
-  });
-  const pin = useMutation({
-    meta: { fail: true },
-    mutationFn: (pinned: boolean) => api.updateSession(inst!, sessionId, { pinned }),
-    onSuccess: (res) => {
-      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      void invalidateSessionLists(qc);
-    },
-  });
-  /** Model / effort of the next messages (also remembered as the workspace's last choice). */
-  const setOptions = useMutation({
-    mutationFn: (patch: { model?: string | null; provider?: string | null; effort?: Effort | null; autoApprove?: boolean; profile?: string | null }) =>
-      api.updateSession(inst!, sessionId, patch),
-    onSuccess: (res, patch) => {
-      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      // another agent: the effective profile (models, modes, skills) is read again
-      if (patch.profile !== undefined) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-      void qc.invalidateQueries({ queryKey: ['workspace', slug] });
-    },
-    onError: setError,
-  });
-  const { canCopy, canExportJson, canTitleAi } = useCopyOps(inst);
-  const titleAi = useMutation({
-    mutationFn: () => api.generateTitle(inst!, sessionId),
-    onSuccess: (res) => {
-      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: res.session });
-      void invalidateSessionLists(qc);
-    },
-    onError: setError,
-  });
-  // « Sans confirmation »: Intendia approves every action of the agent in this session
-  const setAutoApprove = async (on: boolean) => {
-    if (on && !(await ask({
-      title: t('Travailler sans confirmation ?'), danger: true, confirmLabel: t('Activer'),
-      message: t('L’agent exécutera ses commandes et ses écritures sans vous demander votre accord, dans cette session seulement, tant que ce réglage reste actif. Les questions qu’il vous pose attendent toujours votre réponse.'),
-    }))) return;
-    setOptions.mutate({ autoApprove: on });
-  };
-  // another agent: a session never sent changes agent; one with messages is copied there (the original stays)
-  const changeProfile = async (profile: string) => {
-    const s = sess.data?.session;
-    if (!s || !inst) return;
-    if (!s.lastRunId && !s.copiedFrom) { setOptions.mutate({ profile }); return; }
-    if (!(await ask({
-      title: t('Continuer avec l’agent {profile} ?', { profile }), confirmLabel: t('Copier la conversation'),
-      message: s.autoApprove
-        ? t('La conversation est copiée chez l’agent {profile}, dans ce dossier ; cette session reste telle quelle. « Sans confirmation » repart désactivé.', { profile })
-        : t('La conversation est copiée chez l’agent {profile}, dans ce dossier ; cette session reste telle quelle.', { profile }),
-    }))) return;
-    try {
-      const { session } = await api.toProfile(inst, sessionId, profile, newKey());
-      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      goTo.open(slug, session.id);
-    } catch (err) {
-      setError(err);
-    }
-  };
-  const duplicate = useMutation({
-    mutationFn: (key: string) => api.duplicateSession(inst!, sessionId, key),
-    onSuccess: async ({ session }) => {
-      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      goTo.open(slug, session.id);
-    },
-    onError: setError,
-  });
-  // deleted at Hermes only once the undo window is over (banner « Annuler »)
-  // (the hook closes its Chat column; `leave` closing it again changes nothing)
-  const rm = useRemoveSession();
-  const remove = useMutation({
-    mutationFn: () => rm.remove({ kind: 'intendia', inst: inst!, profile: agentProfile, id: sessionId, slug }),
-    onSuccess: () => goTo.leave(slug),
-    onError: setError,
-  });
-
-  // edit, retry, undo, clear (the session replaced by a truncated copy, « Annuler » for 10 s) and branch
-  const rewrite = useMutation({
-    mutationFn: async (a: { action: HistoryAction; before: number | null; text?: string }) => ({
-      a, res: await api.rewriteSession(inst!, sessionId, { key: newKey(), before: a.before, mode: a.action === 'branch' ? 'branch' : 'replace' }),
-    }),
-    onSuccess: async ({ a, res }) => {
-      const copy = res.session;
-      forgetOlder();
-      // the banner first: starting the new run may take longer than the undo window
-      let undone = false;
-      if (a.action !== 'branch' && res.undoUntil) {
-        const original = sessionId;
-        showUndo({
-          inst: inst!, ids: [], undoUntil: res.undoUntil, label: ACTION_LABEL[a.action],
-          run: async () => {
-            try {
-              await api.revertRewrite(inst!, copy.id);
-            } catch (err) {
-              // a first answer lost: the original may be back already
-              const back = err instanceof ApiError && err.status === 409 && await api.session(inst!, original).then(() => true, () => false);
-              if (!back) throw err;
-            }
-            undone = true;
-            await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-            goTo.open(slug, original, copy.id);
-          },
-        });
-      }
-      if (a.action === 'undo' && a.text) setDraft({ inst: inst!, sessionId: copy.id, text: a.text });
-      if ((a.action === 'edit' || a.action === 'retry') && a.text) {
-        try {
-          const sent = await api.send(inst!, copy.id, a.text);
-          setHandoff({ inst: inst!, sessionId: copy.id, runId: sent.runId, text: a.text, ts: Date.now() / 1000 });
-        } catch (err) {
-          // the copy is made: the text waits in its composer, with the reason
-          setDraft({ inst: inst!, sessionId: copy.id, text: a.text, error: (err as Error).message });
-        }
-      }
-      // « Annuler » clicked while the run was starting: the original is open, stay there
-      if (undone) return;
-      await Promise.all(SESSION_LIST_KEYS.map((k) => qc.invalidateQueries({ queryKey: [...k] })));
-      goTo.open(slug, copy.id);
-    },
-    onError: setError,
-  });
-  // text given back by « Annuler le dernier échange », or a send refused after a replacement: once, into the composer
-  const draftRead = useRef(false);
-  useEffect(() => {
-    if (!inst || draftRead.current) return;
-    draftRead.current = true;
-    const d = takeDraft(inst, sessionId);
-    if (!d) return;
-    composer.current?.setText(d.text);
-    if (d.error) setError(new Error(d.error));
-  }, [inst, sessionId]);
-
-  // the latest page and the older pages loaded on demand, by id (an offset may overlap: duplicates dropped)
-  const latest = history.data?.messages;
-  const allMessages = useMemo(() => {
-    if (!older.length) return latest ?? [];
-    const byId = new Map<number, ChatMessage>();
-    for (const m of older) byId.set(m.id, m);
-    for (const m of latest ?? []) byId.set(m.id, m);
-    return [...byId.values()].sort((a, b) => a.id - b.id);
-  }, [older, latest]);
-  const messages = allMessages;
-  const hasOlder = olderHasMore ?? Boolean(history.data?.hasMore);
-  const loadOlder = async () => {
-    if (!inst || !history.data || loadingOlder) return;
-    setLoadingOlder(true);
-    try {
-      // raw rows already read, as Hermes counts them (a page of hidden rows still moves it); new messages meanwhile
-      // only make it fall short (duplicates, dropped by id), never skip
-      const offset = olderOffset(olderCursor, history.data, older.length);
-      const res = await api.messages(inst, sessionId, offset);
-      setOlder((prev) => {
-        const byId = new Map(prev.map((m) => [m.id, m]));
-        for (const m of res.messages) byId.set(m.id, m);
-        return [...byId.values()].sort((a, b) => a.id - b.id);
-      });
-      setOlderHasMore(res.hasMore);
-      setOlderCursor(nextCursor(offset, res));
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoadingOlder(false);
-    }
-  };
-  const todos = useMemo(() => lastTodos(messages), [messages]);
-  // todo_list, write_file or patch finished during the run: Hermes stored the call first, the history is read again
-  // (task list, « Modifiés par l'agent »; last of a burst, 1 s later)
-  const doneTodoCalls = live?.entries.filter((e) => e.kind === 'tool' && REREAD_TOOLS.has(e.tool) && e.state !== 'running').length ?? 0;
-  const seenTodoCalls = useRef(0);
-  useEffect(() => {
-    if (doneTodoCalls <= seenTodoCalls.current) { seenTodoCalls.current = doneTodoCalls; return; }
-    seenTodoCalls.current = doneTodoCalls;
-    const timer = setTimeout(() => void qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] }), 1000);
-    return () => clearTimeout(timer);
-  }, [doneTodoCalls, qc, inst, sessionId]);
-  const openUnits = history.data?.openUnits;
-  const delegations = useMemo(() => delegationState(messages, openUnits), [messages, openUnits]);
-  // the server's decision on background sub-agents (chat/wake.ts on the server)
-  const subagents = history.data?.subagents ?? null;
-  const wakePending = Boolean(subagents?.wakePending);
-  // the server is about to wake the agent: the session is re-read with the messages, so its new run is followed
-  // (the effect on lastRun) as soon as it starts; once more when the wait ends
-  useEffect(() => {
-    if (!inst) return;
-    if (!wakePending) return;
-    const id = setInterval(() => void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }), 3_000);
-    return () => { clearInterval(id); void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] }); };
-  }, [wakePending, qc, inst, sessionId]);
-  // the wake can start between two readings (pending never seen): sub-agents open or a wake expected, then neither
-  // (the summary gone, or only kept for a late result of a lost unit) = the delivery was answered; the session is
-  // re-read so a run started by the server is followed
-  const awaitingSubagents = subagents !== null && (subagents.openTasks > 0 || subagents.wakePending || subagents.capped);
-  const hadWaiting = useRef(false);
-  useEffect(() => {
-    const had = hadWaiting.current;
-    hadWaiting.current = awaitingSubagents;
-    if (inst && had && !awaitingSubagents) void qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-  }, [awaitingSubagents, qc, inst, sessionId]);
-  // « Ne plus attendre »: the server gives up the units shown open (a result that still comes is shown and wakes)
-  const stopWaiting = async () => {
-    if (!inst || !openUnits?.length) return;
-    if (!(await ask({
-      title: t('Ne plus attendre les sous-agents ?'), confirmLabel: t('Ne plus attendre'),
-      message: t('Intendia ne montrera plus ces sous-agents comme en cours. Si d’autres ont déjà livré, l’agent reprend avec leurs résultats. Un résultat qui arrive plus tard s’affichera quand même.'),
-    }))) return;
-    try {
-      await api.stopWaitingSubagents(inst, sessionId, openUnits);
-    } catch (err) {
-      setError(err instanceof ApiError && err.status === 409 ? new Error(t('Un travail est en cours dans cette session : réessayez à sa fin.')) : err);
-    }
-    await qc.invalidateQueries({ queryKey: ['messages', inst, sessionId] });
-    invalidateSessionLists(qc);
-  };
-  // sessions of the background sub-agents (last activity, tools, end), re-read at the same pace as the history
-  const children = useQuery({
-    queryKey: ['session-subagents', inst, sessionId], queryFn: () => api.sessionSubagents(inst!, sessionId),
-    enabled: Boolean(inst) && delegations.open.size > 0, retry: false, refetchOnWindowFocus: false,
-    refetchInterval: () => pollDelay(subagents, Date.now() / 1000),
-  });
-  const entries: Entry[] = attachChildren(applyDeliveries(
-    withTrees(active && live ? mergeHistory(messages, { createdAt: active.createdAt, afterId: active.afterId }, live.entries) : historyEntries(messages), trees),
-    delegations, Boolean(active),
-  ), delegations.open.size > 0 ? children.data?.children ?? [] : []);
+  const run = useRunControl({ inst, sessionId, active, setActive, lastRun: lastRun.data, lastRunId, knownId: data.knownId, forgetOlder: data.older.forget, chat, setError });
+  const { live, link, approval, clarify, outcome, sending, busy, runCount, queued, stop } = run;
+  const actions = useSessionActions({ inst, slug, sessionId, sess: sess.data, agentProfile, setError });
+  const { rename, setOptions, titleAi, canTitleAi, setAutoApprove } = actions;
+  const { entries, todos, subagents, stopWaiting } = useThreadEntries({ inst, sessionId, history, messages, active, live, trees: run.trees, setError });
   const lastStatus = lastRun.data;
   // an empty session (« Nouvelle session », or one never used): the cursor goes to its message box, once
   const focusedEmpty = useRef<string | null>(null);
   const emptyReady = leading && history.isSuccess && entries.length === 0 && !active;
+  const endNote = !active && (outcome ?? (lastStatus && OUTCOME[lastStatus.status] ? { status: lastStatus.status, error: lastStatus.error ?? lastStatus.output, input: null } : null));
+  // Hermes does not keep the message of a run that failed before starting: keep it on screen.
+  const lostInput = endNote && endNote.input && !messages.some((m) => m.role === 'user' && m.content === endNote.input) ? endNote.input : null;
+  if (lostInput) entries.push({ kind: 'user', key: 'lost-input', text: lostInput, ts: null });
+  const running = Boolean(active);
+  /** The session exists at Hermes (sent once, or a copy): it has something to copy and export. */
+  const sentOnce = Boolean(sess.data?.session.lastRunId || sess.data?.session.copiedFrom);
+  const hist = useHistoryActions({
+    inst, slug, sessionId, entries, running, queued, sentOnce, canCopy: actions.canCopy, forgetOlder: data.older.forget, setError, composer,
+  });
+  const { last, lastTurn, runRewrite, threadActions, rewriteWhy } = hist;
   useEffect(() => {
     if (!emptyReady || focusedEmpty.current === sessionId) return;
     focusedEmpty.current = sessionId;
     composer.current?.focus();
   }, [emptyReady, sessionId]);
-  // its workspace can still change (moved: nothing sent, no file written), as on the home page
-  const allWorkspaces = useQuery({ queryKey: ['workspaces'], queryFn: api.workspaces, enabled: Boolean(inst) });
-  // same instance and same agent (the server refuses another one, as the list's « Déplacer vers… »)
-  const agentOf = sess.data?.profile ?? 'default';
-  const siblings = (allWorkspaces.data?.workspaces ?? [])
-    .filter((w) => w.instanceId === inst && (w.profile ?? 'default') === agentOf);
-  const neverSent = Boolean(sess.data && !sess.data.session.lastRunId && !sess.data.session.copiedFrom);
-  // « Instance » card: an empty session becomes an empty session of another instance (the server moves a session
-  // within its instance only): a new one in a workspace of `to`, the draft carried over, the column replaced, then the
-  // old one deleted (restorable on the server for the undo window) unless a run started meanwhile.
-  const pickable = (instances.data?.instances ?? []).map((i) => ({
-    id: i.id, label: i.label, workspaces: (allWorkspaces.data?.workspaces ?? []).filter((w) => w.instanceId === i.id).length,
-  }));
-  const switchInstance = async (to: string) => {
-    if (!inst || to === inst || switching) return;
-    setError(null);
-    const slugTo = pickWorkspace({
-      workspaces: allWorkspaces.data?.workspaces ?? [], inst: to, chat: loadChat(), last: localStorage.getItem('intendia-last-workspace'),
-    });
-    if (!slugTo) {
-      setError(new Error(t('Aucun dossier sur {label}', { label: pickable.find((i) => i.id === to)?.label ?? to })));
-      return;
-    }
-    setSwitching(true);
-    const oldId = sessionId;
-    const oldKey = sessionDraftKey(inst, oldId);
-    try {
-      flushDrafts();
-      const text = loadDraft(oldKey);
-      const { session } = await api.createSession(slugTo);
-      if (text) {
-        saveDraft(sessionDraftKey(to, session.id), text);
-        clearDraft(oldKey);
-      }
-      void invalidateSessionLists(qc);
-      goTo.open(slugTo, session.id);
-    } catch (err) {
-      setError(err);
-      setSwitching(false);
-      return;
-    }
-    void (async () => {
-      try {
-        const fresh = await api.session(inst, oldId);
-        if (fresh.session.lastRunId) return;
-        await api.deleteSession(inst, oldId);
-        forgetSideSession(inst, oldId);
-        void invalidateSessionLists(qc);
-      } catch (err) {
-        console.error('Session vide non supprimée', err);
-      }
-    })();
-  };
-  const moveTo = async (to: string | null) => {
-    if (!to || to === slug || !inst) return;
-    setError(null);
-    try {
-      const res = await api.bulkSessions(inst, [sessionId], 'move', to);
-      const r = res.results[0];
-      if (!r?.ok) throw new Error(r?.error ?? t('Déplacement refusé'));
-      await invalidateSessionLists(qc);
-      goTo.open(to, sessionId);
-    } catch (err) {
-      setError(err);
-    }
-  };
-  const endNote = !active && (outcome ?? (lastStatus && OUTCOME[lastStatus.status] ? { status: lastStatus.status, error: lastStatus.error ?? lastStatus.output, input: null } : null));
-  // Hermes does not keep the message of a run that failed before starting: keep it on screen.
-  const lostInput = endNote && endNote.input && !messages.some((m) => m.role === 'user' && m.content === endNote.input) ? endNote.input : null;
-  if (lostInput) entries.push({ kind: 'user', key: 'lost-input', text: lostInput, ts: null });
+  const move = useSessionMove({ inst, slug, sessionId, sess: sess.data, instances: data.instances.data, setError });
+  const { switching, siblings, neverSent, pickable } = move;
   // run lines go under the history entries; the run of a message Hermes did not keep goes under it
   // the fresher of the two readings (a run that ended since the last cost read is in the history's)
   const runs = (runStatsQ.data && runStatsQ.dataUpdatedAt >= history.dataUpdatedAt ? runStatsQ.data.runs : history.data?.runs) ?? [];
@@ -766,30 +139,6 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     }
     return m;
   }, [messages, runs, lostInput]);
-  const running = Boolean(active);
-  /** The session exists at Hermes (sent once, or a copy): it has something to copy and export. */
-  const sentOnce = Boolean(sess.data?.session.lastRunId || sess.data?.session.copiedFrom);
-  // history actions: not during a run, nor with messages waiting (they would stay on the replaced session)
-  const historyFree = !running && queued === 0 && sentOnce && !rewrite.isPending;
-  const canRewrite = historyFree && canCopy;
-  const last = lastUser(entries);
-  const lastTurn = (() => {
-    for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.kind === 'user' && !(entries[i] as { steer?: boolean }).steer) return entries[i + 1]?.key ?? null;
-    return null;
-  })();
-  const runRewrite = (action: HistoryAction, key?: string, text?: string) => {
-    const before = cutFor(entries, action, key);
-    if (before !== undefined) rewrite.mutate({ action, before, text });
-  };
-  const threadActions: ThreadActions | undefined = canRewrite ? {
-    canEdit: (key) => cutFor(entries, 'edit', key) !== undefined,
-    edit: (key, text) => runRewrite('edit', key, text),
-    retryTurn: last && lastTurn ? lastTurn : null,
-    retry: () => runRewrite('retry', undefined, last?.text),
-    canBranch: (key) => cutFor(entries, 'branch', key) !== undefined,
-    branch: (key) => runRewrite('branch', key),
-    busy: rewrite.isPending,
-  } : undefined;
   // context gauge: read on opening and after each run
   const usage = useQuery({
     queryKey: ['usage', inst, sessionId, runCount], queryFn: () => api.sessionUsage(inst!, sessionId),
@@ -798,40 +147,9 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const estimate = estimateTokens(entries);
   // « /usage »: a line under the composer, closed by × or the next message
   const [usageOpen, setUsageOpen] = useState(false);
-
-  // persistent goal (option 7): relaunched by the server; the bar above the composer, the dialog of /goal
-  const goalQ = useGoal(inst, sessionId);
-  const [goalDialog, setGoalDialog] = useState<{ editing: boolean; initial: Partial<GoalSettings> } | null>(null);
-  // key of the goal's creation, kept with its text until the creation succeeded (same rule as a message's key: a
-  // resend of the same goal after an error never starts a second first turn, another goal gets a new key)
-  const goalClientKey = useRef<{ text: string; key: string } | null>(null);
-  const saveGoal = async (g: GoalSettings) => {
-    if (!inst) return;
-    if (goalDialog?.editing) await api.editGoal(inst, sessionId, g);
-    else {
-      const afterId = knownId();
-      let res: Awaited<ReturnType<typeof api.createGoal>>;
-      try {
-        if (goalClientKey.current?.text !== g.text) goalClientKey.current = { text: g.text, key: newSendKey() };
-        res = await api.createGoal(inst, sessionId, g, goalClientKey.current.key);
-      } catch (err) {
-        const code = codeOf(err);
-        if (code === 'idempotency_conflict' || code === 'already_sent') goalClientKey.current = null;
-        throw err;
-      }
-      goalClientKey.current = null;
-      // the first turn leaves with the goal's text: follow it like a sent message
-      qc.setQueryData(['session', inst, sessionId], (old: Awaited<ReturnType<typeof api.session>> | undefined) => old && { ...old, session: { ...old.session, lastRunId: res.runId } });
-      setActive({ id: res.runId, createdAt: null, afterId, seed: [{ kind: 'user', key: `u-${res.runId}`, text: g.text, ts: Date.now() / 1000 }] });
-      void invalidateSessionLists(qc);
-    }
-    await qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) });
-    await qc.invalidateQueries({ queryKey: ['session', inst, sessionId] });
-  };
+  const { goalQ, goalDialog, setGoalDialog, saveGoal } = useSessionGoal({ inst, sessionId, knownId: data.knownId, setActive });
 
   // slash commands of the composer: the same actions as the menu and the thread, with the reason when not possible
-  const rewriteWhy = !sentOnce ? t('La conversation est vide') : running ? t('L’agent travaille') : queued > 0 ? t('Des messages attendent dans la file')
-    : !canCopy ? t('Indisponible sur cette instance') : rewrite.isPending ? t('Une action est en cours') : undefined;
   const branchKey = lastTurn ?? undefined;
   const commands: Command[] = COMMANDS.map((c) => {
     const disabled = ({
@@ -887,109 +205,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     }
   };
 
-  // Follow the bottom of the thread while it grows (new turns, streamed text, images that load), unless the reader
-  // scrolled up. `measure` (chat/follow.ts) judges from the scroll position, measured on each scroll event and again
-  // just before each automatic scroll: a scroll event comes one frame late, after a burst of text may have landed, and
-  // must not be read as the reader leaving the bottom. The page opens at the bottom.
-  const bottom = useRef<HTMLDivElement>(null);
-  const follow = useRef<FollowState>({ pinned: true, lastTop: 0, lastHeight: 0 });
-  // the element that scrolls the thread: the page's <main>, or the column of the Chat page
-  const box = () => bottom.current?.closest<HTMLElement>('[data-scroll-root]') ?? null;
-  // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
-  // While the thread follows its end, the browser must not "keep the reading position" on its own (scroll
-  // anchoring): a turn that changes height above (its buttons leave when a run starts) would move the position up by a
-  // few pixels, which reads as the reader leaving the bottom, and the answer would arrive off screen. Once the
-  // reader has scrolled up, anchoring is wanted again (turns far above take their real height as they come near).
-  const track = (main: HTMLElement, next: FollowState) => {
-    follow.current = next;
-    main.style.overflowAnchor = next.pinned ? 'none' : '';
-  };
-  const toEnd = (main: HTMLElement) => {
-    main.scrollTop = main.scrollHeight;
-    track(main, { pinned: true, lastTop: main.scrollTop, lastHeight: main.scrollHeight });
-  };
-  const followIfPinned = () => {
-    const main = box();
-    if (!main) return;
-    track(main, measure(follow.current, main));
-    if (follow.current.pinned) toEnd(main);
-  };
-  const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
-  useEffect(() => {
-    const main = box();
-    const thread = bottom.current?.parentElement;
-    if (!main || !thread) return;
-    track(main, startFollow(main));
-    const onScroll = () => track(main, measure(follow.current, main));
-    const grow = new ResizeObserver(followIfPinned);
-    grow.observe(thread);
-    main.addEventListener('scroll', onScroll, { passive: true });
-    return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); main.style.overflowAnchor = ''; };
-  }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
-  useEffect(followIfPinned, [tail, approval, clarify]);
-
+  const { bottom, header, box, toEnd, items, jumpTo, jump } = useThreadScroll({ entries, approval, clarify, inactive: Boolean(col && !col.active) });
   // « Afficher les heures » (time of each step) and « Plan » / ↑ ↓ (jump between the user's questions)
   const [times, setTimes] = useStoredFlag('intendia-thread-times');
   const timeMap = useMemo(() => (times ? stamps(entries) : undefined), [times, entries]);
-  const items = useMemo(() => outline(entries), [entries]);
-  const header = useRef<HTMLElement>(null);
-  const turnEl = (key: string) => box()?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
-  const jumpTo = (key: string) => {
-    const main = box();
-    const el = turnEl(key);
-    if (!main || !el) return;
-    const head = header.current?.getBoundingClientRect().height ?? 0;
-    main.scrollTop += el.getBoundingClientRect().top - main.getBoundingClientRect().top - head - 8;
-    el.classList.add('ring-2', 'ring-accent');
-    setTimeout(() => el.classList.remove('ring-2', 'ring-accent'), 1200);
-  };
-  /** Index of the current question: the last one whose top has reached the top of the view (under the header). */
-  const currentTurn = (): number => {
-    const main = box();
-    if (!main) return -1;
-    const line = main.getBoundingClientRect().top + (header.current?.getBoundingClientRect().height ?? 0) + 24;
-    let at = -1;
-    items.forEach((it, i) => { const el = turnEl(it.key); if (el && el.getBoundingClientRect().top <= line) at = i; });
-    return at;
-  };
-  const jump = (dir: -1 | 1) => {
-    if (!items.length) return;
-    const at = currentTurn();
-    if (dir === 1) { const next = items[at + 1]; if (next) jumpTo(next.key); return; }
-    if (at < 0) return;
-    // ↑ goes back to the top of the current question when the reader went down its turn, else to the previous one
-    const main = box()!;
-    const el = turnEl(items[at]!.key);
-    const top = main.getBoundingClientRect().top + (header.current?.getBoundingClientRect().height ?? 0);
-    const inside = el ? el.getBoundingClientRect().top < top - 4 : false;
-    const target = inside ? items[at] : items[at - 1];
-    if (target) jumpTo(target.key);
-  };
-  const jumpRef = useRef(jump);
-  const inactive = useRef(false);
-  inactive.current = Boolean(col && !col.active);
-  jumpRef.current = jump;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // several columns on the Chat page: the active one only
-      if (inactive.current) return;
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-      const target = e.target as HTMLElement | null;
-      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
-        // in the message field only, and only when the caret is at the edge it moves towards (or the field is empty)
-        if (target.getAttribute('aria-label') !== t('Message')) return;
-        const { selectionStart: a, selectionEnd: b, value } = target;
-        const edge = value === '' || (a === b && (e.key === 'ArrowUp' ? a === 0 : a === value.length));
-        if (!edge) return;
-      } else if (target?.isContentEditable) return;
-      e.preventDefault();
-      jumpRef.current(e.key === 'ArrowUp' ? -1 : 1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const title = sess.data?.session.title || t('Nouvelle session');
   // the reading width, unless the column is one of several on screen
@@ -999,216 +218,26 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const report = col?.report;
   useEffect(() => { report?.({ running, waiting, title }); }, [report, running, waiting, title]);
 
-  // the same handlers as the header's menu and link button, for the palette too
-  const renameSession = async () => {
-    const next = await askText({ title: t('Renommer la session'), label: t('Nouveau titre'), value: sess.data?.session.title ?? '', confirmLabel: t('Renommer') });
-    if (next) rename.mutate(next);
-  };
-  const copyLink = () => void copyText(window.location.origin + window.location.pathname, t('Lien de la session')).then(() => {
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 1500);
-  });
-  // the palette's « Changer de modèle »: the same menu as the composer's, under the same conditions
-  const [modelOpen, setModelOpen] = useState(false);
-  const models = useQuery({ ...chatModelsQuery(inst ?? '', agentProfile), enabled: Boolean(inst && sess.data) });
-  const modelOk = Boolean(inst && sess.data) && !modelPickerDisabled({ disabled: running || setOptions.isPending || !chat.available, loading: models.isLoading });
   // « /goal » can be typed when the message field can
   const goalOk = Boolean(inst) && chat.available && !switching;
-  const openFiles = () => void confirmClose(() => { setPanel(true); setPanelTab('files'); setPreviewPath(null); });
-  const openSubagents = () => void confirmClose(() => { setPanel(true); setPanelTab('subagents'); setPreviewPath(null); });
-  // the page published for the layout (tab title, « / », palette): its handlers read this, rewritten on each render
-  const handlers = useRef({ stop, onCommand, renameSession, copyLink, openFiles });
-  handlers.current = { stop, onCommand, renameSession, copyLink, openFiles };
-  const page = useMemo<ActivePage | null>(() => {
-    if (!leading || EMBEDDED) return null;
-    const actions: PaletteItem[] = [
-      ...(running ? [{ id: 'o:stop', label: t('Arrêter le travail'), run: () => void handlers.current.stop() }] : []),
-      ...(goalOk ? [{ id: 'o:goal', label: t('Fixer un objectif'), run: () => void handlers.current.onCommand('goal', '') }] : []),
-      ...(modelOk ? [{ id: 'o:model', label: t('Changer de modèle'), run: () => setModelOpen(true) }] : []),
-      { id: 'o:files', label: t('Fichiers de la session'), run: () => handlers.current.openFiles() },
-      { id: 'o:usage', label: t('Contexte et forfait utilisés'), run: () => void handlers.current.onCommand('usage', '') },
-      { id: 'o:title', label: t('Renommer la session'), run: () => void handlers.current.renameSession() },
-      { id: 'o:link', label: t('Copier le lien de la session'), run: () => handlers.current.copyLink() },
-    ];
-    return { title, focusComposer: () => composer.current?.focus(), actions };
-  }, [leading, title, running, goalOk, modelOk]);
-  useActivePage(page);
-
-  // files written by the agent (stored write_file / patch calls), most recent first; from the whole stored history
-  // (during a run, the merged entries hide its stored messages behind the live ones)
-  const written = useMemo(() => writtenPaths(historyEntries(messages)), [messages]);
-  // Paths cited by the assistant and the tools; the server says which exist (one lookup per new set).
-  const candidates = useMemo(() => {
-    if (!mounts) return [];
-    const text = entries.map((e) => (e.kind === 'assistant' ? e.text : e.kind === 'tool' ? `${e.preview ?? ''}\n${e.result ?? ''}` : e.kind === 'subagents' ? e.nodes.map((n) => n.summary ?? '').join('\n') : '')).join('\n');
-    const m = { root: mounts.files?.workspaceRoot ?? null };
-    // artefacts first: never cut by the 200 checked
-    const pages = entries.flatMap((e) => (e.kind === 'assistant' ? artifactPaths(e.text) : []));
-    const cited = findPathCandidates(text, m).sort();
-    // files joined to the user's messages come after, so they never push the agent's out of the 200 checked
-    const joined = entries.flatMap((e) => (e.kind === 'user' ? splitAttachments(e.text, m).files : []));
-    return [...new Set([...pages, ...written.map((w) => w.path), ...cited, ...joined])];
-  }, [entries, mounts, written]);
-  const exists = useQuery({
-    queryKey: ['exists', slug, candidates.join('\n'), runCount],
-    queryFn: () => api.filesExist(slug, candidates.slice(0, 200)),
-    enabled: candidates.length > 0,
-    staleTime: 60_000,
-    // the chips and artefacts already found stay while a new set of paths is checked
-    placeholderData: keepPreviousData,
+  const { modelOpen, setModelOpen } = usePalettePage({
+    inst, agentProfile, found: Boolean(sess.data), optionsDisabled: running || setOptions.isPending || !chat.available, leading, title, running, goalOk,
+    handlers: { stop, onCommand, renameSession: actions.renameSession, copyLink: actions.copyLink, openFiles }, composer,
   });
-  const filePaths = useMemo<FilePathsValue>(() => {
-    const found = new Map<string, string>();
-    for (const [written, hit] of Object.entries(exists.data?.results ?? {})) if (hit?.kind === 'file') found.set(written, hit.path);
-    return {
-      found, open: (path) => void confirmClose(() => { setPreviewPath(path); setPanel(true); }), slug,
-      pending: exists.isFetching && !exists.data,
-      mounts: mounts ? { root: mounts.files?.workspaceRoot ?? null } : null,
-    };
-  }, [exists.data, exists.isFetching, slug, mounts]);
-  const cited = useMemo(() => [...new Set(filePaths.found.values())], [filePaths]);
-  const modified = useMemo(() => written.map((w) => ({ ...w, rel: w.op === 'delete' ? null : filePaths.found.get(w.path) ?? null })), [written, filePaths]);
-  const agentRoot = mounts?.files?.workspaceRoot ? `${mounts.files.workspaceRoot.replace(/\/+$/, '')}/${slug}` : undefined;
-  const insert = useCallback((path: string) => composer.current?.insert(path), []);
 
-  const upload = useCallback<Upload>(async (file) => {
-    const [done] = await uploadFiles(slug, 'inbox', [file]);
-    void qc.invalidateQueries({ queryKey: ['tree', slug] });
-    return { agentPath: done!.agentPath, url: rawUrl(slug, done!.path), path: done!.path };
-  }, [slug, qc]);
-  const extract = useCallback<ExtractArchive>(async (path) => {
-    const r = await api.extractArchive(slug, path);
-    void qc.invalidateQueries({ queryKey: ['tree', slug] });
-    return r;
-  }, [slug, qc]);
-  const addFiles = (f: File[]) => composer.current?.addFiles(f);
-
-  const files = previewPath ? (
-    <Preview scope={workspaceScope(slug)} path={previewPath} onClose={() => setPreviewPath(null)} onInsert={insert} />
-  ) : (
-    <SessionFiles inst={inst ?? ''} slug={slug} sessionId={sessionId} onDrop={addFiles} cited={cited} runKey={runCount} onOpen={(p) => void confirmClose(() => setPreviewPath(p))} onClose={() => setPanel(false)}
-      agentRoot={agentRoot} onInsert={insert} modified={modified} />
-  );
-  const subCards = entries.filter((e): e is Extract<Entry, { kind: 'subagents' }> => e.kind === 'subagents');
-  const tabs: [PanelTab, string][] = [['files', t('Fichiers')], ...(subCards.length ? [['subagents', t('Sous-agents')] as [PanelTab, string]] : []),
-    // not inside a frame: no side question of a side question
-    ...(EMBEDDED ? [] : [['aside', t('Question annexe')] as [PanelTab, string]]), ['agent', t('Agent')]];
-  const sideTab: PanelTab = previewPath || (panelTab === 'subagents' && !subCards.length) || (panelTab === 'aside' && EMBEDDED) ? 'files' : panelTab;
-  const side = (
-    <div className="flex h-full flex-col">
-      {!previewPath && (
-        <div role="tablist" aria-label={t('Panneau latéral')} className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-line/70 px-2.5 pt-2">
-          {tabs.map(([k, label]) => (
-            <button key={k} type="button" role="tab" aria-selected={sideTab === k} onClick={() => setPanelTab(k)}
-              className={cx('-mb-px shrink-0 whitespace-nowrap border-b-2 px-2 pb-2 pt-1 text-[13px] transition-colors', sideTab === k ? 'border-ink font-medium text-ink' : 'border-transparent text-ink-faint hover:text-ink')}>
-              {label}
-              {k === 'subagents' && <span className="ml-1.5 font-mono text-[11px] text-ink-faint">{subCards.reduce((n, c) => n + c.nodes.length, 0)}</span>}
-            </button>
-          ))}
-          {/* the files and the agent's card have their own close button; these tabs get one here (the panel covers
-              the page on small screens) */}
-          {(sideTab === 'subagents' || sideTab === 'aside') && (
-            <button type="button" onClick={() => setPanel(false)} aria-label={t('Fermer le panneau')}
-              className="mb-1 ml-auto flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-ink-faint hover:bg-raised hover:text-ink">
-              <X className="size-4" strokeWidth={1.5} />
-            </button>
-          )}
-        </div>
-      )}
-      <div className="min-h-0 flex-1">
-        {sideTab === 'agent' && inst ? (
-          <AgentPanel inst={inst} profile={sess.data?.profile ?? 'default'} autoApprove={Boolean(sess.data?.session.autoApprove)}
-            onAutoApprove={(on) => void setAutoApprove(on)} onClose={() => setPanel(false)} />
-        ) : sideTab === 'aside' && inst ? (
-          <AsideQuestion inst={inst} slug={slug} parentId={sessionId} profile={sess.data?.profile ?? 'default'} />
-        ) : sideTab === 'subagents' ? (
-          <div data-subagents-panel className="flex h-full flex-col gap-3 overflow-y-auto p-3">
-            {[...subCards].reverse().map((c) => <Subagents key={c.key} nodes={c.nodes} openSince={c.openSince} live />)}
-          </div>
-        ) : files}
-      </div>
-    </div>
-  );
+  const files = useSessionFiles({ slug, entries, messages, mounts, runCount, side, composer });
+  const { filePaths, upload, extract, addFiles } = files;
 
   return (
     <FilePaths.Provider value={filePaths}>
     <div className={col ? 'flex h-full' : 'flex min-h-full'}>
     <Scroller inColumn={Boolean(col)}>
     <DropZone onFiles={addFiles} label={t('Déposer dans inbox/ et joindre au message')} className={cx('flex min-w-0 flex-1 flex-col', col ? 'min-h-full' : EMBEDDED ? 'min-h-dvh' : 'min-h-[calc(100dvh-3.75rem-env(safe-area-inset-bottom))] md:min-h-[var(--content-h)]')}>
-      <header ref={header} className="sticky top-0 z-10 border-b border-line/70 bg-sheet/95 backdrop-blur-sm">
-        <div className="flex min-h-16 items-center gap-2 px-4 py-3 md:px-6">
-          {!EMBEDDED && (
-            <Link to="/" aria-label={t('Revenir à la liste')} className={cx(ICON_BTN, 'border-transparent md:hidden')}>
-              <ArrowLeft className="size-4" strokeWidth={1.5} />
-            </Link>
-          )}
-          <div className="min-w-0 flex-1">
-            <h2 data-session-title className="truncate text-lg font-semibold leading-snug">{title}</h2>
-            <p className="mt-0.5 truncate font-mono text-xs text-ink-faint">
-              {[mounts?.label, null, sess.data?.profile ?? 'default', sess.data?.session.model ? shortModel(sess.data.session.model) : null, sess.data ? when(sess.data.session.createdAt) : null]
-                .map((part, i) => (i === 1
-                  ? <span key="ws">{i > 0 && mounts?.label ? ' · ' : ''}<Link to="/w/$slug" params={{ slug }} className="transition-colors hover:text-ink">{ws.data?.workspace.name ?? slug}</Link></span>
-                  : part ? <span key={i}>{i > 0 ? ' · ' : ''}{part}</span> : null))}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button type="button" className={ICON_BTN} aria-label={t('Copier le lien de la session')} title={t('Copier le lien de la session')}
-              onClick={copyLink}>
-              {linkCopied ? <Check className="size-4" strokeWidth={2} /> : <Link2 className="size-4" strokeWidth={1.5} />}
-            </button>
-            {inst && (
-              <button type="button" className={cx('flex h-[34px] shrink-0 items-center gap-1.5 rounded-lg border border-line bg-sheet px-1.5 text-ink transition-colors hover:bg-paper lg:pr-2.5', panel && panelTab === 'agent' && !previewPath && 'bg-raised')} data-agent-button=""
-                aria-label={t('Fiche de l’agent {name}', { name: sess.data?.profile ?? 'default' })} title={t('Fiche de l’agent {name}', { name: sess.data?.profile ?? 'default' })}
-                onClick={() => void confirmClose(() => { const open = panel && panelTab === 'agent' && !previewPath; setPanel(!open); setPanelTab('agent'); setPreviewPath(null); })}>
-                <AgentAvatar name={sess.data?.profile ?? 'default'} color={looks.color(sess.data?.profile ?? 'default')} size={22} />
-                <span className="hidden max-w-[9rem] truncate text-[13px] font-medium lg:inline">{sess.data?.profile ?? 'default'}</span>
-              </button>
-            )}
-            <button type="button" className={cx(ICON_BTN, panel && panelTab === 'files' && 'bg-raised')} aria-label={t('Fichiers de la session')} title={t('Fichiers de la session')}
-              aria-expanded={panel && panelTab === 'files'} onClick={() => void confirmClose(() => { const open = panel && panelTab === 'files'; setPanel(!open); setPanelTab('files'); setPreviewPath(null); })}>
-              <PanelRight className="size-4" strokeWidth={1.5} />
-            </button>
-            {items.length >= OUTLINE_MIN && <TurnPlan items={items} onJump={jumpTo} triggerClass={ICON_BTN} />}
-            <Menu
-              title={t('Actions de la session')}
-              trigger={<Ellipsis className="size-4" strokeWidth={1.5} />}
-              triggerClass={cx(ICON_BTN, 'aria-expanded:bg-raised')}
-              items={[
-                { label: t('Renommer'), icon: <Pencil className="size-4" strokeWidth={1.5} />,
-                  onSelect: () => void renameSession() },
-                sess.data?.session.pinned
-                  ? { label: t('Désépingler'), icon: <PinOff className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(false) }
-                  : { label: t('Épingler'), icon: <Pin className="size-4" strokeWidth={1.5} />, onSelect: () => pin.mutate(true) },
-                sess.data?.session.archived
-                  ? { label: t('Désarchiver'), icon: <ArchiveRestore className="size-4" strokeWidth={1.5} />, onSelect: () => archive.mutate(false) }
-                  : { label: t('Archiver'), icon: <Archive className="size-4" strokeWidth={1.5} />, disabled: running, onSelect: () => archive.mutate(true) },
-                ...(sentOnce && !canCopy ? [] : [{ label: t('Dupliquer'), icon: <Copy className="size-4" strokeWidth={1.5} />, disabled: running || duplicate.isPending, onSelect: () => duplicate.mutate(newKey()) }]),
-                times
-                  ? { label: t('Masquer les heures'), icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(false) }
-                  : { label: t('Afficher les heures'), icon: <Clock className="size-4" strokeWidth={1.5} />, onSelect: () => setTimes(true) },
-                ...(sentOnce ? [
-                  { label: t('Exporter en Markdown'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'md')) },
-                  { label: t('Exporter en HTML'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'html')) },
-                  ...(canExportJson ? [{ label: t('Exporter en JSON'), icon: <Download className="size-4" strokeWidth={1.5} />, onSelect: () => download(api.exportUrl(inst!, sessionId, 'json')) }] : []),
-                ] : []),
-                ...(sentOnce && canCopy ? [{ label: t('Annuler le dernier échange'), icon: <Undo2 className="size-4" strokeWidth={1.5} />, disabled: !canRewrite || !last, onSelect: () => runRewrite('undo', undefined, last?.text) }] : []),
-                ...(sentOnce && canCopy ? [{ label: t('Vider la conversation'), icon: <Eraser className="size-4" strokeWidth={1.5} />, disabled: !canRewrite, onSelect: () => runRewrite('clear') }] : []),
-                ...(sentOnce && canTitleAi ? [{ label: t('Titre par l’IA'), icon: <Sparkles className="size-4" strokeWidth={1.5} />, disabled: titleAi.isPending, onSelect: () => titleAi.mutate() }] : []),
-                sess.data?.session.autoApprove
-                  ? { label: t('Redemander les accords'), icon: <ShieldCheck className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(false) }
-                  : { label: t('Sans confirmation…'), icon: <ShieldOff className="size-4" strokeWidth={1.5} />, onSelect: () => void setAutoApprove(true) },
-                { label: t('Supprimer'), icon: <Trash2 className="size-4" strokeWidth={1.5} />, disabled: running, danger: true, onSelect: () => remove.mutate() },
-              ]}
-            />
-            {col && (
-              <button type="button" className={ICON_BTN} aria-label={t('Fermer ce chat')} title={t('Fermer ce chat (le travail continue)')} onClick={col.hide}>
-                <X className="size-4" strokeWidth={1.5} />
-              </button>
-            )}
-            {!sideOpen && !EMBEDDED && !col && <FullScreen />}
-          </div>
-        </div>
-      </header>
+      <SessionHeader
+        headerRef={header} title={title} slug={slug} inst={inst} sessionId={sessionId} sess={sess.data}
+        instanceLabel={mounts?.label} workspaceName={ws.data?.workspace.name} looks={looks} side={side} items={items} onJump={jumpTo}
+        running={running} sentOnce={sentOnce} times={times} setTimes={setTimes} actions={actions} history={hist} col={col}
+      />
 
       <div className={cx('mx-auto w-full flex-1 px-4 py-7 md:px-6', narrow && 'max-w-[748px]')}>
         <div className="mb-6 empty:hidden"><ChatNotice instanceId={inst} /></div>
@@ -1217,7 +246,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             {neverSent && !EMBEDDED && inst && pickable.length > 1 && (
               <div className="mb-5">
                 <InstancePick value={inst} instances={pickable} disabled={switching || sending || attached > 0}
-                  onPick={(id) => void switchInstance(id)} />
+                  onPick={(id) => void move.switchInstance(id)} />
               </div>
             )}
             <p className="text-base font-semibold">{t('Nouvelle session dans {name}', { name: ws.data?.workspace.name ?? '' })}</p>
@@ -1226,7 +255,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
                 <Picker
                   title={t('Dossier de cette session')} placement="below" value={slug}
                   items={siblings.map((w) => ({ value: w.slug, label: w.name }))}
-                  onPick={(v) => void moveTo(v)}
+                  onPick={(v) => void move.moveTo(v)}
                   label={<>{t('Changer de dossier')}</>}
                 />
               </div>
@@ -1242,7 +271,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           <Thread
             entries={entries} footers={footers} agent={agent} actions={threadActions} times={timeMap} liveDeliveries subagents={subagents}
             vault={vaultOn && inst ? { inst, profile: agentProfile } : undefined}
-            hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={() => void loadOlder()}
+            hasOlder={data.older.hasOlder} loadingOlder={data.older.loadingOlder} onLoadOlder={() => void data.older.loadOlder()}
           />
         )}
         {running && !approval && !clarify && <ThinkingIndicator entries={entries} agent={agent} />}
@@ -1256,10 +285,10 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
           </p>
         )}
         {approval && (
-          <div className="mt-5"><ApprovalCard approval={approval} onChoose={approve} busy={busy} /></div>
+          <div className="mt-5"><ApprovalCard approval={approval} onChoose={run.approve} busy={busy} /></div>
         )}
         {clarify && (
-          <div className="mt-5"><ClarifyCard key={clarify.requestId ?? ''} clarify={clarify} onAnswer={(text) => void answer(text)} busy={busy} /></div>
+          <div className="mt-5"><ClarifyCard key={clarify.requestId ?? ''} clarify={clarify} onAnswer={(text) => void run.answer(text)} busy={busy} /></div>
         )}
         {endNote && (
           <div className={cx('mt-5', AGENT_INDENT)}>
@@ -1305,7 +334,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
               // sending is going back to the end of the thread, wherever the reader was
               const main = box();
               if (main) toEnd(main);
-              return send(text, sk);
+              return run.send(text, sk);
             }}
             skillNames={skillNames}
             autoApprove={sess.data?.session.autoApprove ? { onOff: () => void setAutoApprove(false) } : null}
@@ -1316,40 +345,20 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
             // changing instance: nothing typed or sent here any more (the draft is being carried over)
             disabled={!chat.available || !inst || switching}
             onQueue={(text, sk) => {
-              setQueue((q) => enqueue(q, text, sk));
+              run.enqueueMessage(text, sk);
               // a message waiting is the user writing: an active goal pauses before the loop relaunches
               if (inst && goalQ.data?.status === 'active') {
                 void api.pauseGoal(inst, sessionId, 'user').then(() => qc.invalidateQueries({ queryKey: goalKey(inst, sessionId) }), () => {});
               }
             }}
-            onSteer={steer}
-            steerDisabled={steerDisabled}
-            queue={{
-              items: queue.items, paused: queue.paused,
-              onRemove: (id) => setQueue((q) => dropItem(q, id)),
-              onMove: (id, delta) => setQueue((q) => moveItem(q, id, delta)),
-              onEdit: (id, text) => setQueue((q) => editItem(q, id, text)),
-              // while the agent works: a reorientation (the skills of `/use` only go with a run); else first, sent now
-              // one reorientation at a time: a second click never sends the same text twice
-              sendNowBlocked: (it) => (sendingNow ? t('Envoi en cours…') : active ? (steerDisabled ?? (it.skills?.length ? t('Avec un skill : attend la fin du travail') : null)) : null),
-              onSendNow: (id) => {
-                const it = queue.items.find((i) => i.id === id);
-                if (!it || sendingNow) return;
-                if (active) {
-                  setSendingNow(id);
-                  void steer(it.text).then((done) => { if (done) setQueue((q) => dropItem(q, id)); }).finally(() => setSendingNow(null));
-                  return;
-                }
-                setQueue((q) => resumeQueue(moveItem(q, id, -q.items.length)));
-                setDrain(`now-${Date.now()}`);
-              },
-              onResume: () => { setQueue(resumeQueue); if (!active) setDrain(`resume-${Date.now()}`); },
-            }}
+            onSteer={run.steer}
+            steerDisabled={run.steerDisabled}
+            queue={run.queueProps}
             options={inst && sess.data && (
               <RunOptions
                 inst={inst} profile={sess.data.profile ?? 'default'}
                 model={sess.data.session.model} provider={sess.data.session.modelProvider} effort={sess.data.session.effort}
-                onProfile={(p) => void changeProfile(p)}
+                onProfile={(p) => void actions.changeProfile(p)}
                 hasRuns={Boolean(lastRunId)} disabled={running || setOptions.isPending || !chat.available}
                 modelOpen={modelOpen} onModelOpenChange={setModelOpen}
                 onChange={(patch) => setOptions.mutate(patch)}
@@ -1372,51 +381,13 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
     </DropZone>
     </Scroller>
     {panel && (
-      <aside className={cx(
-        // a column beside others is too narrow to share: the panel covers it (its close button stays in the panel)
-        col && !col.wide
-          ? 'absolute inset-y-0 right-0 z-20 w-full max-w-full border-l border-line/70 bg-sheet shadow-xl'
-          : 'fixed inset-0 z-30 bg-sheet lg:z-auto lg:shrink-0 lg:border-l lg:border-line/70',
-        col ? (col.wide && 'lg:static lg:h-full') : 'lg:sticky lg:top-0 lg:h-[var(--content-h)]',
-        !(col && !col.wide) && (previewPath ? 'lg:w-[min(46vw,640px)]' : 'lg:w-[var(--panel-w)]'),
-      )} style={{ '--panel-w': `${panelPrefs.width}px` } as CSSProperties}>
-        {!previewPath && !(col && !col.wide) && <PanelResizer width={panelPrefs.width} onResize={(w, keep) => setPanelPrefs((p) => {
-          const next = { ...p, width: clampWidth(w) };
-          if (keep) savePanel(sessionId, next);
-          return next;
-        })} />}
-        {side}
-      </aside>
+      <SessionSidePanel
+        inst={inst} slug={slug} sessionId={sessionId} profile={sess.data?.profile ?? 'default'} autoApprove={Boolean(sess.data?.session.autoApprove)}
+        onAutoApprove={(on) => void setAutoApprove(on)} entries={entries} runCount={runCount} files={files} side={side} col={col}
+      />
     )}
     </div>
     </FilePaths.Provider>
-  );
-}
-
-/** Left edge of the side panel (wide screens): drag to resize it, arrows by 20 px; the width is kept on release. */
-function PanelResizer({ width, onResize }: { width: number; onResize: (width: number, keep: boolean) => void }) {
-  const start = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const x0 = e.clientX;
-    const move = (ev: PointerEvent) => onResize(width + (x0 - ev.clientX), false);
-    const up = (ev: PointerEvent) => {
-      onResize(width + (x0 - ev.clientX), true);
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      document.body.style.removeProperty('cursor');
-    };
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-  return (
-    <div role="separator" aria-orientation="vertical" aria-label={t('Largeur du panneau')} aria-valuenow={width} tabIndex={0} data-panel-resizer
-      onPointerDown={start}
-      onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft') { e.preventDefault(); onResize(width + 20, true); }
-        if (e.key === 'ArrowRight') { e.preventDefault(); onResize(width - 20, true); }
-      }}
-      className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize transition-colors hover:bg-accent/30 focus-visible:bg-accent/40 focus-visible:outline-none lg:block" />
   );
 }
 

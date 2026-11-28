@@ -332,6 +332,7 @@ const MOBILE_MAIN: string[] = ['home', 'activity', 'kanban', 'crons'];
 function MobileNav({ current, onSearch, onChat, onLogout, version, inst }: { current: string | null; onSearch: () => void; onChat?: () => void; onLogout: () => void; version?: string; inst: string | null }) {
   const [more, setMore] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // biome-ignore lint/correctness/useExhaustiveDependencies(pathname): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => setMore(false), [pathname]);
   const main = MOBILE_MAIN.map((key) => NAV.find((n) => n.key === key)!);
   const rest = NAV.filter((n) => !MOBILE_MAIN.includes(n.key));
