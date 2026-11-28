@@ -766,7 +766,8 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
 - Touch screens (`pointer: coarse`): `styles.css` gives every control a min-size of 44 px in the base layer, so a
   `h-7` or `size-6` no longer makes it smaller there. A control drawn small on purpose (the × of a tile or a pill, a
   file chip or a word in a sentence) takes `tap-area` instead (with `relative` unless already positioned): its drawing
-  stays, a `::after` of 44 px answers to the finger; never on controls packed closer than 44 px. `touch:` is the
+  stays, a `::after` of 44 px answers to the finger. That area takes no room: the caller keeps 44 px free around the
+  control (`touch:my-[11px]` on a file chip), which the touch spec checks (no area reaches a neighbour). `touch:` is the
   Tailwind variant for the rest (`touch:min-h-11`). An icon inside a field is centred (`top-1/2 -translate-y-1/2`),
   not placed from the top. Checked by `apps/e2e/tests/touch.spec.ts` on 17 pages, a session, a menu and a dialog.
 - Names: `src/a11y/labels.test.ts` reads every `.tsx` and reports a button or link that only draws an icon without

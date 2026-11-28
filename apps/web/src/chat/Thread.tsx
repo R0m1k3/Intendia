@@ -102,7 +102,7 @@ export const Md = memo(function Md({ text }: { text: string }) {
             const path = (p as { 'data-path'?: string })['data-path'];
             if (path && paths) {
               return (
-                <button type="button" className="file-chip tap-area relative cursor-pointer text-left" title={p.title} onClick={() => paths.open(path)}>
+                <button type="button" className="file-chip tap-area relative cursor-pointer text-left touch:my-[11px]" title={p.title} onClick={() => paths.open(path)}>
                   <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />
                   <span>{path.slice(path.lastIndexOf('/') + 1)}</span>
                 </button>
@@ -286,7 +286,7 @@ function Joined({ written }: { written: string }) {
   }
   if (rel) {
     return (
-      <button type="button" className="file-chip tap-area relative cursor-pointer text-left" title={rel} onClick={() => paths.open(rel)}>
+      <button type="button" className="file-chip tap-area relative cursor-pointer text-left touch:my-[11px]" title={rel} onClick={() => paths.open(rel)}>
         <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
       </button>
     );

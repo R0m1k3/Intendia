@@ -202,7 +202,7 @@ export function Composer({
         </p>
       )}
       {(skills.length > 0 || autoApprove) && (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1">
+        <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1 touch:gap-x-6 touch:gap-y-6 touch:py-3">
           {autoApprove && (
             <button type="button" data-auto-approve onClick={autoApprove.onOff} title={t('L’agent agit sans demander votre accord. Cliquer pour redemander l’accord.')}
               className="tap-area relative flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-xs text-warn hover:border-warn">

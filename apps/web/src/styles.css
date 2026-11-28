@@ -127,7 +127,9 @@
 /*
  * `tap-area`: a control drawn small on purpose (the × of a tile or of a pill, a word in a sentence) keeps its drawing
  * on a touch screen; what answers to the finger grows to 44 px around its centre. The control must be positioned
- * (`relative`, or already `absolute`). Not for controls packed closer than 44 px: their areas would overlap.
+ * (`relative`, or already `absolute`). The area takes no room in the layout: the caller keeps 44 px free around the
+ * control on a touch screen (`touch:my-[11px]` on a file chip, 22 px high), else two areas overlap and the later one
+ * takes the finger meant for the other (checked by apps/e2e/tests/touch.spec.ts).
  */
 @utility tap-area {
   @media (pointer: coarse) {
