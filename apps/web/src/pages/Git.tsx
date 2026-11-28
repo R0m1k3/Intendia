@@ -36,7 +36,7 @@ function FileDiff({ slug, repo, file, version, onClose }: { slug: string; repo: 
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
         <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
-        <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer le diff')}>
+        <button type="button" onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer le diff')}>
           <X className="size-4" strokeWidth={1.5} />
         </button>
       </div>
@@ -170,7 +170,7 @@ export function GitPage() {
           {note && (
             <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
               <span className="flex-1">{note}</span>
-              <button onClick={() => setNote(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
+              <button type="button" onClick={() => setNote(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
             </p>
           )}
           {st && (st.files.length ? (

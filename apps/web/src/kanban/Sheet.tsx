@@ -35,6 +35,8 @@ export function Sheet({ title, onClose, children, footer, width = 'md:w-[520px]'
     };
   }, []);
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop closes the sheet; the keyboard has Escape (see the effect above)
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a click on the backdrop closes the sheet; the keyboard has Escape (see the effect above)
     <div
       data-overlay className="fixed inset-0 z-[55] flex justify-end bg-ink/20"
       onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}

@@ -119,7 +119,7 @@ export function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
         </span>
       )}
       {a.state === 'pending' && (
-        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" aria-label={t('Envoi…|fichier')}>
+        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" role="img" aria-label={t('Envoi…|fichier')}>
           <Loader2 className="size-4 animate-spin text-ink-soft" strokeWidth={1.75} />
         </span>
       )}

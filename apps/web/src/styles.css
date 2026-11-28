@@ -164,6 +164,6 @@
   background: var(--color-sheet); color: var(--color-ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   text-decoration: none; transition: border-color 150ms, background-color 150ms;
 }
-.md a.file-chip:hover { border-color: var(--color-ink-faint); background: var(--color-raised); }
+.md :is(a, button).file-chip:hover { border-color: var(--color-ink-faint); background: var(--color-raised); }
 .md .file-chip span, .file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.md code:has(> a.file-chip) { background: none; padding: 0; }
+.md code:has(> :is(a, button).file-chip) { background: none; padding: 0; }

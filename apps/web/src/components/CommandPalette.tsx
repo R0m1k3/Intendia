@@ -111,7 +111,10 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
 
   const partial = searching ? found.data?.partial ?? [] : [];
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
     <div data-overlay className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={() => onClose()}>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the mousedown only stops the backdrop's close; the dialog is a native-focus container, not a control */}
       <div
         role="dialog" aria-modal="true" aria-label={mode === 'files' ? t('Ouvrir un fichier') : t('Rechercher')} onMouseDown={(e) => e.stopPropagation()}
         className="flex max-h-[70vh] w-full max-w-[600px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"
@@ -132,6 +135,8 @@ export function CommandPalette({ nav, onClose, mode: initialMode = 'all' }: {
             <div key={g.id} role="group" aria-labelledby={`${id}-g-${g.id}`} className="pb-1">
               <p id={`${id}-g-${g.id}`} className="px-2.5 pb-1 pt-2 text-xs font-medium text-ink-faint">{g.label}</p>
               {g.items.map((item) => (
+                // biome-ignore lint/a11y/useFocusableInteractive: the option never takes focus; the search field points at it with aria-activedescendant
+                // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard picks the highlighted option with Enter in the search field (onKey)
                 <div
                   key={item.id} id={`${id}-${item.id}`} role="option" aria-selected={item === current}
                   onMouseMove={() => setIndex(items.indexOf(item))} onClick={() => go(item)}

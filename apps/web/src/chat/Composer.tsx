@@ -244,6 +244,7 @@ export function Composer({
         }}
         placeholder={placeholder ?? t('Écrire à l’agent')}
         aria-label="Message"
+        aria-controls={slash.listId} aria-activedescendant={slash.activeId}
         className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
       {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}

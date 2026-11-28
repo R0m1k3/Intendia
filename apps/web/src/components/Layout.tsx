@@ -220,7 +220,7 @@ function FullLayout() {
       >
         <span className="relative">
           <n.icon className="size-[19px]" strokeWidth={1.5} />
-          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-white' : 'bg-raised text-ink-soft')} aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
+          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-white' : 'bg-raised text-ink-soft')} role="img" aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
         </span>
         <span className="max-w-full truncate text-[10.5px] leading-none">{n.short ?? n.label}</span>
       </Link>
@@ -340,7 +340,12 @@ function MobileNav({ current, onSearch, onChat, onLogout, version, inst }: { cur
   return (
     <>
       {more && createPortal(
+        // biome-ignore lint/a11y/noStaticElementInteractions: a tap on the backdrop closes the mobile "More" menu; it holds links that close it when followed
+        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a tap on the backdrop closes the mobile "More" menu
+        // biome-ignore lint/a11y/useKeyWithClickEvents: mobile-only backdrop; the keyboard closes the menu with the "More" button itself
         <div data-overlay className="fixed inset-0 z-40 bg-ink/20 md:hidden" onClick={() => setMore(false)}>
+          {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the click only stops the backdrop close; the nav itself is not a control */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: the click only stops the backdrop close; no action to reach by keyboard */}
           <nav aria-label={t('Plus')} onClick={(e) => e.stopPropagation()}
             className="enter absolute inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] grid grid-cols-3 gap-1 border-t border-line bg-sheet p-3">
             <InstanceSwitcher className="col-span-3" onPicked={() => setMore(false)} />

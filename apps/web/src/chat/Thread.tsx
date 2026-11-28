@@ -102,10 +102,10 @@ export const Md = memo(function Md({ text }: { text: string }) {
             const path = (p as { 'data-path'?: string })['data-path'];
             if (path && paths) {
               return (
-                <a href="#" className="file-chip" title={p.title} onClick={(e) => { e.preventDefault(); paths.open(path); }}>
+                <button type="button" className="file-chip cursor-pointer text-left" title={p.title} onClick={() => paths.open(path)}>
                   <FileText className="size-3.5 shrink-0" strokeWidth={1.5} />
                   <span>{path.slice(path.lastIndexOf('/') + 1)}</span>
-                </a>
+                </button>
               );
             }
             return <a {...p} target="_blank" rel="noreferrer" />;
@@ -286,9 +286,9 @@ function Joined({ written }: { written: string }) {
   }
   if (rel) {
     return (
-      <a href="#" className="file-chip" title={rel} onClick={(e) => { e.preventDefault(); paths.open(rel); }}>
+      <button type="button" className="file-chip cursor-pointer text-left" title={rel} onClick={() => paths.open(rel)}>
         <FileText className="size-3.5 shrink-0" strokeWidth={1.5} /><span>{name}</span>
-      </a>
+      </button>
     );
   }
   return (
@@ -342,6 +342,7 @@ function EditMessage({ text, onCancel, onSend, busy }: { text: string; onCancel:
   return (
     <div className="min-w-0 flex-1" data-edit-message>
       <textarea
+        // biome-ignore lint/a11y/noAutofocus: the field opens when the user chooses to edit the message
         aria-label={t('Modifier le message')} autoFocus value={value} onChange={(e) => setValue(e.target.value)} rows={Math.min(8, Math.max(2, value.split('\n').length))}
         onKeyDown={(e) => {
           if (e.key === 'Escape') onCancel();

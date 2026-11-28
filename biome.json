@@ -25,6 +25,7 @@
 		}
 	},
 	"overrides": [
+		{ "includes": ["apps/**"], "linter": { "rules": { "a11y": { "useSemanticElements": "off" } } } },
 		{
 			"includes": ["**/test/**", "**/*.test.ts", "**/*.test.tsx", "apps/e2e/**", "apps/fake-hermes/**"],
 			"linter": { "rules": { "suspicious": { "noExplicitAny": "off" }, "correctness": { "noUnsafeOptionalChaining": "off", "noPrecisionLoss": "off", "noChildrenProp": "off" } } }

@@ -22,7 +22,7 @@ function ModuleRow({ m, anchor }: { m: ModuleReport; anchor: string }) {
   const StateIcon = m.state === 'full' ? Check : m.state === 'readonly' ? Eye : X;
   return (
     <li id={anchor} className="scroll-mt-6 border-t border-line/70">
-      <button
+      <button type="button"
         className="flex min-h-12 w-full items-center gap-3.5 px-4 py-2.5 text-left transition-colors hover:bg-paper"
         onClick={() => setOpen(!open)}
         aria-expanded={open}

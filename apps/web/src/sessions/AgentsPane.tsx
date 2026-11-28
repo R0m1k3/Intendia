@@ -245,7 +245,7 @@ export function AgentsPane({ openId, onBeside }: {
             <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
             <Folder className="size-3.5 shrink-0" strokeWidth={1.5} />
             <span className="min-w-0 flex-1 truncate">{f.workspace.name}</span>
-            {unread > 0 && <span className="shrink-0 rounded-full bg-accent-soft px-1.5 font-mono text-[10.5px] text-accent-ink" aria-label={plural(unread, '{n} non lu', '{n} non lus')}>{unread}</span>}
+            {unread > 0 && <span className="shrink-0 rounded-full bg-accent-soft px-1.5 font-mono text-[10.5px] text-accent-ink" role="img" aria-label={plural(unread, '{n} non lu', '{n} non lus')}>{unread}</span>}
           </button>
           <button type="button" onClick={() => void newIn(f.workspace.slug, a.name)} title={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
             aria-label={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
@@ -279,7 +279,7 @@ export function AgentsPane({ openId, onBeside }: {
               <span className="block truncate text-[14px] font-semibold leading-5">{a.name}</span>
               <span className={cx('block truncate text-[12px] leading-4', line.tone === 'bad' ? 'font-medium text-bad' : line.tone === 'accent' ? 'font-medium text-accent-ink' : 'text-ink-faint')}>{line.text}</span>
             </span>
-            {a.unread > 0 && <span className="shrink-0 rounded-full bg-accent px-1.5 font-mono text-[11px] font-medium leading-[18px] text-on-accent" aria-label={plural(a.unread, '{n} non lu', '{n} non lus')}>{a.unread}</span>}
+            {a.unread > 0 && <span className="shrink-0 rounded-full bg-accent px-1.5 font-mono text-[11px] font-medium leading-[18px] text-on-accent" role="img" aria-label={plural(a.unread, '{n} non lu', '{n} non lus')}>{a.unread}</span>}
           </button>
           <Menu
             title={t('Agent {name}', { name: a.name })} align="end"
@@ -421,7 +421,7 @@ export function AgentsPane({ openId, onBeside }: {
                       <Hash className="size-3.5 shrink-0 text-ink-faint" strokeWidth={2} />
                       <span className="min-w-0 flex-1 truncate">{ch.name}</span>
                       {ch.stopped ? <span className="text-xs text-warn">{t('arrêté')}</span>
-                        : ch.busy ? <span className="size-1.5 rounded-full bg-accent" aria-label={t('En cours')} />
+                        : ch.busy ? <span className="size-1.5 rounded-full bg-accent" role="img" aria-label={t('En cours')} />
                           : <span className="font-mono text-[11px] text-ink-faint">{ch.members.length}</span>}
                     </Link>
                   </li>

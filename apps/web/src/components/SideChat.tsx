@@ -117,6 +117,7 @@ export function SideChat({ inst, workspaces, onClose }: { inst: string; workspac
       ) : error ? (
         <p className="p-6 text-sm text-bad">{error}</p>
       ) : shown ? (
+        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad is not a user action: it only moves the focus into the embedded session
         <iframe ref={frame} key={shown.id} src={embedUrl(shown)} title={t('Session du chat latéral')}
           className="min-h-0 w-full flex-1 border-0" onLoad={() => frame.current?.contentWindow?.focus()} />
       ) : null}

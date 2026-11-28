@@ -53,7 +53,10 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', key, true);
   }, []);
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
     <div data-overlay className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the mousedown only stops the backdrop's close; the dialog is a native-focus container, not a control */}
       <div
         ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" onMouseDown={(e) => e.stopPropagation()}
         className="enter flex outline-none max-h-[76vh] w-full max-w-[480px] flex-col overflow-hidden rounded-xl border border-line bg-sheet shadow-[var(--shadow-card)]"

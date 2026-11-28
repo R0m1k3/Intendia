@@ -30,7 +30,7 @@ function alertLabel({ failed, approvals }: { failed: number; approvals: number }
 function Alert({ n, label }: { n: number; label: string | null }) {
   if (!n || !label) return null;
   return (
-    <span className="shrink-0 rounded-full bg-bad-soft px-1.5 font-mono text-[11px] leading-[18px] text-bad" title={label} aria-label={label}>
+    <span className="shrink-0 rounded-full bg-bad-soft px-1.5 font-mono text-[11px] leading-[18px] text-bad" title={label} role="img" aria-label={label}>
       {n}
     </span>
   );

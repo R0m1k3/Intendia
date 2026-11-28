@@ -82,6 +82,7 @@ function CatalogEntry({ e, inst, profile, can, onSaved }: { e: McpCatalogEntry; 
       {open && (
         <form className="space-y-2.5 rounded-xl border border-line p-3" onSubmit={(ev) => { ev.preventDefault(); if (!missing.length) install.mutate(); }}>
           {e.requiredEnv.map((r) => (
+            // biome-ignore lint/a11y/noLabelWithoutControl: the control is rendered by Input inside this label
             <label key={r.name} className="block space-y-1">
               <span className="block text-xs text-ink-soft"><span className="font-mono">{r.name}</span>{r.required ? '' : ` ${t('(facultatif)')}`}{r.prompt ? ` : ${r.prompt}` : ''}</span>
               <Input type="password" autoComplete="off" className="font-mono text-[12.5px]" value={env[r.name] ?? ''} aria-label={r.name}

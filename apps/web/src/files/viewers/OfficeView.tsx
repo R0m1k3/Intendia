@@ -72,7 +72,7 @@ function Sheets({ book }: { book: Awaited<ReturnType<typeof readXlsxSheets>> }) 
     <div data-viewer="xlsx">
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-line px-4 py-1.5 text-xs">
         {book.sheets.map((s, i) => (
-          <button key={i} role="tab" aria-selected={i === index} onClick={() => setIndex(i)}
+          <button type="button" key={i} role="tab" aria-selected={i === index} onClick={() => setIndex(i)}
             className={cx('shrink-0 rounded-md px-2 py-1', i === index ? 'bg-raised text-ink' : 'text-ink-faint hover:text-ink')}>{s.name}</button>
         ))}
       </div>
