@@ -19,6 +19,10 @@ describe('measure', () => {
     expect(measure(bottom, at(1900, 3000)).pinned).toBe(false);
   });
 
+  it('stays pinned when the position went up without a gesture of the reader (focus, layout shift)', () => {
+    expect(measure(bottom, at(1900, 3000), false).pinned).toBe(true);
+  });
+
   it('ignores a one-pixel move up', () => {
     expect(measure(bottom, at(2199, 3000)).pinned).toBe(true);
   });

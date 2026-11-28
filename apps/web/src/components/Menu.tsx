@@ -35,9 +35,14 @@ export function Popover({ trigger, title, placement = 'above', align = 'start', 
     const r = btn.current.getBoundingClientRect();
     const w = Math.min(width, window.innerWidth - 16);
     const left = align === 'start' ? Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) : Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
-    setPos(placement === 'above'
-      ? { left, width: w, bottom: window.innerHeight - r.top + 6, maxHeight: Math.max(160, r.top - 16) }
-      : { left, width: w, top: r.bottom + 6, maxHeight: Math.max(160, window.innerHeight - r.bottom - 16) });
+    // the asked side, unless it has too little room and the other one more (a list under the composer at the bottom
+    // of the screen would open off screen)
+    const roomAbove = r.top - 16;
+    const roomBelow = window.innerHeight - r.bottom - 16;
+    const up = placement === 'above' ? !(roomAbove < 200 && roomBelow > roomAbove) : roomBelow < 200 && roomAbove > roomBelow;
+    setPos(up
+      ? { left, width: w, bottom: window.innerHeight - r.top + 6, maxHeight: Math.max(160, roomAbove) }
+      : { left, width: w, top: r.bottom + 6, maxHeight: Math.max(160, roomBelow) });
   }, [open, placement, align, width]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies(pos): the trigger, not read by the effect: it runs again once the panel is placed

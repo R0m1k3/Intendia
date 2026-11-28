@@ -2,7 +2,7 @@
 // moving between the user's questions (« Plan », ↑ ↓, Alt+↑/↓).
 import { useEffect, useMemo, useRef } from 'react';
 import type { Approval, Clarify, Entry } from '../../chat/events';
-import { measure, startFollow, type FollowState } from '../../chat/follow';
+import { GESTURE_MS, measure, startFollow, type FollowState } from '../../chat/follow';
 import { outline } from '../../chat/turns';
 import { t } from '../../i18n';
 
@@ -19,6 +19,9 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
   // must not be read as the reader leaving the bottom. The page opens at the bottom.
   const bottom = useRef<HTMLDivElement>(null);
   const follow = useRef<FollowState>({ pinned: true, lastTop: 0, lastHeight: 0 });
+  // time of the reader's last gesture that can scroll up: only such a move leaves the end of the thread
+  const gesture = useRef(0);
+  const byReader = () => Date.now() - gesture.current < GESTURE_MS;
   // the element that scrolls the thread: the page's <main>, or the column of the Chat page
   const box = () => bottom.current?.closest<HTMLElement>('[data-scroll-root]') ?? null;
   // to the very end of the page: the composer sticks below the thread, the last turn must sit above it
@@ -37,7 +40,7 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
   const followIfPinned = () => {
     const main = box();
     if (!main) return;
-    track(main, measure(follow.current, main));
+    track(main, measure(follow.current, main, byReader()));
     if (follow.current.pinned) toEnd(main);
   };
   const tail = entries.length + (entries.at(-1) && 'text' in entries.at(-1)! ? (entries.at(-1) as { text: string }).text.length : 0);
@@ -47,11 +50,35 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
     const thread = bottom.current?.parentElement;
     if (!main || !thread) return;
     track(main, startFollow(main));
-    const onScroll = () => track(main, measure(follow.current, main));
+    const onScroll = () => track(main, measure(follow.current, main, byReader()));
+    const mark = () => { gesture.current = Date.now(); };
+    const onWheel = (e: WheelEvent) => { if (e.deltaY < 0) mark(); };
+    const onKey = (e: KeyboardEvent) => {
+      // keys that scroll up, outside a field (in the message field they move the caret)
+      const target = e.target as HTMLElement | null;
+      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement || target?.isContentEditable) return;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(e.key) || (e.key === ' ' && e.shiftKey)) mark();
+    };
+    // the scrollbar: a press on the scrolling element itself (not on its content)
+    const onPointer = (e: PointerEvent) => { if (e.target === main) mark(); };
+    // the thread and what sits under it (the composer grows with a queued message, files, a card)
     const grow = new ResizeObserver(followIfPinned);
     grow.observe(thread);
+    if (thread.parentElement) grow.observe(thread.parentElement);
     main.addEventListener('scroll', onScroll, { passive: true });
-    return () => { grow.disconnect(); main.removeEventListener('scroll', onScroll); main.style.overflowAnchor = ''; };
+    main.addEventListener('wheel', onWheel, { passive: true });
+    main.addEventListener('touchmove', mark, { passive: true });
+    main.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      grow.disconnect();
+      main.removeEventListener('scroll', onScroll);
+      main.removeEventListener('wheel', onWheel);
+      main.removeEventListener('touchmove', mark);
+      main.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+      main.style.overflowAnchor = '';
+    };
   }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)
   useEffect(followIfPinned, [tail, approval, clarify]);
@@ -63,6 +90,8 @@ export function useThreadScroll({ entries, approval, clarify, inactive: isInacti
     const main = box();
     const el = turnEl(key);
     if (!main || !el) return;
+    // asked by the reader (« Plan », ↑ ↓): leaving the end is wanted
+    gesture.current = Date.now();
     const head = header.current?.getBoundingClientRect().height ?? 0;
     main.scrollTop += el.getBoundingClientRect().top - main.getBoundingClientRect().top - head - 8;
     el.classList.add('ring-2', 'ring-accent');
