@@ -30,10 +30,22 @@ export function markSeen(state: SeenState, id: string, at: number): SeenState | 
   return { base: state.base, seen: Object.fromEntries(entries) };
 }
 
+/** Everything is read: the base moves to now (sessions that move later are unread again). */
+export function markAllSeen(now: number): SeenState {
+  return { base: now, seen: {} };
+}
+
+/** Sessions that never count as unread: a cron's runs (a failure shows on Planning), not a message for you. */
+export const countsAsUnread = (s: { source?: string | null }) => s.source !== 'cron';
+
 const listeners = new Set<() => void>();
 
 /** Unread marks of an instance, shared by every component of the tab (and other tabs through `storage`). */
-export function useSeen(inst: string | null): { isUnread: (s: { id: string; at: number }) => boolean; seen: (id: string, at: number) => void } {
+export function useSeen(inst: string | null): {
+  isUnread: (s: { id: string; at: number; source?: string | null }) => boolean;
+  seen: (id: string, at: number) => void;
+  seenAll: () => void;
+} {
   const load = useCallback(() => (inst ? readSeen(localStorage.getItem(key(inst)), Date.now()) : { base: 0, seen: {} }), [inst]);
   const [state, setState] = useState<SeenState>(load);
   useEffect(() => {
@@ -54,5 +66,10 @@ export function useSeen(inst: string | null): { isUnread: (s: { id: string; at: 
     localStorage.setItem(key(inst), JSON.stringify(next));
     for (const l of listeners) l();
   }, [inst]);
-  return { isUnread: useCallback((s) => isUnread(state, s), [state]), seen };
+  const seenAll = useCallback(() => {
+    if (!inst) return;
+    localStorage.setItem(key(inst), JSON.stringify(markAllSeen(Date.now())));
+    for (const l of listeners) l();
+  }, [inst]);
+  return { isUnread: useCallback((s) => countsAsUnread(s) && isUnread(state, s), [state]), seen, seenAll };
 }

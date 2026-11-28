@@ -2,19 +2,20 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Check, ChevronsUpDown, Plus, Settings2 } from 'lucide-react';
 import { api, type CompatReport, type PublicInstance } from '../api';
-import { failedCount } from '../home/summary';
+import { useFailuresSeen } from '../crons/failuresSeen';
 import { useCurrentInstance } from '../instance/current';
 import { Popover } from './Menu';
 import { cx, Mark, worst } from './ui';
 import { plural, t } from '../i18n';
 import { useApprovals } from './useApprovals';
 
-/** What needs a look on each instance: crons whose last run failed, runs waiting for approval. */
+/** What needs a look on each instance: crons whose last run failed (not seen yet on Planning), runs waiting for approval. */
 export function useAlerts(): (id: string) => { failed: number; approvals: number } {
   const overview = useQuery({ queryKey: ['crons-overview'], queryFn: () => api.cronsOverview(), refetchInterval: 60_000 });
   const approvals = useApprovals();
+  const { unseen } = useFailuresSeen();
   return (id) => ({
-    failed: failedCount((overview.data?.crons ?? []).filter((c) => c.instanceId === id)),
+    failed: unseen(id, (overview.data?.crons ?? []).filter((c) => c.instanceId === id)),
     approvals: (approvals.data?.approvals ?? []).filter((a) => a.instanceId === id).length,
   });
 }
@@ -154,7 +155,8 @@ export function InstanceRail() {
               <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-paper">
                 <Mark state={report ? worst(report.modules.map((m) => m.state)) : null} />
               </span>
-              {n > 0 && (
+              {/* the current instance already shows them (Planning, « Vous attend »): only the others count here */}
+              {n > 0 && !on && (
                 <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-sheet ring-2 ring-paper">{n}</span>
               )}
             </button>

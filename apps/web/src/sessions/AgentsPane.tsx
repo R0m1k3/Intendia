@@ -106,7 +106,7 @@ export function AgentsPane({ openId, onBeside }: {
   const feed = useApprovals({ enabled: inst !== null });
   const marks: Map<string, RunMark> = inst ? runMarks(activity.data?.runs ?? [], feed.data?.approvals ?? [], inst, activity.data?.subagents ?? []) : new Map();
   const unused = useQuery({ queryKey: ['sessions-cleanup', inst], queryFn: () => api.cleanupInfo(inst!), enabled: inst !== null });
-  const { isUnread, seen } = useSeen(inst);
+  const { isUnread, seen, seenAll } = useSeen(inst);
   const looks = useAgentLooks(inst);
   const [folded, setFolded] = useFolded(inst);
   const [more, setMore] = useState<ReadonlySet<string>>(() => new Set());
@@ -212,7 +212,7 @@ export function AgentsPane({ openId, onBeside }: {
   const group = (label: string, items: RecentSession[], key: string) => items.length > 0 && (
     <div key={key} role="group" aria-label={label} data-group={key}>
       <ListLabel>{label}</ListLabel>
-      <ul className="flex flex-col gap-0.5">{items.map((s) => row(s, false))}</ul>
+      <ul className="flex flex-col gap-px">{items.map((s) => row(s, true))}</ul>
     </div>
   );
   const forced = view !== 'all';
@@ -236,7 +236,6 @@ export function AgentsPane({ openId, onBeside }: {
   const folderRow = (a: AgentNode, f: FolderNode) => {
     const key = `f:${a.name}/${f.workspace.slug}`;
     const open = forced || !folded.has(key);
-    const unread = f.sessions.filter((s) => s.id !== openId && isUnread(s)).length;
     return (
       <li key={key} data-folder={f.workspace.slug}>
         <div className="group/f flex items-center gap-1 rounded-lg pr-1 hover:bg-paper">
@@ -245,7 +244,6 @@ export function AgentsPane({ openId, onBeside }: {
             <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
             <Folder className="size-3.5 shrink-0" strokeWidth={1.5} />
             <span className="min-w-0 flex-1 truncate">{f.workspace.name}</span>
-            {unread > 0 && <span className="shrink-0 rounded-full bg-accent-soft px-1.5 font-mono text-[10.5px] text-accent-ink" role="img" aria-label={plural(unread, '{n} non lu', '{n} non lus')}>{unread}</span>}
           </button>
           <button type="button" onClick={() => void newIn(f.workspace.slug, a.name)} title={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
             aria-label={t('Nouvelle session dans {folder}', { folder: f.workspace.name })}
@@ -279,7 +277,8 @@ export function AgentsPane({ openId, onBeside }: {
               <span className="block truncate text-[14px] font-semibold leading-5">{a.name}</span>
               <span className={cx('block truncate text-[12px] leading-4', line.tone === 'bad' ? 'font-medium text-bad' : line.tone === 'accent' ? 'font-medium text-accent-ink' : 'text-ink-faint')}>{line.text}</span>
             </span>
-            {a.unread > 0 && <span className="shrink-0 rounded-full bg-accent px-1.5 font-mono text-[11px] font-medium leading-[18px] text-on-accent" role="img" aria-label={plural(a.unread, '{n} non lu', '{n} non lus')}>{a.unread}</span>}
+            {/* folded: a dot says something new is inside (the rows show it when open) */}
+            {!open && a.unread > 0 && <span className="size-2 shrink-0 rounded-full bg-accent" role="img" aria-label={t('Nouveaux messages')} />}
           </button>
           <Menu
             title={t('Agent {name}', { name: a.name })} align="end"
@@ -312,14 +311,17 @@ export function AgentsPane({ openId, onBeside }: {
                 {othersOpen && sessionsOf(othersKey, a.others)}
               </li>
             )}
-            {a.folders.length === 0 && a.others.length === 0 && (
-              <li className="py-1 pl-6 text-[12.5px] text-ink-faint">{t('Aucune conversation')}</li>
-            )}
           </ul>
         )}
       </li>
     );
   };
+
+  // agents with nothing to show yet: one folded line at the end, not one block each
+  const active = tree.agents.filter((a) => a.folders.length > 0 || a.others.length > 0);
+  const idle = tree.agents.filter((a) => a.folders.length === 0 && a.others.length === 0);
+  const idleOpen = folded.has('idle:open');
+  const anyUnread = loaded.some((s) => s.id !== openId && isUnread(s));
 
   const searchRows = found.data?.sessions ?? [];
   const nothing = !searching && list.isSuccess && tree.agents.length === 0;
@@ -407,6 +409,11 @@ export function AgentsPane({ openId, onBeside }: {
         </>
       ) : (
         <>
+          {view === 'unread' && anyUnread && (
+            <div className="flex justify-end px-1.5 pb-1">
+              <Button variant="ghost" className="h-8 px-2 text-[12.5px]" onClick={seenAll}>{t('Tout marquer comme lu')}</Button>
+            </div>
+          )}
           {group(t('Vous attend'), tree.needsYou, 'needs-you')}
           {group(t('En cours'), tree.working, 'working')}
           {view === 'all' && group(t('Épinglées'), tree.pinned, 'pinned')}
@@ -432,7 +439,17 @@ export function AgentsPane({ openId, onBeside }: {
           {tree.agents.length > 0 && (
             <div role="group" aria-label={t('Agents')}>
               <ListLabel>{t('Agents')}</ListLabel>
-              <ul className="flex flex-col">{tree.agents.map(agentBlock)}</ul>
+              <ul className="flex flex-col">{active.map(agentBlock)}</ul>
+              {idle.length > 0 && (
+                <div data-idle-agents className="mt-1">
+                  <button type="button" onClick={() => setFolded('idle:open', !idleOpen)} aria-expanded={idleOpen}
+                    className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink-soft hover:bg-paper">
+                    <ChevronRight className={cx('size-3.5 shrink-0 text-ink-faint transition-transform', idleOpen && 'rotate-90')} strokeWidth={1.75} />
+                    <span className="min-w-0 flex-1 truncate">{plural(idle.length, '{n} agent sans conversation', '{n} agents sans conversation')}</span>
+                  </button>
+                  {idleOpen && <ul className="flex flex-col">{idle.map(agentBlock)}</ul>}
+                </div>
+              )}
             </div>
           )}
           <ErrorText error={agents.error} />
