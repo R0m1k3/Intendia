@@ -100,7 +100,7 @@ export function Ask({ workspaces, focus, onFocused, onAttachmentsChange, example
         hint={t('Entrée pour envoyer · une nouvelle session est créée')}
         leading={(
           <Picker
-            title={t('Dossier de la nouvelle session')} placement="below" value={ws.slug} disabled={attached > 0}
+            title={t('Dossier de la nouvelle session')} placement="above" value={ws.slug} disabled={attached > 0}
             items={workspaces.map((w) => ({ value: w.slug, label: w.name, hint: w.profile && w.profile !== 'default' ? t('agent {profile}', { profile: w.profile }) : undefined }))}
             onPick={(v) => v && setSlug(v)}
             triggerClass="flex h-7 max-w-[12rem] min-w-0 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-paper hover:text-ink aria-expanded:bg-paper"

@@ -25,16 +25,20 @@ export interface ScrollBox {
 
 export const startFollow = (box: ScrollBox): FollowState => ({ pinned: true, lastTop: box.scrollTop, lastHeight: box.scrollHeight });
 
+/** How long after a gesture of the reader (wheel, touch, keys, scrollbar) a move up is theirs, ms. */
+export const GESTURE_MS = 1200;
+
 /**
  * One measure, on each `scroll` event and before each automatic scroll: content growth never moves the position up, so
  * only the reader can unpin; coming back near the bottom as it was at the previous measure pins again (a burst of text
- * since then does not count against the reader).
+ * since then does not count against the reader). `byReader`: a gesture of the reader came just before; a move up
+ * without one (the browser keeping a focused card in view, a layout that shifts) never unpins.
  */
-export function measure(prev: FollowState, box: ScrollBox): FollowState {
+export function measure(prev: FollowState, box: ScrollBox, byReader = true): FollowState {
   const top = box.scrollTop;
   const gap = box.scrollHeight - top - box.clientHeight;
   let pinned = prev.pinned;
-  if (top < prev.lastTop - UP_TOLERANCE && gap > BOTTOM_EPS) pinned = false;
+  if (byReader && top < prev.lastTop - UP_TOLERANCE && gap > BOTTOM_EPS) pinned = false;
   else if (top + box.clientHeight >= Math.min(prev.lastHeight, box.scrollHeight) - FOLLOW_GAP) pinned = true;
   return { pinned, lastTop: top, lastHeight: box.scrollHeight };
 }
