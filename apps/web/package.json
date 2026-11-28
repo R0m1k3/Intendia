@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/precompress.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
