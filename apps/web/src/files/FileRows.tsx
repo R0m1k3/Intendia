@@ -107,13 +107,13 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
                   </a>
                 )}
                 {agentRoot && (
-                  <button className={ICON_BTN} title={t('Copier le chemin')} aria-label={t('Copier le chemin de {name}', { name: e.name })}
+                  <button type="button" className={ICON_BTN} title={t('Copier le chemin')} aria-label={t('Copier le chemin de {name}', { name: e.name })}
                     onClick={() => void copyText(`${agentRoot}/${e.path}`, t('Chemin'))}>
                     <ClipboardCopy className="size-4" strokeWidth={1.5} />
                   </button>
                 )}
                 {onInsert && agentRoot && !isDirEntry(e) && (
-                  <button className={ICON_BTN} title={t('Insérer dans le message')} aria-label={t('Insérer {name} dans le message', { name: e.name })}
+                  <button type="button" className={ICON_BTN} title={t('Insérer dans le message')} aria-label={t('Insérer {name} dans le message', { name: e.name })}
                     onClick={() => onInsert(`${agentRoot}/${e.path}`)}>
                     <MessageSquarePlus className="size-4" strokeWidth={1.5} />
                   </button>
@@ -121,10 +121,10 @@ export function FileRows({ scope, entries, selected, onOpen, actions = false, on
                 {actions && slug && (
                   <>
                     {!isDirEntry(e) && <ShareButton slug={slug} path={e.path} compact />}
-                    <button className={ICON_BTN} title={t('Renommer ou déplacer')} aria-label={t('Renommer ou déplacer {name}', { name: e.name })} onClick={() => void move(e)}>
+                    <button type="button" className={ICON_BTN} title={t('Renommer ou déplacer')} aria-label={t('Renommer ou déplacer {name}', { name: e.name })} onClick={() => void move(e)}>
                       <MoveRight className="size-4" strokeWidth={1.5} />
                     </button>
-                    <button className={cx(ICON_BTN, 'hover:text-bad')} title={t('Supprimer')} aria-label={t('Supprimer {name}', { name: e.name })} onClick={() => void remove(e)}>
+                    <button type="button" className={cx(ICON_BTN, 'hover:text-bad')} title={t('Supprimer')} aria-label={t('Supprimer {name}', { name: e.name })} onClick={() => void remove(e)}>
                       <Trash2 className="size-4" strokeWidth={1.5} />
                     </button>
                   </>

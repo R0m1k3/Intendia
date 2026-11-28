@@ -119,13 +119,13 @@ export function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
         </span>
       )}
       {a.state === 'pending' && (
-        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" aria-label={t('Envoi…|fichier')}>
+        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sheet/60" role="img" aria-label={t('Envoi…|fichier')}>
           <Loader2 className="size-4 animate-spin text-ink-soft" strokeWidth={1.75} />
         </span>
       )}
       <button
         type="button" onClick={onRemove} aria-label={t('Retirer {name}', { name: a.name })} title={t('Retirer {name}', { name: a.name })}
-        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
+        className="tap-area absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
       >
         <X className="size-3" strokeWidth={2} />
       </button>

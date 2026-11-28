@@ -80,7 +80,7 @@ export function GoalBar({ inst, sessionId, sessionLastRunId, goal, onEdit }: {
           <div className="truncate font-medium" title={goal.text}>{goal.text}</div>
           <div className="flex flex-wrap gap-x-2 text-[12px] text-ink-soft">
             <span data-goal-line>{goalLine(goal)}</span>
-            <span aria-label={t('Relances')} data-goal-count>{t('relance {n}/{max}', { n: goal.relaunches, max: goal.maxRelaunches })}</span>
+            <span data-goal-count>{t('relance {n}/{max}', { n: goal.relaunches, max: goal.maxRelaunches })}</span>
             <span data-goal-cost title={t('Contrôlé entre les tours, avec un tour de retard possible')}>{costLine(goal)}</span>
             {goal.mode === 'click' && <span>{t('après votre clic')}</span>}
             {note && <span className="text-ink-faint">{note}</span>}

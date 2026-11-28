@@ -78,7 +78,7 @@ export function RunFooter({ r }: { r: RunStat }) {
   if (!items.length && !st) return null;
   return (
     <p className="flex min-w-0 items-start gap-1.5 text-xs text-ink-faint" title={detail(r)} data-run-footer={r.runId}>
-      {st && <span className="flex h-4 shrink-0 items-center" aria-label={st.label}>{st.icon}</span>}
+      {st && <span className="flex h-4 shrink-0 items-center" role="img" aria-label={st.label}>{st.icon}</span>}
       <span className="min-w-0 font-mono tabular-nums">{items.join(' · ')}</span>
     </p>
   );

@@ -54,7 +54,10 @@ export function GoalDialog({ initial, editing, autoApprove, onSubmit, onClose }:
   };
 
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a click on the backdrop closes the dialog; the keyboard has Escape
     <div data-overlay className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[12vh]" onMouseDown={onClose}>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the mousedown only stops the backdrop's close; the dialog is a native-focus container, not a control */}
       <form
         role="dialog" aria-modal="true" aria-label={editing ? t('Modifier l’objectif') : t('Fixer un objectif')} data-goal-dialog
         onMouseDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void submit(); }}
@@ -74,10 +77,12 @@ export function GoalDialog({ initial, editing, autoApprove, onSubmit, onClose }:
           />
         </label>
         <div className="mt-3 grid grid-cols-2 gap-3">
+          {/* biome-ignore lint/a11y/noLabelWithoutControl: the control is rendered by Input inside this label */}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">{t('Relances max')}</span>
             <Input name="goal-max" inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value)} />
           </label>
+          {/* biome-ignore lint/a11y/noLabelWithoutControl: the control is rendered by Input inside this label */}
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">Budget ($)</span>
             <Input name="goal-budget" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder={t('aucun')} />

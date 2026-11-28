@@ -202,10 +202,10 @@ export function Composer({
         </p>
       )}
       {(skills.length > 0 || autoApprove) && (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1">
+        <div className="flex flex-wrap gap-1.5 px-1 pb-1 pt-1 touch:gap-x-6 touch:gap-y-6 touch:py-3">
           {autoApprove && (
             <button type="button" data-auto-approve onClick={autoApprove.onOff} title={t('L’agent agit sans demander votre accord. Cliquer pour redemander l’accord.')}
-              className="flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-xs text-warn hover:border-warn">
+              className="tap-area relative flex items-center gap-1 rounded-full border border-warn/40 bg-warn-soft px-2.5 py-0.5 text-xs text-warn hover:border-warn">
               <ShieldOff className="size-3" strokeWidth={2} /> {t('Sans confirmation')} <X className="size-3" strokeWidth={2} />
             </button>
           )}
@@ -213,7 +213,7 @@ export function Composer({
             <span key={name} data-skill-pill={name} className="flex items-center gap-1 rounded-full border border-line bg-raised py-0.5 pl-2.5 pr-1 text-xs">
               <Sparkles className="size-3 text-ink-faint" strokeWidth={1.75} /> {t('Skill : ')}<span className="font-mono">{name}</span>
               <button type="button" onClick={() => setSkills(skills.filter((x) => x !== name))} aria-label={t('Retirer le skill {name}', { name })}
-                className="flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
+                className="tap-area relative flex size-5 items-center justify-center rounded-full text-ink-faint hover:bg-sheet hover:text-ink">
                 <X className="size-3" strokeWidth={2} />
               </button>
             </span>
@@ -244,7 +244,8 @@ export function Composer({
         }}
         placeholder={placeholder ?? t('Écrire à l’agent')}
         aria-label="Message"
-        className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
+        aria-controls={slash.listId} aria-activedescendant={slash.activeId}
+        className="block max-h-60 min-h-9 w-full resize-none touch:min-h-11 bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
       {commandNote && <p role="status" data-command-note className="px-2 pb-1 text-[12px] text-ink-soft">{commandNote}</p>}
       {/* sized by the composer, not the window: a Chat column can be narrow on a wide screen */}

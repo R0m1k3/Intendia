@@ -83,11 +83,11 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
         bodyClassName="border-t border-line/70"
         title={
           <nav aria-label={t('Dossier')} className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
-            <button onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>{t('racine')}</button>
+            <button type="button" onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>{t('racine')}</button>
             {crumbs.map((c, i) => (
               <span key={i} className="flex items-center gap-1">
                 <ChevronRight className="size-3.5 text-ink-faint" strokeWidth={1.5} />
-                <button onClick={() => void go({ path: crumbs.slice(0, i + 1).join('/') })} className={i === crumbs.length - 1 ? 'text-ink' : 'text-ink-faint hover:text-ink'}>{c}</button>
+                <button type="button" onClick={() => void go({ path: crumbs.slice(0, i + 1).join('/') })} className={i === crumbs.length - 1 ? 'text-ink' : 'text-ink-faint hover:text-ink'}>{c}</button>
               </span>
             ))}
           </nav>
@@ -98,10 +98,10 @@ function Browser({ inst, search, go }: { inst: string; search: InstanceFilesSear
               <FileArchive className="size-4" strokeWidth={1.5} />
             </a>
           <div className="relative w-40 shrink-0 sm:w-48">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Chercher un nom')} className="h-9 pl-8" aria-label={t('Chercher un fichier')} />
             {q && (
-              <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label={t('Effacer')}><X className="size-4" strokeWidth={1.5} /></button>
+              <button type="button" onClick={() => setQ('')} className="tap-area absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink" aria-label={t('Effacer')}><X className="size-4" strokeWidth={1.5} /></button>
             )}
           </div>
           </div>

@@ -1,7 +1,7 @@
 // The composer's slash commands and skills: the menus shown while « /name » is typed (↑/↓, Entrée or Tab, Échap),
 // running a command, the skills asked by /use for the next message (pills), and the note when one cannot run.
 import type { KeyboardEvent, RefObject } from 'react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { cx } from '../../components/ui';
 import { t } from '../../i18n';
 import { matchCommands, matchSkills, parseCommand, type Command, type CommandName } from '../commands';
@@ -29,6 +29,8 @@ export function useSlashMenus({ text, setText, sending, setSending, disabled, co
 
   const menu = commands && onCommand && !disabled && !sending && closedFor !== text ? matchCommands(text, commands) : null;
   const skillMenu = !menu && skillNames && !disabled && !sending && closedFor !== text ? matchSkills(text, skillNames) : null;
+  // the field keeps the focus: it names the open list and the highlighted option (aria-controls / aria-activedescendant)
+  const uid = useId();
   const pickedSkill = skillMenu ? skillMenu[Math.min(pick, skillMenu.length - 1)]! : null;
   const addSkill = (name: string) => {
     if (skills.includes(name)) { edit(''); return; }
@@ -94,18 +96,25 @@ export function useSlashMenus({ text, setText, sending, setSending, disabled, co
     return false;
   };
 
-  return { menu, picked, skillMenu, pickedSkill, setPick, skills, setSkills, commandNote, edit, addSkill, runCommand, choose, onMenuKey };
+  const listId = skillMenu ? `${uid}-skills` : menu ? `${uid}-commands` : undefined;
+  // by position: a skill name is not always a valid id
+  const activeId = skillMenu && pickedSkill ? `${uid}-skill-${skillMenu.indexOf(pickedSkill)}` : picked ? `${uid}-command-${picked.name}` : undefined;
+
+  return { menu, picked, listId, activeId, uid, skillMenu, pickedSkill, setPick, skills, setSkills, commandNote, edit, addSkill, runCommand, choose, onMenuKey };
 }
 
 /** The two menus above the message field: skills (after « /use ») and commands. */
-export function SlashMenuLists({ menus }: { menus: Pick<SlashMenus, 'menu' | 'picked' | 'skillMenu' | 'pickedSkill' | 'setPick' | 'addSkill' | 'choose'> }) {
-  const { menu, picked, skillMenu, pickedSkill, setPick, addSkill, choose } = menus;
+export function SlashMenuLists({ menus }: { menus: Pick<SlashMenus, 'uid' | 'menu' | 'picked' | 'skillMenu' | 'pickedSkill' | 'setPick' | 'addSkill' | 'choose'> }) {
+  const { uid, menu, picked, skillMenu, pickedSkill, setPick, addSkill, choose } = menus;
   return (
     <>
       {skillMenu && (
-        <ul role="listbox" aria-label="Skills" data-skills className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
-          {skillMenu.map((name) => (
-            <li key={name} role="option" aria-selected={name === pickedSkill}
+        // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a listbox driven from the message field (focus stays there; aria-controls / aria-activedescendant point at it)
+        <ul id={`${uid}-skills`} role="listbox" aria-label="Skills" data-skills className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
+          {skillMenu.map((name, i) => (
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: option of the listbox above, chosen with the keys typed in the message field
+            // biome-ignore lint/a11y/useFocusableInteractive: the option never takes focus; the field exposes it through aria-activedescendant
+            <li key={name} id={`${uid}-skill-${i}`} role="option" aria-selected={name === pickedSkill}
               onMouseDown={(e) => { e.preventDefault(); addSkill(name); }}
               onMouseEnter={() => setPick(skillMenu.indexOf(name))}
               className={cx('flex cursor-pointer items-baseline gap-2 rounded-md px-2 py-1.5 font-mono text-[13px]', name === pickedSkill && 'bg-raised')}>
@@ -115,9 +124,12 @@ export function SlashMenuLists({ menus }: { menus: Pick<SlashMenus, 'menu' | 'pi
         </ul>
       )}
       {menu && (
-        <ul role="listbox" aria-label={t('Commandes')} data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
+        // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: a listbox driven from the message field (focus stays there; aria-controls / aria-activedescendant point at it)
+        <ul id={`${uid}-commands`} role="listbox" aria-label={t('Commandes')} data-commands className="mb-1 max-h-64 overflow-y-auto border-b border-line px-1 pb-1">
           {menu.map((c) => (
-            <li key={c.name} role="option" aria-selected={c === picked} aria-disabled={Boolean(c.disabled)}
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: option of the listbox above, chosen with the keys typed in the message field
+            // biome-ignore lint/a11y/useFocusableInteractive: the option never takes focus; the field exposes it through aria-activedescendant
+            <li key={c.name} id={`${uid}-command-${c.name}`} role="option" aria-selected={c === picked} aria-disabled={Boolean(c.disabled)}
               onMouseDown={(e) => { e.preventDefault(); void choose(c); }}
               onMouseEnter={() => setPick(menu.indexOf(c))}
               title={c.disabled}

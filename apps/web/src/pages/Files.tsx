@@ -135,11 +135,11 @@ export function FilesPage() {
               <nav aria-label={t('Dossier')} className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[13px] font-normal">
                 <Link to="/w/$slug" params={{ slug }} className="text-ink-faint hover:text-ink">{slug}</Link>
                 <ChevronRight className="size-3.5 text-ink-faint" strokeWidth={1.5} />
-                <button onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>{t('fichiers')}</button>
+                <button type="button" onClick={() => void go({})} className={cx(crumbs.length ? 'text-ink-faint hover:text-ink' : 'text-ink')}>{t('fichiers')}</button>
                 {crumbs.map((c, i) => (
                   <span key={i} className="flex items-center gap-1">
                     <ChevronRight className="size-3.5 text-ink-faint" strokeWidth={1.5} />
-                    <button onClick={() => void go({ path: crumbs.slice(0, i + 1).join('/') })} className={i === crumbs.length - 1 ? 'text-ink' : 'text-ink-faint hover:text-ink'}>{c}</button>
+                    <button type="button" onClick={() => void go({ path: crumbs.slice(0, i + 1).join('/') })} className={i === crumbs.length - 1 ? 'text-ink' : 'text-ink-faint hover:text-ink'}>{c}</button>
                   </span>
                 ))}
               </nav>
@@ -150,10 +150,10 @@ export function FilesPage() {
               <FileArchive className="size-4" strokeWidth={1.5} />
             </a>
               <div className="relative w-40 shrink-0 sm:w-48">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Chercher un nom')} className="h-9 pl-8" aria-label={t('Chercher un fichier')} />
                 {q && (
-                  <button onClick={() => setQ('')} className="absolute right-2 top-2.5 text-ink-faint hover:text-ink" aria-label={t('Effacer')}><X className="size-4" strokeWidth={1.5} /></button>
+                  <button type="button" onClick={() => setQ('')} className="tap-area absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink" aria-label={t('Effacer')}><X className="size-4" strokeWidth={1.5} /></button>
                 )}
               </div>
               </div>
@@ -163,7 +163,7 @@ export function FilesPage() {
             {notice && (
               <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">
                 <span className="flex-1">{notice}</span>
-                <button onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
+                <button type="button" onClick={() => setNotice(null)} className="text-ink-faint hover:text-ink" aria-label={t('Fermer la note')}><X className="size-4" strokeWidth={1.5} /></button>
               </p>
             )}
             {debounced && <p className="px-4 pb-2 pt-2 text-xs text-ink-faint">{found.isFetching ? t('Recherche…') : plural(entries.length, '{n} résultat dans tout le dossier', '{n} résultats dans tout le dossier') + (found.data?.truncated ? t(' (liste coupée)') : '')}</p>}

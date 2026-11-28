@@ -10,6 +10,8 @@ export function DropZone({ onFiles, label, children, className }: {
   const depth = useRef(0);
   const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files');
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag and drop is a mouse shortcut; the file pickers (upload and attach buttons) are the keyboard path
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: drag and drop is a mouse shortcut; the file pickers (upload and attach buttons) are the keyboard path
     <div
       className={cx('relative', className)}
       onDragEnter={(e) => { if (!hasFiles(e)) return; e.preventDefault(); depth.current += 1; setOver(true); }}

@@ -134,9 +134,9 @@ export function ChannelPage() {
             <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={1} aria-label={t('Message')}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
               placeholder={t('Message au canal ; sans @nom, @{lead} répond', { lead: d.channel.lead })}
-              className="block max-h-60 min-h-9 w-full resize-none bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none" />
+              className="block max-h-60 min-h-9 w-full resize-none touch:min-h-11 bg-transparent px-1.5 py-1.5 text-[15px] placeholder:text-ink-faint focus:outline-none" />
             <button type="button" onClick={submit} disabled={!text.trim() || send.isPending} aria-label={t('Envoyer')}
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors disabled:opacity-40">
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors disabled:opacity-40">
               <ArrowUp className="size-4" strokeWidth={2} />
             </button>
           </div>

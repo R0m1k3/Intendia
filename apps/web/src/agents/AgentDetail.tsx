@@ -65,6 +65,7 @@ function Description({ inst, name, text, editable, canPropose }: { inst: string;
   }
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(draft); }}>
+        {/* biome-ignore lint/a11y/noAutofocus: the field opens when the user chooses to edit the description */}
       <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={4} autoFocus aria-label={t('Description')}
         className="w-full rounded-[10px] border border-line bg-sheet px-3 py-2.5 text-sm transition-colors hover:border-ink-faint/60 focus:border-ink focus:outline-none" />
       <ErrorText error={save.error} />

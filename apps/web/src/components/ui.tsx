@@ -91,6 +91,7 @@ export function Input({ className, ...p }: ComponentProps<'input'>) {
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed as children, inside this label
     <label className="block">
       <span className="mb-1.5 block text-[13px] font-medium">{label}</span>
       {children}
@@ -296,6 +297,7 @@ export function Chips<K extends string>({ items, value, onChange, label, classNa
   onChange: (k: K) => void; label: string; className?: string; role?: 'radio' | 'tab'; disabled?: boolean;
 }) {
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is "tablist" or "radiogroup" (both accept aria-label), chosen by a prop
     <div role={role === 'tab' ? 'tablist' : 'radiogroup'} aria-label={label} className={cx('flex flex-wrap gap-1.5', className)}>
       {items.map((it) => (
         <button

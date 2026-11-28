@@ -133,12 +133,12 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
           </Button>
         ))}
         {entry && agentPath && onInsert && (
-          <button onClick={() => onInsert(agentPath)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Insérer dans le message')} aria-label={t('Insérer dans le message')}>
+          <button type="button" onClick={() => onInsert(agentPath)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Insérer dans le message')} aria-label={t('Insérer dans le message')}>
             <MessageSquarePlus className="size-4" strokeWidth={1.5} />
           </button>
         )}
         {entry && agentPath && (
-          <button onClick={() => void copyText(agentPath, t('Chemin'))} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Copier le chemin')} aria-label={t('Copier le chemin')}>
+          <button type="button" onClick={() => void copyText(agentPath, t('Chemin'))} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" title={t('Copier le chemin')} aria-label={t('Copier le chemin')}>
             <ClipboardCopy className="size-4" strokeWidth={1.5} />
           </button>
         )}
@@ -150,7 +150,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
           <Download className="size-4" strokeWidth={1.5} />
         </a>
         {onClose && (
-          <button onClick={() => void confirmClose(onClose)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer l’aperçu')} title={t('Fermer')}>
+          <button type="button" onClick={() => void confirmClose(onClose)} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer l’aperçu')} title={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </button>
         )}
@@ -158,7 +158,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
       {rendered && !editing && entry && (kind !== 'markdown' || text.data !== undefined) && (
         <div className="flex gap-1 border-b border-line px-4 py-1.5 text-xs">
           {([[false, kind === 'csv' ? t('Tableau|vue') : t('Rendu')], [true, t('Source')]] as const).map(([isSource, l]) => (
-            <button key={String(isSource)} onClick={() => setSource(isSource)}
+            <button type="button" key={String(isSource)} onClick={() => setSource(isSource)}
               className={cx('rounded-md px-2 py-1', isSource === source ? 'bg-raised text-ink' : 'text-ink-faint hover:text-ink')}>{l}</button>
           ))}
         </div>
@@ -175,9 +175,15 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
         ) : kind === 'html' || kind === 'svg' ? (
           <iframe src={url} title={name} sandbox="" className="h-full min-h-[70vh] w-full border-0 bg-white" />
         ) : kind === 'audio' ? (
-          <div className="p-6"><audio src={url} controls className="w-full" /></div>
+          <div className="p-6">
+            {/* biome-ignore lint/a11y/useMediaCaption: a file of the user's own; no caption track exists for it */}
+            <audio src={url} controls className="w-full" />
+          </div>
         ) : kind === 'video' ? (
-          <div className="p-4"><video src={url} controls className="max-h-[75vh] w-full" /></div>
+          <div className="p-4">
+            {/* biome-ignore lint/a11y/useMediaCaption: a file of the user's own; no caption track exists for it */}
+            <video src={url} controls className="max-h-[75vh] w-full" />
+          </div>
         ) : (kind === 'csv' || kind === 'diff') && !source && !editing ? (
           <Suspense fallback={null}>
             {kind === 'csv' ? <CsvView url={url} name={name} version={entry.mtime} /> : <DiffView url={url} version={entry.mtime} />}

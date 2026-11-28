@@ -112,7 +112,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
           <FolderOpen className="size-4" strokeWidth={1.5} />
         </Link>
         {onClose && (
-          <button onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer')} title={t('Fermer')}>
+          <button type="button" onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-raised hover:text-ink" aria-label={t('Fermer')} title={t('Fermer')}>
             <X className="size-4" strokeWidth={1.5} />
           </button>
         )}
@@ -135,7 +135,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
               {modified.map((m) => (
                 <li key={m.path} className="flex min-w-0 items-center gap-1 pr-2" data-modified={m.rel ? 'exists' : 'gone'}>
                   {m.rel ? (
-                    <button onClick={() => onOpen(m.rel!)} className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm hover:bg-raised/50" title={m.rel}>
+                    <button type="button" onClick={() => onOpen(m.rel!)} className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm hover:bg-raised/50" title={m.rel}>
                       <span className="min-w-0 flex-1 truncate">{baseName(m.rel)}</span>
                       <span className="max-w-[40%] shrink-0 truncate font-mono text-[11px] text-ink-faint">{m.rel.slice(0, -baseName(m.rel).length - 1)}</span>
                       {m.ts !== null && <span className="shrink-0 font-mono text-[11px] text-ink-faint">{clock(m.ts)}</span>}
@@ -165,7 +165,7 @@ export function SessionFiles({ inst, slug, sessionId, cited, onOpen, onClose, on
             <ul className="divide-y divide-line">
               {elsewhere.map((e) => (
                 <li key={e.path} className="flex min-w-0 items-center gap-1 pr-2">
-                  <button onClick={() => onOpen(e.path)} className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm hover:bg-raised/50" title={e.path}>
+                  <button type="button" onClick={() => onOpen(e.path)} className="flex h-11 min-w-0 flex-1 items-center gap-3 px-4 text-left text-sm hover:bg-raised/50" title={e.path}>
                     <span className="min-w-0 flex-1 truncate">{e.name}</span>
                     <span className="max-w-[45%] shrink-0 truncate font-mono text-[11px] text-ink-faint">{e.path.slice(0, -e.name.length - 1)}</span>
                   </button>

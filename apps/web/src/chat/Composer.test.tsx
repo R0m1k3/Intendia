@@ -83,8 +83,15 @@ describe('Composer', () => {
     const page = await mount(<Composer onSend={async () => true} onStop={() => {}} running={false} commands={COMMANDS} onCommand={onCommand} />);
     await type(field(page), '/');
     expect(page.querySelectorAll('[data-commands] [role="option"]')).toHaveLength(3);
+    // the field names the open list and its highlighted line for a screen reader
+    expect(field(page).getAttribute('aria-controls')).toBe(page.querySelector('[data-commands]')!.id);
+    expect(field(page).getAttribute('aria-activedescendant')).toBe(page.querySelector('[data-commands] [aria-selected="true"]')!.id);
+    await press(field(page), 'ArrowDown');
+    expect(field(page).getAttribute('aria-activedescendant')).toBe(page.querySelectorAll('[data-commands] [role="option"]')[1]!.id);
     await press(field(page), 'Escape');
     expect(page.querySelector('[data-commands]')).toBeNull();
+    expect(field(page).hasAttribute('aria-controls')).toBe(false);
+    expect(field(page).hasAttribute('aria-activedescendant')).toBe(false);
     await type(field(page), '/retry');
     await press(field(page), 'Enter');
     expect(onCommand).not.toHaveBeenCalled();

@@ -47,6 +47,7 @@ export function DailyBars({ daily, days }: { daily: UsageDay[]; days: number }) 
   const h = hover === null ? null : data[hover]!;
   return (
     <div className="relative">
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the hover only hides the tooltip; the figures are in the chart legend and table of the page */}
       <svg viewBox={`0 ${-PAD_T} ${W} ${H + PAD_B + PAD_T}`} className="w-full" role="img" aria-label={t('Coût estimé par jour')} onMouseLeave={() => setHover(null)}>
         {ticks.map((tick) => (
           <g key={tick}>
@@ -60,6 +61,7 @@ export function DailyBars({ daily, days }: { daily: UsageDay[]; days: number }) 
           const bh = v > 0 ? Math.max(2, H - y(v)) : 0;
           const r = Math.min(4, bw / 2, bh);
           return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: hover shows the day figures in a tooltip, a pure mouse extra
             <g key={d.day} onMouseEnter={() => setHover(i)}>
               {/* hit target: the whole column */}
               <rect x={PAD_L + i * slot} y={0} width={slot} height={H} fill="transparent" />

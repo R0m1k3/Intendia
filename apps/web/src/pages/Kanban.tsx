@@ -50,6 +50,7 @@ function Card({ task, targets, onOpen, onMove, draggable }: {
 }) {
   const running = task.status === 'running';
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: drag and drop is a mouse shortcut; every card also has a "Déplacer vers…" select
     <li draggable={draggable}
       onDragStart={(e) => { e.dataTransfer.setData('text/x-kanban-task', task.id); e.dataTransfer.setData(`text/x-from-${task.status}`, ''); e.dataTransfer.effectAllowed = 'move'; }}
       className={cx('group rounded-xl border border-line bg-sheet px-3.5 py-3 transition-colors hover:border-ink-faint/50', draggable && 'cursor-grab active:cursor-grabbing')}>
@@ -86,6 +87,7 @@ function Column({ col, workflow, canWrite, dragging, onOpen, onMove, onAdd }: {
   const [over, setOver] = useState(false);
   const accepts = dragging !== null && col.dragTarget && canMove(workflow.manual, dragging, col.key);
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: drop target of the card drag; the keyboard moves a card with its "Déplacer vers…" select
     <section aria-label={statusLabel(col.key, col.label)}
       onDragOver={(e) => { if (accepts) { e.preventDefault(); setOver(true); } }}
       onDragLeave={() => setOver(false)}
@@ -353,6 +355,8 @@ export function KanbanPage() {
   const shownCol = columns.find((c) => c.key === mobileCol) ?? columns[0];
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: tracks the card being dragged to light up valid columns; the keyboard moves cards with the select of each card
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: tracks the card being dragged to light up valid columns; the keyboard moves cards with the select of each card
     <div onDragStart={(e) => {
       const from = [...e.dataTransfer.types].find((ty) => ty.startsWith('text/x-from-'));
       setDragging(from ? from.slice('text/x-from-'.length) : null);
@@ -421,7 +425,7 @@ export function KanbanPage() {
                 {shownCol && <Column col={shownCol} workflow={wf} canWrite={can('updateTask')} dragging={null} onOpen={(id) => go({ task: id })} onMove={(id, _f, to) => move.mutate({ id, to })} />}
               </div>
             ) : (
-              <div className="flex items-start gap-3 overflow-x-auto px-7 pb-4" aria-label={t('Colonnes')}>
+              <div className="flex items-start gap-3 overflow-x-auto px-7 pb-4" role="group" aria-label={t('Colonnes')}>
                 {columns.map((c, i) => (
                   <Column key={c.key} col={c} workflow={wf} canWrite={can('updateTask')} dragging={dragging}
                     onAdd={i === 0 && can('createTask') ? () => setDialog('task') : undefined}

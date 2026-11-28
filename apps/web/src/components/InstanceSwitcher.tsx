@@ -30,7 +30,7 @@ function alertLabel({ failed, approvals }: { failed: number; approvals: number }
 function Alert({ n, label }: { n: number; label: string | null }) {
   if (!n || !label) return null;
   return (
-    <span className="shrink-0 rounded-full bg-bad-soft px-1.5 font-mono text-[11px] leading-[18px] text-bad" title={label} aria-label={label}>
+    <span className="shrink-0 rounded-full bg-bad-soft px-1.5 font-mono text-[11px] leading-[18px] text-bad" title={label} role="img" aria-label={label}>
       {n}
     </span>
   );
@@ -155,7 +155,7 @@ export function InstanceRail() {
                 <Mark state={report ? worst(report.modules.map((m) => m.state)) : null} />
               </span>
               {n > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-white ring-2 ring-paper">{n}</span>
+                <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-sheet ring-2 ring-paper">{n}</span>
               )}
             </button>
           </div>

@@ -144,7 +144,6 @@ export default {
   'Retirer': 'Remove',
   'coût inconnu (prix du modèle absent) : seul le plafond de relances limite': 'cost unknown (no model price): only the follow-up limit applies',
   'coût en cours de comptage': 'cost being counted',
-  'Relances': 'Follow-ups',
   'relance {n}/{max}': 'follow-up {n}/{max}',
   'Contrôlé entre les tours, avec un tour de retard possible': 'Checked between turns, possibly one turn late',
   'après votre clic': 'after your click',

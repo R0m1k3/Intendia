@@ -107,10 +107,12 @@ export function MainModel({ data, disabled, onSave, onKey }: {
     <ConfigBox id="cf-m" title={t('Modèle principal')} description={t('Le modèle qui répond dans les sessions de cet agent, sauf choix fait dans le chat.')}>
       <div>
       <div className="flex flex-wrap items-end gap-3">
+        {/* biome-ignore lint/a11y/noLabelWithoutControl: the control is rendered by ProviderSelect inside this label */}
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-medium">{t('Fournisseur')}</span>
           <ProviderSelect value={provider} providers={data.providers} onChange={setProvider} disabled={disabled} auto />
         </label>
+        {/* biome-ignore lint/a11y/noLabelWithoutControl: the control is rendered by Input inside this label */}
         <label className="block min-w-64 flex-1">
           <span className="mb-1.5 block text-[13px] font-medium">{t('Modèle')}</span>
           <Input className="font-mono text-[12.5px]" list="main-models" value={model} disabled={disabled} onChange={(e) => setModel(e.target.value)} />

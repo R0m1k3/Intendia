@@ -95,7 +95,11 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
   const danger = req.kind === 'ask' && req.opts.danger;
   const confirmLabel = req.opts.confirmLabel ?? (req.kind === 'copy' ? t('Fermer') : t('Confirmer'));
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop cancels the dialog; the keyboard has Escape
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a click on the backdrop cancels the dialog; the keyboard has Escape
     <div data-overlay className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/25 px-3 pt-[18vh]" onMouseDown={() => finish(false)}>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the mousedown only stops the backdrop's close; the dialog is a native-focus container, not a control */}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is "dialog" or "alertdialog" depending on the request, both support aria-modal */}
       <form
         role={req.kind === 'ask' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
@@ -118,6 +122,7 @@ function DialogView({ req, done }: { req: Request; done: () => void }) {
           </fieldset>
         )}
         {(req.kind === 'text' || req.kind === 'copy') && (
+          // biome-ignore lint/a11y/noLabelWithoutControl: the label wraps a textarea or the Input component, chosen by the request kind
           <label className="mt-4 block">
             {req.kind === 'text' && req.opts.label && <span className="mb-2 block text-sm font-medium">{req.opts.label}</span>}
             {req.kind === 'text' && req.opts.multiline ? (

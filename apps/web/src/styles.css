@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `touch:` = on a touch screen (see the 44 px rule below). */
+@custom-variant touch (@media (pointer: coarse));
+
 /*
  * Intendia, "inbox" theme: white work area, light grey sidebar, near-black ink, one orange accent for the
  * main actions and the selection; tabular figures and mono labels for times, paths and tags.
@@ -106,6 +109,36 @@
   :focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; border-radius: 4px; }
 }
 
+/*
+ * Touch screens (a finger, not a mouse: `pointer: coarse`): every control is at least 44 px high, buttons and
+ * block links at least 44 px wide. A min-size in the base layer: a utility's `h-7` or `size-6` no longer makes a
+ * control smaller there, only a `min-h-*` / `min-w-*` or `tap-area` does. Inline links in a sentence are not concerned
+ * (a min-size does nothing on an inline box).
+ */
+@layer base {
+  @media (pointer: coarse) {
+    :where(button, select, summary, textarea, a, [role="button"], [role="tab"],
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"])) { min-height: 44px; }
+    :where(button, a, [role="button"]) { min-width: 44px; }
+    /* a link that is a block (a flex item, a row): its text stays in the middle of its 44 px */
+    :where(a, summary) { align-content: center; }
+  }
+}
+/*
+ * `tap-area`: a control drawn small on purpose (the × of a tile or of a pill, a word in a sentence) keeps its drawing
+ * on a touch screen; what answers to the finger grows to 44 px around its centre. The control must be positioned
+ * (`relative`, or already `absolute`). The area takes no room in the layout: the caller keeps 44 px free around the
+ * control on a touch screen (`touch:my-[11px]` on a file chip, 22 px high), else two areas overlap and the later one
+ * takes the finger meant for the other (checked by apps/e2e/tests/touch.spec.ts).
+ */
+@utility tap-area {
+  @media (pointer: coarse) {
+    min-height: 0;
+    min-width: 0;
+    &::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+  }
+}
+
 /* One entrance: the page content fades and rises a few pixels. */
 @keyframes enter { from { opacity: 0; transform: translateY(4px); } }
 .enter { animation: enter 240ms var(--ease-out) both; }
@@ -164,6 +197,6 @@
   background: var(--color-sheet); color: var(--color-ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   text-decoration: none; transition: border-color 150ms, background-color 150ms;
 }
-.md a.file-chip:hover { border-color: var(--color-ink-faint); background: var(--color-raised); }
+.md :is(a, button).file-chip:hover { border-color: var(--color-ink-faint); background: var(--color-raised); }
 .md .file-chip span, .file-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.md code:has(> a.file-chip) { background: none; padding: 0; }
+.md code:has(> :is(a, button).file-chip) { background: none; padding: 0; }
