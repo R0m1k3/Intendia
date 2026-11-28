@@ -35,6 +35,7 @@ export function WorkspaceDetail({ slug, instance, back }: { slug: string; instan
   useDirtyGuard(text !== null && agents.isSuccess && text !== agents.data.text);
   const w = ws.data?.workspace;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(slug): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { setText(null); setArchived(false); }, [slug]);
 
   const create = useMutation({

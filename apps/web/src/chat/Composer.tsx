@@ -132,6 +132,7 @@ export function Composer({
     },
   }));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(text): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => {
     const el = ref.current;
     if (!el) return;

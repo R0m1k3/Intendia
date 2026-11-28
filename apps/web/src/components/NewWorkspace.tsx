@@ -27,6 +27,7 @@ export function NewWorkspace({ onCancel, instanceId, onCreated }: { onCancel?: (
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies(inst): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => setProfile('default'), [inst]);
 
   const submit = async (e: React.FormEvent) => {

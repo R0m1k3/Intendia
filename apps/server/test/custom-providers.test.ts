@@ -160,7 +160,7 @@ describe('custom endpoints: HTTP', () => {
   it('refuses to remove the provider of the main model', async () => {
     const t = await testApp();
     await t.request('POST', `${BASE}/custom-providers`, { name: 'Local', baseUrl: 'http://l.test/v1' });
-    t.fake.config.setRaw(t.fake.config.raw.replace(/^  provider: auto$/m, '  provider: local'));
+    t.fake.config.setRaw(t.fake.config.raw.replace(/^ {2}provider: auto$/m, '  provider: local'));
     const r = await t.request('DELETE', `${BASE}/custom-providers/local`);
     expect(r.status).toBe(409);
     expect(r.json.code).toBe('in_use');

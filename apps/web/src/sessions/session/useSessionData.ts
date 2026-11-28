@@ -47,6 +47,7 @@ export function useSessionData({ slug, sessionId, running, setError }: {
   const [olderCursor, setOlderCursor] = useState<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const forgetOlder = useCallback(() => { setOlder([]); setOlderHasMore(null); setOlderCursor(null); }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies(sessionId): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { forgetOlder(); }, [sessionId, forgetOlder]);
   const lastRunId = sess.data?.session.lastRunId ?? null;
   const lastRun = useQuery({

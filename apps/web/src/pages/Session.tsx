@@ -94,6 +94,7 @@ export function SessionView({ slug, sessionId }: { slug: string; sessionId: stri
   const found = Boolean(sess.data);
   useEffect(() => { if (inst && found && leading) setSideSession(inst, { slug, id: sessionId }); }, [inst, found, slug, sessionId, leading]);
   // in the side chat, the cursor goes to the message field
+  // biome-ignore lint/correctness/useExhaustiveDependencies(found): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { if (EMBEDDED) composer.current?.focus(); }, [found]);
 
   const run = useRunControl({ inst, sessionId, active, setActive, lastRun: lastRun.data, lastRunId, knownId: data.knownId, forgetOlder: data.older.forget, chat, setError });

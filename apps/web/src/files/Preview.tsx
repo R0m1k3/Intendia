@@ -76,6 +76,7 @@ export function Preview({ scope, path, onClose, startEditing, onEditingStarted, 
   const [source, setSource] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies(path): the trigger, not read by the effect: it runs again when this changes
   useEffect(() => { setEditing(false); setDraft(null); setBase(null); setSource(false); setError(null); }, [path]);
   const canEdit = Boolean(slug && isText && entry && !tooBig);
   // biome-ignore lint/correctness/useExhaustiveDependencies: dependencies chosen on purpose (see the comment of this hook)

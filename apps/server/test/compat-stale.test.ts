@@ -74,7 +74,7 @@ describe('compat report saved by an older Intendia', () => {
   });
 
   it('logs a failed check, shows it, retries it at the next tick and clears it on success', async () => {
-    const { db, make, id } = setup();
+    const { make, id } = setup();
     await make().check(id);
     const compat = make();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

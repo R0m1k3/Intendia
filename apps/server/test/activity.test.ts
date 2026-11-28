@@ -233,7 +233,7 @@ describe('approvals of every instance', () => {
 
   it('lists a question of the agent (clarify) and drops it once answered', async () => {
     const t = await testApp();
-    const { s, base } = await session(t);
+    const { base } = await session(t);
     const runId = (await t.request('POST', `${base}/runs`, { input: 'question' })).json.runId as string;
     let list: Awaited<ReturnType<typeof t.services.activity.approvals>>['approvals'] = [];
     for (let i = 0; i < 200 && list.length === 0; i++) {
