@@ -42,7 +42,7 @@ export function ConfigEnv({ inst, profile, can, onSaved, focusKey }: TabProps & 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
           <Input className="pl-8" placeholder={t('Chercher une variable')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('Chercher une variable')} />
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlySet} onChange={(e) => setOnlySet(e.target.checked)} />{t('Définies seulement')}</label>

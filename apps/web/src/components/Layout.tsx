@@ -220,7 +220,7 @@ function FullLayout() {
       >
         <span className="relative">
           <n.icon className="size-[19px]" strokeWidth={1.5} />
-          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-white' : 'bg-raised text-ink-soft')} role="img" aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
+          {c.n ? <span className={cx('absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4', c.bad ? 'bg-bad text-sheet' : 'bg-raised text-ink-soft')} role="img" aria-label={`(${c.label ?? c.n})`}>{c.n}</span> : null}
         </span>
         <span className="max-w-full truncate text-[10.5px] leading-none">{n.short ?? n.label}</span>
       </Link>

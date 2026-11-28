@@ -761,6 +761,22 @@ page `/i/$inst/suivi` (`pages/Monitor.tsx`, `monitor/*`).
   type, press, click): `chat/Composer.test.tsx`, `components/Dialog.test.tsx`, `components/ErrorText.test.tsx`.
 - Server errors answered to the client extend `HttpError` (`apps/server/src/http-error.ts`): status, code, message.
 
+## Web client: touch screens and accessibility
+
+- Touch screens (`pointer: coarse`): `styles.css` gives every control a min-size of 44 px in the base layer, so a
+  `h-7` or `size-6` no longer makes it smaller there. A control drawn small on purpose (the × of a tile or a pill, a
+  file chip or a word in a sentence) takes `tap-area` instead (with `relative` unless already positioned): its drawing
+  stays, a `::after` of 44 px answers to the finger; never on controls packed closer than 44 px. `touch:` is the
+  Tailwind variant for the rest (`touch:min-h-11`). An icon inside a field is centred (`top-1/2 -translate-y-1/2`),
+  not placed from the top. Checked by `apps/e2e/tests/touch.spec.ts` on 17 pages, a session, a menu and a dialog.
+- Names: `src/a11y/labels.test.ts` reads every `.tsx` and reports a button or link that only draws an icon without
+  `aria-label` / `title`. A badge or a state drawn as a `span` with an `aria-label` also takes `role="img"`.
+- Colours: `src/a11y/contrast.test.ts` holds every text/background pair of the palette (light and dark) to 4.5:1,
+  refuses `text-accent` (the bright orange is a background; orange text is `accent-ink`) and `text-white` (on a
+  palette colour the text is `sheet` or `on-accent`, right in both themes); white is kept for the agent initials.
+- The slash menus of the composer are a `listbox` driven from the message field: the field carries `aria-controls`
+  and `aria-activedescendant`. Biome's a11y rules are on (warnings); a `biome-ignore` there states the keyboard way.
+
 ## Web client: what is downloaded
 
 - `apps/web/src/main.tsx` is a few lines: it loads the English dictionary (`i18n/en-all.ts`, `setEnglish`) only when

@@ -24,7 +24,7 @@ export function ChatModels({ inst, profile, providers, writable, onYaml, onProvi
         ? (
           <p className="text-sm text-ink-soft">
             <T k="Aucun fournisseur n’est connecté : le chat propose seulement « Auto ». Ajoutez un abonnement ou une clé dans l’onglet {tab}." vars={{
-              tab: onProviders ? <button type="button" className="text-accent-ink underline-offset-2 hover:underline" onClick={onProviders}>{t('Fournisseurs')}</button> : t('Fournisseurs'),
+              tab: onProviders ? <button type="button" className="tap-area relative text-accent-ink underline-offset-2 hover:underline" onClick={onProviders}>{t('Fournisseurs')}</button> : t('Fournisseurs'),
             }} />
           </p>
         )
@@ -75,7 +75,7 @@ function ProviderBlock({ inst, profile, p, writable, onYaml }: { inst: string; p
       {editable ? (
         <>
           <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
             <Input className="pl-8" placeholder={t('Ajouter un modèle (chercher ou taper son nom)')} value={q} disabled={busy}
               onChange={(e) => setQ(e.target.value)} aria-label={t('Ajouter un modèle {provider}', { provider: p.name })} />
           </div>

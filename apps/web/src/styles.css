@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `touch:` = on a touch screen (see the 44 px rule below). */
+@custom-variant touch (@media (pointer: coarse));
+
 /*
  * Intendia, "inbox" theme: white work area, light grey sidebar, near-black ink, one orange accent for the
  * main actions and the selection; tabular figures and mono labels for times, paths and tags.
@@ -104,6 +107,34 @@
     -webkit-font-smoothing: antialiased;
   }
   :focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; border-radius: 4px; }
+}
+
+/*
+ * Touch screens (a finger, not a mouse: `pointer: coarse`): every control is at least 44 px high, buttons and
+ * block links at least 44 px wide. A min-size in the base layer: a utility's `h-7` or `size-6` no longer makes a
+ * control smaller there, only a `min-h-*` / `min-w-*` or `tap-area` does. Inline links in a sentence are not concerned
+ * (a min-size does nothing on an inline box).
+ */
+@layer base {
+  @media (pointer: coarse) {
+    :where(button, select, summary, textarea, a, [role="button"], [role="tab"],
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="hidden"], [type="color"])) { min-height: 44px; }
+    :where(button, a, [role="button"]) { min-width: 44px; }
+    /* a link that is a block (a flex item, a row): its text stays in the middle of its 44 px */
+    :where(a, summary) { align-content: center; }
+  }
+}
+/*
+ * `tap-area`: a control drawn small on purpose (the × of a tile or of a pill, a word in a sentence) keeps its drawing
+ * on a touch screen; what answers to the finger grows to 44 px around its centre. The control must be positioned
+ * (`relative`, or already `absolute`). Not for controls packed closer than 44 px: their areas would overlap.
+ */
+@utility tap-area {
+  @media (pointer: coarse) {
+    min-height: 0;
+    min-width: 0;
+    &::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+  }
 }
 
 /* One entrance: the page content fades and rises a few pixels. */

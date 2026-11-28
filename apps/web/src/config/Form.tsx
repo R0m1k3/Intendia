@@ -102,7 +102,7 @@ export function ConfigForm({ inst, profile, can, onSaved, preset, initialQuery }
       <div className={cx('grid gap-4', !preset && 'md:grid-cols-[220px_1fr]')}>
         {!preset && <nav className="space-y-0.5 md:sticky md:top-4 md:self-start" aria-label={t('Catégories')}>
           <div className="relative mb-2">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
             <Input className="pl-8" placeholder={t('Chercher un réglage')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t('Chercher un réglage')} />
           </div>
           <select className={cx(SELECT, 'w-full md:hidden')} value={cat} onChange={(e) => { setCategory(e.target.value); setQ(''); }} aria-label={t('Catégorie')}>

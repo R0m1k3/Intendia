@@ -12,7 +12,7 @@ export function Hint({ id, className }: { id: TermId; className?: string }) {
   return (
     <Popover
       title={t('Que veut dire « {term} » ?', { term: g.term })} placement="below" align="start" width={320}
-      triggerClass={`inline-grid size-5 shrink-0 place-items-center rounded-full align-middle text-ink-faint hover:bg-raised hover:text-ink ${className ?? ''}`}
+      triggerClass={`tap-area relative inline-grid size-5 shrink-0 place-items-center rounded-full align-middle text-ink-faint hover:bg-raised hover:text-ink ${className ?? ''}`}
       trigger={<CircleHelp className="size-3.5" strokeWidth={1.75} aria-hidden />}
     >
       {() => (

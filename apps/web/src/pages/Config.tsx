@@ -155,7 +155,7 @@ function ConfigView({ inst, profile, search }: { inst: string; profile: string; 
               })}
               {tab !== 'reglages' && tabs.includes('reglages') && (
                 <form className="relative ml-auto w-full sm:w-56" onSubmit={(e) => { e.preventDefault(); if (find.trim()) go({ tab: 'reglages', key: undefined }); }}>
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-ink-faint" strokeWidth={1.5} />
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.5} />
                   <Input className="pl-8" placeholder={t('Chercher un réglage')} aria-label={t('Chercher un réglage')} value={find} onChange={(e) => setFind(e.target.value)} />
                 </form>
               )}

@@ -56,7 +56,7 @@ export function FirstSteps({ facts }: { facts: StepFacts }) {
       <ol className="divide-y divide-line/70 border-t border-line/70">
         {steps.map((s) => (
           <li key={s.key} className="flex items-center gap-3 px-3.5 py-2" data-step={s.key} data-done={s.done}>
-            <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${s.done ? 'border-ok bg-ok text-white' : 'border-line'}`}>
+            <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${s.done ? 'border-ok bg-ok text-sheet' : 'border-line'}`}>
               {s.done && <Check className="size-3" strokeWidth={2.5} aria-label={t('Fait')} />}
             </span>
             <span className="min-w-0 flex-1">

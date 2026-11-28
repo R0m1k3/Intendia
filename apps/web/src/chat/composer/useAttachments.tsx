@@ -125,7 +125,7 @@ export function Tile({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
       )}
       <button
         type="button" onClick={onRemove} aria-label={t('Retirer {name}', { name: a.name })} title={t('Retirer {name}', { name: a.name })}
-        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
+        className="tap-area absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-sheet text-ink-soft shadow-sm hover:text-ink"
       >
         <X className="size-3" strokeWidth={2} />
       </button>

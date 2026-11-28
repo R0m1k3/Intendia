@@ -155,7 +155,7 @@ export function InstanceRail() {
                 <Mark state={report ? worst(report.modules.map((m) => m.state)) : null} />
               </span>
               {n > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-white ring-2 ring-paper">{n}</span>
+                <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-bad px-1 text-center font-mono text-[10.5px] leading-[18px] text-sheet ring-2 ring-paper">{n}</span>
               )}
             </button>
           </div>
